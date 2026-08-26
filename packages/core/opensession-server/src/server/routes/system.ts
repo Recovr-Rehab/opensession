@@ -18,7 +18,10 @@ import { getSessionControl } from "../session-control";
 import { MAX_UPLOAD_BYTES, stageHttpUpload } from "../uploads";
 import { systemStats } from "../system-stats";
 import { BOOT_ID, broadcastToAll } from "../ws-hub";
-import { executorClientHealth, executorClientReady } from "../executor-client";
+import {
+	executorClientHealth,
+	executorClientReadinessSnapshot,
+} from "../executor-client";
 import {
 	sessionKernelHealth,
 	sessionKernelReadinessSnapshot,
@@ -169,9 +172,11 @@ export async function handleSystemRoutes(
 		try {
 			const kernel = sessionKernelReadinessSnapshot();
 			const executor = executorClientHealth();
-			const executorReadiness = await executorClientReady();
+			const executorReadiness = executorClientReadinessSnapshot();
 			const readiness = serviceReadiness();
-			const ready = executorReadiness.ready && readiness.phase === "ready";
+			// This is the only gateway node. Keep serving the UI while a worker
+			// lane is degraded; launches themselves still fail closed.
+			const ready = readiness.phase === "ready";
 			return Response.json(
 				{ ok: ready, ready, phase: readiness.phase, bootId: BOOT_ID, activeRuns: activeAgentRunCount(), executor: { ...executor, ...executorReadiness }, sessionKernel: kernel },
 				{ status: ready ? 200 : 503 },
