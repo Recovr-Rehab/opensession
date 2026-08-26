@@ -207,6 +207,10 @@ describe("local run-host capability", () => {
       launch: async () => {},
     });
     writeFileSync(join(dir, "meta.json"), JSON.stringify({
+      hostId,
+      pid: process.pid,
+      osSessionId: spec.osSessionId,
+      startedAt: new Date().toISOString(),
       done: { type: "done", result: "completed while disconnected" },
     } satisfies RunHostMeta));
 

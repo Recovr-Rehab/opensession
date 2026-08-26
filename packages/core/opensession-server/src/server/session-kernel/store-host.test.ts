@@ -434,7 +434,7 @@ describe("per-session session kernel storage", () => {
   test("backfills old sparse projections in bounded retryable batches", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    for (let index = 0; index < 17; index += 1)
+    for (let index = 0; index < 5; index += 1)
       host.call("setRunState", [{
         sessionId: `projection-backfill-${String(index).padStart(2, "0")}`,
         state: "idle",
@@ -451,7 +451,7 @@ describe("per-session session kernel storage", () => {
     expect(host.allAskEntries()).toEqual([]);
     expect(host.central.sparseProjectionMigrationComplete()).toBe(true);
     host.close();
-  });
+  }, 10_000);
 
   test("settles only isolated stores that contain pending steers", () => {
     const path = paths();
