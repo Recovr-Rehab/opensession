@@ -265,13 +265,13 @@ function FirstMileSummary({
 	return (
 		<div
 			className={cn(
-				"grid gap-3 phone:grid-cols-2",
+				"grid gap-4 phone:grid-cols-2 phone:gap-3",
 				"grid-cols-5",
 			)}
 		>
 			{tiles.map((tile) => {
 				const className = cn(
-					"flex aspect-square min-w-0 flex-col justify-between rounded-2xl border p-4 text-left backdrop-blur-xl phone:rounded-xl phone:p-3.5",
+					"flex aspect-square min-w-0 flex-col justify-between rounded-3xl border p-5 text-left backdrop-blur-xl phone:rounded-2xl phone:p-3.5",
 					tile.step &&
 						"focus-ring cursor-pointer transition-[transform,filter] duration-150 hover:brightness-[0.98] active:scale-[0.96] motion-reduce:transform-none",
 					tile.ready
@@ -469,7 +469,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								ease,
 							}}
 							className={cn(
-								"mx-auto flex min-h-full w-full max-w-[960px] flex-col items-center",
+								"mx-auto flex min-h-full w-full max-w-[1160px] flex-col items-center",
 								step.id === "welcome"
 									? "justify-center py-8 pb-16 phone:py-5 phone:pb-10"
 									: "pb-8 pt-24 phone:pb-5 phone:pt-20",
@@ -523,7 +523,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										className={cn(
 											"w-full pb-8 [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:text-fg",
 											// The final review uses the full canvas for larger tiles; forms stay focused.
-											step.id === "ready" ? "max-w-[960px]" : "max-w-[780px]",
+											step.id === "ready" ? "max-w-[1160px]" : "max-w-[780px]",
 											// Match opensession.com's card glass: translucent paper, a quiet
 											// hairline, and the same 14px blur with restrained saturation.
 											"[&_.bg-settings-plate]:rounded-3xl [&_.bg-settings-plate]:border-divider-soft [&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--popup-surface)_95%,transparent)] [&_.bg-settings-plate]:shadow-[0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:[backdrop-filter:blur(14px)_saturate(1.08)]",
