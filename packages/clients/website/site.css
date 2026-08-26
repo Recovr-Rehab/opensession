@@ -1485,7 +1485,7 @@ summary:focus-visible {
 }
 
 @keyframes enter {
-	from { opacity: 0; transform: translateY(12px); }
+	from { opacity: 0; filter: blur(4px); transform: translateY(12px); }
 }
 
 @keyframes dialog-enter {
