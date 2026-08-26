@@ -189,9 +189,9 @@ summary:focus-visible {
 }
 
 .rail-actions .button {
-	min-width: max-content;
 	flex: 1 1 0;
-	white-space: nowrap;
+	white-space: normal;
+	text-align: center;
 }
 
 .rail-note {

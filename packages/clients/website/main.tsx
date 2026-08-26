@@ -499,7 +499,7 @@ function LandingPage() {
 							href="/announcement"
 							onClick={openAnnouncement}
 						>
-							Read the announcement
+							Read announcement
 						</a>
 					</div>
 					<p className="rail-note">
