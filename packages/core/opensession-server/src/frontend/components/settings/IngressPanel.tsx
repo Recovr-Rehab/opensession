@@ -30,7 +30,6 @@ import { cn } from "../../ui/cn";
 import { CopyCheck, useCopy } from "../../ui/copy";
 import { Input } from "../../ui/input";
 import { Radio, RadioGroup } from "../../ui/radio";
-import { Segmented, SegmentedOption } from "../../ui/segmented";
 import {
 	SettingCard,
 	SettingCardSkeleton,
@@ -142,9 +141,72 @@ function SetupStep({ number, title, children }: { number: number; title: string;
 	);
 }
 
+function DomainSetupSteps({
+	value,
+	onValueChange,
+	appStatus,
+	callbackStatus,
+}: {
+	value: "domain" | "callbacks";
+	onValueChange: (value: "domain" | "callbacks") => void;
+	appStatus: PublicIngressSettings["app"]["domain"]["health"];
+	callbackStatus: PublicIngressSettings["health"];
+}) {
+	const steps = [
+		{
+			value: "domain" as const,
+			number: 1,
+			title: "Friendly domain",
+			description: "Give your team a memorable address while keeping the app private.",
+			status: appStatus,
+		},
+		{
+			value: "callbacks" as const,
+			number: 2,
+			title: "Public callbacks",
+			description: "Required for GitHub webhooks and remote Sandbox callbacks. The public endpoint never exposes the app.",
+			status: callbackStatus,
+		},
+	];
+	return (
+		<SettingCard className="mb-5">
+			<ol className="m-0 grid list-none grid-cols-2 p-0 phone:grid-cols-1">
+				{steps.map((step, index) => {
+					const active = value === step.value;
+					return (
+						<li key={step.value} className={cn(index > 0 && "border-l border-line phone:border-t phone:border-l-0")}>
+							<button
+								type="button"
+								aria-current={active ? "step" : undefined}
+								className={cn(
+									"flex min-h-28 w-full items-start gap-3.5 px-5 py-4 text-left transition-[background-color] hover:bg-hover phone:min-h-0 phone:py-4",
+									active && "bg-pressed",
+								)}
+								onClick={() => onValueChange(step.value)}
+							>
+								<span className={cn("mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-surface text-label font-semibold text-dim", active && "bg-fg text-panel")}>
+									{step.number}
+								</span>
+								<span className="min-w-0 flex-1">
+									<span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+										<span className="text-item-title font-semibold text-fg">{step.title}</span>
+										<StatusChip label={ingressHealthLabel(step.status)} dot={ingressHealthDot(step.status)} />
+									</span>
+									<span className="mt-1.5 block text-supporting leading-relaxed text-dim">{step.description}</span>
+								</span>
+							</button>
+						</li>
+					);
+				})}
+			</ol>
+		</SettingCard>
+	);
+}
+
 function PrivateAppSetup({
 	settings,
 	domain,
+	onboarding,
 	email,
 	apiToken,
 	provider,
@@ -162,6 +224,7 @@ function PrivateAppSetup({
 }: {
 	settings: PublicIngressSettings;
 	domain: string;
+	onboarding: boolean;
 	email: string;
 	apiToken: string;
 	provider: "cloudflare" | "vercel";
@@ -183,42 +246,30 @@ function PrivateAppSetup({
 	const managedCredential = settings.app.domain.credentialConfigured && domain.trim() === savedDomain && settings.app.domain.dnsProvider === provider;
 	const managedInputMissing = !domain.trim() || (!managedCredential && (!email.trim() || !apiToken.trim()));
 	const status = settings.app.domain.health;
-	const statusLabel = busy ? action === "verify" ? "Checking" : action === "save" ? "Saving" : "Setting up" : ingressHealthLabel(status);
-	const statusDot = ingressHealthDot(status);
 	return (
 		<>
-			<SettingsGroupLabel
-				className="mt-0"
-				actions={<StatusChip label={statusLabel} dot={busy ? "var(--yellow)" : statusDot} />}
-			>
-				Private app
-			</SettingsGroupLabel>
-			<SettingCard>
-				<SettingRow>
-					<SettingRowText>
-						<SettingRowTitle>Current address</SettingRowTitle>
-						<div className="selectable mt-1 break-all font-mono text-supporting text-dim">{settings.app.publicBaseUrl}</div>
-					</SettingRowText>
-				</SettingRow>
-				{settings.app.domain.certificateExpiresAt && (
+			{!onboarding && (
+				<SettingCard>
 					<SettingRow>
 						<SettingRowText>
-							<SettingRowTitle>Certificate</SettingRowTitle>
-							<SettingRowDescription>
-								Valid until {new Date(settings.app.domain.certificateExpiresAt).toLocaleDateString()}
-								{settings.app.domain.credentialConfigured ? ". Renewal is automatic." : ". Managed outside Open Session."}
-							</SettingRowDescription>
+							<SettingRowTitle>Current address</SettingRowTitle>
+							<div className="selectable mt-1 break-all font-mono text-supporting text-dim">{settings.app.publicBaseUrl}</div>
 						</SettingRowText>
 					</SettingRow>
-				)}
-			</SettingCard>
-			<SettingsForm className="mt-3">
-				<div>
-					<div className="text-item-title font-medium text-fg">Optional friendly domain</div>
-					<p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">
-						Give your team a memorable HTTPS address while keeping the app private.
-					</p>
-				</div>
+					{settings.app.domain.certificateExpiresAt && (
+						<SettingRow>
+							<SettingRowText>
+								<SettingRowTitle>Certificate</SettingRowTitle>
+								<SettingRowDescription>
+									Valid until {new Date(settings.app.domain.certificateExpiresAt).toLocaleDateString()}
+									{settings.app.domain.credentialConfigured ? ". Renewal is automatic." : ". Managed outside Open Session."}
+								</SettingRowDescription>
+							</SettingRowText>
+						</SettingRow>
+					)}
+				</SettingCard>
+			)}
+			<SettingsForm className={onboarding ? "mt-0" : "mt-3"}>
 				{status === "ready" && !settings.app.domain.credentialConfigured && (
 					<SettingsHint className="m-0">This address is already working. Its certificate is managed outside Open Session.</SettingsHint>
 				)}
@@ -346,7 +397,7 @@ export function IngressPanel({
 	const localSetup = useSetupStatus();
 	const setup = parentSetup || localSetup;
 	const [settings, setSettings] = useState<PublicIngressSettings | null>(null);
-	const [surface, setSurface] = useState<"app" | "ingress">("app");
+	const [surface, setSurface] = useState<"domain" | "callbacks">("domain");
 	const [method, setMethod] = useState<IngressExposure>("custom");
 	const [appDomain, setAppDomain] = useState("");
 	const [certificateEmail, setCertificateEmail] = useState("");
@@ -370,6 +421,7 @@ export function IngressPanel({
 		if (!loaded.current) {
 			setAppDomain(configuredAppDomain(next));
 			setPrivateProvider(next.app.domain.dnsProvider || "cloudflare");
+			if (onboarding && next.app.domain.health === "ready") setSurface("callbacks");
 			setDrafts(configuredIngressDrafts(next));
 			setPublicAddress(next.server.ipv4[0] || next.server.ipv6[0] || "");
 			loaded.current = true;
@@ -511,8 +563,8 @@ export function IngressPanel({
 		<SettingsPanel className={onboarding ? "mx-auto max-w-[1120px]" : "relative"}>
 			{!onboarding && (
 				<SettingsHeader
-					title="Domains and ingress"
-					description="Keep the app private, then choose one way to receive public callbacks."
+					title="Domains and callbacks"
+					description="Set a friendly private address, then add the public endpoint external services need."
 				/>
 			)}
 
@@ -521,17 +573,18 @@ export function IngressPanel({
 				<SettingCardSkeleton rows={3} label="Loading public ingress" />
 			) : (
 				<>
-					<div className="mb-5 flex justify-center px-5">
-						<Segmented label="Domain setup" value={surface} onValueChange={(value) => setSurface(value as "app" | "ingress")} className="w-full max-w-[480px]">
-							<SegmentedOption value="app" className="flex min-h-10 flex-1 items-center justify-center phone:min-h-11">Private app</SegmentedOption>
-							<SegmentedOption value="ingress" className="flex min-h-10 flex-1 items-center justify-center phone:min-h-11">Public callbacks</SegmentedOption>
-						</Segmented>
-					</div>
-					{surface === "app" ? (
+					<DomainSetupSteps
+						value={surface}
+						onValueChange={setSurface}
+						appStatus={settings.app.domain.health}
+						callbackStatus={settings.health}
+					/>
+					{surface === "domain" ? (
 						<>
 							<PrivateAppSetup
 								settings={settings}
 								domain={appDomain}
+								onboarding={onboarding}
 								email={certificateEmail}
 								apiToken={privateApiToken}
 								provider={privateProvider}
@@ -553,9 +606,6 @@ export function IngressPanel({
 								onVerify={() => void verifyAppDomain()}
 								onSaveManual={() => void runPrivateApp("save", () => savePrivateAppDomain(appDomain), "Private app domain saved")}
 							/>
-							{onboarding && settings.health !== "ready" && (
-								<SettingsHint className="mt-4">Both are optional. Without public callbacks, external services cannot deliver webhooks or remote callbacks.</SettingsHint>
-							)}
 						</>
 					) : (
 					<>
@@ -585,15 +635,6 @@ export function IngressPanel({
 						</>
 					)}
 
-					<SettingsGroupLabel
-						className={onboarding ? "mt-0" : undefined}
-						actions={onboarding ? <StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(selectedHealth)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(selectedHealth)} /> : undefined}
-					>
-						Public callbacks
-					</SettingsGroupLabel>
-					{onboarding && (
-						<SettingsHint className="mt-2 mb-3">Optional. Skip this if you do not need webhooks, remote Sandbox callbacks, or public workload identity.</SettingsHint>
-					)}
 					<div
 						className={cn(
 							"grid items-start gap-3.5 phone:grid-cols-1",
