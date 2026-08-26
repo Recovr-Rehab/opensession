@@ -417,9 +417,7 @@ function SetupOverview() {
 						<strong>
 							<span aria-hidden="true">2. </span>Expose it safely
 						</strong>
-						<span>
-							Use Tailscale to connect from your phone or share with your team.
-						</span>
+						<span>Connect from your phone or share with your team.</span>
 					</div>
 					<a
 						className="landing-setup-step-action landing-setup-step-action-secondary"
