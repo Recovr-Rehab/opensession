@@ -275,7 +275,9 @@ function PrivateAppSetup({
 							</SetupStep>
 						</SetupSteps>
 						{status === "waiting_dns" && <InlineAlert>DNS has not reached this server yet. Wait a moment, then verify again.</InlineAlert>}
-						{status === "unreachable" && <InlineAlert>DNS points to this server, but the HTTPS app is not reachable. Verify Caddy and the certificate, then try again.</InlineAlert>}
+						{status === "unreachable" && ingressHostname(domain) === ingressHostname(savedDomain) && (
+							<InlineAlert>DNS points to this server, but the HTTPS app is not reachable. Verify Caddy and the certificate, then try again.</InlineAlert>
+						)}
 						<SettingsFormActions className="phone:flex-col-reverse">
 							<Button variant="soft" disabled={busy || !savedDomain || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onVerify}>
 								{action === "verify" ? "Checking…" : "Verify address"}
@@ -387,10 +389,12 @@ export function IngressPanel({
 	}, []);
 
 	// A custom-domain setup is complete before DNS necessarily reaches this
-	// server. Keep either explicit waiting state current without requiring a
-	// repeated manual probe while the provider propagates it.
+	// server. Keep waiting and transiently unreachable states current without
+	// requiring a repeated manual probe while DNS or the listener converges.
 	useEffect(() => {
-		if (settings?.health !== "waiting_dns" && settings?.app.domain.health !== "waiting_dns") return;
+		const publicPending = settings?.health === "waiting_dns" || settings?.health === "unreachable";
+		const appPending = settings?.app.domain.health === "waiting_dns" || settings?.app.domain.health === "unreachable";
+		if (!publicPending && !appPending) return;
 		const timer = window.setInterval(() => {
 			void fetchPublicIngress().then((next) => applyFromEffect(next, false)).catch(() => {});
 		}, 5_000);
