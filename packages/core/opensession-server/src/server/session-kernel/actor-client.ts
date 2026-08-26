@@ -27,6 +27,7 @@ import type {
   DeliveryMutationReply,
 } from "./delivery-protocol";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
+import type { AgentOperationRequest, AgentOperationResult } from "./agent-operation-protocol";
 import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
 import type { TimerActorRequest, TimerActorResult } from "./timer-protocol";
 import type { GatewayCommandRequest, GatewayCommandResult } from "./gateway-command-protocol";
@@ -363,6 +364,13 @@ export class SessionKernelActorClient {
     return (response as DeliveryMutationReply<DeliveryActorResult<T>>).result;
   }
 
+  decideAgentOperation(request: AgentOperationRequest): AgentOperationResult {
+    return this.callSync<AgentOperationResult>(
+      { t: "reduce", command: { kind: "agent_operation", commandId: request.identity.operationId, request } },
+      `Agent operation ${request.op}`,
+    );
+  }
+
   decideAgentHostSupervision<T extends AgentHostSupervisionRequest>(
     request: T,
   ): T extends AgentHostPlanRegistration
@@ -647,6 +655,9 @@ class RemoteStore implements SessionKernelStoreApi {
   }
   releaseQuarantine(sessionId: string) {
     return this.call<boolean>("releaseQuarantine", sessionId);
+  }
+  decideAgentOperation(request: AgentOperationRequest): AgentOperationResult {
+    return this.actor.decideAgentOperation(request);
   }
   acceptCommand(input: {
     sessionId: string;

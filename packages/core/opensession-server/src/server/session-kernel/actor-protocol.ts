@@ -5,7 +5,7 @@ import type {
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 27;
+export const SESSION_KERNEL_ACTOR_VERSION = 28;
 export const SESSION_KERNEL_TRANSPORT_VERSION = 1;
 export const SESSION_KERNEL_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 export const SESSION_KERNEL_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
@@ -98,6 +98,8 @@ export type KernelActorRunEventResult = RunEventDecisionResult;
 export function isCriticalSettlementCommand(
   command: SessionActorReducerCommand,
 ): boolean {
+  if (command.kind === "agent_operation")
+    return command.request.op === "settle" || command.request.op === "indeterminate";
   if (command.kind === "gateway")
     return command.request.op === "complete" || command.request.op === "fail";
   if (command.kind === "core")

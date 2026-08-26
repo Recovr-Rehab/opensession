@@ -23,6 +23,13 @@ export function sessionActorReducerRoute(
   command: SessionActorReducerCommand,
 ): SessionActorRoute {
   switch (command.kind) {
+    case "agent_operation":
+      // Queries fail closed by durably quarantining contradictory receipts.
+      return {
+        scope: "session",
+        sessionId: command.request.identity.sessionId,
+        mutation: true,
+      };
     case "agent_host_supervision":
       return {
         scope: "session",

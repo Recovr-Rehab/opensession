@@ -7,6 +7,7 @@
  */
 import { audit } from "../audit";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
+import { decodeAgentOperationRequest, type AgentOperationRequest, type AgentOperationResult } from "./agent-operation-protocol";
 import type {
   AgentHostPlanRegistration,
   AgentHostPlanRegistrationResult,
@@ -82,6 +83,13 @@ function compatibilityStoreForTest(
 			`Session ${domain} mutation requires the authoritative actor`,
 		);
 	return sessionKernelStore();
+}
+
+export function sessionAgentOperation(request: AgentOperationRequest): AgentOperationResult {
+  const decoded = decodeAgentOperationRequest(request);
+  if (!decoded) return { accepted: false, reason: "invalid_request" };
+  if (state.actor) return state.actor.decideAgentOperation(decoded);
+  return compatibilityStoreForTest("core").decideAgentOperation(decoded);
 }
 
 export function registerAgentHostPlan(

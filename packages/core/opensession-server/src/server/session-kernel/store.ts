@@ -17,6 +17,18 @@ import {
   type AgentHostSupervisionResult,
 } from "./agent-host-supervision-protocol";
 import { decodeSignedAgentHostSupervisionEnvelopeV1 } from "@tellahq/opensession-protocol/agent-host-supervision";
+import {
+  AGENT_OPERATION_EVIDENCE_HORIZON_MS,
+  SESSION_KERNEL_MAX_AGENT_OPERATIONS_PER_SESSION,
+  SESSION_KERNEL_MAX_AGENT_OPERATIONS_PER_TURN,
+  canonicalAgentOperationIdentity,
+  canonicalAgentOperationTerminal,
+  decodeAgentOperationReceipt,
+  decodeAgentOperationRequest,
+  type AgentOperationReceipt,
+  type AgentOperationRequest,
+  type AgentOperationResult,
+} from "./agent-operation-protocol";
 /**
  * Durable state for the session actor boundary.
  *
@@ -242,7 +254,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 27;
+export const SESSION_KERNEL_SCHEMA_VERSION = 28;
 export const SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS = 64;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
@@ -525,6 +537,275 @@ function migrateAgentHostSupervisionSchema(
   tx.immediate();
 }
 
+function assertAgentOperationSchema28(db: Database): void {
+  const expected = {
+    session_kernel_agent_operation_high_water: [["session_id","TEXT",1,1],["operation_sequence","INTEGER",1,0],["updated_at","INTEGER",1,0]],
+    session_kernel_agent_operations: [
+      ["session_id","TEXT",1,1],["operation_id","TEXT",1,2],["semantic_hash","TEXT",1,0],["identity_hash","TEXT",1,0],
+      ["identity","TEXT",1,0],["operation_sequence","INTEGER",1,0],["run_id","TEXT",1,0],["turn_id","TEXT",1,0],
+      ["run_generation","INTEGER",1,0],["kind","TEXT",1,0],["state","TEXT",1,0],["anchor_change_seq","INTEGER",1,0],
+      ["terminal_change_seq","INTEGER",0,0],["terminal_entry_ids","TEXT",0,0],["terminal_request","TEXT",0,0],
+      ["receipt","TEXT",1,0],["admitted_at","INTEGER",1,0],["terminal_at","INTEGER",0,0],
+    ],
+  } as const;
+  const normalize = (value: string) => value.toLowerCase().replace(/\s+/g," ").trim();
+  for (const [table, columns] of Object.entries(expected)) {
+    const row = db.query("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table) as {sql:string}|null;
+    const actual = (db.query(`PRAGMA table_xinfo(${table})`).all() as Array<{name:string;type:string;notnull:number;pk:number;hidden:number}>).map(({name,type,notnull,pk,hidden})=>[name,type,notnull,pk,hidden]);
+    const wanted = columns.map(([name,type,notnull,pk])=>[name,type,notnull,pk,0]);
+    if (!row?.sql || !normalize(row.sql).endsWith(") strict") || JSON.stringify(actual)!==JSON.stringify(wanted))
+      throw new Error("Agent operation schema does not match exact schema 28");
+    const sql=normalize(row.sql);
+    const required = table === "session_kernel_agent_operation_high_water"
+      ? ["primary key", "check(operation_sequence >= 0)", "check(updated_at >= 0)"]
+      : [
+          "primary key(session_id, operation_id)",
+          "unique(session_id, semantic_hash)", "unique(session_id, operation_sequence)",
+          "check(semantic_hash glob 'sha256:*' and length(semantic_hash)=71)",
+          "check(identity_hash glob 'sha256:*' and length(identity_hash)=71)",
+          "check(operation_sequence >= 1)", "check(run_generation >= 0)",
+          "check(kind in ('model','mcp'))", "check(state in ('admitted','settled','indeterminate'))",
+          "check(anchor_change_seq >= 0)", "check(admitted_at >= 0)",
+          "check((state='admitted' and terminal_change_seq is null",
+          "(state!='admitted' and terminal_change_seq is not null",
+        ];
+    if(required.some((fragment)=>!sql.includes(fragment)))
+      throw new Error("Agent operation schema constraints do not match schema 28");
+  }
+  const indexes=db.query(`SELECT name,sql FROM sqlite_master WHERE type='index' AND tbl_name IN ('session_kernel_agent_operations','session_kernel_agent_operation_high_water') AND sql IS NOT NULL ORDER BY name`).all() as Array<{name:string;sql:string}>;
+  const wantedIndexes=[
+    ["idx_skao_prune","create index idx_skao_prune on session_kernel_agent_operations(session_id,terminal_at) where state='settled'"],
+    ["idx_skao_turn_sequence","create index idx_skao_turn_sequence on session_kernel_agent_operations(session_id,run_id,run_generation,turn_id,operation_sequence)"],
+  ];
+  if(JSON.stringify(indexes.map(({name,sql})=>[name,normalize(sql)]))!==JSON.stringify(wantedIndexes)) throw new Error("Agent operation schema indexes do not match exact schema 28");
+  const integrity=db.query("PRAGMA quick_check").get() as Record<string,unknown>;
+  if(!Object.values(integrity).includes("ok")) throw new Error("Agent operation schema integrity check failed");
+}
+
+type DurableAgentOperationRow = {
+  session_id: string;
+  operation_id: string;
+  semantic_hash: string;
+  identity_hash: string;
+  identity: string;
+  operation_sequence: number;
+  run_id: string;
+  turn_id: string;
+  run_generation: number;
+  kind: "model" | "mcp";
+  state: "admitted" | "settled" | "indeterminate";
+  anchor_change_seq: number;
+  terminal_change_seq: number | null;
+  terminal_entry_ids: string | null;
+  terminal_request: string | null;
+  receipt: string;
+  admitted_at: number;
+  terminal_at: number | null;
+};
+
+function parseStrictJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new Error("Agent operation row contains invalid JSON");
+  }
+}
+
+function decodeDurableAgentOperationRow(
+  row: DurableAgentOperationRow,
+): AgentOperationReceipt {
+  const receipt = decodeAgentOperationReceipt(parseStrictJson(row.receipt));
+  if (!receipt) throw new Error("Agent operation row has an invalid receipt");
+  const identityText = canonicalAgentOperationIdentity(receipt.identity);
+  const identityHash = `sha256:${digest(identityText)}`;
+  const { operationId: _operationId, ...semanticIdentity } = receipt.identity;
+  const semanticHash = `sha256:${digest(JSON.stringify(semanticIdentity))}`;
+  if (
+    row.session_id !== receipt.identity.sessionId ||
+    row.operation_id !== receipt.identity.operationId ||
+    row.identity !== identityText ||
+    row.identity_hash !== identityHash ||
+    row.semantic_hash !== semanticHash ||
+    Number(row.operation_sequence) !== receipt.sequence ||
+    row.run_id !== receipt.identity.runId ||
+    row.turn_id !== receipt.identity.turnId ||
+    Number(row.run_generation) !== receipt.identity.generation ||
+    row.kind !== receipt.identity.kind ||
+    row.state !== receipt.state ||
+    Number(row.anchor_change_seq) !==
+      receipt.identity.transcriptAnchor.throughChangeSeq ||
+    Number(row.admitted_at) !== receipt.admittedAtMs
+  )
+    throw new Error("Agent operation row contradicts its receipt identity");
+
+  if (receipt.state === "admitted") {
+    if (
+      row.terminal_change_seq !== null ||
+      row.terminal_entry_ids !== null ||
+      row.terminal_request !== null ||
+      row.terminal_at !== null
+    )
+      throw new Error("Admitted Agent operation row contains terminal fields");
+    return receipt;
+  }
+  if (row.terminal_request === null || row.terminal_entry_ids === null) {
+    throw new Error("Terminal Agent operation row is incomplete");
+  }
+  const request = decodeAgentOperationRequest(
+    parseStrictJson(row.terminal_request),
+  );
+  if (!request || (request.op !== "settle" && request.op !== "indeterminate")) {
+    throw new Error("Agent operation terminal request is invalid");
+  }
+  const entryIds = [
+    ...new Set(request.transcriptReceipts.flatMap((ref) => ref.entryIds)),
+  ];
+  const storedEntryIds = parseStrictJson(row.terminal_entry_ids);
+  const terminalChangeSeq = Math.max(
+    ...request.transcriptReceipts.map((ref) => ref.throughChangeSeq),
+  );
+  if (
+    canonicalAgentOperationTerminal(request) !== row.terminal_request ||
+    canonicalAgentOperationIdentity(request.identity) !== identityText ||
+    (request.op === "settle" ? "settled" : "indeterminate") !== receipt.state ||
+    JSON.stringify(storedEntryIds) !== JSON.stringify(entryIds) ||
+    Number(row.terminal_change_seq) !== terminalChangeSeq ||
+    Number(row.terminal_at) !== receipt.terminalAtMs ||
+    request.gatewayReceiptDigest !== receipt.gatewayReceiptDigest ||
+    request.outputDigest !== receipt.outputDigest ||
+    request.outcomeCode !== receipt.outcomeCode ||
+    JSON.stringify(request.transcriptReceipts) !==
+      JSON.stringify(receipt.transcriptReceipts) ||
+    JSON.stringify(request.pendingToolUseEntryIds) !==
+      JSON.stringify(receipt.pendingToolUseEntryIds)
+  )
+    throw new Error("Agent operation row contradicts its terminal receipt");
+  return receipt;
+}
+
+function assertAgentOperationRows28(db: Database, sessionId?: string): void {
+  const rows = db
+    .query(
+      `SELECT * FROM session_kernel_agent_operations
+       WHERE ? IS NULL OR session_id=?`,
+    )
+    .all(sessionId ?? null, sessionId ?? null) as DurableAgentOperationRow[];
+  for (const row of rows) decodeDurableAgentOperationRow(row);
+  const allHighs = db
+    .query(
+      `SELECT session_id,operation_sequence,updated_at
+       FROM session_kernel_agent_operation_high_water
+       WHERE ? IS NULL OR session_id=?`,
+    )
+    .all(sessionId ?? null, sessionId ?? null) as Array<{
+    session_id: string;
+    operation_sequence: number;
+    updated_at: number;
+  }>;
+  for (const high of allHighs) {
+    if (
+      typeof high.session_id !== "string" ||
+      high.session_id.length === 0 ||
+      !Number.isSafeInteger(high.operation_sequence) ||
+      high.operation_sequence < 0 ||
+      high.operation_sequence >= Number.MAX_SAFE_INTEGER ||
+      !Number.isSafeInteger(high.updated_at) ||
+      high.updated_at < 0
+    )
+      throw new Error(
+        `Invalid Agent operation high-water for ${high.session_id}`,
+      );
+  }
+  const highs = db
+    .query(
+      `SELECT op.session_id,MAX(op.operation_sequence) AS actual,
+              high.operation_sequence
+       FROM session_kernel_agent_operations AS op
+       LEFT JOIN session_kernel_agent_operation_high_water AS high
+         ON high.session_id=op.session_id
+       WHERE ? IS NULL OR op.session_id=?
+       GROUP BY op.session_id`,
+    )
+    .all(sessionId ?? null, sessionId ?? null) as Array<{
+    session_id: string;
+    operation_sequence: number | null;
+    actual: number;
+  }>;
+  for (const high of highs) {
+    if (
+      high.operation_sequence === null ||
+      Number(high.operation_sequence) < Number(high.actual)
+    ) {
+      throw new Error(
+        `Agent operation high-water contradicts receipts for ${high.session_id}`,
+      );
+    }
+  }
+}
+
+function migrateAgentOperationSchema28(
+  db: Database,
+  schemaVersion: number,
+): void {
+  if (schemaVersion >= 28) return;
+  const tx = db.transaction(() => {
+    const partial = db
+      .query(
+        `SELECT name FROM sqlite_master WHERE name IN
+       ('session_kernel_agent_operations','session_kernel_agent_operation_high_water')`,
+      )
+      .all() as Array<{ name: string }>;
+    if (partial.length !== 0)
+      throw new Error("Partial Agent operation schema is unsupported");
+    const supervisionColumns = new Set(
+      (
+        db
+          .query("PRAGMA table_info(session_kernel_agent_host_supervision)")
+          .all() as Array<{ name: string }>
+      ).map((column) => column.name),
+    );
+    for (const required of [
+      "receipt_format",
+      "envelope",
+      "authority_hash",
+      "supervisor_epoch",
+      "status",
+    ])
+      if (!supervisionColumns.has(required))
+        throw new Error(
+          "Schema 28 requires exact schema 27 signed supervision storage",
+        );
+    db.exec(`
+      CREATE TABLE session_kernel_agent_operation_high_water (
+        session_id TEXT PRIMARY KEY,
+        operation_sequence INTEGER NOT NULL CHECK(operation_sequence >= 0),
+        updated_at INTEGER NOT NULL CHECK(updated_at >= 0)
+      ) STRICT;
+      CREATE TABLE session_kernel_agent_operations (
+        session_id TEXT NOT NULL, operation_id TEXT NOT NULL,
+        semantic_hash TEXT NOT NULL CHECK(semantic_hash GLOB 'sha256:*' AND length(semantic_hash)=71),
+        identity_hash TEXT NOT NULL CHECK(identity_hash GLOB 'sha256:*' AND length(identity_hash)=71),
+        identity TEXT NOT NULL, operation_sequence INTEGER NOT NULL CHECK(operation_sequence >= 1),
+        run_id TEXT NOT NULL, turn_id TEXT NOT NULL,
+        run_generation INTEGER NOT NULL CHECK(run_generation >= 0),
+        kind TEXT NOT NULL CHECK(kind IN ('model','mcp')),
+        state TEXT NOT NULL CHECK(state IN ('admitted','settled','indeterminate')),
+        anchor_change_seq INTEGER NOT NULL CHECK(anchor_change_seq >= 0),
+        terminal_change_seq INTEGER, terminal_entry_ids TEXT, terminal_request TEXT,
+        receipt TEXT NOT NULL, admitted_at INTEGER NOT NULL CHECK(admitted_at >= 0), terminal_at INTEGER,
+        PRIMARY KEY(session_id, operation_id), UNIQUE(session_id, semantic_hash),
+        UNIQUE(session_id, operation_sequence),
+        CHECK((state='admitted' AND terminal_change_seq IS NULL AND terminal_entry_ids IS NULL AND terminal_request IS NULL AND terminal_at IS NULL) OR
+              (state!='admitted' AND terminal_change_seq IS NOT NULL AND terminal_entry_ids IS NOT NULL AND terminal_request IS NOT NULL AND terminal_at IS NOT NULL))
+      ) STRICT;
+      CREATE INDEX idx_skao_turn_sequence ON session_kernel_agent_operations(session_id,run_id,run_generation,turn_id,operation_sequence);
+      CREATE INDEX idx_skao_prune ON session_kernel_agent_operations(session_id,terminal_at) WHERE state='settled';
+      PRAGMA user_version = 28;
+    `);
+  });
+  tx.immediate();
+}
+
 function migrateAgentHostSupervisionSchema27(
   db: Database,
   schemaVersion: number,
@@ -739,6 +1020,8 @@ const SESSION_KERNEL_SESSION_TABLES = [
   "session_kernel_turn_projections",
   "session_kernel_agent_host_plan",
   "session_kernel_agent_host_supervision",
+  "session_kernel_agent_operations",
+  "session_kernel_agent_operation_high_water",
   "session_kernel_commands",
   "session_kernel_changes",
   "session_kernel_timers",
@@ -1230,8 +1513,11 @@ export class SessionKernelStore {
       "DROP INDEX IF EXISTS idx_skc_updated; DROP INDEX IF EXISTS idx_skc_status_created;",
     );
     migrateAgentHostSupervisionSchema(this.db, schemaVersion);
-    // Schema 27 writes user_version last inside its IMMEDIATE transaction.
+    // Additive migrations write user_version last inside IMMEDIATE transactions.
     migrateAgentHostSupervisionSchema27(this.db, schemaVersion);
+    migrateAgentOperationSchema28(this.db, schemaVersion);
+    assertAgentOperationSchema28(this.db);
+    assertAgentOperationRows28(this.db);
 		if (path !== ":memory:") {
 			try {
 				chmodSync(path, 0o600);
@@ -1390,6 +1676,15 @@ export class SessionKernelStore {
 	}
 
 	releaseQuarantine(sessionId: string): boolean {
+		const quarantine = this.quarantinedSession(sessionId);
+		if (!quarantine) return false;
+		if (quarantine.commandKind === "agent_operation") {
+			try {
+				assertAgentOperationRows28(this.db, sessionId);
+			} catch {
+				return false;
+			}
+		}
 		return this.db.run(
 			"DELETE FROM session_kernel_quarantine WHERE session_id = ?",
 			[sessionId],
@@ -2132,6 +2427,448 @@ export class SessionKernelStore {
     return result;
   }
 
+  decideAgentOperation(raw: AgentOperationRequest): AgentOperationResult {
+    const request = decodeAgentOperationRequest(raw);
+    if (!request) return { accepted: false, reason: "invalid_request" };
+    const identity = request.identity;
+    if (this.isTombstoned(identity.sessionId))
+      throw new Error(`Session ${identity.sessionId} was deleted`);
+    const identityText = canonicalAgentOperationIdentity(identity);
+    const identityHash = `sha256:${digest(identityText)}`;
+    const { operationId: _operationId, ...semanticIdentity } = identity;
+    const semanticHash = `sha256:${digest(JSON.stringify(semanticIdentity))}`;
+    const now = Date.now();
+    let result!: AgentOperationResult;
+    const tx = this.db.transaction(() => {
+      const existingQuarantine = this.db
+        .query(
+          "SELECT 1 AS quarantined FROM session_kernel_quarantine WHERE session_id=?",
+        )
+        .get(identity.sessionId);
+      if (existingQuarantine) {
+        result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      const quarantine = (reason: string): void => {
+        this.db.run(
+          `INSERT INTO session_kernel_quarantine(session_id,reason,command_kind,quarantined_at)
+           VALUES (?,?,'agent_operation',?) ON CONFLICT(session_id) DO UPDATE SET
+           reason=excluded.reason,command_kind=excluded.command_kind,quarantined_at=excluded.quarantined_at`,
+          [identity.sessionId, reason, now],
+        );
+      };
+      const decodeRow = (
+        row: DurableAgentOperationRow | null,
+      ): AgentOperationReceipt | undefined => {
+        if (!row) return;
+        try {
+          return decodeDurableAgentOperationRow(row);
+        } catch {
+          quarantine("Corrupt or contradictory Agent operation receipt");
+          return;
+        }
+      };
+      const rawRow = this.db
+        .query(
+          `SELECT * FROM session_kernel_agent_operations WHERE session_id=? AND operation_id=?`,
+        )
+        .get(
+          identity.sessionId,
+          identity.operationId,
+        ) as DurableAgentOperationRow | null;
+      const rowReceipt = decodeRow(rawRow);
+      if (rawRow && !rowReceipt) {
+        result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      const rawSemantic = this.db
+        .query(
+          `SELECT * FROM session_kernel_agent_operations WHERE session_id=? AND semantic_hash=?`,
+        )
+        .get(
+          identity.sessionId,
+          semanticHash,
+        ) as DurableAgentOperationRow | null;
+      const semanticReceipt = decodeRow(rawSemantic);
+      if (rawSemantic && !semanticReceipt) {
+        result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      if (
+        (rawRow &&
+          (rawRow.identity_hash !== identityHash ||
+            rawRow.identity !== identityText)) ||
+        (rawSemantic && rawSemantic.operation_id !== identity.operationId)
+      ) {
+        quarantine("Agent operation identity crossover");
+        result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      if (request.op === "query") {
+        result = rowReceipt
+          ? { accepted: true, replayed: true, receipt: rowReceipt }
+          : { accepted: false, reason: "not_found" };
+        return;
+      }
+      if (request.op !== "admit") {
+        if (!rawRow || !rowReceipt) {
+          result = { accepted: false, reason: "not_found" };
+          return;
+        }
+        const terminalText = canonicalAgentOperationTerminal(request);
+        if (rowReceipt.state !== "admitted") {
+          if (rawRow.terminal_request === terminalText) {
+            result = { accepted: true, replayed: true, receipt: rowReceipt };
+          } else {
+            quarantine("Agent operation terminal receipt crossover");
+            result = { accepted: false, reason: "operation_barrier" };
+          }
+          return;
+        }
+        const refs = request.transcriptReceipts;
+        if (
+          refs.some(
+            (ref, index) =>
+              ref.throughChangeSeq <=
+                identity.transcriptAnchor.throughChangeSeq ||
+              (index > 0 &&
+                ref.throughChangeSeq < refs[index - 1]!.throughChangeSeq),
+          )
+        ) {
+          result = { accepted: false, reason: "transcript_barrier" };
+          return;
+        }
+        const terminalChangeSeq = Math.max(
+          ...refs.map((ref) => ref.throughChangeSeq),
+        );
+        const entryIds = [...new Set(refs.flatMap((ref) => [...ref.entryIds]))];
+        const receipt: AgentOperationReceipt = {
+          identity,
+          sequence: rowReceipt.sequence,
+          state: request.op === "settle" ? "settled" : "indeterminate",
+          admittedAtMs: rowReceipt.admittedAtMs,
+          terminalAtMs: now,
+          gatewayReceiptDigest: request.gatewayReceiptDigest,
+          outputDigest: request.outputDigest,
+          outcomeCode: request.outcomeCode,
+          transcriptReceipts: refs,
+          ...(identity.kind === "model"
+            ? { pendingToolUseEntryIds: request.pendingToolUseEntryIds }
+            : {}),
+        };
+        const update = this.db.run(
+          `UPDATE session_kernel_agent_operations SET state=?,terminal_change_seq=?,
+           terminal_entry_ids=?,terminal_request=?,receipt=?,terminal_at=?
+           WHERE session_id=? AND operation_id=? AND state='admitted'`,
+          [
+            receipt.state,
+            terminalChangeSeq,
+            json(entryIds),
+            terminalText,
+            json(receipt),
+            now,
+            identity.sessionId,
+            identity.operationId,
+          ],
+        );
+        if (update.changes !== 1)
+          throw new Error("Agent operation settlement lost serialization");
+        result = { accepted: true, replayed: false, receipt };
+        return;
+      }
+      if (rowReceipt) {
+        result = { accepted: true, replayed: true, receipt: rowReceipt };
+        return;
+      }
+      const run = this.runState(identity.sessionId);
+      if (
+        run.currentRunId !== identity.runId ||
+        run.generation !== identity.generation
+      ) {
+        result = { accepted: false, reason: "stale_run" };
+        return;
+      }
+      if (
+        ![
+          "starting",
+          "running",
+          "ask_blocked",
+          "interrupted",
+          "reattaching",
+        ].includes(run.state)
+      ) {
+        result = { accepted: false, reason: "terminal_run" };
+        return;
+      }
+      const plan = decodeDurableAgentHostPlan(
+        identity.sessionId,
+        this.db
+          .query(
+            `SELECT registration_id,run_id,run_generation,turn_id,plan_hash,host_id,
+                  host_generation_high_water,supervisor_high_water
+           FROM session_kernel_agent_host_plan WHERE session_id=?`,
+          )
+          .get(identity.sessionId) as Record<string, unknown> | null,
+      );
+      if (!plan) {
+        result = { accepted: false, reason: "plan_unregistered" };
+        return;
+      }
+      if (
+        plan.runId !== identity.runId ||
+        plan.generation !== identity.generation ||
+        plan.turnId !== identity.turnId ||
+        plan.planHash !== identity.planHash
+      ) {
+        result = { accepted: false, reason: "plan_mismatch" };
+        return;
+      }
+      const authorityRow = this.db
+        .query(
+          `SELECT session_id,supervisor_epoch,run_id,run_generation,host_id,
+                  host_generation,host_incarnation,kernel_service_epoch,challenge,
+                  nonce,status,receipt_format,key_id,signature,envelope,authority,
+                  authority_bytes,authority_hash,expires_at
+           FROM session_kernel_agent_host_supervision
+           WHERE session_id=? AND status='active'`,
+        )
+        .get(identity.sessionId) as Record<string, unknown> | null;
+      if (
+        !authorityRow ||
+        authorityRow.receipt_format !== "signed_v1" ||
+        !authorityRow.envelope
+      ) {
+        result = { accepted: false, reason: "authority_inactive" };
+        return;
+      }
+      const authority = decodeDurableAgentHostAuthority(
+        authorityRow as unknown as DurableAgentHostSupervisionRow,
+      );
+      const envelope = decodeSignedAgentHostSupervisionEnvelopeV1(
+        parsed(authorityRow.envelope as string),
+      );
+      const authorityBytes = Buffer.from(
+        serializeAgentHostSupervisionAuthorityV2(authority),
+      );
+      if (
+        !envelope ||
+        authorityRow.authority !== json(authority) ||
+        authorityRow.envelope !== json(envelope) ||
+        authorityRow.key_id !== authority.keyId ||
+        authorityRow.signature !== envelope.signature ||
+        Number(authorityRow.expires_at) !== authority.expiresAtMs ||
+        !Buffer.from(envelope.authorityBytes, "base64url").equals(authorityBytes)
+      )
+        throw new Error("Contradictory active signed Agent Host authority");
+      if (
+        Number(authorityRow.expires_at) +
+          MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS <=
+        now
+      ) {
+        result = { accepted: false, reason: "authority_inactive" };
+          return;
+        }
+      if (
+        authorityRow.authority_hash !== identity.authorityHash ||
+        Number(authorityRow.supervisor_epoch) !== identity.supervisorEpoch ||
+        authority.supervisorEpoch !== identity.supervisorEpoch ||
+        authority.planHash !== identity.planHash ||
+        authority.fence.sessionId !== identity.sessionId ||
+        authority.fence.runId !== identity.runId ||
+        authority.fence.turnId !== identity.turnId ||
+        authority.fence.generation !== identity.generation ||
+        authority.hostId !== identity.hostId ||
+        authority.hostGeneration !== identity.hostGeneration ||
+        authority.hostIncarnation !== identity.hostIncarnation ||
+        plan.supervisorHighWater !== identity.supervisorEpoch
+      ) {
+        result = { accepted: false, reason: "authority_mismatch" };
+        return;
+      }
+
+      const rawPriorRows = this.db
+        .query(
+          `SELECT * FROM session_kernel_agent_operations
+         WHERE session_id=? AND run_id=? AND run_generation=? AND turn_id=?
+         ORDER BY operation_sequence`,
+        )
+        .all(
+          identity.sessionId,
+          identity.runId,
+          identity.generation,
+          identity.turnId,
+        ) as DurableAgentOperationRow[];
+      const priorReceipts: AgentOperationReceipt[] = [];
+      for (const priorRow of rawPriorRows) {
+        const priorReceipt = decodeRow(priorRow);
+        if (!priorReceipt) {
+          result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+        priorReceipts.push(priorReceipt);
+      }
+      const prior = priorReceipts.at(-1);
+      if (prior?.state === "admitted") {
+        result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      if (priorReceipts.some((receipt) => receipt.state === "indeterminate")) {
+        result = { accepted: false, reason: "indeterminate_turn" };
+        return;
+      }
+      if (!prior) {
+        if (identity.kind !== "model") {
+          result = { accepted: false, reason: "operation_order" };
+          return;
+      }
+      } else {
+        let lastModelIndex = -1;
+        for (let index = priorReceipts.length - 1; index >= 0; index--) {
+          if (priorReceipts[index]!.identity.kind === "model") {
+            lastModelIndex = index;
+            break;
+      }
+      }
+        if (lastModelIndex < 0) {
+          quarantine("Agent operation turn has no model root");
+          result = { accepted: false, reason: "operation_barrier" };
+          return;
+      }
+        const modelReceipt = priorReceipts[lastModelIndex]!;
+        const pending = modelReceipt.pendingToolUseEntryIds ?? [];
+        const mcpReceipts = priorReceipts.slice(lastModelIndex + 1);
+        if (
+          mcpReceipts.some((receipt) => receipt.identity.kind !== "mcp") ||
+          mcpReceipts.length > pending.length
+        ) {
+          quarantine(
+            "Agent operation tool-use sequence contradicts model declaration",
+          );
+          result = { accepted: false, reason: "operation_barrier" };
+          return;
+        }
+        for (let index = 0; index < mcpReceipts.length; index++) {
+          if (mcpReceipts[index]!.identity.toolUseEntryId !== pending[index]) {
+            quarantine("Agent operation tool-use identity crossover");
+            result = { accepted: false, reason: "operation_barrier" };
+            return;
+          }
+        }
+        const nextToolUseEntryId = pending[mcpReceipts.length];
+        if (nextToolUseEntryId !== undefined) {
+          if (
+            identity.kind !== "mcp" ||
+            identity.toolUseEntryId !== nextToolUseEntryId
+          ) {
+            result = { accepted: false, reason: "operation_order" };
+            return;
+          }
+        } else if (pending.length === 0 || identity.kind !== "model") {
+          result = { accepted: false, reason: "operation_order" };
+          return;
+        }
+        const dependencyReceipts = priorReceipts.slice(lastModelIndex);
+        const requiredEntryIds = new Set<string>();
+        let requiredChangeSeq = 0;
+        for (const dependency of dependencyReceipts) {
+          for (const ref of dependency.transcriptReceipts ?? []) {
+            requiredChangeSeq = Math.max(
+              requiredChangeSeq,
+              ref.throughChangeSeq,
+            );
+            for (const entryId of ref.entryIds) requiredEntryIds.add(entryId);
+          }
+        }
+        if (
+          identity.transcriptAnchor.throughChangeSeq < requiredChangeSeq ||
+          [...requiredEntryIds].some(
+            (entryId) => !identity.transcriptAnchor.entryIds.includes(entryId),
+          )
+        ) {
+          result = { accepted: false, reason: "transcript_barrier" };
+          return;
+        }
+      }
+
+      const cutoff = now - AGENT_OPERATION_EVIDENCE_HORIZON_MS;
+      this.db.run(
+        `DELETE FROM session_kernel_agent_operations AS old
+         WHERE old.session_id=? AND old.state IN ('settled','indeterminate') AND old.terminal_at < ?
+           AND NOT (old.run_id=? AND old.run_generation=? AND old.turn_id=?)
+           AND NOT EXISTS (
+             SELECT 1 FROM session_kernel_agent_operations AS live
+             WHERE live.session_id=old.session_id AND live.run_id=old.run_id
+               AND live.run_generation=old.run_generation AND live.turn_id=old.turn_id
+               AND live.state='admitted'
+           )`,
+        [identity.sessionId, cutoff, identity.runId, identity.generation, identity.turnId],
+      );
+      const counts = this.db
+        .query(
+          `SELECT COUNT(*) AS session_count,
+                SUM(CASE WHEN run_id=? AND run_generation=? AND turn_id=? THEN 1 ELSE 0 END) AS turn_count
+         FROM session_kernel_agent_operations WHERE session_id=?`,
+        )
+        .get(
+          identity.runId,
+          identity.generation,
+          identity.turnId,
+          identity.sessionId,
+        ) as { session_count: number; turn_count: number | null };
+      if (
+        Number(counts.session_count) >=
+          SESSION_KERNEL_MAX_AGENT_OPERATIONS_PER_SESSION ||
+        Number(counts.turn_count ?? 0) >=
+          SESSION_KERNEL_MAX_AGENT_OPERATIONS_PER_TURN
+      ) {
+        result = { accepted: false, reason: "receipt_capacity" };
+        return;
+      }
+      const high = this.db
+        .query(
+          "SELECT operation_sequence FROM session_kernel_agent_operation_high_water WHERE session_id=?",
+        )
+        .get(identity.sessionId) as { operation_sequence: number } | null;
+      const sequence = Number(high?.operation_sequence ?? 0) + 1;
+      if (!Number.isSafeInteger(sequence))
+        throw new Error("Agent operation sequence high-water overflow");
+      this.db.run(
+        `INSERT INTO session_kernel_agent_operation_high_water(session_id,operation_sequence,updated_at)
+         VALUES (?,?,?) ON CONFLICT(session_id) DO UPDATE SET
+         operation_sequence=excluded.operation_sequence,updated_at=excluded.updated_at`,
+        [identity.sessionId, sequence, now],
+      );
+      const receipt: AgentOperationReceipt = {
+        identity,
+        sequence,
+        state: "admitted",
+        admittedAtMs: now,
+      };
+      this.db.run(
+        `INSERT INTO session_kernel_agent_operations(session_id,operation_id,semantic_hash,identity_hash,identity,
+         operation_sequence,run_id,turn_id,run_generation,kind,state,anchor_change_seq,receipt,admitted_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,'admitted',?,?,?)`,
+        [
+          identity.sessionId,
+          identity.operationId,
+          semanticHash,
+          identityHash,
+          identityText,
+          sequence,
+          identity.runId,
+          identity.turnId,
+          identity.generation,
+          identity.kind,
+          identity.transcriptAnchor.throughChangeSeq,
+          json(receipt),
+          now,
+        ],
+      );
+      result = { accepted: true, replayed: false, receipt };
+    });
+    tx.immediate();
+    return result;
+  }
 	applyRunEvent(input: RunEventDecision): RunEventDecisionResult {
 		const now = Date.now();
 		const since = new Date(now).toISOString();
@@ -2379,6 +3116,8 @@ export class SessionKernelStore {
         "session_kernel_turn_projections",
         "session_kernel_agent_host_plan",
         "session_kernel_agent_host_supervision",
+        "session_kernel_agent_operations",
+        "session_kernel_agent_operation_high_water",
 				"session_kernel_quarantine",
 				"session_kernel_commands",
 				"session_kernel_changes",
@@ -2408,6 +3147,8 @@ export class SessionKernelStore {
         "session_kernel_turn_projections",
         "session_kernel_agent_host_plan",
         "session_kernel_agent_host_supervision",
+        "session_kernel_agent_operations",
+        "session_kernel_agent_operation_high_water",
 				"session_kernel_quarantine",
 				"session_kernel_commands",
 				"session_kernel_changes",

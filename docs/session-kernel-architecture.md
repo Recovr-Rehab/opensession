@@ -323,12 +323,39 @@ is not actor lifecycle evidence.
 
 ## Agent operation receipts (unwired foundation)
 
-The repository contains an additive Agent operation v1 protocol and an
-import-inert, gateway-owned SQLite receipt ledger for future model and MCP
-proxying. This smallest foundation is deliberately not composed at boot and has
-no Host transport, provider/MCP adapter, credential resolution, live key,
-transcript-store, or SessionKernel actor/schema wiring. It therefore creates no
-new production authority and performs no work on import.
+Schema 28 adds actor-owned Agent operation admission, transcript barriers, and
+terminal receipts to the existing Agent operation v1 protocol and import-inert
+gateway ledger. The internal facade is deliberately not composed at boot and
+has no Host transport, provider/MCP adapter, credential resolution, live key,
+or production operation route. It therefore performs no provider, MCP, socket,
+executor, or transcript I/O and creates no executable production authority.
+
+Each admit, settle, indeterminate, or exact query is one synchronous actor
+reduction and one short SQLite transaction. Admission binds the exact turn
+fence, operation identity and kind, descriptor and payload digests, adapter
+identity, transcript input anchor, registered plan, and the current active
+schema-27 signed supervision receipt. A caller-supplied authority hash is never
+accepted independently of that stored signed row. Legacy unsigned receipts do
+not authorize operations.
+
+A turn has at most one admitted nonterminal operation. A model terminal declares
+an ordered, bounded, unique set of pending tool-use entry IDs contained in its
+terminal transcript receipts. MCP admission binds the exact next declared entry,
+so distinct calls may proceed model, MCP, MCP. A successor anchor must
+cumulatively cover every required transcript entry and change sequence, and the
+next model is blocked until every declared MCP operation has settled. Physical
+prepared and executing phases remain gateway-ledger state. Actor state
+is only admitted, settled, or indeterminate. Indeterminate is visible terminal
+state and blocks continuation until a future explicit actor-owned recovery
+policy exists. Exact duplicate requests replay their original durable receipt;
+identity or terminal crossover quarantines the session.
+
+Terminal receipts and active operations are retained for at least seven days.
+Expiry-aware pruning never removes an active operation or the latest dependency
+for a turn. Per-turn and per-session receipt limits bound storage without a
+fixed session or turn count, while a separate monotonic operation high-water
+survives pruning and restart. Session deletion removes receipts and high-water
+in the same tombstone transaction.
 
 The shared gateway ledger requires an exact session/operation primary key plus
 kind, full turn fence, plan and authority hashes, descriptor and physical
@@ -338,9 +365,9 @@ canonical durable receipt. `prepared` means no physical invocation was allowed
 to start and may be reauthorized after recovery. Once `executing` commits,
 recovery requires explicit adapter proof; the default and initial adapter
 contract is reconciliation unsupported and settles the row visibly as
-`indeterminate`, never as a retry. The SessionKernel does not yet admit or
-settle these operations. A later integration must add short actor barriers
-without holding an actor mailbox across provider or MCP I/O.
+`indeterminate`, never as a retry. The SessionKernel now admits and settles only these durable authority facts.
+Gateway execution remains unwired. No actor mailbox is held across physical
+provider, MCP, gateway-ledger, or transcript work.
 
 ## Detached Agent Host supervision
 

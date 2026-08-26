@@ -1,4 +1,5 @@
 import type { AskActorRequest } from "./ask-protocol";
+import type { AgentOperationRequest } from "./agent-operation-protocol";
 import type { AgentHostSupervisionRequest } from "./agent-host-supervision-protocol";
 import type { DeliveryActorRequest } from "./delivery-protocol";
 import type { GatewayCommandRequest } from "./gateway-command-protocol";
@@ -17,6 +18,11 @@ export type RunFence = {
 };
 
 export type SessionActorReducerCommand =
+  | {
+      kind: "agent_operation";
+      commandId: string;
+      request: AgentOperationRequest;
+    }
   | {
       kind: "agent_host_supervision";
       commandId: string;

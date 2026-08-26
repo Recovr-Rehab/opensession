@@ -70,11 +70,14 @@ inspect or interfere with each other and are not a security boundary.
 
 ### Agent operation receipt foundation
 
-The additive Agent operation v1 protocol and gateway SQLite ledger are a
-production-unwired receipt foundation. They do not authorize model or MCP work,
-open a route, verify a Host, resolve credentials, or alter the SessionKernel.
-No boot composition references the ledger. A caller must eventually verify the
-signed supervision envelope and the separately branded
+The additive Agent operation v1 protocol, gateway SQLite ledger, and schema-28
+SessionKernel admission/barrier receipts are a production-unwired foundation.
+They do not execute model or MCP work, open a route, resolve credentials, or
+compose the ledger at boot. The actor authorizes only a bounded durable identity
+after matching the exact active signed schema-27 supervision row and registered
+plan. Legacy unsigned receipts cannot authorize admission, and an authority
+hash supplied without that stored signed row fails closed. A future gateway
+caller must also verify the signed supervision envelope and separately branded
 `AgentGatewayDispatchGrant`, recompute every domain-separated digest, and pass
 kind-specific policy before physical work can begin.
 
@@ -84,9 +87,11 @@ descriptors carry only a transcript anchor and policy hash. MCP descriptors
 carry only a durable tool-use reference and arguments digest. Strict decoders
 reject bodies, prompts, arguments, credentials, URLs, headers, environment and
 provider/account configuration recursively. Durable receipts contain bounded
-identity, timestamps, normalized outcome/usage/error codes, transcript receipt
-references and allowlisted opaque provider references only. The operation
-ledger has no body or arbitrary metadata column.
+identity, timestamps, normalized outcome codes, transcript destination receipt
+references and digests only. Neither actor storage nor the operation ledger has
+a body or arbitrary metadata column. Schema-28 actor state is strictly
+`admitted -> settled | indeterminate`; gateway-only physical state remains
+`prepared -> executing -> settled | indeterminate`.
 
 The only durable state progression is `prepared -> executing -> settled |
 indeterminate`. A recovered `prepared` operation may be reauthorized later.

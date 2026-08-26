@@ -198,6 +198,8 @@ describe("schema 27 signed Agent Host receipts", () => {
       store.close();
       const db = new Database(path);
       db.exec(`
+        DROP TABLE session_kernel_agent_operations;
+        DROP TABLE session_kernel_agent_operation_high_water;
         DROP INDEX idx_skahs_active;
         DROP INDEX idx_skahs_prune;
         ALTER TABLE session_kernel_agent_host_supervision RENAME TO signed_source;
@@ -247,7 +249,7 @@ describe("schema 27 signed Agent Host receipts", () => {
     expect(
       (validDb.query("PRAGMA user_version").get() as { user_version: number })
         .user_version,
-    ).toBe(27);
+    ).toBe(28);
     validDb.close();
 
     const corruptPath = join(dir, "corrupt.sqlite");
