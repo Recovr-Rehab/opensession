@@ -28,32 +28,19 @@ interface FirstMileStep {
 	description: string;
 }
 
-// Public callbacks come before GitHub so a configured endpoint can prefill the
-// App form, but the step remains optional for private-only installations.
-// GitHub then supplies the organization step's answers:
-// the organization is named and marked from the org you just connected rather
-// than asked for cold. Members sit after repositories, since an invite is worth
-// more once there is something to join. The members step is removed
-// when GitHub sign-in is not connected, because that step imports and invites
-// people through the connected GitHub organization.
+// Organization and model setup come first, before the connection steps.
+// Domains remains before GitHub so a configured endpoint can prefill the App
+// form, but the step stays optional for private-only installations. Members sit
+// after repositories, since an invite is worth more once there is something to
+// join. The members step is removed when GitHub sign-in is not connected,
+// because that step imports and invites people through the connected GitHub
+// organization.
 const STEPS: FirstMileStep[] = [
 	{
 		id: "welcome",
 		label: "Welcome",
 		title: `Welcome to ${PRODUCT_NAME}`,
 		description: "Set up this server before you start using Open Session.",
-	},
-	{
-		id: "ingress",
-		label: "Network",
-		title: "Connect Open Session",
-		description: "Keep the app private for your team. Optionally let external services reach a public callback endpoint.",
-	},
-	{
-		id: "github",
-		label: "GitHub",
-		title: "Connect GitHub",
-		description: "GitHub signs you in and lets sessions access repositories, push changes, and create and review pull requests. The App form includes your public webhook URL.",
 	},
 	{
 		id: "organization",
@@ -66,6 +53,18 @@ const STEPS: FirstMileStep[] = [
 		label: "Models",
 		title: "Models",
 		description: "Connect the AI subscriptions your team will use to run sessions.",
+	},
+	{
+		id: "ingress",
+		label: "Domains",
+		title: "Domains",
+		description: "Keep the app private for your team. Optionally let external services reach a public callback endpoint.",
+	},
+	{
+		id: "github",
+		label: "GitHub",
+		title: "Connect GitHub",
+		description: "GitHub signs you in and lets sessions access repositories, push changes, and create and review pull requests. The App form includes your public webhook URL.",
 	},
 	{
 		id: "repos",
