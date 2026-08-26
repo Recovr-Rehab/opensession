@@ -7,6 +7,16 @@ import {
 } from "@tellahq/opensession-protocol/agent-host";
 import { decodeExecutorId } from "@tellahq/opensession-protocol/executor";
 
+export type AgentHostPlanRegistration = {
+  op: "register_plan";
+  registrationId: string;
+  sessionId: string;
+  runId: string;
+  turnId: string;
+  generation: number;
+  planHash: string;
+};
+
 export type AgentHostSupervisionClaim = {
   op: "claim";
   claimId: string;
@@ -29,7 +39,14 @@ export type AgentHostSupervisionClaim = {
   kernelServiceEpoch: string;
 };
 
-export type AgentHostSupervisionRequest = AgentHostSupervisionClaim;
+export type AgentHostSupervisionRequest =
+  AgentHostPlanRegistration | AgentHostSupervisionClaim;
+export type AgentHostPlanRegistrationResult =
+  | { accepted: true; replayed: boolean }
+  | {
+      accepted: false;
+      reason: "stale_run" | "terminal_run" | "invalid_plan" | "plan_mismatch";
+    };
 export type AgentHostSupervisionReceipt = {
   authority: AgentHostSupervisionAuthorityV2;
   /** Canonical unsigned UTF-8 bytes encoded as base64. */
@@ -48,9 +65,44 @@ export type AgentHostSupervisionResult =
         | "challenge_reused"
         | "nonce_reused"
         | "stale_host"
-        | "stale_service_epoch"
+        | "plan_unregistered"
+        | "plan_mismatch"
         | "receipt_capacity";
     };
+
+const PLAN_KEYS = [
+  "op",
+  "registrationId",
+  "sessionId",
+  "runId",
+  "turnId",
+  "generation",
+  "planHash",
+] as const;
+const PLAN_HASH_RE = /^sha256:[a-f0-9]{64}$/;
+
+export function decodeAgentHostPlanRegistration(
+  value: unknown,
+): AgentHostPlanRegistration | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
+  const plan = value as Record<string, unknown>;
+  if (
+    Object.keys(plan).length !== PLAN_KEYS.length ||
+    Object.keys(plan).some((key) => !PLAN_KEYS.includes(key as never)) ||
+    plan.op !== "register_plan" ||
+    !decodeExecutorId(plan.registrationId) ||
+    !decodeExecutorId(plan.sessionId) ||
+    !decodeExecutorId(plan.runId) ||
+    !decodeExecutorId(plan.turnId) ||
+    !Number.isSafeInteger(plan.generation) ||
+    (plan.generation as number) < 0 ||
+    typeof plan.planHash !== "string" ||
+    !PLAN_HASH_RE.test(plan.planHash)
+  )
+    return undefined;
+  return plan as AgentHostPlanRegistration;
+}
 
 const CLAIM_KEYS = [
   "op",

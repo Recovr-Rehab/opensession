@@ -467,6 +467,20 @@ describe("Agent Host transport", () => {
     });
   });
 
+  test("strictly rejects malformed steer images", async () => {
+    const { driver, socketPath } = await setup();
+    const client = new AgentHostClient({ socketPath });
+    await client.connect();
+    await client.startTurn(spec);
+    client.steer("bad image", "steer-bad-image", [
+      { mediaType: "text/plain", data: btoa("not-an-image") },
+    ]);
+    await tick();
+    expect(driver.steers).toEqual([]);
+    expect(driver.cancelled).toBe(1);
+    client.close();
+  });
+
   test("fails closed on a malformed frame and cancels on owner disconnect", async () => {
     const { driver, socketPath } = await setup();
     const malformed = connect(socketPath);

@@ -709,7 +709,8 @@ export async function startSessionKernelService(
         const actorBoundRequest =
           envelope.request.t === "call" &&
           envelope.request.request.t === "reduce" &&
-          envelope.request.request.command.kind === "agent_host_supervision"
+          envelope.request.request.command.kind === "agent_host_supervision" &&
+          envelope.request.request.command.request.op === "claim"
             ? {
                 ...envelope.request,
                 request: {

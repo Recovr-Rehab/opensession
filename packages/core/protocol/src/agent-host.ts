@@ -19,7 +19,7 @@ export const AGENT_HOST_SUPERVISION_AUDIENCE =
   "opensession-agent-host" as const;
 export const AGENT_HOST_SUPERVISION_PURPOSE = "agent-host-supervision" as const;
 export const MAX_AGENT_HOST_SUPERVISION_LEASE_MS = 5 * 60_000;
-const MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS = 30_000;
+export const MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS = 30_000;
 
 const MAX_CAPABILITY_BYTES = 16 * 1024;
 const MAX_SHORT_TEXT_BYTES = 16 * 1024;
@@ -417,6 +417,20 @@ function base64FromBytes(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+export function decodeAgentImages(value: unknown): ImageInput[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_IMAGES) return undefined;
+  const images: ImageInput[] = [];
+  let totalBytes = 0;
+  for (const candidate of value) {
+    const image = decodeImage(candidate);
+    if (!image) return undefined;
+    totalBytes += atob(image.data).length;
+    if (totalBytes > MAX_IMAGES_BYTES) return undefined;
+    images.push(image);
+  }
+  return images;
+}
+
 function decodeImage(value: unknown): ImageInput | undefined {
   if (!record(value) || !exact(value, ["mediaType", "data"])) return undefined;
   if (
@@ -493,14 +507,7 @@ export function decodeAgentTurnSpec(
     !boundedString(input.prompt, MAX_PROMPT_BYTES, true) ||
     (input.promptEntryId !== undefined &&
       !decodeExecutorId(input.promptEntryId)) ||
-    (images !== undefined &&
-      (!Array.isArray(images) ||
-        images.length > MAX_IMAGES ||
-        images.some((image) => !decodeImage(image)) ||
-        images.reduce(
-          (total, image) => total + atob((image as ImageInput).data).length,
-          0,
-        ) > MAX_IMAGES_BYTES))
+    (images !== undefined && !decodeAgentImages(images))
   )
     return undefined;
 

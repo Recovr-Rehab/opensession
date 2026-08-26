@@ -16,7 +16,7 @@ Host workers have a 24-hour maximum lifetime. Capacity is bounded to 32 MiB per
 turn and 512 MiB globally, with a separate 64 MiB emergency reserve and 14
 worker slots reserved for control and recovery.
 
-SessionKernel schema 24 may issue canonical **unsigned** supervision payloads
+SessionKernel schema 25 may issue canonical **unsigned** supervision payloads
 that bind the exact turn fence, plan hash, Host generation/incarnation, kernel
 service epoch, fresh challenge, nonce, audience, purpose, validity window, and
 future key id. They contain no credentials, prompt, transcript, model, provider,

@@ -7,7 +7,7 @@
  * transcript state, and provider credentials belong to the control plane.
  */
 
-export const EXECUTOR_PROTOCOL_VERSION = 2 as const;
+export const EXECUTOR_PROTOCOL_VERSION = 3 as const;
 export const EXECUTOR_PROTOCOL_MIN_VERSION = EXECUTOR_PROTOCOL_VERSION;
 
 export function executorSocketPath(sessionsDir: string): string {

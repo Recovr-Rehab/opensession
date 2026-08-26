@@ -1,11 +1,16 @@
 import { DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS } from "./gateway-command-protocol";
+import { decodeExecutorId } from "@tellahq/opensession-protocol/executor";
 import {
+  MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS,
   decodeAgentHostSupervisionAuthorityV2,
   serializeAgentHostSupervisionAuthorityV2,
 } from "@tellahq/opensession-protocol/agent-host";
 import {
   authorityFromAgentHostSupervisionClaim,
+  decodeAgentHostPlanRegistration,
   decodeAgentHostSupervisionClaim,
+  type AgentHostPlanRegistration,
+  type AgentHostPlanRegistrationResult,
   type AgentHostSupervisionClaim,
   type AgentHostSupervisionReceipt,
   type AgentHostSupervisionResult,
@@ -235,7 +240,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 24;
+export const SESSION_KERNEL_SCHEMA_VERSION = 25;
 export const SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS = 64;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
@@ -309,6 +314,36 @@ export function sessionKernelSessionDbPath(
 		throw new Error("Invalid session kernel session id");
 	const key = digest(sessionId);
 	return `${root}/${key.slice(0, 2)}/${key}.sqlite`;
+}
+
+type DurableAgentHostPlan = AgentHostPlanRegistration & {
+  hostId?: string;
+  supervisorHighWater: number;
+};
+
+function decodeDurableAgentHostPlan(
+  sessionId: string,
+  row: Record<string, unknown> | null,
+): DurableAgentHostPlan | undefined {
+  if (!row) return undefined;
+  const plan = decodeAgentHostPlanRegistration({
+    op: "register_plan",
+    registrationId: row.registration_id,
+    sessionId,
+    runId: row.run_id,
+    turnId: row.turn_id,
+    generation: row.run_generation,
+    planHash: row.plan_hash,
+  });
+  const hostId = row.host_id == null ? undefined : decodeExecutorId(row.host_id);
+  const supervisorHighWater = Number(row.supervisor_high_water);
+  if (
+    !plan ||
+    (row.host_id != null && !hostId) ||
+    !Number.isSafeInteger(supervisorHighWater) ||
+    supervisorHighWater < 0
+  ) throw new Error("Invalid durable Agent Host plan");
+  return { ...plan, hostId, supervisorHighWater };
 }
 
 export type RunEventDecision = {
@@ -395,6 +430,7 @@ const SESSION_KERNEL_SESSION_TABLES = [
   "session_kernel_delivery",
   "session_kernel_turn",
   "session_kernel_turn_projections",
+  "session_kernel_agent_host_plan",
   "session_kernel_agent_host_supervision",
   "session_kernel_commands",
   "session_kernel_changes",
@@ -552,6 +588,17 @@ export class SessionKernelStore {
         cancel TEXT,
         updated_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS session_kernel_agent_host_plan (
+        session_id TEXT PRIMARY KEY,
+        registration_id TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        run_generation INTEGER NOT NULL,
+        turn_id TEXT NOT NULL,
+        plan_hash TEXT NOT NULL,
+        host_id TEXT,
+        supervisor_high_water INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS session_kernel_agent_host_supervision (
         session_id TEXT NOT NULL,
         supervisor_epoch INTEGER NOT NULL,
@@ -569,6 +616,7 @@ export class SessionKernelStore {
         authority TEXT NOT NULL,
         authority_bytes TEXT NOT NULL,
         authority_hash TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
         created_at INTEGER NOT NULL,
         PRIMARY KEY (session_id, supervisor_epoch),
         UNIQUE (session_id, claim_id),
@@ -673,6 +721,37 @@ export class SessionKernelStore {
       this.db.exec(
         "ALTER TABLE session_kernel_creation ADD COLUMN setup_plan TEXT",
       );
+    const supervisionColumns = new Set(
+      (
+        this.db
+          .query("PRAGMA table_info(session_kernel_agent_host_supervision)")
+          .all() as Array<{ name: string }>
+      ).map((column) => column.name),
+    );
+    if (!supervisionColumns.has("expires_at")) {
+      this.db.exec(
+        "ALTER TABLE session_kernel_agent_host_supervision ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0",
+      );
+      const rows = this.db.query(
+        "SELECT session_id, supervisor_epoch, authority FROM session_kernel_agent_host_supervision",
+      ).all() as Array<{
+        session_id: string;
+        supervisor_epoch: number;
+        authority: string;
+      }>;
+      for (const row of rows) {
+        const authority = decodeAgentHostSupervisionAuthorityV2(
+          parsed(row.authority),
+        );
+        if (!authority)
+          throw new Error("Invalid durable Agent Host authority during schema 25 migration");
+        this.db.run(
+          `UPDATE session_kernel_agent_host_supervision SET expires_at = ?
+           WHERE session_id = ? AND supervisor_epoch = ?`,
+          [authority.expiresAtMs, row.session_id, row.supervisor_epoch],
+        );
+      }
+    }
 		const commandColumns = new Set(
 			(
         this.db
@@ -1558,6 +1637,65 @@ export class SessionKernelStore {
     return result;
   }
 
+  registerAgentHostPlan(
+    input: AgentHostPlanRegistration,
+  ): AgentHostPlanRegistrationResult {
+    if (!decodeAgentHostPlanRegistration(input))
+      return { accepted: false, reason: "invalid_plan" };
+    if (this.isTombstoned(input.sessionId))
+      throw new Error(`Session ${input.sessionId} was deleted`);
+    const run = this.runState(input.sessionId);
+    if (run.currentRunId !== input.runId || run.generation !== input.generation)
+      return { accepted: false, reason: "stale_run" };
+    if (![
+      "starting", "running", "ask_blocked", "interrupted", "reattaching",
+    ].includes(run.state)) return { accepted: false, reason: "terminal_run" };
+    const prior = decodeDurableAgentHostPlan(
+      input.sessionId,
+      this.db.query(
+        `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
+                host_id, supervisor_high_water
+         FROM session_kernel_agent_host_plan WHERE session_id = ?`,
+      ).get(input.sessionId) as Record<string, unknown> | null,
+    );
+    if (
+      prior &&
+      prior.runId === input.runId &&
+      prior.generation === input.generation
+    ) {
+      return prior.turnId === input.turnId && prior.planHash === input.planHash
+        ? { accepted: true, replayed: true }
+        : { accepted: false, reason: "plan_mismatch" };
+    }
+    this.db.run(
+      `INSERT INTO session_kernel_agent_host_plan
+       (session_id, registration_id, run_id, run_generation, turn_id,
+        plan_hash, host_id, supervisor_high_water, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(session_id) DO UPDATE SET
+        registration_id = excluded.registration_id,
+        run_id = excluded.run_id,
+        run_generation = excluded.run_generation,
+        turn_id = excluded.turn_id,
+        plan_hash = excluded.plan_hash,
+        host_id = excluded.host_id,
+        supervisor_high_water = excluded.supervisor_high_water,
+        updated_at = excluded.updated_at`,
+      [
+        input.sessionId,
+        input.registrationId,
+        input.runId,
+        input.generation,
+        input.turnId,
+        input.planHash,
+        prior?.hostId ?? null,
+        prior?.supervisorHighWater ?? 0,
+        Date.now(),
+      ],
+    );
+    return { accepted: true, replayed: false };
+  }
+
   claimAgentHostSupervision(input: AgentHostSupervisionClaim): AgentHostSupervisionResult {
     if (!decodeAgentHostSupervisionClaim(input))
       return { accepted: false, reason: "invalid_claim" };
@@ -1597,33 +1735,38 @@ export class SessionKernelStore {
     if (!["starting", "running", "ask_blocked", "interrupted", "reattaching"].includes(run.state))
       return { accepted: false, reason: "terminal_run" };
 
+    const plan = decodeDurableAgentHostPlan(
+      input.sessionId,
+      this.db.query(
+        `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
+                host_id, supervisor_high_water
+         FROM session_kernel_agent_host_plan WHERE session_id = ?`,
+      ).get(input.sessionId) as Record<string, unknown> | null,
+    );
+    if (!plan) return { accepted: false, reason: "plan_unregistered" };
+    if (
+      plan.runId !== input.runId ||
+      plan.generation !== input.generation ||
+      plan.turnId !== input.turnId ||
+      plan.planHash !== input.planHash
+    ) return { accepted: false, reason: "plan_mismatch" };
+    if (plan.hostId != null && plan.hostId !== input.hostId)
+      return { accepted: false, reason: "stale_host" };
+
     const current = this.db.query(
       `SELECT supervisor_epoch, host_id, host_generation, host_incarnation,
               kernel_service_epoch, authority
        FROM session_kernel_agent_host_supervision
        WHERE session_id = ? AND status = 'active'`,
     ).get(input.sessionId) as Record<string, unknown> | null;
-    const latestEpoch = Number((this.db.query(
-      `SELECT COALESCE(MAX(supervisor_epoch), 0) AS epoch
-       FROM session_kernel_agent_host_supervision WHERE session_id = ?`,
-    ).get(input.sessionId) as { epoch: number }).epoch);
-    const priorAuthority = current
-      ? decodeAgentHostSupervisionAuthorityV2(parsed(current.authority as string))
-      : undefined;
-    if (current && !priorAuthority)
-      throw new Error("Invalid durable active Agent Host authority");
-    if (priorAuthority && priorAuthority.planHash !== input.planHash)
-      return { accepted: false, reason: "invalid_claim" };
+    if (current && !decodeAgentHostSupervisionAuthorityV2(
+      parsed(current.authority as string),
+    )) throw new Error("Invalid durable active Agent Host authority");
     if (current) {
-      const priorHostGeneration = Number(current.host_generation);
-      if (input.hostGeneration < priorHostGeneration)
+      if (input.hostId !== current.host_id)
         return { accepted: false, reason: "stale_host" };
-      if (input.hostGeneration === priorHostGeneration &&
-          (input.hostId !== current.host_id || input.hostIncarnation !== current.host_incarnation))
+      if (input.hostGeneration < Number(current.host_generation))
         return { accepted: false, reason: "stale_host" };
-      if (input.kernelServiceEpoch !== current.kernel_service_epoch &&
-          input.hostGeneration <= priorHostGeneration)
-        return { accepted: false, reason: "stale_service_epoch" };
     }
     if (this.db.query(
       "SELECT 1 FROM session_kernel_agent_host_supervision WHERE session_id = ? AND challenge = ?",
@@ -1633,13 +1776,23 @@ export class SessionKernelStore {
       "SELECT 1 FROM session_kernel_agent_host_supervision WHERE session_id = ? AND nonce = ?",
     ).get(input.sessionId, input.nonce))
       return { accepted: false, reason: "nonce_reused" };
+    this.db.run(
+      `DELETE FROM session_kernel_agent_host_supervision
+       WHERE session_id = ? AND status != 'active'
+         AND expires_at + ? <= ?`,
+      [
+        input.sessionId,
+        MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS,
+        Date.now(),
+      ],
+    );
     const count = Number((this.db.query(
       "SELECT COUNT(*) AS count FROM session_kernel_agent_host_supervision WHERE session_id = ?",
     ).get(input.sessionId) as { count: number }).count);
     if (count >= SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS)
       return { accepted: false, reason: "receipt_capacity" };
 
-    const supervisorEpoch = latestEpoch + 1;
+    const supervisorEpoch = plan.supervisorHighWater + 1;
     const authority = authorityFromAgentHostSupervisionClaim(input, supervisorEpoch);
     if (!authority) return { accepted: false, reason: "invalid_claim" };
     const authorityBytes = Buffer.from(serializeAgentHostSupervisionAuthorityV2(authority));
@@ -1657,13 +1810,20 @@ export class SessionKernelStore {
          (session_id, supervisor_epoch, claim_id, request_hash, run_id,
           run_generation, host_id, host_generation, host_incarnation,
           kernel_service_epoch, challenge, nonce, status, authority,
-          authority_bytes, authority_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+          authority_bytes, authority_hash, expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
         [input.sessionId, supervisorEpoch, input.claimId, requestHash,
           input.runId, input.generation, input.hostId, input.hostGeneration,
           input.hostIncarnation, input.kernelServiceEpoch, input.hostChallenge,
           input.nonce, json(authority), receipt.authorityBytes,
-          receipt.authorityHash, Date.now()]);
+          receipt.authorityHash, input.expiresAtMs, Date.now()]);
+      this.db.run(
+        `UPDATE session_kernel_agent_host_plan
+         SET host_id = COALESCE(host_id, ?), supervisor_high_water = ?, updated_at = ?
+         WHERE session_id = ? AND run_id = ? AND run_generation = ?`,
+        [input.hostId, supervisorEpoch, Date.now(), input.sessionId,
+          input.runId, input.generation],
+      );
     });
     tx.immediate();
     return { accepted: true, replayed: false, receipt };
@@ -1914,6 +2074,7 @@ export class SessionKernelStore {
         "session_kernel_delivery",
         "session_kernel_turn",
         "session_kernel_turn_projections",
+        "session_kernel_agent_host_plan",
         "session_kernel_agent_host_supervision",
 				"session_kernel_quarantine",
 				"session_kernel_commands",
@@ -1942,6 +2103,7 @@ export class SessionKernelStore {
         "session_kernel_delivery",
         "session_kernel_turn",
         "session_kernel_turn_projections",
+        "session_kernel_agent_host_plan",
         "session_kernel_agent_host_supervision",
 				"session_kernel_quarantine",
 				"session_kernel_commands",

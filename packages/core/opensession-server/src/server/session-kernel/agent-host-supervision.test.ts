@@ -1,15 +1,34 @@
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   AGENT_HOST_SUPERVISION_AUDIENCE,
   AGENT_HOST_SUPERVISION_PURPOSE,
+  MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS,
 } from "@tellahq/opensession-protocol/agent-host";
 import { SessionKernelStore } from "./store";
-import type { AgentHostSupervisionClaim } from "./agent-host-supervision-protocol";
+import type {
+  AgentHostPlanRegistration,
+  AgentHostSupervisionClaim,
+} from "./agent-host-supervision-protocol";
 
 const planHash = `sha256:${"a".repeat(64)}`;
+function plan(
+  overrides: Partial<AgentHostPlanRegistration> = {},
+): AgentHostPlanRegistration {
+  return {
+    op: "register_plan",
+    registrationId: "plan-registration-0001",
+    sessionId: "session-1",
+    runId: "run-1",
+    turnId: "turn-1",
+    generation: 1,
+    planHash,
+    ...overrides,
+  };
+}
 function claim(
   overrides: Partial<AgentHostSupervisionClaim> = {},
 ): AgentHostSupervisionClaim {
@@ -47,66 +66,157 @@ function runningStore(path = ":memory:"): SessionKernelStore {
   ).toBe(true);
   return store;
 }
+function register(store: SessionKernelStore, input = plan()): void {
+  expect(store.registerAgentHostPlan(input).accepted).toBe(true);
+}
 
 describe("Agent Host supervision actor state", () => {
-  test("requires the exact current nonterminal run and generation", () => {
+  test("migrates live schema 24 additively and raises the rollback floor", () => {
+    const directory = mkdtempSync(join(tmpdir(), "agent-host-schema24-"));
+    const path = join(directory, "kernel.sqlite");
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE session_kernel_agent_host_supervision (
+        session_id TEXT NOT NULL,
+        supervisor_epoch INTEGER NOT NULL,
+        claim_id TEXT NOT NULL,
+        request_hash TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        run_generation INTEGER NOT NULL,
+        host_id TEXT NOT NULL,
+        host_generation INTEGER NOT NULL,
+        host_incarnation TEXT NOT NULL,
+        kernel_service_epoch TEXT NOT NULL,
+        challenge TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        status TEXT NOT NULL,
+        authority TEXT NOT NULL,
+        authority_bytes TEXT NOT NULL,
+        authority_hash TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, supervisor_epoch)
+      );
+      PRAGMA user_version = 24;
+    `);
+    legacy.close();
+    const store = new SessionKernelStore(path);
+    store.close();
+    const migrated = new Database(path, { readonly: true });
+    expect(
+      (migrated.query("PRAGMA user_version").get() as { user_version: number })
+        .user_version,
+    ).toBe(25);
+    expect(
+      migrated
+        .query(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_kernel_agent_host_plan'",
+        )
+        .get(),
+    ).toBeDefined();
+    expect(
+      (
+        migrated
+          .query("PRAGMA table_info(session_kernel_agent_host_supervision)")
+          .all() as Array<{ name: string }>
+      ).some((column) => column.name === "expires_at"),
+    ).toBe(true);
+    migrated.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  test("requires actor-owned plan registration before a claim", () => {
     const store = runningStore();
+    expect(store.claimAgentHostSupervision(claim())).toEqual({
+      accepted: false,
+      reason: "plan_unregistered",
+    });
+    expect(store.registerAgentHostPlan(plan())).toEqual({
+      accepted: true,
+      replayed: false,
+    });
+    expect(store.registerAgentHostPlan(plan())).toEqual({
+      accepted: true,
+      replayed: true,
+    });
+    expect(store.registerAgentHostPlan(plan({ turnId: "other-turn" }))).toEqual(
+      {
+        accepted: false,
+        reason: "plan_mismatch",
+      },
+    );
     expect(store.claimAgentHostSupervision(claim()).accepted).toBe(true);
-    expect(
-      store.claimAgentHostSupervision(
-        claim({
-          claimId: "claim-stale-run-0001",
-          runId: "run-old",
-          hostChallenge: "challenge-stale-run-01",
-          nonce: "nonce-stale-run-00001",
-        }),
-      ),
-    ).toEqual({ accepted: false, reason: "stale_run" });
-    expect(
-      store.claimAgentHostSupervision(
-        claim({
-          claimId: "claim-stale-gen-0001",
-          generation: 0,
-          hostChallenge: "challenge-stale-gen-01",
-          nonce: "nonce-stale-gen-00001",
-        }),
-      ),
-    ).toEqual({ accepted: false, reason: "stale_run" });
     store.close();
   });
 
-  test("pins the exact plan and replays only an identical claim", () => {
+  test("serializes concurrent exact plan registration", async () => {
     const store = runningStore();
+    const results = await Promise.all([
+      Promise.resolve().then(() => store.registerAgentHostPlan(plan())),
+      Promise.resolve().then(() => store.registerAgentHostPlan(plan())),
+    ]);
+    expect(results).toEqual([
+      { accepted: true, replayed: false },
+      { accepted: true, replayed: true },
+    ]);
+    store.close();
+  });
+
+  test("persists plan registration across restart", () => {
+    const directory = mkdtempSync(join(tmpdir(), "agent-host-plan-"));
+    const path = join(directory, "kernel.sqlite");
+    let store = runningStore(path);
+    register(store);
+    store.close();
+    store = new SessionKernelStore(path);
+    expect(store.registerAgentHostPlan(plan())).toEqual({
+      accepted: true,
+      replayed: true,
+    });
+    expect(store.claimAgentHostSupervision(claim()).accepted).toBe(true);
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  test("requires the exact current run, generation, turn, and plan hash", () => {
+    const store = runningStore();
+    register(store);
+    for (const [overrides, reason] of [
+      [{ runId: "run-old" }, "stale_run"],
+      [{ generation: 0 }, "stale_run"],
+      [{ turnId: "turn-old" }, "plan_mismatch"],
+      [{ planHash: `sha256:${"b".repeat(64)}` }, "plan_mismatch"],
+    ] as const) {
+      expect(
+        store.claimAgentHostSupervision(
+          claim({
+            ...overrides,
+            claimId: `claim-${reason}-${String(Math.random()).slice(2)}`,
+            hostChallenge: `challenge-${reason}-0001`,
+            nonce: `nonce-${reason}-00000001`,
+          }),
+        ),
+      ).toEqual({ accepted: false, reason });
+    }
+    store.close();
+  });
+
+  test("replays only an identical claim and consumes challenge and nonce once", () => {
+    const store = runningStore();
+    register(store);
     const input = claim();
     const first = store.claimAgentHostSupervision(input);
-    const replay = store.claimAgentHostSupervision(input);
     expect(first.accepted).toBe(true);
     if (!first.accepted) throw new Error("claim rejected");
-    expect(first.receipt.authority.planHash).toBe(planHash);
-    expect(replay).toEqual({ ...first, replayed: true as const });
+    expect(store.claimAgentHostSupervision(input)).toEqual({
+      ...first,
+      replayed: true as const,
+    });
     expect(
       store.claimAgentHostSupervision({
         ...input,
-        planHash: `sha256:${"b".repeat(64)}`,
+        hostIncarnation: "changed-incarnation-01",
       }),
     ).toEqual({ accepted: false, reason: "claim_mismatch" });
-    expect(
-      store.claimAgentHostSupervision(
-        claim({
-          claimId: "claim-plan-mismatch-1",
-          planHash: `sha256:${"b".repeat(64)}`,
-          hostChallenge: "challenge-plan-other-01",
-          nonce: "nonce-plan-other-00001",
-        }),
-      ),
-    ).toEqual({ accepted: false, reason: "invalid_claim" });
-    store.close();
-  });
-
-  test("consumes challenge and nonce once and advances takeover epochs", () => {
-    const store = runningStore();
-    const first = store.claimAgentHostSupervision(claim());
-    expect(first.accepted && first.receipt.authority.supervisorEpoch).toBe(1);
     expect(
       store.claimAgentHostSupervision(
         claim({
@@ -123,132 +233,139 @@ describe("Agent Host supervision actor state", () => {
         }),
       ),
     ).toEqual({ accepted: false, reason: "nonce_reused" });
-    const takeover = store.claimAgentHostSupervision(
+    store.close();
+  });
+
+  test("allows a surviving Host to recover after a kernel service restart", () => {
+    const store = runningStore();
+    register(store);
+    expect(store.claimAgentHostSupervision(claim()).accepted).toBe(true);
+    const recovered = store.claimAgentHostSupervision(
       claim({
-        claimId: "claim-takeover-00001",
-        hostChallenge: "challenge-takeover-001",
-        nonce: "nonce-takeover-000001",
+        claimId: "claim-kernel-restart-1",
+        kernelServiceEpoch: "kernel-service-epoch-2",
+        hostChallenge: "challenge-kernel-restart",
+        nonce: "nonce-kernel-restart-01",
       }),
     );
     expect(
-      takeover.accepted && takeover.receipt.authority.supervisorEpoch,
+      recovered.accepted && recovered.receipt.authority.supervisorEpoch,
     ).toBe(2);
     store.close();
   });
 
-  test("rejects old host incarnations and service epochs", () => {
+  test("allows same-generation Host process restart and rejects identity rollback", () => {
     const store = runningStore();
-    expect(store.claimAgentHostSupervision(claim()).accepted).toBe(true);
+    register(store);
     expect(
       store.claimAgentHostSupervision(
         claim({
-          claimId: "claim-old-service-001",
-          kernelServiceEpoch: "kernel-service-epoch-2",
-          hostChallenge: "challenge-old-service-1",
-          nonce: "nonce-old-service-0001",
-        }),
-      ),
-    ).toEqual({ accepted: false, reason: "stale_service_epoch" });
-    expect(
-      store.claimAgentHostSupervision(
-        claim({
-          claimId: "claim-new-host-00001",
           hostGeneration: 2,
-          hostIncarnation: "incarnation-00000002",
-          kernelServiceEpoch: "kernel-service-epoch-2",
-          hostChallenge: "challenge-new-host-0001",
-          nonce: "nonce-new-host-000001",
         }),
       ).accepted,
     ).toBe(true);
+    const restarted = store.claimAgentHostSupervision(
+      claim({
+        claimId: "claim-host-restart-001",
+        hostGeneration: 2,
+        hostIncarnation: "incarnation-00000002",
+        hostChallenge: "challenge-host-restart-01",
+        nonce: "nonce-host-restart-0001",
+      }),
+    );
+    expect(
+      restarted.accepted && restarted.receipt.authority.supervisorEpoch,
+    ).toBe(2);
     expect(
       store.claimAgentHostSupervision(
         claim({
-          claimId: "claim-old-host-00001",
-          hostChallenge: "challenge-old-host-0001",
-          nonce: "nonce-old-host-000001",
+          claimId: "claim-lower-host-gen",
+          hostGeneration: 1,
+          hostChallenge: "challenge-lower-host-gen",
+          nonce: "nonce-lower-host-gen-01",
+        }),
+      ),
+    ).toEqual({ accepted: false, reason: "stale_host" });
+    expect(
+      store.claimAgentHostSupervision(
+        claim({
+          claimId: "claim-changed-host-id",
+          hostId: "host-2",
+          hostChallenge: "challenge-changed-host-id",
+          nonce: "nonce-changed-host-id-01",
         }),
       ),
     ).toEqual({ accepted: false, reason: "stale_host" });
     store.close();
   });
 
-  test("settles terminal authority without purging and keeps epochs monotonic", () => {
-    const store = runningStore();
-    const first = claim();
-    expect(store.claimAgentHostSupervision(first).accepted).toBe(true);
-    expect(
-      store.applyRunEvent({
-        sessionId: "session-1",
-        event: "run_failed",
-        runKey: "run-1",
-      }).accepted,
-    ).toBe(true);
-    expect(store.claimAgentHostSupervision(first)).toMatchObject({
-      accepted: true,
-      replayed: true,
-    });
-    expect(
-      store.applyRunEvent({
-        sessionId: "session-1",
-        event: "prompt",
-        runKey: "run-2",
-      }).accepted,
-    ).toBe(true);
-    const next = store.claimAgentHostSupervision(
-      claim({
-        claimId: "claim-next-run-00001",
-        runId: "run-2",
-        turnId: "turn-2",
-        generation: 2,
-        planHash: `sha256:${"b".repeat(64)}`,
-        hostGeneration: 2,
-        hostIncarnation: "incarnation-00000002",
-        hostChallenge: "challenge-next-run-0001",
-        nonce: "nonce-next-run-000001",
-      }),
-    );
-    expect(next.accepted && next.receipt.authority.supervisorEpoch).toBe(2);
-    store.close();
-  });
-
-  test("persists exact unsigned receipts across restart", () => {
-    const directory = mkdtempSync(join(tmpdir(), "agent-host-supervision-"));
+  test("retains monotonic epoch after pruning 64 expired terminal receipts and restart", () => {
+    const realNow = Date.now;
+    let now = 1_000_000;
+    Date.now = () => now;
+    const directory = mkdtempSync(join(tmpdir(), "agent-host-prune-"));
     const path = join(directory, "kernel.sqlite");
-    let store = runningStore(path);
-    const input = claim();
-    const first = store.claimAgentHostSupervision(input);
-    expect(first.accepted).toBe(true);
-    if (!first.accepted) throw new Error("claim rejected");
-    store.close();
-    store = new SessionKernelStore(path);
-    expect(store.claimAgentHostSupervision(input)).toEqual({
-      ...first,
-      replayed: true as const,
-    });
-    store.close();
-    rmSync(directory, { recursive: true, force: true });
-  });
-
-  test("serializes concurrent claims into monotonic epochs", async () => {
-    const store = runningStore();
-    const results = await Promise.all([
-      Promise.resolve().then(() => store.claimAgentHostSupervision(claim())),
-      Promise.resolve().then(() =>
-        store.claimAgentHostSupervision(
+    try {
+      let store = runningStore(path);
+      register(store);
+      for (let index = 0; index < 64; index += 1) {
+        const result = store.claimAgentHostSupervision(
           claim({
-            claimId: "claim-concurrent-0002",
-            hostChallenge: "challenge-concurrent-02",
-            nonce: "nonce-concurrent-000002",
+            claimId: `claim-capacity-${index}`,
+            hostChallenge: `challenge-capacity-${index}`.padEnd(20, "x"),
+            nonce: `nonce-capacity-${index}`.padEnd(20, "x"),
+            expiresAtMs: now + 100,
           }),
-        ),
-      ),
-    ]);
-    expect(
-      results.map(
-        (result) => result.accepted && result.receipt.authority.supervisorEpoch,
-      ),
-    ).toEqual([1, 2]);
-    store.close();
+        );
+        expect(result.accepted).toBe(true);
+      }
+      expect(
+        store.applyRunEvent({
+          sessionId: "session-1",
+          event: "run_failed",
+          runKey: "run-1",
+        }).accepted,
+      ).toBe(true);
+      store.close();
+      now += 101 + MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS;
+      store = new SessionKernelStore(path);
+      expect(
+        store.applyRunEvent({
+          sessionId: "session-1",
+          event: "prompt",
+          runKey: "run-2",
+        }).accepted,
+      ).toBe(true);
+      register(
+        store,
+        plan({
+          registrationId: "plan-registration-0002",
+          runId: "run-2",
+          turnId: "turn-2",
+          generation: 2,
+          planHash: `sha256:${"b".repeat(64)}`,
+        }),
+      );
+      const recovered = store.claimAgentHostSupervision(
+        claim({
+          claimId: "claim-after-prune-001",
+          runId: "run-2",
+          turnId: "turn-2",
+          generation: 2,
+          planHash: `sha256:${"b".repeat(64)}`,
+          hostGeneration: 2,
+          hostIncarnation: "incarnation-00000002",
+          hostChallenge: "challenge-after-prune-01",
+          nonce: "nonce-after-prune-0001",
+        }),
+      );
+      expect(
+        recovered.accepted && recovered.receipt.authority.supervisorEpoch,
+      ).toBe(65);
+      store.close();
+    } finally {
+      Date.now = realNow;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

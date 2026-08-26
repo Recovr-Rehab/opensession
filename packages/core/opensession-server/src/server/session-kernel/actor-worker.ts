@@ -76,7 +76,9 @@ export function startSessionKernelActorWorker(): void {
         if (sessionId)
           store = host.storeForSession(sessionId, !isReadReducer(command));
         if (command.kind === "agent_host_supervision")
-          result = store.claimAgentHostSupervision(command.request);
+          result = command.request.op === "register_plan"
+            ? store.registerAgentHostPlan(command.request)
+            : store.claimAgentHostSupervision(command.request);
         else if (command.kind === "creation_event")
           result = store.applyCreationEvent(command.decision);
         else if (command.kind === "run_event")

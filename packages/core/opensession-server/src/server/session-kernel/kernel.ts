@@ -8,7 +8,9 @@
 import { audit } from "../audit";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
 import type {
-  AgentHostSupervisionRequest,
+  AgentHostPlanRegistration,
+  AgentHostPlanRegistrationResult,
+  AgentHostSupervisionClaim,
   AgentHostSupervisionResult,
 } from "./agent-host-supervision-protocol";
 import {
@@ -82,8 +84,15 @@ function compatibilityStoreForTest(
 	return sessionKernelStore();
 }
 
+export function registerAgentHostPlan(
+  request: AgentHostPlanRegistration,
+): AgentHostPlanRegistrationResult {
+  if (state.actor) return state.actor.decideAgentHostSupervision(request);
+  return compatibilityStoreForTest("core").registerAgentHostPlan(request);
+}
+
 export function claimAgentHostSupervision(
-  request: AgentHostSupervisionRequest,
+  request: AgentHostSupervisionClaim,
 ): AgentHostSupervisionResult {
   if (state.actor) return state.actor.decideAgentHostSupervision(request);
   return compatibilityStoreForTest("core").claimAgentHostSupervision(request);

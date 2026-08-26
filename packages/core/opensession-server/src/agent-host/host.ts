@@ -14,6 +14,7 @@ import {
   AGENT_HOST_PROTOCOL_VERSION,
   decodeAgentHostHello,
   decodeAgentHostStartTurn,
+  decodeAgentImages,
   isAgentTurnFence,
   type AgentHostClientMessage,
   type AgentHostServerMessage,
@@ -138,9 +139,16 @@ function decodeMessage(value: unknown): AgentHostClientMessage | undefined {
         "steerId",
       ]) &&
         nonempty(value.text) &&
-        nonempty(value.steerId) &&
-        (value.images === undefined || Array.isArray(value.images))
-        ? (value as unknown as AgentHostClientMessage)
+        nonempty(value.steerId)
+        ? (() => {
+            const images =
+              value.images === undefined
+                ? undefined
+                : decodeAgentImages(value.images);
+            return value.images !== undefined && !images
+              ? undefined
+              : ({ ...value, images } as unknown as AgentHostClientMessage);
+          })()
         : undefined;
     case "answer": {
       const result = value.result;

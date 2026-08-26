@@ -307,20 +307,27 @@ is not actor lifecycle evidence.
 
 ## Detached Agent Host supervision
 
-Schema 24 adds an additive v2 Agent Host supervision authority alongside the
-existing Host implementation. A short typed SessionKernel claim validates the
-exact current session/run/turn/generation fence and nonterminal run state, pins
-the plan hash, consumes a Host challenge and nonce once, and monotonically
-advances a per-session supervisor epoch. It binds the Host generation and
+Schema 25 is an additive migration from live schema 24 and raises the normal
+`user_version` rollback floor, so a schema-24 actor refuses the migrated store.
+It adds a v2 Agent Host supervision authority alongside the
+existing Host implementation. Before any claim, a short typed SessionKernel
+reduction registers the exact current run/generation, turn ID, and canonical
+plan hash once. Exact registration replays and any mismatch fails closed. A
+second short claim reduction must match that actor-owned plan, consumes a Host
+challenge and nonce once, and monotonically advances a per-session supervisor
+high-water mark. It binds the stable Host ID, Host generation and process
 incarnation to the current kernel service epoch. Exact retries return the same
-canonical immutable payload and bytes; takeovers require a fresh challenge and
-old epochs, incarnations, generations, and service epochs are stale.
+canonical immutable payload and bytes. A fresh challenge lets the same Host
+generation recover after either its process incarnation or the kernel service
+epoch changes; the higher supervisor epoch fences old control. Lower Host
+generations and changed Host IDs remain stale.
 
 The actor stores only bounded supervision metadata. It does not store prompts,
 transcripts, provider/model configuration, MCP payloads, or credentials, and it
-performs no provider, executor, model, socket, or signing work. Superseded
-receipts are retained at a fixed capacity and are not purged without a future
-actor-owned settlement protocol. The returned payload is deliberately unsigned
+performs no provider, executor, model, socket, or signing work. Superseded and settled receipts remain replayable through their lease and clock
+skew. The actor prunes only expired non-active receipts before enforcing its
+fixed capacity; active and unexpired receipts are never pruned, and the separate
+supervisor high-water mark survives pruning and restart. The returned payload is deliberately unsigned
 and provides no Host authentication. Service-side Ed25519 signing and a keyring
 are the mandatory next slice before this authority can be used.
 

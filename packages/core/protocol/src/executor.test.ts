@@ -62,7 +62,7 @@ describe("executor versioning", () => {
     capabilities: ["fs", "process"] as Array<"fs" | "process">,
   } as const;
 
-  test("accepts only an exact-v2 incarnation hello", () => {
+  test("accepts only an exact-v3 incarnation hello", () => {
     expect(decodeExecutorHello(hello)).toEqual(hello);
     expect(
       decodeExecutorHello({ ...hello, version: EXECUTOR_PROTOCOL_VERSION - 1 }),
