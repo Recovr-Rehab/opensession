@@ -1261,10 +1261,9 @@ a {
 		border-color: color-mix(in srgb, var(--composer-border) 35%, transparent);
 	}
 
-	/* Keep the installed phone composer focused on drafting and sending. The
-	   add menu remains available for images and session options; only model
-	   selection and dictation stay in the browser view. */
-	.app .pwa-composer-auxiliary {
+	/* Keep dictation in the browser view, where its recording APIs are reliable.
+	   The installed phone composer still shows model selection after it expands. */
+	.app .pwa-composer-dictation {
 		display: none;
 	}
 
