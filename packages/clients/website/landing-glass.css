@@ -7,8 +7,8 @@
 	--card-glass: oklch(1 0 0 / 0.8);
 	--glass-line: oklch(0 0 0 / 0.07);
 	/* Marketing dialogs use the section material through WebsiteModal, keeping
-	   its hue while letting a little of the artwork show through. */
-	--modal-surface: oklch(1 0 0 / 0.82);
+	   its hue while letting more of the artwork show through. */
+	--modal-surface: oklch(1 0 0 / 0.74);
 	--modal-filter: blur(14px) saturate(1.08);
 	--modal-ring: var(--glass-line);
 	--button-glass: oklch(1 0 0 / 0.52);
