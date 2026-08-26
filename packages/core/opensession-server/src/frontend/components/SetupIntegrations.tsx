@@ -269,8 +269,8 @@ function githubOnboardingSteps(owner: GithubAppOwnerType): React.ReactNode[] {
 	return [
 		<>Create a GitHub App for your {account}.</>,
 		<>
-			Review the prefilled name and permissions, confirm <strong>Device Flow</strong>
-			 is on, then create the App.
+			Review the prefilled name and permissions, confirm <strong>Device Flow</strong>{" "}
+			is on, then create the App.
 		</>,
 		<>GitHub returns the App credentials directly to this server.</>,
 		<>Install the App on the repositories Open Session should reach.</>,
