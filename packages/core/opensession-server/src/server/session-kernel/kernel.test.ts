@@ -256,6 +256,12 @@ describe("SessionKernel", () => {
 			})).toEqual({ status: "execute" });
 			durableStore.close();
 			durableStore = new SessionKernelStore(path);
+			durableStore.setRunState({
+				sessionId: "projection-repair",
+				state: "running",
+				event: "prompt",
+				currentRunId: "live-run",
+			});
 			durableStore.quarantineSession(
 				"projection-repair",
 				"actor restarted after execution began",
@@ -270,6 +276,12 @@ describe("SessionKernel", () => {
 			expect(durableStore.command("projection-repair", "write-one")).toMatchObject({
 				status: "failed",
 				retryable: false,
+			});
+		// Releasing the gateway fence does not invent a terminal run outcome. The
+		// still-owned run can now finish its ordinary settlement in the same session.
+			expect(durableStore.runState("projection-repair")).toMatchObject({
+				state: "running",
+				currentRunId: "live-run",
 			});
 		} finally {
 			durableStore.close();

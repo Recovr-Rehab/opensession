@@ -1735,16 +1735,18 @@ export class SessionKernelStore {
 	}
 
 	quarantineRepairEvidence(sessionId: string, commandKind = "unknown"): boolean {
-		if (["preparing", "starting", "running", "ask_blocked", "interrupted", "reattaching"]
-			.includes(this.runState(sessionId).state)) return false;
+		const recoverableGatewaySettlement =
+			this.recoverableGatewaySettlementCommands(sessionId, commandKind);
+		if (
+			["preparing", "starting", "running", "ask_blocked", "interrupted", "reattaching"]
+				.includes(this.runState(sessionId).state) &&
+			!recoverableGatewaySettlement
+		) return false;
 		const ambiguousCommands = this.db.query(
 			`SELECT 1 FROM session_kernel_commands
 			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate') LIMIT 1`,
 		).get(sessionId);
-		if (
-			ambiguousCommands &&
-			!this.recoverableGatewaySettlementCommands(sessionId, commandKind)
-		) return false;
+		if (ambiguousCommands && !recoverableGatewaySettlement) return false;
 		const claimedTimer = this.db.query(
 			"SELECT 1 FROM session_kernel_timers WHERE session_id = ? AND token IS NOT NULL LIMIT 1",
 		).get(sessionId);
