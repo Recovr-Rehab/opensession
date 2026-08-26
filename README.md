@@ -3,7 +3,7 @@
 Self-hosted agent-infrastructure server: a web UI plus Slack, Linear, Plain,
 and GitHub agents, driving coding sessions through the Pi engine
 (supported model providers) in git worktrees on your own box, or in isolated
-sandboxes — Docker locally, with pluggable adapters for other providers.
+sandboxes.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/readme-hero-roomy-dark.webp">
@@ -25,17 +25,15 @@ first.
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
 ```
 
-On Linux, `--tailscale` asks the installer to add Tailscale when passwordless
-`sudo` is available. The recommended remote-access install also adds Caddy and
+The recommended install also adds Tailscale, Caddy and
 the lego certificate helper so the private app can use HTTPS or a friendly
-custom domain. If it reports that `sudo` is needed, run the manual command it
-prints. Without `TS_AUTHKEY`, installing the client does not join a tailnet.
+custom domain.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale --caddy
 ```
 
-For public ingress through Cloudflare Tunnel, `--cloudflare` installs
+For public ingress through Cloudflare Tunnel instead of Tailscale, `--cloudflare` installs
 `cloudflared`. Finish configuring either option under Settings → Domains and
 ingress.
 
