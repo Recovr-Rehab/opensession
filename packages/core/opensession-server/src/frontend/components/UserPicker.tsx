@@ -509,7 +509,7 @@ setError(e.message);
                 continue.
               </>
             ) : (
-              "Open Session is your team’s control room for coding agents."
+              "Open Session is your team’s control room for coding agents. Sign in with GitHub so pull requests from your sessions are authored by you."
             )}
           </AuthCopy>
           <Button
@@ -526,11 +526,6 @@ setError(e.message);
                 ? "Reconnect with GitHub"
                 : "Continue with GitHub"}
           </Button>
-          {!reconnect ? (
-            <p className="mx-auto mt-3.5 max-w-[32ch] text-label leading-normal text-dim">
-              Sign in with GitHub so pull requests are authored by you.
-            </p>
-          ) : null}
         </>
       ) : (
         <div className="flex flex-col items-center">
