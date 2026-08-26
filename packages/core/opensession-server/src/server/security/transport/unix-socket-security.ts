@@ -262,17 +262,68 @@ function installVerifiedUnixSocketGate(
   });
 }
 
-export interface VerifiedUnixSocketListenOptions {
+export interface VerifiedUnixSocketOwnedPathListenOptions {
   readonly path: string;
   readonly parentPolicy: UnixPathPolicy;
   readonly socketPolicy: UnixPathPolicy;
   /** Held from stale-socket proof through bind; closed by server drain. */
   readonly pathLock: UnixSocketPathLock;
+  readonly inheritedFd?: never;
+}
+
+export interface VerifiedUnixSocketInheritedListenOptions {
+  /** An already-bound, already-listening Unix socket descriptor, normally from systemd. */
+  readonly inheritedFd: number;
+  readonly path?: never;
+  readonly parentPolicy?: never;
+  readonly socketPolicy?: never;
+  readonly pathLock?: never;
+}
+
+export type VerifiedUnixSocketListenOptions =
+  | VerifiedUnixSocketOwnedPathListenOptions
+  | VerifiedUnixSocketInheritedListenOptions;
+
+export interface VerifiedUnixSocketServerOptions {
+  /** Fail closed if composition accidentally supplies the legacy owned-path mode. */
+  readonly listenerMode?: "owned-path-or-inherited" | "inherited-fd-only";
 }
 
 export interface VerifiedUnixSocketServer {
   listen(options: VerifiedUnixSocketListenOptions): Promise<void>;
   closeAndDrain(timeoutMs?: number): Promise<void>;
+}
+
+function assertInheritedPeerPolicy(policy: PeerCredentialPolicy): void {
+  if (!policy || !Number.isSafeInteger(policy.uid) || policy.uid <= 0 || policy.uid > 0xffff_ffff || policy.allowRoot === true)
+    throw new Error("Inherited Unix listeners require an exact expected non-root peer UID");
+}
+
+/** Proves the inherited descriptor is an already-listening AF_UNIX socket. */
+async function assertInheritedUnixListenerDescriptor(fd: number): Promise<void> {
+  if (process.platform !== "linux") throw new Error("Inherited Unix listeners are supported only on linux");
+  const ffi = await import("bun:ffi");
+  const library = ffi.dlopen("libc.so.6", {
+    getsockname: { args: ["int", "ptr", "ptr"], returns: "int" },
+    getsockopt: { args: ["int", "int", "int", "ptr", "ptr"], returns: "int" },
+  } as const);
+  try {
+    const address = new Uint8Array(128);
+    const addressLength = new Uint32Array([address.byteLength]);
+    if (library.symbols.getsockname(fd, ffi.ptr(address), ffi.ptr(addressLength)) !== 0 || addressLength[0] < 2)
+      throw new Error("Inherited listener descriptor is not a socket");
+    const littleEndian = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+    if (new DataView(address.buffer).getUint16(0, littleEndian) !== 1)
+      throw new Error("Inherited listener descriptor is not Unix-domain");
+    const accepting = new Int32Array(1);
+    const acceptingLength = new Uint32Array([accepting.byteLength]);
+    // Linux SOL_SOCKET and SO_ACCEPTCONN.
+    if (library.symbols.getsockopt(fd, 1, 30, ffi.ptr(accepting), ffi.ptr(acceptingLength)) !== 0 ||
+        acceptingLength[0] !== accepting.byteLength || accepting[0] !== 1)
+      throw new Error("Inherited Unix descriptor is not listening");
+  } finally {
+    library.close();
+  }
 }
 
 /** Owns the raw server so unverified sockets cannot reach another listener. */
@@ -281,7 +332,11 @@ export function createVerifiedUnixSocketServer(
   policy: PeerCredentialPolicy,
   accept: (accepted: VerifiedAcceptedSocket) => void | Promise<void>,
   onServerError: (error: Error) => void = () => {},
+  options: VerifiedUnixSocketServerOptions = {},
 ): VerifiedUnixSocketServer {
+  const listenerMode = options.listenerMode ?? "owned-path-or-inherited";
+  if (listenerMode !== "owned-path-or-inherited" && listenerMode !== "inherited-fd-only")
+    throw new Error("Malformed verified Unix socket listener mode");
   const server = createServer();
   const gate = installVerifiedUnixSocketGate(server, verifier, policy, accept);
   let state: "idle" | "starting" | "listening" | "failed" | "closed" = "idle";
@@ -298,37 +353,60 @@ export function createVerifiedUnixSocketServer(
     async listen(options: VerifiedUnixSocketListenOptions) {
       if (state !== "idle") throw new Error(`Verified Unix socket server cannot listen while ${state}`);
       state = "starting";
-      pathLock = options.pathLock;
       try {
-        assertLivePathLock(pathLock, options.path);
-        validPathPolicy(options.parentPolicy);
-        validPathPolicy(options.socketPolicy);
-        requireCurrentProcessOwner(options.parentPolicy);
-        requireCurrentProcessOwner(options.socketPolicy);
-        await validateUnixSocketParent(dirname(options.path), options.parentPolicy);
-        await new Promise<void>((resolveListen, rejectListen) => {
-          const onError = (error: Error) => rejectListen(error);
-          server.once("error", onError);
-          server.listen(options.path, async () => {
-            server.off("error", onError);
-            try {
-              await chmod(options.path, options.socketPolicy.mode);
-              await validateUnixSocketPath(options.path, options.socketPolicy);
-              if (terminalError || state !== "starting")
-                throw terminalError ?? new Error("Verified Unix socket server failed while starting");
+        if ("inheritedFd" in options) {
+          assertInheritedPeerPolicy(policy);
+          const inheritedFd = options.inheritedFd;
+          if (typeof inheritedFd !== "number" || !Number.isSafeInteger(inheritedFd) || inheritedFd < 3 || inheritedFd > 0x7fff_ffff)
+            throw new Error("Malformed inherited Unix listener descriptor");
+          await assertInheritedUnixListenerDescriptor(inheritedFd);
+          await new Promise<void>((resolveListen, rejectListen) => {
+            const onError = (error: Error) => rejectListen(error);
+            server.once("error", onError);
+            server.listen({ fd: inheritedFd }, () => {
+              server.off("error", onError);
+              if (terminalError || state !== "starting") {
+                rejectListen(terminalError ?? new Error("Verified Unix socket server failed while starting"));
+                return;
+              }
               state = "listening";
               resolveListen();
-            } catch (error) {
-              rejectListen(error);
-            }
+            });
           });
-        });
+        } else {
+          if (listenerMode === "inherited-fd-only")
+            throw new Error("Verified Unix socket server requires an inherited listener descriptor");
+          pathLock = options.pathLock;
+          assertLivePathLock(pathLock, options.path);
+          validPathPolicy(options.parentPolicy);
+          validPathPolicy(options.socketPolicy);
+          requireCurrentProcessOwner(options.parentPolicy);
+          requireCurrentProcessOwner(options.socketPolicy);
+          await validateUnixSocketParent(dirname(options.path), options.parentPolicy);
+          await new Promise<void>((resolveListen, rejectListen) => {
+            const onError = (error: Error) => rejectListen(error);
+            server.once("error", onError);
+            server.listen(options.path, async () => {
+              server.off("error", onError);
+              try {
+                await chmod(options.path, options.socketPolicy.mode);
+                await validateUnixSocketPath(options.path, options.socketPolicy);
+                if (terminalError || state !== "starting")
+                  throw terminalError ?? new Error("Verified Unix socket server failed while starting");
+                state = "listening";
+                resolveListen();
+              } catch (error) {
+                rejectListen(error);
+              }
+            });
+          });
+        }
       } catch (error) {
         terminalError ??= error instanceof Error ? error : new Error("Unix socket startup failed");
         state = "failed";
         gate.close();
         if (server.listening) server.close();
-        await pathLock.close();
+        await pathLock?.close();
         throw terminalError;
       }
     },
