@@ -139,7 +139,9 @@ describe("Pi model invocation reference and registry", () => {
     expect(Buffer.from(decoded!.canonicalBytes).equals(Buffer.from(JSON.stringify(owner.reference)))).toBe(false);
     expect(decodePiModelGatewayPayload(registry, {
       fence, operationId: "operation-1", bindingRef: ref(1), descriptorDigest: digest("a"),
-    }, owner.reference)).toBeUndefined();
+    }, owner.reference)?.value).toBe(invocation);
+    expect(registry.consumeExact(lookup(owner.reference))?.invocation).toBe(invocation);
+    expect(registry.consumeExact(lookup(owner.reference))).toBeUndefined();
   });
 
   test("refs and diagnostics contain no invocation or provider material", () => {

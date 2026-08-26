@@ -342,7 +342,9 @@ export interface PiModelGatewayLookupExpectation {
   readonly bindingRef: string;
 }
 
-/** Strictly decode a host-visible ref, then atomically resolve its private invocation. */
+/** Strictly decode a host-visible ref without consuming its private invocation.
+ * Authorization and admission happen after this gateway decode boundary. The
+ * model adapter consumes the exact registration only after execution begins. */
 export function decodePiModelGatewayPayload(
   registry: PiModelInvocationRegistry,
   expectation: PiModelGatewayLookupExpectation,
@@ -354,7 +356,7 @@ export function decodePiModelGatewayPayload(
     invocationRef: reference.invocationRef,
   })) return undefined;
   if (reference.bindingRef !== expectation.bindingRef) return undefined;
-  const snapshot = registry.consumeExact({
+  const snapshot = registry.peekForDecode({
     ...expectation,
     invocationRef: reference.invocationRef,
     invocationDigest: reference.invocationDigest,
