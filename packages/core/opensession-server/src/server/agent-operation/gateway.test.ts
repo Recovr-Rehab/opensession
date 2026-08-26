@@ -52,7 +52,10 @@ const envelope = {
   signature: Buffer.alloc(64).toString("base64url"),
 } as const;
 
-async function fixture(failAt?: AgentGatewayFailpoint) {
+async function fixture(
+  failAt?: AgentGatewayFailpoint,
+  beforeAdapterCompletes?: () => Promise<void>,
+) {
   const root = mkdtempSync(join(tmpdir(), "agent-gateway-"));
   roots.push(root);
   const ledger = new SQLiteAgentOperationLedger({
@@ -131,6 +134,7 @@ async function fixture(failAt?: AgentGatewayFailpoint) {
       version: "1.0",
       async execute() {
         executions++;
+        await beforeAdapterCompletes?.();
         return {
           outcome: { status: "succeeded", outputDigest: d("e") },
           transcript: { text: "ephemeral" },
@@ -239,6 +243,24 @@ describe("Agent operation gateway durable choreography", () => {
     expect(recovered.prepared).toHaveLength(1);
     expect(f.counts().executions).toBe(0);
     await f.gateway.dispatch(f.request, "payload");
+    expect(f.counts().executions).toBe(1);
+    await f.ledger.close();
+  });
+
+  test("does not hold the actor while physical work is blocked", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const adapterStarted = new Promise<void>((resolve) => (started = resolve));
+    const adapterRelease = new Promise<void>((resolve) => (release = resolve));
+    const f = await fixture(undefined, async () => {
+      started();
+      await adapterRelease;
+    });
+    const dispatch = f.gateway.dispatch(f.request, "payload");
+    await adapterStarted;
+    await expect(f.actor.admit()).resolves.toEqual({ accepted: true });
+    release();
+    await dispatch;
     expect(f.counts().executions).toBe(1);
     await f.ledger.close();
   });
