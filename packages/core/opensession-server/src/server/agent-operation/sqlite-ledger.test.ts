@@ -11,7 +11,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentOperationIdentity } from "./ledger";
+import type {
+  AgentOperationIdentity,
+  AgentOperationIndeterminateReason,
+} from "./ledger";
 import {
   AgentOperationConflictError,
   AgentOperationLedgerFullError,
@@ -45,6 +48,15 @@ const identity = (
   },
   planHash: d("a"),
   authorityHash: d("b"),
+  supervisorEpoch: 4,
+  hostId: "host-1",
+  hostGeneration: 2,
+  hostIncarnation: "incarnation-1",
+  transcriptAnchor: {
+    throughChangeSeq: 2,
+    entryIds: ["entry-1"],
+    digest: d("c"),
+  },
   descriptor: {
     version: 1,
     kind: "model",
@@ -60,6 +72,16 @@ const identity = (
   adapterVersion: "1.0",
   ...overrides,
 });
+const transcriptRefs = [
+  {
+    appendId: "append-1",
+    entryIds: ["entry-2"],
+    firstSeq: 3,
+    lastSeq: 3,
+    throughChangeSeq: 3,
+    requestDigest: d("2"),
+  },
+];
 const settlement = {
   completedAtMs: 3,
   outcome: {
@@ -67,17 +89,23 @@ const settlement = {
     outputDigest: d("1"),
     usage: { inputTokens: 4, outputTokens: 2 },
   },
-  transcriptRefs: [
-    {
-      appendId: "append-1",
-      entryIds: ["entry-2"],
-      firstSeq: 3,
-      lastSeq: 3,
-      throughChangeSeq: 3,
-      requestDigest: d("2"),
-    },
-  ],
+  transcriptRefs,
+  kernelTerminal: {
+    outputDigest: d("1"),
+    outcomeCode: "ok",
+    transcriptRefs,
+    pendingToolUseEntryIds: [] as string[],
+  },
 };
+const indeterminateTerminal = async (
+  _record?: AgentOperationIdentity,
+  reason: AgentOperationIndeterminateReason = "ambiguous_completion",
+) => ({
+  outputDigest: d("3"),
+  outcomeCode: reason,
+  transcriptRefs,
+  pendingToolUseEntryIds: [] as string[],
+});
 
 describe("SQLite Agent operation ledger", () => {
   test("persists exact prepared, executing and settled replay across every reopen boundary", async () => {
@@ -159,6 +187,7 @@ describe("SQLite Agent operation ledger", () => {
     const mismatches: AgentOperationIdentity[] = [
       identity({
         kind: "mcp",
+        toolUseEntryId: "entry-1",
         descriptorDigest:
           "sha256:436fa9871b12e7650a5df3675f2683c79d080d64dcdd81a7632cb1dc9dc0eb1c",
         descriptor: {
@@ -177,6 +206,10 @@ describe("SQLite Agent operation ledger", () => {
       identity({ fence: { ...original.fence, generation: 2 } }),
       identity({ planHash: d("1") }),
       identity({ authorityHash: d("2") }),
+      identity({ supervisorEpoch: 5 }),
+      identity({ hostId: "host-2" }),
+      identity({ hostGeneration: 3 }),
+      identity({ hostIncarnation: "incarnation-2" }),
       identity({ payloadDigest: d("4") }),
       identity({ adapterId: "adapter-2" }),
       identity({ adapterVersion: "2.0" }),
@@ -212,7 +245,12 @@ describe("SQLite Agent operation ledger", () => {
       AgentOperationTransitionError,
     );
     await expect(
-      ledger.markIndeterminate(exact, "ambiguous_completion", 4),
+      ledger.markIndeterminate(
+        exact,
+        "ambiguous_completion",
+        4,
+        await indeterminateTerminal(),
+      ),
     ).rejects.toBeInstanceOf(AgentOperationTransitionError);
     await ledger.close();
   });
@@ -234,15 +272,26 @@ describe("SQLite Agent operation ledger", () => {
       ledger,
       active[1],
       undefined,
+      indeterminateTerminal,
       4,
     );
     expect(recovered.receipt).toMatchObject({
       state: "indeterminate",
       errorCode: "reconciliation_unsupported",
+      transcriptRefs,
+      kernelTerminal: await indeterminateTerminal(
+        active[1],
+        "reconciliation_unsupported",
+      ),
     });
     expect((await ledger.scanActive()).map((r) => r.receipt.state)).toEqual([
       "prepared",
     ]);
+    await ledger.close();
+    ledger = new SQLiteAgentOperationLedger({ dbPath });
+    expect((await ledger.getExact(active[1]))!.receipt).toEqual(
+      recovered.receipt,
+    );
     await ledger.close();
   });
 
@@ -272,6 +321,7 @@ describe("SQLite Agent operation ledger", () => {
           settlement: { ...settlement, providerResponseRef: "response-1" },
         }),
       },
+      indeterminateTerminal,
       4,
     );
     expect(result.receipt.state).toBe("settled");
@@ -306,6 +356,7 @@ describe("SQLite Agent operation ledger", () => {
         ledger,
         executing,
         { reconcile: async () => malformed as never },
+        indeterminateTerminal,
         3,
       );
       expect(result.receipt).toMatchObject({
@@ -327,7 +378,14 @@ describe("SQLite Agent operation ledger", () => {
       await ledger.claimPrepared(exact, 1);
       await ledger.markExecuting(exact, 2);
       expect(
-        (await ledger.markIndeterminate(exact, reason, 3)).receipt.state,
+        (
+          await ledger.markIndeterminate(
+            exact,
+            reason,
+            3,
+            await indeterminateTerminal(undefined, reason),
+          )
+        ).receipt.state,
       ).toBe("indeterminate");
       await ledger.close();
     }
@@ -343,6 +401,7 @@ describe("SQLite Agent operation ledger", () => {
           throw new DOMException("aborted", "AbortError");
         },
       },
+      indeterminateTerminal,
       3,
     );
     expect(recovered.receipt.errorCode).toBe("reconciliation_failed");

@@ -3,10 +3,12 @@ import type {
   AgentAdapterReconciliationProofV1,
   AgentOperationDescriptorV1,
   AgentOperationDigest,
+  AgentOperationKernelTerminalV1,
   AgentOperationKind,
   AgentOperationOutcomeV1,
   AgentOperationReceiptV1,
   AgentOperationState,
+  AgentTranscriptAnchorV1,
   AgentTranscriptReceiptRefV1,
 } from "@tellahq/opensession-protocol/agent-operation";
 import type { AgentTurnFence } from "@tellahq/opensession-protocol/agent-host";
@@ -17,6 +19,12 @@ export interface AgentOperationIdentity {
   fence: Readonly<AgentTurnFence>;
   planHash: AgentOperationDigest;
   authorityHash: AgentOperationDigest;
+  supervisorEpoch: number;
+  hostId: string;
+  hostGeneration: number;
+  hostIncarnation: string;
+  transcriptAnchor: Readonly<AgentTranscriptAnchorV1>;
+  toolUseEntryId?: string;
   descriptor: AgentOperationDescriptorV1;
   descriptorDigest: AgentOperationDigest;
   payloadDigest: AgentOperationDigest;
@@ -34,7 +42,8 @@ export interface AgentOperationRecord extends AgentOperationIdentity {
 export interface AgentOperationSettlement {
   completedAtMs: number;
   outcome: AgentOperationOutcomeV1;
-  transcriptRefs?: readonly AgentTranscriptReceiptRefV1[];
+  transcriptRefs: readonly AgentTranscriptReceiptRefV1[];
+  kernelTerminal: Readonly<AgentOperationKernelTerminalV1>;
   providerRequestRef?: string;
   providerResponseRef?: string;
 }
@@ -64,6 +73,7 @@ export interface AgentOperationLedger {
     identity: AgentOperationIdentity,
     reason: AgentOperationIndeterminateReason,
     completedAtMs: number,
+    kernelTerminal: Readonly<AgentOperationKernelTerminalV1>,
   ): Promise<AgentOperationRecord>;
   /** Both the primary key and every expected identity field are required. */
   getExact(
@@ -132,6 +142,10 @@ export async function reconcileExecutingOperation(
   ledger: AgentOperationLedger,
   record: AgentOperationRecord,
   reconciler: ExecutingOperationReconciler | undefined,
+  createIndeterminateTerminal: (
+    record: AgentOperationRecord,
+    reason: AgentOperationIndeterminateReason,
+  ) => Promise<Readonly<AgentOperationKernelTerminalV1>>,
   completedAtMs: number,
 ): Promise<AgentOperationRecord> {
   if (record.receipt.state !== "executing")
@@ -146,7 +160,13 @@ export async function reconcileExecutingOperation(
       | "ambiguous_completion",
   ): Promise<AgentOperationRecord> => {
     try {
-      return await ledger.markIndeterminate(record, reason, completedAtMs);
+      const terminal = await createIndeterminateTerminal(record, reason);
+      return await ledger.markIndeterminate(
+        record,
+        reason,
+        completedAtMs,
+        terminal,
+      );
     } catch (error) {
       const latest = await ledger.getExact(record);
       if (
@@ -271,6 +291,7 @@ function validSettlement(
         "completedAtMs",
         "outcome",
         "transcriptRefs",
+        "kernelTerminal",
         "providerRequestRef",
         "providerResponseRef",
       ].includes(key),
@@ -282,9 +303,8 @@ function validSettlement(
     state: "settled",
     completedAtMs: candidate.completedAtMs,
     outcome: candidate.outcome,
-    ...(candidate.transcriptRefs === undefined
-      ? {}
-      : { transcriptRefs: candidate.transcriptRefs }),
+    transcriptRefs: candidate.transcriptRefs,
+    kernelTerminal: candidate.kernelTerminal,
     providerRef: {
       adapterId: record.adapterId,
       adapterVersion: record.adapterVersion,

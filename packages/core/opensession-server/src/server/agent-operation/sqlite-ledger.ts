@@ -37,7 +37,7 @@ const MAX_ID_BYTES = 512;
 const DEFAULT_MAX_ROW_BYTES = 256 * 1024;
 const TABLE_SQL = `CREATE TABLE agent_operation_receipts (
   session_id TEXT NOT NULL, operation_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('model','mcp')),
-  run_id TEXT NOT NULL, turn_id TEXT NOT NULL, generation INTEGER NOT NULL CHECK(generation>=1),
+  run_id TEXT NOT NULL, turn_id TEXT NOT NULL, generation INTEGER NOT NULL CHECK(generation>=0),
   plan_hash TEXT NOT NULL, authority_hash TEXT NOT NULL, descriptor_digest TEXT NOT NULL, payload_digest TEXT NOT NULL,
   adapter_id TEXT NOT NULL, adapter_version TEXT NOT NULL,
   state TEXT NOT NULL CHECK(state IN ('prepared','executing','settled','indeterminate')),
@@ -130,6 +130,16 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
       authorityHash: identity.authorityHash,
       descriptorDigest: identity.descriptorDigest,
       payloadDigest: identity.payloadDigest,
+      actorIdentity: {
+        supervisorEpoch: identity.supervisorEpoch,
+        hostId: identity.hostId,
+        hostGeneration: identity.hostGeneration,
+        hostIncarnation: identity.hostIncarnation,
+        transcriptAnchor: identity.transcriptAnchor,
+        ...(identity.kind === "mcp"
+          ? { toolUseEntryId: identity.toolUseEntryId }
+          : {}),
+      },
       state: "prepared",
       acceptedAtMs,
       providerRef: {
@@ -215,12 +225,22 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
     settlement: AgentOperationSettlement,
   ): Promise<AgentOperationRecord> {
     validTime(settlement.completedAtMs, "completedAtMs");
+    const expectedOutcomeCode =
+      settlement.outcome.code ??
+      (settlement.outcome.status === "succeeded"
+        ? "ok"
+        : settlement.outcome.status === "cancelled"
+          ? "cancelled"
+          : "operation_failed");
+    if (settlement.kernelTerminal.outcomeCode !== expectedOutcomeCode)
+      throw new TypeError("settled terminal outcome contradicts settlement");
     return this.#transition(identity, "executing", "settled", (current) => ({
       ...current.receipt,
       state: "settled",
       completedAtMs: settlement.completedAtMs,
       outcome: settlement.outcome,
       transcriptRefs: settlement.transcriptRefs,
+      kernelTerminal: settlement.kernelTerminal,
       providerRef: {
         adapterId: current.adapterId,
         adapterVersion: current.adapterVersion,
@@ -237,8 +257,13 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
     identity: AgentOperationIdentity,
     reason: AgentOperationIndeterminateReason,
     completedAtMs: number,
+    kernelTerminal: AgentOperationReceiptV1["kernelTerminal"],
   ): Promise<AgentOperationRecord> {
     validTime(completedAtMs, "completedAtMs");
+    if (!kernelTerminal)
+      throw new TypeError("indeterminate terminal evidence is required");
+    if (kernelTerminal.outcomeCode !== reason)
+      throw new TypeError("indeterminate terminal outcome contradicts reason");
     const code =
       reason === "reconciliation_unsupported" ||
       reason === "reconciliation_failed" ||
@@ -253,6 +278,8 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
         ...current.receipt,
         state: "indeterminate",
         completedAtMs,
+        transcriptRefs: kernelTerminal.transcriptRefs,
+        kernelTerminal,
         errorCode: code,
       }),
     );
@@ -450,6 +477,14 @@ function decodeRow(row: Row, max: number): AgentOperationRecord {
     },
     planHash: row.plan_hash,
     authorityHash: row.authority_hash,
+    supervisorEpoch: receipt.actorIdentity.supervisorEpoch,
+    hostId: receipt.actorIdentity.hostId,
+    hostGeneration: receipt.actorIdentity.hostGeneration,
+    hostIncarnation: receipt.actorIdentity.hostIncarnation,
+    transcriptAnchor: receipt.actorIdentity.transcriptAnchor,
+    ...(receipt.kind === "mcp"
+      ? { toolUseEntryId: receipt.actorIdentity.toolUseEntryId }
+      : {}),
     descriptor,
     descriptorDigest: row.descriptor_digest,
     payloadDigest: row.payload_digest,
@@ -516,6 +551,12 @@ function sameIdentity(
     a.fence.generation === b.fence.generation &&
     a.planHash === b.planHash &&
     a.authorityHash === b.authorityHash &&
+    a.supervisorEpoch === b.supervisorEpoch &&
+    a.hostId === b.hostId &&
+    a.hostGeneration === b.hostGeneration &&
+    a.hostIncarnation === b.hostIncarnation &&
+    JSON.stringify(a.transcriptAnchor) === JSON.stringify(b.transcriptAnchor) &&
+    a.toolUseEntryId === b.toolUseEntryId &&
     a.descriptorDigest === b.descriptorDigest &&
     a.payloadDigest === b.payloadDigest &&
     a.adapterId === b.adapterId &&
@@ -529,12 +570,43 @@ function validateIdentity(v: AgentOperationIdentity): void {
     ["sessionId", v.fence.sessionId],
     ["runId", v.fence.runId],
     ["turnId", v.fence.turnId],
+    ["hostId", v.hostId],
+    ["hostIncarnation", v.hostIncarnation],
     ["adapterId", v.adapterId],
     ["adapterVersion", v.adapterVersion],
   ] as const)
     validText(value, name);
-  if (!Number.isSafeInteger(v.fence.generation) || v.fence.generation < 1)
+  if (!Number.isSafeInteger(v.fence.generation) || v.fence.generation < 0)
     throw new TypeError("invalid generation");
+  positive(v.supervisorEpoch, "supervisorEpoch");
+  positive(v.hostGeneration, "hostGeneration");
+  if (
+    !Number.isSafeInteger(v.transcriptAnchor.throughChangeSeq) ||
+    v.transcriptAnchor.throughChangeSeq < 0 ||
+    !/^sha256:[a-f0-9]{64}$/.test(v.transcriptAnchor.digest) ||
+    !Array.isArray(v.transcriptAnchor.entryIds) ||
+    v.transcriptAnchor.entryIds.length > 512 ||
+    new Set(v.transcriptAnchor.entryIds).size !==
+      v.transcriptAnchor.entryIds.length
+  )
+    throw new TypeError("invalid transcript anchor");
+  for (const entryId of v.transcriptAnchor.entryIds)
+    validText(entryId, "transcriptAnchor.entryId");
+  if (
+    (v.kind === "model" && v.toolUseEntryId !== undefined) ||
+    (v.kind === "mcp" &&
+      (!v.toolUseEntryId ||
+        v.descriptor.kind !== "mcp" ||
+        v.descriptor.toolUseEntryId !== v.toolUseEntryId))
+  )
+    throw new TypeError("invalid tool-use identity");
+  if (
+    v.kind === "model" &&
+    (v.descriptor.kind !== "model" ||
+      JSON.stringify(v.descriptor.transcript) !==
+        JSON.stringify(v.transcriptAnchor))
+  )
+    throw new TypeError("model transcript anchor mismatch");
   if (v.descriptor.kind !== v.kind)
     throw new TypeError("descriptor kind mismatch");
   canonicalDescriptorJson(v);

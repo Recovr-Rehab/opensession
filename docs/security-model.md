@@ -121,6 +121,16 @@ retained, persisted or exposed as doctor evidence. Expiry is pruned
 synchronously on registry access, so importing the module starts no timer. This
 registry is not composed into production routing yet.
 
+Every gateway-ledger receipt durably binds the actor-required supervisor epoch,
+Host identity/generation/incarnation, exact transcript anchor and MCP tool-use
+entry identity. Every terminal receipt also carries the exact bounded
+SessionKernel replay material: output digest, outcome code, ordered transcript
+receipt references and, for model operations, ordered pending tool-use entry
+IDs. Settled and indeterminate receipts lacking this material fail strict
+decoding. Recovery must durably append a visible indeterminate transcript entry
+before marking the gateway receipt indeterminate, so a restart can repair the
+actor terminal without retrying physical provider or MCP work.
+
 The only durable state progression is `prepared -> executing -> settled |
 indeterminate`. A recovered `prepared` operation may be reauthorized later.
 A recovered `executing` operation is never retried by default. Initial

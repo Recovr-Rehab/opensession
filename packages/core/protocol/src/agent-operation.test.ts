@@ -7,6 +7,7 @@ import {
   AGENT_MCP_PAYLOAD_DIGEST_DOMAIN,
   AGENT_MODEL_PAYLOAD_DIGEST_DOMAIN,
   AGENT_OPERATION_DESCRIPTOR_DIGEST_DOMAIN,
+  AGENT_OPERATION_RECEIPT_DIGEST_DOMAIN,
   MAX_AGENT_OPERATION_DEPTH,
   decodeAgentGatewayDispatchGrant,
   decodeAgentOperationDescriptorV1,
@@ -19,6 +20,7 @@ import {
   hashAgentMcpPayloadV1,
   hashAgentModelPayloadV1,
   hashAgentOperationDescriptorV1,
+  hashAgentOperationReceiptV1,
   serializeAgentOperationDescriptorV1,
   serializeAgentOperationQueryV1,
   serializeAgentOperationReceiptV1,
@@ -70,6 +72,13 @@ const receipt: AgentOperationReceiptV1 = {
   authorityHash: d("e"),
   descriptorDigest: d("c"),
   payloadDigest: d("f"),
+  actorIdentity: {
+    supervisorEpoch: 4,
+    hostId: "host-1",
+    hostGeneration: 2,
+    hostIncarnation: "incarnation-1",
+    transcriptAnchor: model.transcript,
+  },
   state: "prepared",
   acceptedAtMs: 1,
   providerRef: { adapterId: "adapter-1", adapterVersion: "1.0" },
@@ -201,7 +210,7 @@ describe("Agent operation protocol v1", () => {
     expect(decodeAgentOperationDescriptorV1(proxy)).toBeUndefined();
   });
 
-  test("uses deterministic canonical serialization and four distinct digest domains", async () => {
+  test("uses deterministic canonical serialization and distinct digest domains", async () => {
     const bytes = serializeAgentOperationDescriptorV1(model);
     expect(new TextDecoder().decode(bytes)).toBe(
       '{"version":1,"kind":"model","stepId":"step-1","transcript":{"throughChangeSeq":4,"entryIds":["entry-1"],"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"modelPolicyHash":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","adapterRequestVersion":"model-request.v1"}',
@@ -248,10 +257,11 @@ describe("Agent operation protocol v1", () => {
     ).toEqual(serializeAgentOperationQueryV1(query));
     expect([
       AGENT_OPERATION_DESCRIPTOR_DIGEST_DOMAIN,
+      AGENT_OPERATION_RECEIPT_DIGEST_DOMAIN,
       AGENT_MODEL_PAYLOAD_DIGEST_DOMAIN,
       AGENT_MCP_PAYLOAD_DIGEST_DOMAIN,
       AGENT_MCP_ARGUMENTS_DIGEST_DOMAIN,
-    ]).toHaveLength(4);
+    ]).toHaveLength(5);
   });
 
   test("strictly decodes immutable transcript destination receipt references", () => {
@@ -288,6 +298,68 @@ describe("Agent operation protocol v1", () => {
     ).toBeUndefined();
   });
 
+  test("durably binds exact SessionKernel terminal replay material", async () => {
+    const transcriptRefs = [
+      {
+        appendId: "append-1",
+        entryIds: ["entry-2", "tool-1"],
+        firstSeq: 5,
+        lastSeq: 6,
+        throughChangeSeq: 6,
+        requestDigest: d("1"),
+      },
+    ];
+    const kernelTerminal = {
+      outputDigest: d("2"),
+      outcomeCode: "ok",
+      transcriptRefs,
+      pendingToolUseEntryIds: ["tool-1"],
+    };
+    const terminal: AgentOperationReceiptV1 = {
+      ...receipt,
+      state: "settled",
+      executingAtMs: 2,
+      completedAtMs: 3,
+      outcome: {
+        status: "succeeded",
+        code: "ok",
+        outputDigest: d("2"),
+      },
+      transcriptRefs,
+      kernelTerminal,
+    };
+    expect(decodeAgentOperationReceiptV1(terminal)).toEqual(terminal);
+    expect(await hashAgentOperationReceiptV1(terminal)).toMatch(
+      /^sha256:[a-f0-9]{64}$/,
+    );
+    expect(serializeAgentOperationReceiptV1(terminal)).toEqual(
+      serializeAgentOperationReceiptV1(
+        decodeAgentOperationReceiptV1(terminal)!,
+      ),
+    );
+    expect(
+      decodeAgentOperationReceiptV1({
+        ...terminal,
+        kernelTerminal: {
+          ...kernelTerminal,
+          pendingToolUseEntryIds: ["missing-tool"],
+        },
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeAgentOperationReceiptV1({
+        ...terminal,
+        kernelTerminal: { ...kernelTerminal, outputDigest: d("3") },
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeAgentOperationReceiptV1({
+        ...terminal,
+        kernelTerminal: undefined,
+      }),
+    ).toBeUndefined();
+  });
+
   test("receipts are strict bounded metadata and cannot contain bodies or secrets", () => {
     expect(decodeAgentOperationReceiptV1(receipt)).toEqual(receipt);
     expect(
@@ -301,6 +373,7 @@ describe("Agent operation protocol v1", () => {
         payloadDigest: receipt.payloadDigest,
         descriptorDigest: receipt.descriptorDigest,
         authorityHash: receipt.authorityHash,
+        actorIdentity: receipt.actorIdentity,
         planHash: receipt.planHash,
         fence: receipt.fence,
         kind: receipt.kind,

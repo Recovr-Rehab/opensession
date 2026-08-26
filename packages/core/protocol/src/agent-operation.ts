@@ -8,6 +8,8 @@ export const AGENT_OPERATION_VERSION = 1 as const;
 export const AGENT_GATEWAY_DISPATCH_GRANT_PREFIX = "osag_dispatch_v1." as const;
 export const AGENT_OPERATION_DESCRIPTOR_DIGEST_DOMAIN =
   "opensession.agent-operation.descriptor.v1";
+export const AGENT_OPERATION_RECEIPT_DIGEST_DOMAIN =
+  "opensession.agent-operation.receipt.v1";
 export const AGENT_MODEL_PAYLOAD_DIGEST_DOMAIN =
   "opensession.agent-operation.model-payload.v1";
 export const AGENT_MCP_PAYLOAD_DIGEST_DOMAIN =
@@ -186,6 +188,21 @@ export interface AgentOperationProviderRefV1 {
   requestId?: string;
   responseId?: string;
 }
+export interface AgentOperationActorIdentityV1 {
+  supervisorEpoch: number;
+  hostId: string;
+  hostGeneration: number;
+  hostIncarnation: string;
+  transcriptAnchor: Readonly<AgentTranscriptAnchorV1>;
+  toolUseEntryId?: string;
+}
+export interface AgentOperationKernelTerminalV1 {
+  outputDigest: AgentOperationDigest;
+  outcomeCode: string;
+  transcriptRefs: readonly AgentTranscriptReceiptRefV1[];
+  /** Present for model operations, including an empty list. Forbidden for MCP. */
+  pendingToolUseEntryIds?: readonly string[];
+}
 export interface AgentOperationReceiptV1 {
   version: 1;
   operationId: string;
@@ -195,12 +212,15 @@ export interface AgentOperationReceiptV1 {
   authorityHash: AgentOperationDigest;
   descriptorDigest: AgentOperationDigest;
   payloadDigest: AgentOperationDigest;
+  actorIdentity: Readonly<AgentOperationActorIdentityV1>;
   state: AgentOperationState;
   acceptedAtMs: number;
   executingAtMs?: number;
   completedAtMs?: number;
   outcome?: AgentOperationOutcomeV1;
   transcriptRefs?: readonly AgentTranscriptReceiptRefV1[];
+  /** Exact actor-terminal replay material, durable before actor settlement. */
+  kernelTerminal?: Readonly<AgentOperationKernelTerminalV1>;
   providerRef: AgentOperationProviderRefV1;
   errorCode?:
     | "reconciliation_unsupported"
@@ -569,6 +589,101 @@ function transcriptRef(
 ): AgentTranscriptReceiptRefV1 | undefined {
   return decodeAgentTranscriptReceiptRefV1(value);
 }
+function decodeActorIdentity(
+  kind: AgentOperationKind,
+  value: unknown,
+): AgentOperationActorIdentityV1 | undefined {
+  if (
+    !record(value) ||
+    !exact(value, [
+      "supervisorEpoch",
+      "hostId",
+      "hostGeneration",
+      "hostIncarnation",
+      "transcriptAnchor",
+      ...(kind === "mcp" ? ["toolUseEntryId"] : []),
+    ])
+  )
+    return undefined;
+  const transcriptAnchor = anchor(value.transcriptAnchor);
+  if (
+    !time(value.supervisorEpoch) ||
+    value.supervisorEpoch < 1 ||
+    !validId(value.hostId) ||
+    !time(value.hostGeneration) ||
+    value.hostGeneration < 1 ||
+    !validId(value.hostIncarnation) ||
+    !transcriptAnchor ||
+    (kind === "mcp"
+      ? !validId(value.toolUseEntryId)
+      : value.toolUseEntryId !== undefined)
+  )
+    return undefined;
+  return Object.freeze({
+    supervisorEpoch: value.supervisorEpoch,
+    hostId: value.hostId,
+    hostGeneration: value.hostGeneration,
+    hostIncarnation: value.hostIncarnation,
+    transcriptAnchor,
+    ...(kind === "mcp" ? { toolUseEntryId: value.toolUseEntryId as string } : {}),
+  });
+}
+function decodeKernelTerminal(
+  kind: AgentOperationKind,
+  value: unknown,
+): AgentOperationKernelTerminalV1 | undefined {
+  if (!record(value)) return undefined;
+  const keys = [
+    "outputDigest",
+    "outcomeCode",
+    "transcriptRefs",
+    ...(kind === "model" ? ["pendingToolUseEntryIds"] : []),
+  ];
+  if (
+    !exact(value, keys) ||
+    !validDigest(value.outputDigest) ||
+    typeof value.outcomeCode !== "string" ||
+    !/^[a-z][a-z0-9_]{0,63}$/.test(value.outcomeCode) ||
+    !Array.isArray(value.transcriptRefs) ||
+    value.transcriptRefs.length < 1 ||
+    value.transcriptRefs.length > 64
+  )
+    return undefined;
+  const refs = value.transcriptRefs.map(transcriptRef);
+  if (
+    refs.some((ref) => !ref) ||
+    refs.some(
+      (ref, index) =>
+        index > 0 &&
+        (ref!.firstSeq <= refs[index - 1]!.lastSeq ||
+          ref!.throughChangeSeq <= refs[index - 1]!.throughChangeSeq),
+    )
+  )
+    return undefined;
+  const flattened = refs.flatMap((ref) => [...ref!.entryIds]);
+  if (new Set(flattened).size !== flattened.length) return undefined;
+  let pending: readonly string[] | undefined;
+  if (kind === "model") {
+    if (
+      !ids(value.pendingToolUseEntryIds) ||
+      value.pendingToolUseEntryIds.length > 64
+    )
+      return undefined;
+    let prior = -1;
+    for (const entryId of value.pendingToolUseEntryIds) {
+      const index = flattened.indexOf(entryId);
+      if (index <= prior) return undefined;
+      prior = index;
+    }
+    pending = Object.freeze([...value.pendingToolUseEntryIds]);
+  }
+  return Object.freeze({
+    outputDigest: value.outputDigest,
+    outcomeCode: value.outcomeCode,
+    transcriptRefs: Object.freeze(refs as AgentTranscriptReceiptRefV1[]),
+    ...(kind === "model" ? { pendingToolUseEntryIds: pending! } : {}),
+  });
+}
 export function decodeAgentOperationReceiptV1(
   value: unknown,
 ): AgentOperationReceiptV1 | undefined {
@@ -581,12 +696,14 @@ export function decodeAgentOperationReceiptV1(
     "authorityHash",
     "descriptorDigest",
     "payloadDigest",
+    "actorIdentity",
     "state",
     "acceptedAtMs",
     "executingAtMs",
     "completedAtMs",
     "outcome",
     "transcriptRefs",
+    "kernelTerminal",
     "providerRef",
     "errorCode",
   ];
@@ -621,6 +738,11 @@ export function decodeAgentOperationReceiptV1(
     )
   )
     return undefined;
+  const actorIdentity = decodeActorIdentity(
+    value.kind as AgentOperationKind,
+    value.actorIdentity,
+  );
+  if (!actorIdentity) return undefined;
   const refs =
     value.transcriptRefs === undefined
       ? undefined
@@ -668,6 +790,19 @@ export function decodeAgentOperationReceiptV1(
       ...(decodedUsage === undefined ? {} : { usage: decodedUsage }),
     }) as AgentOperationOutcomeV1;
   }
+  const kernelTerminal = decodeKernelTerminal(
+    value.kind as AgentOperationKind,
+    value.kernelTerminal,
+  );
+  if (value.kernelTerminal !== undefined && !kernelTerminal) return undefined;
+  if (
+    kernelTerminal &&
+    (JSON.stringify(kernelTerminal.transcriptRefs) !== JSON.stringify(refs) ||
+      (outcome?.outputDigest !== undefined &&
+        outcome.outputDigest !== kernelTerminal.outputDigest) ||
+      (outcome?.code !== undefined && outcome.code !== kernelTerminal.outcomeCode))
+  )
+    return undefined;
   const state = value.state as AgentOperationState;
   if (
     (state === "prepared" &&
@@ -675,6 +810,7 @@ export function decodeAgentOperationReceiptV1(
         value.completedAtMs !== undefined ||
         outcome ||
         value.transcriptRefs !== undefined ||
+        kernelTerminal !== undefined ||
         value.providerRef.requestId !== undefined ||
         value.providerRef.responseId !== undefined ||
         value.errorCode !== undefined)) ||
@@ -683,6 +819,7 @@ export function decodeAgentOperationReceiptV1(
         value.completedAtMs !== undefined ||
         outcome ||
         value.transcriptRefs !== undefined ||
+        kernelTerminal !== undefined ||
         value.providerRef.requestId !== undefined ||
         value.providerRef.responseId !== undefined ||
         value.errorCode !== undefined)) ||
@@ -694,17 +831,21 @@ export function decodeAgentOperationReceiptV1(
         (time(value.executingAtMs)
           ? value.executingAtMs
           : value.acceptedAtMs)) ||
-    (state === "settled" && (!outcome || value.errorCode !== undefined)) ||
+    (state === "settled" &&
+      (!outcome || !kernelTerminal || value.errorCode !== undefined)) ||
     (state === "indeterminate" &&
       (outcome !== undefined ||
+        !kernelTerminal ||
         !ERROR_CODES.includes(value.errorCode as (typeof ERROR_CODES)[number])))
   )
     return undefined;
   return Object.freeze({
     ...value,
     fence: Object.freeze({ ...value.fence }),
+    actorIdentity,
     ...(outcome === undefined ? {} : { outcome }),
     ...(refs === undefined ? {} : { transcriptRefs: Object.freeze(refs) }),
+    ...(kernelTerminal === undefined ? {} : { kernelTerminal }),
   }) as AgentOperationReceiptV1;
 }
 
@@ -839,6 +980,16 @@ export function serializeAgentOperationReceiptV1(
       authorityHash: v.authorityHash,
       descriptorDigest: v.descriptorDigest,
       payloadDigest: v.payloadDigest,
+      actorIdentity: {
+        supervisorEpoch: v.actorIdentity.supervisorEpoch,
+        hostId: v.actorIdentity.hostId,
+        hostGeneration: v.actorIdentity.hostGeneration,
+        hostIncarnation: v.actorIdentity.hostIncarnation,
+        transcriptAnchor: v.actorIdentity.transcriptAnchor,
+        ...(v.kind === "mcp"
+          ? { toolUseEntryId: v.actorIdentity.toolUseEntryId }
+          : {}),
+      },
       state: v.state,
       acceptedAtMs: v.acceptedAtMs,
       ...(v.executingAtMs === undefined
@@ -859,6 +1010,21 @@ export function serializeAgentOperationReceiptV1(
               throughChangeSeq: ref.throughChangeSeq,
               requestDigest: ref.requestDigest,
             })),
+          }),
+      ...(v.kernelTerminal === undefined
+        ? {}
+        : {
+            kernelTerminal: {
+              outputDigest: v.kernelTerminal.outputDigest,
+              outcomeCode: v.kernelTerminal.outcomeCode,
+              transcriptRefs: v.kernelTerminal.transcriptRefs,
+              ...(v.kind === "model"
+                ? {
+                    pendingToolUseEntryIds:
+                      v.kernelTerminal.pendingToolUseEntryIds,
+                  }
+                : {}),
+            },
           }),
       providerRef: {
         adapterId: v.providerRef.adapterId,
@@ -897,3 +1063,8 @@ export const hashAgentMcpPayloadV1 = (v: Uint8Array) =>
   hash(AGENT_MCP_PAYLOAD_DIGEST_DOMAIN, v);
 export const hashAgentMcpArgumentsV1 = (v: Uint8Array) =>
   hash(AGENT_MCP_ARGUMENTS_DIGEST_DOMAIN, v);
+export const hashAgentOperationReceiptV1 = (v: AgentOperationReceiptV1) =>
+  hash(
+    AGENT_OPERATION_RECEIPT_DIGEST_DOMAIN,
+    serializeAgentOperationReceiptV1(v),
+  );
