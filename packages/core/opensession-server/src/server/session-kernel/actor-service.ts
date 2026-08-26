@@ -101,6 +101,8 @@ type QueuedSessionTurn = {
 
 type SessionMailbox = {
   running: boolean;
+  /** Chosen once when the mailbox activates and kept until it drains. */
+  slot: WorkerSlot;
   normal: QueuedSessionTurn[];
   priority: QueuedSessionTurn[];
   priorityBurst: number;
@@ -261,11 +263,6 @@ export async function startSessionKernelService(
   );
   const sessionSlots = slots.slice(1);
   const sessionMailboxes = new Map<string, SessionMailbox>();
-  // Sticky lane pins (session id -> lane), bounded and LRU-evicted only when
-  // the pinned session's mailbox is idle. Sized well above the open-store
-  // bound per lane so an active working set never cycles pins.
-  const MAX_LANE_PINS = 8_192;
-  const lanePins = new Map<string, WorkerSlot>();
   let queuedSessionTurns = 0;
   let queuedGlobalTurns = 0;
   let admittedTransportRequests = 0;
@@ -571,42 +568,16 @@ export async function startSessionKernelService(
   }
 
   function assignedSessionSlot(sessionId: string): WorkerSlot {
-    // Sticky affinity keeps one logical actor's in-memory SQLite/cache state on
-    // one lane. The durable database remains the authority and is rehydrated
-    // after restart or LRU passivation. Placement is two-choice: the session's
-    // two rendezvous candidates are fixed by its id, and the quieter one is
-    // pinned when the session first becomes active. A pin never moves while
-    // the session's mailbox is live; it can only be dropped between turns by
-    // the bounded pin cache, after which the next activation re-chooses.
-    const pinned = lanePins.get(sessionId);
-    if (pinned) {
-      lanePins.delete(sessionId);
-      lanePins.set(sessionId, pinned);
-      return pinned;
-    }
+    // Placement is chosen only when a mailbox activates. The mailbox owns the
+    // pin until it drains, so queued turns never migrate while a logical actor
+    // is live. A later activation may choose the quieter rendezvous candidate.
     const loads: LaneLoad[] = sessionSlots.map((slot) => ({
       // A restarting lane retries quickly; weigh it as a full queue rather
       // than excluding it so both candidates stay usable.
       queued: slot.queue.length + (slot.ready ? 0 : laneQueueLimit),
       executing: slot.pending.size,
     }));
-    const chosen = sessionSlots[chooseSessionLane(sessionId, loads)]!;
-    while (lanePins.size >= MAX_LANE_PINS) {
-      // Evict the least recently used pin whose mailbox is idle. An active
-      // mailbox is never unpinned; if every pin is active, exceed the bound
-      // rather than move live work.
-      let evicted = false;
-      for (const key of lanePins.keys()) {
-        if (!sessionMailboxes.has(key)) {
-          lanePins.delete(key);
-          evicted = true;
-          break;
-        }
-      }
-      if (!evicted) break;
-    }
-    lanePins.set(sessionId, chosen);
-    return chosen;
+    return sessionSlots[chooseSessionLane(sessionId, loads)]!;
   }
 
   function pumpSessionMailbox(sessionId: string, mailbox: SessionMailbox): void {
@@ -635,7 +606,7 @@ export async function startSessionKernelService(
     }
     mailbox.running = true;
     void turn.gate
-      .then(() => sendToSlot(assignedSessionSlot(sessionId), turn.request))
+      .then(() => sendToSlot(mailbox.slot, turn.request))
       .then(turn.resolve, turn.reject)
       .finally(() => {
         queuedSessionTurns -= 1;
@@ -654,6 +625,7 @@ export async function startSessionKernelService(
     if (!mailbox) {
       mailbox = {
         running: false,
+        slot: assignedSessionSlot(sessionId),
         normal: [],
         priority: [],
         priorityBurst: 0,

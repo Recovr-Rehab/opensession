@@ -77,7 +77,11 @@ Gateway settings can be placed in `~/.opensession.env`:
 
 The independently supervised executor does not read `~/.opensession.env`. Set
 `OPENSESSION_EXECUTOR_LAUNCH_CONCURRENCY` (default 8) with an `Environment=`
-systemd drop-in on `opensession-executor.service`.
+systemd drop-in on `opensession-executor.service`. The session kernel likewise
+keeps the application/secrets environment outside its service boundary. Its
+worker count scales to available CPUs (16 on the production host), while the
+root deploy installs a dedicated 4G `MemoryHigh` / 6G `MemoryMax` capacity
+drop-in for the authoritative kernel process.
 
 All overrides are bounded integers. Invalid or out-of-range values log an error
 and retain the built-in default.
