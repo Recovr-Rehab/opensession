@@ -12,7 +12,6 @@ import React, {
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, Reorder } from "motion/react";
 import { duration, ease } from "../ui/motion";
-import { Spinner } from "../ui/spinner";
 import { EmptyState, InlineAlert, TranscriptSkeleton } from "../ui/state";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { getLiveTypingPref } from "../lib/live-typing-pref";
@@ -381,7 +380,6 @@ import {
 	SCROLL_ACTION_CLEARANCE,
 	SUGGESTIONS_CLEARANCE,
 	TRANSCRIPT_ICON_BUTTON,
-	TRANSCRIPT_LOADING_MORE,
 	TRANSCRIPT_PILL_BUTTON,
 	TRANSCRIPT_PILL_LOADING,
 	TRANSCRIPT_PILL_SPINNER,
@@ -1138,11 +1136,9 @@ export function SessionViewer({
 	// this is the FIRST render, before the session's detail has hydrated, and
 	// the list row carries the answer where it no longer carries the ids.
 	const [loading, setLoading] = useState(!cachedTranscript && !!session.ran);
-	// A cached transcript paints immediately while the watch handshake catches it
-	// up. Keep that background work visible without replacing readable history.
-	const [loadingMoreTranscript, setLoadingMoreTranscript] = useState(
-		Boolean(cachedTranscript),
-	);
+	// Cached transcripts stay visible while the watch handshake catches them up.
+	// That background sync is intentionally silent: it does not block reading or
+	// sending, and a loader at the live edge looks like part of the conversation.
 	// The initial transcript is the tail only when the file is large; these drive
 	// the "load earlier history" affordance at the top of the conversation.
 	const [historyTruncated, setHistoryTruncated] = useState(
@@ -2897,9 +2893,6 @@ export function SessionViewer({
 					loadingHistoryRef.current = false;
 					setLoadingHistory(false);
 					setLoading(false);
-					// Indexed mode still owes the complete outline after this bounded
-					// tail. Keep the quiet anchored spinner until that frame arrives.
-					if (!v2) setLoadingMoreTranscript(false);
 					// A whole-history walk ends here when the server answers with the
 					// whole transcript — the legacy path's only way to serve a backlog,
 					// and the seq path's fallback when a store read fails. A TRUNCATED
@@ -2958,7 +2951,6 @@ export function SessionViewer({
 					transcriptIndexEpochRef.current = msg.epoch;
 					setTranscriptOutlineReady(true);
 					setTranscriptIndexState({ sessionId: session.id, entries: msg.entries });
-					setLoadingMoreTranscript(false);
 					setHistoryTruncated(false);
 					backgroundHistoryRef.current = false;
 					historyRevealRef.current = null;
@@ -3229,10 +3221,6 @@ export function SessionViewer({
 					}
 					break;
 				case "session_status":
-					// This is the final frame in a legacy watch handshake. Indexed mode
-					// still owes its complete outline after this frame.
-					if (transcriptSeqRef.current?.sessionId !== session.id)
-						setLoadingMoreTranscript(false);
 					setIsRunningLive(msg.isRunning);
 					if (!msg.isRunning) {
 						// Every isRunning:false broadcast follows its run's stream_done,
@@ -7553,21 +7541,6 @@ export function SessionViewer({
                 reply streams into the space below; sized by the scroll hook. */}
 							<div ref={spacerRef} className={TURN_SPACER} aria-hidden="true" />
 						</div>
-
-							{loadingMoreTranscript && (
-								<div
-									role="status"
-									aria-label="Loading more messages"
-									className={cn(
-										TRANSCRIPT_LOADING_MORE,
-										summaryStep > 0 && VIEWER_SUMMARY_STEP,
-									)}
-								>
-									<div className="mx-auto flex w-full max-w-[calc(var(--session-col)+40px)]">
-										<Spinner />
-									</div>
-								</div>
-							)}
 
 							{/* Sibling of the scroller, not a child: a press on the rail
 							    must never reach the transcript container, whose scroll hook
