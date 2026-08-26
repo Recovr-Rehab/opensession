@@ -75,6 +75,25 @@ function CodeBlock({ children }: { children: string }) {
 	);
 }
 
+/** A generated config file shown like a chat code fence, with its copy
+ *  control fixed in the top-right corner. */
+function ConfigCodeBlock({ code }: { code: string }) {
+	const { copied, copy } = useCopy();
+	return (
+		<div className="relative overflow-hidden rounded-xl border border-code-well-line bg-code-well py-2.5 pr-14 pl-3.5 text-code-well-ink">
+			<Button
+				variant="ghost"
+				size="sm"
+				aria-label={copied ? "Copied" : "Copy configuration"}
+				icon={<CopyCheck copied={copied} size={15} idle={<IconCopy size={15} />} />}
+				className="absolute top-1 right-1 shrink-0 phone:size-10 phone:justify-center phone:p-0"
+				onClick={() => copy(code, { toast: "Copied" })}
+			/>
+			<pre className="m-0 overflow-x-auto font-mono text-meta whitespace-pre-wrap [overflow-wrap:anywhere]">{code}</pre>
+		</div>
+	);
+}
+
 function SetupSteps({ children }: { children: React.ReactNode }) {
 	return <ol className="m-0 grid list-none gap-3 p-0 text-supporting text-dim">{children}</ol>;
 }
@@ -259,9 +278,9 @@ function PrivateAppSetup({
 								<p className="m-0">Bind Caddy only to the Tailscale address and forward the app to loopback.</p>
 							</SetupStep>
 						</SetupSteps>
-						<details className="rounded-lg bg-surface p-3 text-meta text-dim">
+						<details className="text-meta text-dim">
 							<summary className="cursor-pointer font-medium text-fg">Generated Caddy configuration</summary>
-							<pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-meta">{privateAppCaddyConfig(settings, domain)}</pre>
+							<div className="mt-2"><ConfigCodeBlock code={privateAppCaddyConfig(settings, domain)} /></div>
 						</details>
 						<div className="grid gap-2">
 							<div className="text-label font-medium text-dim">Apply Caddy</div>
@@ -532,134 +551,138 @@ export function IngressPanel({
 						<p className="m-0 text-supporting leading-relaxed text-dim">
 							A separate public endpoint for webhooks and remote Sandboxes. It never serves the app.
 						</p>
-						<div className="grid gap-2">
-							<div className="text-label font-medium text-dim">How external services connect</div>
-							<SettingCard>
-								<RadioGroup
-									aria-label="Public callback method"
-									value={method}
-									disabled={!!busy || !settings.canManage}
-									onValueChange={(next) => setMethod(next as IngressExposure)}
-									className="[&>*+*]:relative [&>*+*]:before:pointer-events-none [&>*+*]:before:absolute [&>*+*]:before:inset-x-5 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-line [&>*+*]:before:content-['']"
-								>
-									{INGRESS_METHODS.map((option) => (
-										<label key={option.value} className="flex min-h-11 cursor-pointer items-start gap-3 px-5 py-4 transition-[background-color] hover:bg-hover">
-											<Radio value={option.value} className="mt-0.5" />
-											<span className="min-w-0">
-												<span className="block text-item-title font-medium text-fg">{option.label}</span>
-												<span className="mt-1 block text-supporting text-dim">{option.description}</span>
-											</span>
-										</label>
-									))}
-								</RadioGroup>
-							</SettingCard>
-						</div>
+						<div className="grid grid-cols-[minmax(0,280px)_minmax(0,1fr)] items-start gap-x-5 gap-y-3 phone:grid-cols-1">
+							<div className="grid gap-2">
+								<div className="text-label font-medium text-dim">How external services connect</div>
+								<SettingCard>
+									<RadioGroup
+										aria-label="Public callback method"
+										value={method}
+										disabled={!!busy || !settings.canManage}
+										onValueChange={(next) => setMethod(next as IngressExposure)}
+										className="[&>*+*]:relative [&>*+*]:before:pointer-events-none [&>*+*]:before:absolute [&>*+*]:before:inset-x-5 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-line [&>*+*]:before:content-['']"
+									>
+										{INGRESS_METHODS.map((option) => (
+											<label key={option.value} className="flex min-h-11 cursor-pointer items-start gap-3 px-5 py-3.5 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-hover">
+												<Radio value={option.value} className="mt-0.5" />
+												<span className="min-w-0">
+													<span className="block text-item-title font-medium text-fg">{option.label}</span>
+													<span className="mt-1 block text-supporting text-dim">{option.description}</span>
+												</span>
+											</label>
+										))}
+									</RadioGroup>
+								</SettingCard>
+							</div>
 
-						{method === "tailscale" && (
-							<SetupSteps>
-								<SetupStep number={1} title="Connect this server to Tailscale">
-									<p className="m-0">The server must have a Tailscale DNS name. Funnel may also need to be allowed in your tailnet policy.</p>
-									{!settings.tailscale.installed && <CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale --no-onboard"}</CodeBlock>}
-									<CodeBlock>sudo tailscale up</CodeBlock>
-								</SetupStep>
-								<SetupStep number={2} title="Start Funnel">
-									<p className="m-0">Open Session sends public HTTPS traffic only to its isolated listener. No DNS records or inbound ports are needed.</p>
-									<SettingsField className="mb-0">
-										Public URL
-										<Input value={settings.tailscale.suggestedUrl} readOnly className="font-mono" placeholder="Connect Tailscale to discover the URL" />
-									</SettingsField>
-									<p className="m-0">A CNAME cannot replace this address because Funnel’s certificate and routing use the .ts.net hostname. For your own domain, use Cloudflare Tunnel or Direct HTTPS with Caddy.</p>
-								</SetupStep>
-							</SetupSteps>
-						)}
-
-						{method === "cloudflare" && (
-							<>
-								{!settings.cloudflare.installed && (
-									<InlineAlert>
-										Install cloudflared first, then reload this page.
-										<div className="mt-2"><CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --cloudflare --no-onboard"}</CodeBlock></div>
-									</InlineAlert>
-								)}
-								<p className="m-0 text-supporting text-dim">Run these commands in a terminal on the Open Session server.</p>
+							<div className="grid min-w-0 content-start gap-3.5">
+							{method === "tailscale" && (
 								<SetupSteps>
-									<SetupStep number={1} title="Sign in to Cloudflare">
-										<CodeBlock>cloudflared tunnel login</CodeBlock>
-										<p className="m-0">Choose the Cloudflare account and zone that will own your ingress domain.</p>
+									<SetupStep number={1} title="Connect this server to Tailscale">
+										<p className="m-0">The server must have a Tailscale DNS name. Funnel may also need to be allowed in your tailnet policy.</p>
+										{!settings.tailscale.installed && <CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale --no-onboard"}</CodeBlock>}
+										<CodeBlock>sudo tailscale up</CodeBlock>
 									</SetupStep>
-									<SetupStep number={2} title="Create a named tunnel">
-										<CodeBlock>cloudflared tunnel create opensession</CodeBlock>
-										<p className="m-0">Copy the UUID printed by this command.</p>
-										<SettingsField className="mb-0">
-											Tunnel ID
-											<Input value={tunnelId} placeholder="00000000-0000-0000-0000-000000000000" disabled={!!busy} className="font-mono" onChange={(event) => setTunnelId(event.target.value)} />
-										</SettingsField>
-									</SetupStep>
-									<SetupStep number={3} title="Add the DNS route">
+									<SetupStep number={2} title="Start Funnel">
+										<p className="m-0">Open Session sends public HTTPS traffic only to its isolated listener. No DNS records or inbound ports are needed.</p>
 										<SettingsField className="mb-0">
 											Public URL
-											<Input key={method} type="url" value={url} placeholder="https://ingress.example.com" disabled={!!busy} onChange={(event) => setDrafts((current) => ({ ...current, cloudflare: event.target.value }))} />
+											<Input value={settings.tailscale.suggestedUrl} readOnly className="font-mono" placeholder="Connect Tailscale to discover the URL" />
 										</SettingsField>
-										<CodeBlock>{`cloudflared tunnel route dns opensession ${ingressHostname(url)}`}</CodeBlock>
-									</SetupStep>
-									<SetupStep number={4} title="Generate the connector token">
-										<CodeBlock>cloudflared tunnel token opensession</CodeBlock>
-										<p className="m-0">Paste the printed token. Open Session stores it on this server and starts the connector for you.</p>
-										<SettingsField className="mb-0">
-											Tunnel token
-											<Input
-												type="password"
-												value={tunnelToken}
-												disabled={!!busy}
-												autoComplete="off"
-												placeholder={settings.cloudflare.tokenConfigured ? "Leave blank to keep the saved token" : "Paste the connector token"}
-												onChange={(event) => setTunnelToken(event.target.value)}
-											/>
-										</SettingsField>
+										<p className="m-0">A CNAME cannot replace this address because Funnel’s certificate and routing use the .ts.net hostname. For your own domain, use Cloudflare Tunnel or Direct HTTPS with Caddy.</p>
 									</SetupStep>
 								</SetupSteps>
-								<div className="grid gap-2">
-									<div className="text-label font-medium text-dim">Tunnel destination</div>
-									<CodeBlock>{settings.cloudflare.connectorTarget}</CodeBlock>
-									<p className="m-0 text-supporting text-dim">Use this isolated listener only. Never route the private app port through the tunnel.</p>
-								</div>
-								{settings.cloudflare.connectorRunning && <StatusChip label="Connector running" dot="var(--green)" />}
-							</>
-						)}
+							)}
 
-						{method === "custom" && (
-							<>
-								<SetupSteps>
-									<SetupStep number={1} title="Choose a separate public domain">
-										<SettingsField className="mb-0">
-											Domain
-											<Input key={method} value={url} placeholder="ingress.example.com" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => setDrafts((current) => ({ ...current, custom: event.target.value }))} />
-										</SettingsField>
-										<p className="m-0">Do not use the private app hostname. HTTPS is added automatically.</p>
-									</SetupStep>
-									<SetupStep number={2} title="Open ports 80 and 443">
-										<p className="m-0">Allow inbound TCP traffic from the public internet to ports 80 and 443 in the server firewall and your cloud security group. Caddy uses port 80 for certificate validation and serves HTTPS on port 443.</p>
-									</SetupStep>
-									<SetupStep number={3} title="Add DNS records at your provider">
-										<p className="m-0">Point the domain to this server’s public IP address, not its private or Tailscale address.</p>
-										{records.length ? records.map((record) => <CodeBlock key={record}>{record}</CodeBlock>) : (
-											<InlineAlert>Open Session could not detect this server’s public IP. Set OPENSESSION_PUBLIC_IPV4 or OPENSESSION_PUBLIC_IPV6 for the service, restart it, and reload this page.</InlineAlert>
-										)}
-									</SetupStep>
-									<SetupStep number={4} title="Configure Caddy">
-										<p className="m-0">Open Session adds this dedicated site to /etc/caddy/Caddyfile and reloads Caddy. If DNS is still propagating, the status stays at Waiting for DNS and checks again automatically.</p>
-										{!settings.custom.caddyInstalled && <CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --caddy --no-onboard"}</CodeBlock>}
-									</SetupStep>
-								</SetupSteps>
-								<details className="rounded-lg bg-surface p-3 text-meta text-dim">
-									<summary className="cursor-pointer font-medium text-fg">Generated Caddy configuration</summary>
-									<pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-meta">{customCaddyConfig(url)}</pre>
-								</details>
-								{settings.health === "waiting_dns" && settings.exposure === "custom" && (
-									<InlineAlert>DNS does not point to this server yet. Keep this page open or click Check again after updating the records.</InlineAlert>
-								)}
-							</>
-						)}
+							{method === "cloudflare" && (
+								<>
+									{!settings.cloudflare.installed && (
+										<InlineAlert>
+											Install cloudflared first, then reload this page.
+											<div className="mt-2"><CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --cloudflare --no-onboard"}</CodeBlock></div>
+										</InlineAlert>
+									)}
+									<p className="m-0 text-supporting text-dim">Run these commands in a terminal on the Open Session server.</p>
+									<SetupSteps>
+										<SetupStep number={1} title="Sign in to Cloudflare">
+											<CodeBlock>cloudflared tunnel login</CodeBlock>
+											<p className="m-0">Choose the Cloudflare account and zone that will own your ingress domain.</p>
+										</SetupStep>
+										<SetupStep number={2} title="Create a named tunnel">
+											<CodeBlock>cloudflared tunnel create opensession</CodeBlock>
+											<p className="m-0">Copy the UUID printed by this command.</p>
+											<SettingsField className="mb-0">
+												Tunnel ID
+												<Input value={tunnelId} placeholder="00000000-0000-0000-0000-000000000000" disabled={!!busy} className="font-mono" onChange={(event) => setTunnelId(event.target.value)} />
+											</SettingsField>
+										</SetupStep>
+										<SetupStep number={3} title="Add the DNS route">
+											<SettingsField className="mb-0">
+												Public URL
+												<Input key={method} type="url" value={url} placeholder="https://ingress.example.com" disabled={!!busy} onChange={(event) => setDrafts((current) => ({ ...current, cloudflare: event.target.value }))} />
+											</SettingsField>
+											<CodeBlock>{`cloudflared tunnel route dns opensession ${ingressHostname(url)}`}</CodeBlock>
+										</SetupStep>
+										<SetupStep number={4} title="Generate the connector token">
+											<CodeBlock>cloudflared tunnel token opensession</CodeBlock>
+											<p className="m-0">Paste the printed token. Open Session stores it on this server and starts the connector for you.</p>
+											<SettingsField className="mb-0">
+												Tunnel token
+												<Input
+													type="password"
+													value={tunnelToken}
+													disabled={!!busy}
+													autoComplete="off"
+													placeholder={settings.cloudflare.tokenConfigured ? "Leave blank to keep the saved token" : "Paste the connector token"}
+													onChange={(event) => setTunnelToken(event.target.value)}
+												/>
+											</SettingsField>
+										</SetupStep>
+									</SetupSteps>
+									<div className="grid gap-2">
+										<div className="text-label font-medium text-dim">Tunnel destination</div>
+										<CodeBlock>{settings.cloudflare.connectorTarget}</CodeBlock>
+										<p className="m-0 text-supporting text-dim">Use this isolated listener only. Never route the private app port through the tunnel.</p>
+									</div>
+									{settings.cloudflare.connectorRunning && <StatusChip label="Connector running" dot="var(--green)" />}
+								</>
+							)}
+
+							{method === "custom" && (
+								<>
+									<SetupSteps>
+										<SetupStep number={1} title="Choose a separate public domain">
+											<SettingsField className="mb-0">
+												Domain
+												<Input key={method} value={url} placeholder="ingress.example.com" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => setDrafts((current) => ({ ...current, custom: event.target.value }))} />
+											</SettingsField>
+											<p className="m-0">Do not use the private app hostname. HTTPS is added automatically.</p>
+										</SetupStep>
+										<SetupStep number={2} title="Open ports 80 and 443">
+											<p className="m-0">Allow inbound TCP traffic from the public internet to ports 80 and 443 in the server firewall and your cloud security group. Caddy uses port 80 for certificate validation and serves HTTPS on port 443.</p>
+										</SetupStep>
+										<SetupStep number={3} title="Add DNS records at your provider">
+											<p className="m-0">Point the domain to this server’s public IP address, not its private or Tailscale address.</p>
+											{records.length ? records.map((record) => <CodeBlock key={record}>{record}</CodeBlock>) : (
+												<InlineAlert>Open Session could not detect this server’s public IP. Set OPENSESSION_PUBLIC_IPV4 or OPENSESSION_PUBLIC_IPV6 for the service, restart it, and reload this page.</InlineAlert>
+											)}
+										</SetupStep>
+										<SetupStep number={4} title="Configure Caddy">
+											<p className="m-0">Open Session adds this dedicated site to /etc/caddy/Caddyfile and reloads Caddy. If DNS is still propagating, the status stays at Waiting for DNS and checks again automatically.</p>
+											{!settings.custom.caddyInstalled && <CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --caddy --no-onboard"}</CodeBlock>}
+										</SetupStep>
+									</SetupSteps>
+									<details className="text-meta text-dim">
+										<summary className="cursor-pointer font-medium text-fg">Generated Caddy configuration</summary>
+										<div className="mt-2"><ConfigCodeBlock code={customCaddyConfig(url)} /></div>
+									</details>
+									{settings.health === "waiting_dns" && settings.exposure === "custom" && (
+										<InlineAlert>DNS does not point to this server yet. Keep this page open or click Check again after updating the records.</InlineAlert>
+									)}
+								</>
+							)}
+							</div>
+						</div>
 
 						{settings.health === "unreachable" && settings.exposure === method && (
 							<InlineAlert>The public URL is configured but its health check is not reachable. Verify DNS, the connector, and any firewall rules, then check again.</InlineAlert>
