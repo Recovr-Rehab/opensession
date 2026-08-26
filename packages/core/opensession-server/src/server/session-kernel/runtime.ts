@@ -238,12 +238,24 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 			active.add(item.id);
 			void executeSessionEffect(item)
 				.then(async (executed) => {
-					if (executed)
+					if (!executed) return;
+					try {
 						await sessionCoreAsync({
 							op: "ack_outbox",
 							id: item.id,
 							sessionId: item.sessionId,
 						});
+					} catch (settlementError) {
+						// The physical effect succeeded. An acknowledgement timeout is
+						// therefore an indeterminate settlement, not an effect failure:
+						// fail_outbox would falsely retry/account for work that completed.
+						// A committed ACK removes the item; an uncommitted ACK leaves it
+						// available for the runtime's next idempotent execution pass.
+						console.error(
+							`[session-kernel] outbox ${item.kind}/${item.id} completed but could not acknowledge:`,
+							settlementError,
+						);
+					}
 				})
 				.catch(async (error) => {
 					if (error instanceof SessionKernelQuarantinedError) {

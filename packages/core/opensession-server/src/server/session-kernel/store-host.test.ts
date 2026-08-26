@@ -414,6 +414,81 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("repairs a committed outbox settlement while replay-safe lifecycle work remains", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "committed-outbox-repair";
+    host.call("setRunState", [{ sessionId, state: "idle", event: "seed" }]);
+    const settledId = host.call("enqueueOutbox", [
+      sessionId,
+      "turn_outcome_project",
+      { projectionId: "settled" },
+      "settled",
+    ]) as number;
+    const pendingId = host.call("enqueueOutbox", [
+      sessionId,
+      "turn_outcome_project",
+      { projectionId: "pending" },
+      "pending",
+    ]) as number;
+
+    // Actor reducers settle in the isolated store directly. The central route
+    // deliberately remains as durable ownership evidence until maintenance.
+    host.storeForSession(sessionId).ackOutbox(settledId);
+    host.quarantineSession(
+      sessionId,
+      `Outbox ${settledId} crossed session ownership`,
+      "core:ack_outbox",
+    );
+
+    expect(host.central.isolatedOutboxSessionId(settledId)).toBe(sessionId);
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+    expect(host.quarantinedSession(sessionId)).toBeUndefined();
+    expect(host.storeForSession(sessionId).pendingOutbox()).toEqual([
+      expect.objectContaining({ id: pendingId }),
+    ]);
+    host.close();
+  });
+
+  test("does not repair an outbox ownership mismatch without matching route evidence", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const owner = "actual-outbox-owner";
+    const wrongSession = "wrong-outbox-owner";
+    host.call("setRunState", [{ sessionId: owner, state: "idle", event: "seed" }]);
+    host.call("setRunState", [{
+      sessionId: wrongSession,
+      state: "idle",
+      event: "seed",
+    }]);
+    const outboxId = host.call("enqueueOutbox", [
+      owner,
+      "turn_outcome_project",
+      { projectionId: "owned" },
+      "owned",
+    ]) as number;
+    host.call("enqueueOutbox", [
+      wrongSession,
+      "turn_outcome_project",
+      { projectionId: "still-pending" },
+      "still-pending",
+    ]);
+    host.quarantineSession(
+      wrongSession,
+      `Outbox ${outboxId} crossed session ownership`,
+      "core:ack_outbox",
+    );
+
+    expect(host.quarantinedSession(wrongSession)).toMatchObject({
+      repairable: false,
+    });
+    expect(host.call("releaseQuarantine", [wrongSession])).toBe(false);
+    host.close();
+  });
+
   test("contains failures from already-open isolated databases per session", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);

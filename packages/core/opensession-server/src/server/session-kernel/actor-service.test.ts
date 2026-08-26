@@ -436,6 +436,17 @@ describe("session kernel actor service", () => {
       }));
       expect(settled.ok).toBe(true);
 
+      const replayedSettlement = result(await send({
+        t: "reduce",
+        rpcId: "async-settlement-replayed",
+        command: {
+          kind: "core",
+          commandId: crypto.randomUUID(),
+          request: { op: "ack_outbox", id, sessionId },
+        },
+      }));
+      expect(replayedSettlement.ok).toBe(true);
+
       const pending = result(await send({
         t: "store",
         rpcId: "async-settlement-pending",

@@ -56,19 +56,34 @@ describe("public session safety state", () => {
       sessionId: "unreconciled-session",
       repairable: false,
     };
+    const committedOutbox = {
+      ...recoverable,
+      sessionId: "committed-outbox-session",
+      reason: "Outbox 4000000000001815 crossed session ownership",
+      commandKind: "core:ack_outbox",
+    };
     expect(automaticallyRecoverableSessionSafety(recoverable)).toBe(true);
     expect(automaticallyRecoverableSessionSafety(delivery)).toBe(true);
+    expect(automaticallyRecoverableSessionSafety(committedOutbox)).toBe(true);
     expect(automaticallyRecoverableSessionSafety(contradiction)).toBe(false);
     expect(automaticallyRecoverableSessionSafety(unreconciled)).toBe(false);
 
     const attempted: string[] = [];
     expect(await reconcileAutomaticallyRecoverableSessionSafety(
-      [contradiction, recoverable, delivery, unreconciled],
+      [contradiction, recoverable, delivery, committedOutbox, unreconciled],
       async (sessionId) => {
         attempted.push(sessionId);
         return true;
       },
-    )).toEqual(["recoverable-session", "delivery-session"]);
-    expect(attempted).toEqual(["recoverable-session", "delivery-session"]);
+    )).toEqual([
+      "recoverable-session",
+      "delivery-session",
+      "committed-outbox-session",
+    ]);
+    expect(attempted).toEqual([
+      "recoverable-session",
+      "delivery-session",
+      "committed-outbox-session",
+    ]);
   });
 });

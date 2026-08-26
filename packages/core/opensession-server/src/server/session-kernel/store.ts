@@ -2066,10 +2066,15 @@ export class SessionKernelStore {
 		sessionId: string,
 		commandKind = "unknown",
 		reason?: string,
+		verifiedCommittedOutboxSettlement = false,
 	): boolean {
 		const recoverableSettlement =
 			this.recoverableGatewaySettlementCommands(sessionId, commandKind) ??
 			this.recoverableDeliverySettlementCommands(sessionId, commandKind, reason);
+		const recoverableOutboxSettlement =
+			verifiedCommittedOutboxSettlement &&
+			(commandKind === "core:ack_outbox" || commandKind === "core:fail_outbox") &&
+			/^Outbox \d+ crossed session ownership$/.test(reason ?? "");
 		if (
 			["preparing", "starting", "running", "ask_blocked", "interrupted", "reattaching"]
 				.includes(this.runState(sessionId).state) &&
@@ -2098,7 +2103,7 @@ export class SessionKernelStore {
 			"delivery_interrupt_cancel",
 		]);
 		const onlyRecoverableLifecycleEffects =
-			!!recoverableSettlement &&
+			(!!recoverableSettlement || recoverableOutboxSettlement) &&
 			pendingEffects.length > 0 &&
 			pendingEffects.every((effect) => recoverableLifecycleEffects.has(effect.kind));
 		if (pendingEffects.length > 0 && !onlyRecoverableLifecycleEffects) return false;
@@ -2154,11 +2159,22 @@ export class SessionKernelStore {
 		});
 	}
 
-	releaseQuarantine(sessionId: string): boolean {
+	releaseQuarantine(
+		sessionId: string,
+		verifiedCommittedOutboxSettlement = false,
+	): boolean {
 		let released = false;
 		const transaction = this.db.transaction(() => {
 			const quarantine = this.quarantinedSession(sessionId);
-			if (!quarantine?.repairable) return;
+			if (
+				!quarantine ||
+				!this.quarantineRepairEvidence(
+					sessionId,
+					quarantine.commandKind,
+					quarantine.reason,
+					verifiedCommittedOutboxSettlement,
+				)
+			) return;
 			const recoverable =
 				this.recoverableGatewaySettlementCommands(
 					sessionId,

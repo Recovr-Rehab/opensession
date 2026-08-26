@@ -29,6 +29,11 @@ export function automaticallyRecoverableSessionSafety(
   quarantine: DurableSessionQuarantine,
 ): boolean {
   if (!quarantine.repairable) return false;
+  if (
+    (quarantine.commandKind === "core:ack_outbox" ||
+      quarantine.commandKind === "core:fail_outbox") &&
+    /^Outbox \d+ crossed session ownership$/.test(quarantine.reason)
+  ) return true;
   const actorRestart =
     quarantine.reason === "actor restarted before execution admission" ||
     quarantine.reason === "actor restarted before acknowledgement" ||

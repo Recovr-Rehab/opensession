@@ -133,12 +133,47 @@ export class SessionKernelStoreHost {
     );
   }
 
+  /** Prove that a settlement which timed out at the gateway did commit. The
+   * central route is durable ownership evidence, while absence from that
+   * session's isolated outbox proves the actor already removed the effect. */
+  private committedOutboxSettlementEvidence(
+    sessionId: string,
+    quarantine: DurableSessionQuarantine,
+  ): boolean {
+    if (
+      quarantine.commandKind !== "core:ack_outbox" &&
+      quarantine.commandKind !== "core:fail_outbox"
+    ) return false;
+    const match = /^Outbox (\d+) crossed session ownership$/.exec(
+      quarantine.reason,
+    );
+    if (!match || !this.isIsolated(sessionId)) return false;
+    const outboxId = Number(match[1]);
+    if (!Number.isSafeInteger(outboxId)) return false;
+    if (
+      this.centralOperation(
+        () => this.central.isolatedOutboxSessionId(outboxId),
+      ) !== sessionId
+    ) return false;
+    const settled = this.containIsolated(
+      sessionId,
+      "storage:outbox-settlement-evidence",
+      () => this.openIsolated(sessionId).outboxSessionId(outboxId),
+    );
+    return settled.ok && settled.value === undefined;
+  }
+
   quarantinedSession(sessionId: string): DurableSessionQuarantine | undefined {
     const infrastructure = this.centralOperation(
       () => this.central.quarantinedSession(sessionId),
     );
     if (infrastructure) {
-      if (!infrastructure.repairable || !this.isIsolated(sessionId))
+      const committedOutboxSettlement =
+        this.committedOutboxSettlementEvidence(sessionId, infrastructure);
+      if (
+        (!infrastructure.repairable && !committedOutboxSettlement) ||
+        !this.isIsolated(sessionId)
+      )
         return infrastructure;
       const evidence = this.containIsolated(
         sessionId,
@@ -146,6 +181,8 @@ export class SessionKernelStoreHost {
         () => this.openIsolated(sessionId).quarantineRepairEvidence(
           sessionId,
           infrastructure.commandKind,
+          infrastructure.reason,
+          committedOutboxSettlement,
         ),
       );
       return {
@@ -159,9 +196,24 @@ export class SessionKernelStoreHost {
       "storage:quarantine-read",
       () => this.openIsolated(sessionId).quarantinedSession(sessionId),
     );
-    return isolated.ok
-      ? isolated.value
-      : this.centralOperation(() => this.central.quarantinedSession(sessionId));
+    if (!isolated.ok)
+      return this.centralOperation(() => this.central.quarantinedSession(sessionId));
+    if (!isolated.value || isolated.value.repairable) return isolated.value;
+    const committedOutboxSettlement = this.committedOutboxSettlementEvidence(
+      sessionId,
+      isolated.value,
+    );
+    return committedOutboxSettlement
+      ? {
+          ...isolated.value,
+          repairable: this.openIsolated(sessionId).quarantineRepairEvidence(
+            sessionId,
+            isolated.value.commandKind,
+            isolated.value.reason,
+            true,
+          ),
+        }
+      : isolated.value;
   }
 
   quarantineSession(
@@ -287,7 +339,10 @@ export class SessionKernelStoreHost {
       );
     if (method === "releaseQuarantine") {
       const sessionId = String(args[0] ?? "");
-      if (!this.quarantinedSession(sessionId)?.repairable) return false;
+      const quarantine = this.quarantinedSession(sessionId);
+      if (!quarantine?.repairable) return false;
+      const committedOutboxSettlement =
+        this.committedOutboxSettlementEvidence(sessionId, quarantine);
       let isolatedReleased = false;
       if (this.isIsolated(sessionId)) {
         this.centralOperation(
@@ -296,12 +351,18 @@ export class SessionKernelStoreHost {
         const isolated = this.containIsolated(
           sessionId,
           "storage:quarantine-release",
-          () => this.openIsolated(sessionId).releaseQuarantine(sessionId),
+          () => this.openIsolated(sessionId).releaseQuarantine(
+            sessionId,
+            committedOutboxSettlement,
+          ),
         );
         if (isolated.ok) isolatedReleased = isolated.value;
       }
       const centralReleased = this.centralOperation(
-        () => this.central.releaseQuarantine(sessionId),
+        () => this.central.releaseQuarantine(
+          sessionId,
+          committedOutboxSettlement,
+        ),
       );
       if (centralReleased || isolatedReleased)
         this.refreshSessionProjections(sessionId);

@@ -210,15 +210,25 @@ export function startSessionKernelActorWorker(): void {
               core.effectKey,
             );
           else if (core.op === "ack_outbox") {
-            if (store.outboxSessionId(core.id) !== core.sessionId)
+            const owner =
+              store.outboxSessionId(core.id) ?? host.outboxSessionId(core.id);
+            // Settlements are idempotent. A timed-out acknowledgement may have
+            // committed even though the caller did not receive its response;
+            // in that case the effect is already absent and replay is a no-op.
+            // Existing effects still retain the cross-session ownership fence.
+            if (owner !== undefined && owner !== core.sessionId)
               throw new Error(`Outbox ${core.id} crossed session ownership`);
             result = store.ackOutbox(core.id);
           } else if (core.op === "defer_outbox") {
-            if (store.outboxSessionId(core.id) !== core.sessionId)
+            const owner =
+              store.outboxSessionId(core.id) ?? host.outboxSessionId(core.id);
+            if (owner !== undefined && owner !== core.sessionId)
               throw new Error(`Outbox ${core.id} crossed session ownership`);
             result = store.deferOutbox(core.id);
           } else if (core.op === "fail_outbox") {
-            if (store.outboxSessionId(core.id) !== core.sessionId)
+            const owner =
+              store.outboxSessionId(core.id) ?? host.outboxSessionId(core.id);
+            if (owner !== undefined && owner !== core.sessionId)
               throw new Error(`Outbox ${core.id} crossed session ownership`);
             result = store.noteOutboxFailure(
               core.id,
