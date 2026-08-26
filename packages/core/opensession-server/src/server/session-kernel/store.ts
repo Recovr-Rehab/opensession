@@ -6740,6 +6740,33 @@ export class SessionKernelStore {
     return placement;
   }
 
+  claimIsolatedSessionsForTranscriptMigration(
+    sessionIds: readonly string[],
+  ): DurableSessionPlacement[] {
+    if (sessionIds.length === 0) return [];
+    const unique = [...new Set(sessionIds)];
+    const claim = this.db.transaction(() => {
+      const now = Date.now();
+      for (const sessionId of unique) {
+        if (this.hasSessionDurableState(sessionId))
+          throw new Error(`Session ${sessionId} still has central kernel state`);
+        this.db.run(`
+          INSERT INTO session_kernel_placements
+            (session_id, placement, transcript_authority, needs_scan, updated_at)
+          VALUES (?, 'isolated', 'shared', 1, ?)
+          ON CONFLICT(session_id) DO NOTHING
+        `, [sessionId, now]);
+        const placement = this.sessionPlacement(sessionId);
+        if (!placement || placement.placement !== "isolated")
+          throw new Error(
+            `Session ${sessionId} isolated migration placement was not persisted`,
+          );
+      }
+    });
+    claim.immediate();
+    return unique.map((sessionId) => this.sessionPlacement(sessionId)!);
+  }
+
 	claimIsolatedSession(sessionId: string): DurableSessionPlacement {
 		if (this.hasSessionDurableState(sessionId))
 			throw new Error(`Session ${sessionId} already has central kernel state`);
@@ -7047,6 +7074,7 @@ export type SessionKernelStoreApi = Omit<
 	| "rollbackActorTranscriptAuthorities"
 	| "claimIsolatedSession"
 	| "claimIsolatedSessionForTranscriptMigration"
+	| "claimIsolatedSessionsForTranscriptMigration"
 	| "markIsolatedSessionDirty"
 	| "settleIsolatedSessionWake"
 	| "isolatedWakeCandidates"

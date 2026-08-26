@@ -77,6 +77,11 @@ function main(): void {
     sourceTranscriptPath,
     isolatedRoot,
     dryRun,
+    onProgress: ({ completed, total, migrated, adopted }) =>
+      console.error(
+        `[actor-transcript-migration] ${completed}/${total} ` +
+          `(migrated=${migrated}, adopted=${adopted})`,
+      ),
   });
   console.log(JSON.stringify({
     ...result,

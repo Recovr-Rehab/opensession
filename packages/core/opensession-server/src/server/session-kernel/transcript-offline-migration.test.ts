@@ -13,7 +13,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TranscriptStore } from "../transcript-store";
 import { SessionKernelStoreHost } from "./store-host";
-import { SessionKernelStore, sessionKernelSessionDbPath } from "./store";
+import {
+  SESSION_KERNEL_SCHEMA_VERSION,
+  SessionKernelStore,
+  sessionKernelSessionDbPath,
+} from "./store";
 import {
   migrateActorTranscriptsOffline,
   rollbackActorTranscriptsOffline,
@@ -139,6 +143,14 @@ describe("offline actor transcript migration", () => {
     );
     expect(snapshot(target, paths.sessionId)).toEqual(expected);
     target.close();
+    const targetDb = new Database(
+      sessionKernelSessionDbPath(paths.sessionId, paths.isolatedRoot),
+      { readonly: true },
+    );
+    expect((targetDb.query("PRAGMA user_version").get() as {
+      user_version: number;
+    }).user_version).toBe(SESSION_KERNEL_SCHEMA_VERSION);
+    targetDb.close();
     const central = new SessionKernelStore(paths.centralPath);
     expect(central.sessionPlacement(paths.sessionId)).toMatchObject({
       placement: "isolated",
@@ -285,6 +297,30 @@ describe("offline actor transcript migration", () => {
     expect(central.sessionPlacement(paths.sessionId)?.transcriptAuthority).toBe("actor");
     central.close();
     expect(readFileSync(paths.sourceTranscriptPath)).toEqual(beforeBytes);
+  });
+
+  test("refuses to adopt a staged target that changed after verification", async () => {
+    const paths = await fixture();
+    expect(() => migrateActorTranscriptsOffline({
+      ...paths,
+      beforePublish: () => {
+        throw new Error("stop before publication");
+      },
+    })).toThrow("stop before publication");
+    const target = new Database(
+      sessionKernelSessionDbPath(paths.sessionId, paths.isolatedRoot),
+    );
+    target.run(
+      "UPDATE transcript_events SET data = ? WHERE session_id = ? AND seq = 1",
+      [JSON.stringify({ changed: true }), paths.sessionId],
+    );
+    target.close();
+    expect(() => migrateActorTranscriptsOffline(paths)).toThrow(
+      "target transcript digest differs from source",
+    );
+    const central = new SessionKernelStore(paths.centralPath);
+    expect(central.sessionPlacement(paths.sessionId)?.transcriptAuthority).toBe("shared");
+    central.close();
   });
 
   test("enumerates receipt-only rows and aborts all authority publication", () => {
