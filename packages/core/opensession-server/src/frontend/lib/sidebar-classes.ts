@@ -836,10 +836,12 @@ export const SIDEBAR_WS_TICKER =
 /**
  * Teammates focused on this row's work, as the same overlapping pile used by
  * Feed. The call site gives earlier faces the higher stack and rings every
- * squircle in the row's live surface colour, so left-to-right reading order
- * also stays front-to-back on resting, hovered, selected, and waiting rows.
+ * squircle in this surface colour, so left-to-right reading order also stays
+ * front-to-back. On hover the solid ring follows the row's precomposited gray
+ * wash instead of cutting a sidebar-coloured halo through it.
  */
-export const SIDEBAR_WS_FACES = "flex shrink-0 items-center";
+export const SIDEBAR_WS_FACES =
+	"flex shrink-0 items-center [--sidebar-face-ring:var(--sidebar-bg)] group-hover:[--sidebar-face-ring:var(--row-chip)]";
 export const SIDEBAR_WS_FACE = "[&:not(:first-child)]:-ml-1.5";
 
 /**

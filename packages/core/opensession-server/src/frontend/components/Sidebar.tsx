@@ -3382,7 +3382,7 @@ setClosingPrUrls((current) => {
 										style={facepileAvatarStyle(
 											index,
 											shown.length,
-											"var(--sidebar-bg)",
+											"var(--sidebar-face-ring)",
 										)}
 										title={`${viewer} is here`}
 									/>
