@@ -27,8 +27,9 @@ interface FirstMileStep {
 	description: string;
 }
 
-// Public callbacks come before GitHub so the generated App form carries a
-// working webhook URL. GitHub then supplies the organization step's answers:
+// Public callbacks come before GitHub so a configured endpoint can prefill the
+// App form, but the step remains optional for private-only installations.
+// GitHub then supplies the organization step's answers:
 // the organization is named and marked from the org you just connected rather
 // than asked for cold. Members sit after repositories, since an invite is worth
 // more once there is something to join. The members step is removed
@@ -45,7 +46,7 @@ const STEPS: FirstMileStep[] = [
 		id: "ingress",
 		label: "Network",
 		title: "Connect Open Session",
-		description: "Keep the app private for your team, then choose how external services reach its public callback endpoint.",
+		description: "Keep the app private for your team. Optionally let external services reach a public callback endpoint.",
 	},
 	{
 		id: "github",
@@ -366,7 +367,6 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	function goTo(next: number) {
 		const nextIndex = Math.min(Math.max(next, 0), steps.length - 1);
 		if (nextIndex === index) return;
-		if (step.id === "ingress" && nextIndex > index && !ingressReady) return;
 		setDirection(nextIndex > index ? 1 : -1);
 		setIndex(nextIndex);
 		void refetch();
@@ -622,10 +622,12 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 							if (index === steps.length - 1) void finish();
 							else goTo(index + 1);
 						}}
-						disabled={!status || finishing || (step.id === "ingress" && !ingressReady)}
+						disabled={!status || finishing}
 						className="justify-self-end phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
 					>
-						{index === 0
+						{step.id === "ingress" && !ingressReady
+							? "Skip for now"
+							: index === 0
 							? "Continue"
 							: index === steps.length - 1
 								? finishing
