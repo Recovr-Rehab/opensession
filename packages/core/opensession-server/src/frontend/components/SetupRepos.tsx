@@ -105,7 +105,7 @@ export function ReposSection({
 				// step, where the label needs no space above it. On the settings
 				// page it follows the default-repository card and keeps the
 				// group's own mt-9, which is what separates the two.
-				className="first:mt-0"
+				className={cn("first:mt-0", compact && "text-body text-fg/65")}
 				actions={
 					<Button
 						size="sm"
@@ -196,7 +196,7 @@ export function ReposSection({
 					})
 				)}
 			</SettingCard>
-			<SettingsHint className={compact ? "text-white/60" : undefined}>
+			<SettingsHint className={compact ? "text-fg/55" : undefined}>
 				Remote repositories are cloned onto the server. Local folders stay where
 				they are. Code sessions use isolated worktrees by default. New repos are
 				usable right away with no restart. Commit <code>.agents/</code> scripts to
