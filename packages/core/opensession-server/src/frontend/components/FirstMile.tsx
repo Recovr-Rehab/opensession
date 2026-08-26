@@ -325,6 +325,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const [index, setIndex] = useState(initialFirstMileIndex);
 	const [direction, setDirection] = useState(1);
 	const [footerSeparated, setFooterSeparated] = useState(false);
+	const [progressMaterial, setProgressMaterial] = useState(false);
 	const [finishing, setFinishing] = useState(false);
 	const [theme, setTheme] = useState(effectiveTheme);
 	const headingRef = useRef<HTMLHeadingElement>(null);
@@ -354,6 +355,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 		const update = () => {
 			const remaining = main.scrollHeight - main.scrollTop - main.clientHeight;
 			setFooterSeparated(remaining > 1);
+			setProgressMaterial(main.scrollTop > 16);
 		};
 		update();
 		main.addEventListener("scroll", update, { passive: true });
@@ -407,7 +409,10 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 		>
 			<nav
 				className={cn(
-					"absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center rounded-[999px] bg-[color-mix(in_srgb,var(--popup-surface)_72%,transparent)] px-1 shadow-[0_12px_32px_-20px_color-mix(in_srgb,var(--fg)_38%,transparent)] [backdrop-filter:blur(18px)_saturate(1.2)] phone:top-[max(12px,env(safe-area-inset-top))]",
+					"absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center rounded-[999px] px-1 transition-[background-color,box-shadow,backdrop-filter] duration-200 phone:top-[max(12px,env(safe-area-inset-top))] motion-reduce:transition-none",
+					progressMaterial
+						? "bg-[color-mix(in_srgb,var(--popup-surface)_72%,transparent)] shadow-[0_12px_32px_-20px_color-mix(in_srgb,var(--fg)_38%,transparent)] [backdrop-filter:blur(18px)_saturate(1.2)]"
+						: "bg-transparent shadow-none [backdrop-filter:blur(0px)_saturate(1)]",
 					index === 0 && "invisible pointer-events-none",
 				)}
 				aria-hidden={index === 0}
