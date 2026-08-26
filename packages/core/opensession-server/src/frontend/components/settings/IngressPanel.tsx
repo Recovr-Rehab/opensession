@@ -734,13 +734,14 @@ export function IngressPanel({
 											)}
 										</SetupStep>
 										<SetupStep number={4} title="Configure Caddy">
-											<p className="m-0">Open Session adds this dedicated site to /etc/caddy/Caddyfile and reloads Caddy. If DNS is still propagating, the status stays at Waiting for DNS and checks again automatically.</p>
+											<p className="m-0">Open Session adds this dedicated site to /etc/caddy/Caddyfile, binds it to the public-facing network interface, and reloads Caddy. If DNS is still propagating, the status stays at Waiting for DNS and checks again automatically.</p>
 											{!settings.custom.caddyInstalled && <CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --caddy --no-onboard"}</CodeBlock>}
 										</SetupStep>
 									</SetupSteps>
 									<details className="text-meta text-dim">
-										<summary className="cursor-pointer font-medium text-fg">Generated Caddy configuration</summary>
+										<summary className="cursor-pointer font-medium text-fg">Caddy route preview</summary>
 										<div className="mt-2"><ConfigCodeBlock code={customCaddyConfig(url)} /></div>
+										<p className="mt-2 mb-0">Automatic setup also adds the detected local interface bind.</p>
 									</details>
 									{settings.health === "waiting_dns" && settings.exposure === "custom" && (
 										<InlineAlert>DNS does not point to this server yet. Keep this page open or click Check again after updating the records.</InlineAlert>
