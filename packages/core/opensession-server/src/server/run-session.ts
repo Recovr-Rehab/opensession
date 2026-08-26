@@ -2700,6 +2700,9 @@ async function runSessionPromptInner(
 		// Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
 		// sessions pass no user, so they never see a user-restricted server.
 		user: runInputs.user,
+		// The creator grant also gives provider routing a safe human identity for
+		// synthetic continuations such as worker reports and restart recovery.
+		mcpGrantUser: runInputs.mcpGrantUser,
 		journal: { osSessionId: session.id, kind: "prompt" },
 		startToken,
 		onAskUser: makeAskHandler(sessionId),

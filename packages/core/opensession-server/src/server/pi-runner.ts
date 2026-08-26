@@ -92,6 +92,7 @@ import {
 import { transcriptStore } from "./transcript-store";
 import { transcriptForwarder } from "./transcript-forward";
 import { gitIdentityEnv } from "./shared/user-mappings";
+import { providerAccountUser } from "./session-actors";
 import {
   GITHUB_RUN_AUTH_FILE_ENV,
   githubRunEnv,
@@ -1482,6 +1483,10 @@ async function* runPiAttempt(
   }
 
   const { prompt, cwd, mode, mcpServers, confirmTools, journal, user, author } = opts;
+  // `user` remains the exact prompt sender for MCP/GitHub policy and audit.
+  // Provider accounts are different: synthetic continuation senders inherit
+  // the interactive session owner's personal subscription.
+  const accountUser = providerAccountUser(user, opts.mcpGrantUser);
   const isAsk = mode === "ask";
   const isScratch = mode === "scratch";
 
@@ -1574,7 +1579,7 @@ async function* runPiAttempt(
       readModelProviderConfig()?.openaiAccounts,
       opts.accountAffinityKey || journal?.osSessionId || cwd,
       undefined,
-      user,
+      accountUser,
       opts.accountId,
       opts.accountStrict,
       new Set([...walk.excluded, pickedOpenai.id])
@@ -1697,7 +1702,7 @@ async function* runPiAttempt(
         readModelProviderConfig()?.openaiAccounts,
         opts.accountAffinityKey || journal?.osSessionId || cwd,
         pickOut,
-        user,
+        accountUser,
         opts.accountId,
         opts.accountStrict,
         walk.excluded,
@@ -1879,7 +1884,7 @@ async function* runPiAttempt(
       // zero-cost fallback entry the bridge path minted.
       const provider = buildPiAnthropicProvider({
         unifiedSessionId: unifiedSessionId || runKey,
-        user,
+        user: accountUser,
         accountId: opts.accountId,
         accountStrict: opts.accountStrict,
         usageCredits: opts.usageCredits,
@@ -1962,7 +1967,12 @@ async function* runPiAttempt(
     // additions to the minimal environment, never inherited server secrets.
     const cliEnv: Record<string, string> = {};
     if (opts.claudeCliEnv) {
-      const cliAccount = pickClaudeAccount(undefined, user, undefined, opts.usageCredits);
+      const cliAccount = pickClaudeAccount(
+        undefined,
+        accountUser,
+        undefined,
+        opts.usageCredits,
+      );
       if (cliAccount) {
         const cliCfgDir = `${PI_STATE_DIR}/cli/claude/${cliAccount.id}`;
         mkdirSync(cliCfgDir, { recursive: true, mode: 0o700 });
@@ -1989,7 +1999,7 @@ async function* runPiAttempt(
         cfg?.openaiAccounts,
         journal?.osSessionId || runKey,
         undefined,
-        user,
+        accountUser,
       );
       if ("error" in picked) {
         console.warn(
