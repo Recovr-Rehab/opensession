@@ -10,6 +10,7 @@ import {
   type LinuxPeerCredentialBackend,
 } from "./linux-peer-credentials";
 import {
+  createLinuxUnixSocketPathLock,
   createVerifiedUnixSocketServer,
   doctorLinuxPeerCredentials,
   isProvenStaleSocketConnectError,
@@ -109,11 +110,16 @@ describe("Linux peer credentials", () => {
       socket.once("data", () => events.push("data"));
       socket.resume();
     });
-    await gate.listen({
+    const pathLock = await createLinuxUnixSocketPathLock(path, { uid, gid, mode: 0o700 });
+    const listenOptions = {
       path,
       parentPolicy: { uid, gid, mode: 0o700 },
       socketPolicy: { uid, gid, mode: 0o600 },
-    });
+      pathLock,
+    } as const;
+    const starting = gate.listen(listenOptions);
+    await expect(gate.listen(listenOptions)).rejects.toThrow("while starting");
+    await starting;
     expect((await lstat(path)).mode & 0o7777).toBe(0o600);
     cleanups.push(async () => { await gate.closeAndDrain(); await rm(dir, { recursive: true, force: true }); });
     const first = connect(path); first.write("before-connect");
@@ -132,10 +138,12 @@ describe("Linux peer credentials", () => {
     const rejectedPath = join(rejectedDir, "peer.sock");
     const rejecting = await createLinuxPeerCredentialVerifier();
     const rejectedServer = createVerifiedUnixSocketServer(rejecting, { uid: uid + 1 }, () => { throw new Error("must not run"); });
+    const rejectedLock = await createLinuxUnixSocketPathLock(rejectedPath, { uid, gid, mode: 0o700 });
     await rejectedServer.listen({
       path: rejectedPath,
       parentPolicy: { uid, gid, mode: 0o700 },
       socketPolicy: { uid, gid, mode: 0o600 },
+      pathLock: rejectedLock,
     });
     cleanups.push(async () => { await rejectedServer.closeAndDrain(); await rm(rejectedDir, { recursive: true, force: true }); });
     const rejected = await dial(rejectedPath);
@@ -144,18 +152,21 @@ describe("Linux peer credentials", () => {
     rejecting.close();
   });
 
-  test("bounds drain when an accepted handler never settles", async () => {
+  test("drains physical sockets even when an accepted handler never settles", async () => {
     const dir = await mkdtemp(join(tmpdir(), "os-peer-drain-"));
     const path = join(dir, "peer.sock");
     const verifier = await createLinuxPeerCredentialVerifier();
     const server = createVerifiedUnixSocketServer(verifier, { uid }, () => new Promise<void>(() => {}));
+    const pathLock = await createLinuxUnixSocketPathLock(path, { uid, gid, mode: 0o700 });
     await server.listen({
       path,
       parentPolicy: { uid, gid, mode: 0o700 },
       socketPolicy: { uid, gid, mode: 0o600 },
+      pathLock,
     });
     const client = await dial(path);
-    await expect(server.closeAndDrain(20)).rejects.toThrow("drain timed out");
+    await server.closeAndDrain(20);
+    expect(pathLock.closed).toBe(true);
     client.destroy(); verifier.close();
     await rm(dir, { recursive: true, force: true });
   });
@@ -208,6 +219,18 @@ describe("Unix socket paths", () => {
     await expect(validateUnixSocketParent(protectedLeaf, { uid, gid, mode: 0o700 })).rejects.toThrow("writable by an untrusted principal");
   });
 
+  test("serializes stale removal and bind with a crash-safe path lock", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "os-peer-lock-"));
+    cleanups.push(() => rm(dir, { recursive: true, force: true }));
+    const path = join(dir, "peer.sock");
+    const first = await createLinuxUnixSocketPathLock(path, { uid, gid, mode: 0o700 });
+    await expect(createLinuxUnixSocketPathLock(path, { uid, gid, mode: 0o700 })).rejects.toThrow("Unable to acquire");
+    await first.close();
+    await first.close();
+    const replacement = await createLinuxUnixSocketPathLock(path, { uid, gid, mode: 0o700 });
+    await replacement.close();
+  });
+
   test("accepts only ECONNREFUSED as stale-socket proof", () => {
     expect(isProvenStaleSocketConnectError({ code: "ECONNREFUSED" })).toBe(true);
     expect(isProvenStaleSocketConnectError({ code: "EACCES" })).toBe(false);
@@ -225,30 +248,40 @@ describe("Unix socket paths", () => {
     await child.exited;
     await chmod(path, 0o600);
     const before = await lstat(path);
+    const staleLock = await createLinuxUnixSocketPathLock(path, { uid, gid, mode: 0o700 });
     await removeProvenStaleUnixSocket(
       path,
       { uid, gid, mode: 0o600 },
       { uid, gid, mode: 0o700 },
+      staleLock,
     );
+    await staleLock.close();
     await expect(lstat(path)).rejects.toThrow();
     expect(before.isSocket()).toBe(true);
 
-    await mkdir(join(dir, "not-socket"), { mode: 0o700 });
+    const notSocketPath = join(dir, "not-socket");
+    await mkdir(notSocketPath, { mode: 0o700 });
+    const notSocketLock = await createLinuxUnixSocketPathLock(notSocketPath, { uid, gid, mode: 0o700 });
     await expect(removeProvenStaleUnixSocket(
-      join(dir, "not-socket"),
+      notSocketPath,
       { uid, gid, mode: 0o700 },
       { uid, gid, mode: 0o700 },
+      notSocketLock,
     )).rejects.toThrow("file type");
+    await notSocketLock.close();
 
     const activePath = join(dir, "active.sock");
     const active = createServer();
     await new Promise<void>((resolve) => active.listen(activePath, resolve));
     await chmod(activePath, 0o600);
+    const activeLock = await createLinuxUnixSocketPathLock(activePath, { uid, gid, mode: 0o700 });
     await expect(removeProvenStaleUnixSocket(
       activePath,
       { uid, gid, mode: 0o600 },
       { uid, gid, mode: 0o700 },
+      activeLock,
     )).rejects.toThrow("active");
+    await activeLock.close();
     await new Promise<void>((resolve) => active.close(() => resolve()));
   });
 });

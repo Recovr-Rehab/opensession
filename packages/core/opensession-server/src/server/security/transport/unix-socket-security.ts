@@ -1,4 +1,5 @@
-import { chmod, lstat, rename, unlink } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { chmod, lstat, open, rename, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, parse, resolve, sep } from "node:path";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import type { LinuxPeerCredentialVerifier, PeerCredentialPolicy, VerifiedPeer } from "./linux-peer-credentials";
@@ -8,6 +9,19 @@ export interface UnixPathPolicy {
   readonly gid?: number;
   /** Exact permission bits, for example 0o700 or 0o600. */
   readonly mode: number;
+}
+
+export interface UnixSocketPathLock {
+  readonly path: string;
+  readonly closed: boolean;
+  close(): Promise<void>;
+}
+
+const livePathLocks = new WeakMap<object, string>();
+
+function assertLivePathLock(lock: UnixSocketPathLock, path: string): void {
+  if (!lock || lock.closed || livePathLocks.get(lock) !== path)
+    throw new Error("A live exclusive lock for the exact Unix socket path is required");
 }
 
 export interface VerifiedAcceptedSocket {
@@ -69,6 +83,54 @@ export async function validateUnixSocketPath(path: string, policy: UnixPathPolic
   assertMetadata(await lstat(path), policy, "socket");
 }
 
+/** Acquires a crash-safe advisory lock retained across stale removal and bind. */
+export async function createLinuxUnixSocketPathLock(
+  path: string,
+  parentPolicy: UnixPathPolicy,
+): Promise<UnixSocketPathLock> {
+  if (process.platform !== "linux") throw new Error("Unix socket path locks are supported only on linux");
+  validPathPolicy(parentPolicy);
+  requireCurrentProcessOwner(parentPolicy);
+  await validateUnixSocketParent(dirname(path), parentPolicy);
+  const lockPath = `${path}.lock`;
+  const handle = await open(lockPath, fsConstants.O_CREAT | fsConstants.O_RDWR | fsConstants.O_NOFOLLOW, 0o600);
+  let library: { symbols: { flock(fd: number, operation: number): number }; close(): void } | undefined;
+  try {
+    await handle.chmod(0o600);
+    const [descriptor, lockStat] = await Promise.all([lstat(lockPath), handle.stat()]);
+    if (!descriptor.isFile() || descriptor.isSymbolicLink() || descriptor.uid !== parentPolicy.uid ||
+        (Number(descriptor.mode) & 0o7777) !== 0o600 || descriptor.dev !== lockStat.dev || descriptor.ino !== lockStat.ino)
+      throw new Error("Unix socket lock file identity, owner, or mode rejected");
+    const ffi = await import("bun:ffi");
+    library = ffi.dlopen("libc.so.6", {
+      flock: { args: ["int", "int"], returns: "int" },
+    } as const);
+    // Linux LOCK_EX | LOCK_NB. Values stay private to this linux-gated helper.
+    if (library.symbols.flock(handle.fd, 2 | 4) !== 0)
+      throw new Error("Unix socket path lock is already held");
+    let closed = false;
+    const lock: UnixSocketPathLock = Object.freeze({
+      path,
+      get closed() { return closed; },
+      async close() {
+        if (closed) return;
+        closed = true;
+        livePathLocks.delete(lock);
+        try { library!.symbols.flock(handle.fd, 8); } finally {
+          await handle.close();
+          library!.close();
+        }
+      },
+    });
+    livePathLocks.set(lock, path);
+    return lock;
+  } catch (error) {
+    await handle.close().catch(() => {});
+    library?.close();
+    throw new Error("Unable to acquire Unix socket path lock", { cause: error });
+  }
+}
+
 /**
  * Removes only the exact stale socket inode inspected by this call. It first
  * proves the parent and every ancestor are protected, then uses an atomic
@@ -82,7 +144,9 @@ export async function removeProvenStaleUnixSocket(
   path: string,
   policy: UnixPathPolicy,
   parentPolicy: UnixPathPolicy,
+  lock: UnixSocketPathLock,
 ): Promise<void> {
+  assertLivePathLock(lock, path);
   validPathPolicy(policy);
   validPathPolicy(parentPolicy);
   requireCurrentProcessOwner(policy);
@@ -140,7 +204,6 @@ function installVerifiedUnixSocketGate(
   const identities = new WeakMap<Socket, symbol>();
   const sockets = new Set<Socket>();
   const closeWaiters = new Set<Promise<void>>();
-  const jobs = new Set<Promise<void>>();
   let closed = false;
   const onConnection = (socket: Socket) => {
     socket.pause();
@@ -181,9 +244,7 @@ function installVerifiedUnixSocketGate(
     let result: void | Promise<void>;
     try { result = accept(accepted); }
     catch { socket.destroy(); return; }
-    const job = Promise.resolve(result).catch(() => { socket.destroy(); });
-    jobs.add(job);
-    void job.finally(() => jobs.delete(job));
+    void Promise.resolve(result).catch(() => { socket.destroy(); });
   };
   server.prependListener("connection", onConnection);
   const close = () => {
@@ -196,7 +257,7 @@ function installVerifiedUnixSocketGate(
     close,
     async closeAndDrain() {
       close();
-      await Promise.allSettled([...jobs, ...closeWaiters]);
+      await Promise.allSettled([...closeWaiters]);
     },
   });
 }
@@ -205,6 +266,8 @@ export interface VerifiedUnixSocketListenOptions {
   readonly path: string;
   readonly parentPolicy: UnixPathPolicy;
   readonly socketPolicy: UnixPathPolicy;
+  /** Held from stale-socket proof through bind; closed by server drain. */
+  readonly pathLock: UnixSocketPathLock;
 }
 
 export interface VerifiedUnixSocketServer {
@@ -221,55 +284,67 @@ export function createVerifiedUnixSocketServer(
 ): VerifiedUnixSocketServer {
   const server = createServer();
   const gate = installVerifiedUnixSocketGate(server, verifier, policy, accept);
-  let listening = false;
+  let state: "idle" | "starting" | "listening" | "failed" | "closed" = "idle";
   let terminalError: Error | undefined;
+  let pathLock: UnixSocketPathLock | undefined;
   server.on("error", (error) => {
     terminalError ??= error;
+    state = "failed";
     gate.close();
-    if (listening) server.close();
-    listening = false;
+    if (server.listening) server.close();
     try { onServerError(error); } catch {}
   });
   return Object.freeze({
     async listen(options: VerifiedUnixSocketListenOptions) {
-      if (listening) throw new Error("Verified Unix socket server is already listening");
-      if (terminalError) throw new Error("Verified Unix socket server has failed", { cause: terminalError });
-      validPathPolicy(options.parentPolicy);
-      validPathPolicy(options.socketPolicy);
-      requireCurrentProcessOwner(options.parentPolicy);
-      requireCurrentProcessOwner(options.socketPolicy);
-      await validateUnixSocketParent(dirname(options.path), options.parentPolicy);
-      await new Promise<void>((resolveListen, rejectListen) => {
-        const onError = (error: Error) => rejectListen(error);
-        server.once("error", onError);
-        server.listen(options.path, async () => {
-          server.off("error", onError);
-          try {
-            await chmod(options.path, options.socketPolicy.mode);
-            await validateUnixSocketPath(options.path, options.socketPolicy);
-            listening = true;
-            resolveListen();
-          } catch (error) {
-            terminalError = error instanceof Error ? error : new Error("Unix socket path validation failed");
-            gate.close();
-            server.close();
-            rejectListen(error);
-          }
+      if (state !== "idle") throw new Error(`Verified Unix socket server cannot listen while ${state}`);
+      state = "starting";
+      pathLock = options.pathLock;
+      try {
+        assertLivePathLock(pathLock, options.path);
+        validPathPolicy(options.parentPolicy);
+        validPathPolicy(options.socketPolicy);
+        requireCurrentProcessOwner(options.parentPolicy);
+        requireCurrentProcessOwner(options.socketPolicy);
+        await validateUnixSocketParent(dirname(options.path), options.parentPolicy);
+        await new Promise<void>((resolveListen, rejectListen) => {
+          const onError = (error: Error) => rejectListen(error);
+          server.once("error", onError);
+          server.listen(options.path, async () => {
+            server.off("error", onError);
+            try {
+              await chmod(options.path, options.socketPolicy.mode);
+              await validateUnixSocketPath(options.path, options.socketPolicy);
+              if (terminalError || state !== "starting")
+                throw terminalError ?? new Error("Verified Unix socket server failed while starting");
+              state = "listening";
+              resolveListen();
+            } catch (error) {
+              rejectListen(error);
+            }
+          });
         });
-      });
+      } catch (error) {
+        terminalError ??= error instanceof Error ? error : new Error("Unix socket startup failed");
+        state = "failed";
+        gate.close();
+        if (server.listening) server.close();
+        await pathLock.close();
+        throw terminalError;
+      }
     },
     async closeAndDrain(timeoutMs = 5_000) {
       if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000)
         throw new Error("Invalid verified socket drain timeout");
-      const stopped = listening
+      state = "closed";
+      const stopped = server.listening
         ? new Promise<void>((resolveClose) => server.close(() => resolveClose()))
         : Promise.resolve();
-      listening = false;
-      const drain = gate.closeAndDrain();
+      const settled = Promise.all([gate.closeAndDrain(), stopped]);
+      void settled.then(() => pathLock?.close()).catch(() => {});
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         await Promise.race([
-          drain,
+          settled,
           new Promise<never>((_, reject) => {
             timer = setTimeout(() => reject(new Error("Verified Unix socket drain timed out")), timeoutMs);
             timer.unref?.();
@@ -277,7 +352,6 @@ export function createVerifiedUnixSocketServer(
         ]);
       } finally {
         if (timer) clearTimeout(timer);
-        await stopped;
       }
     },
   });

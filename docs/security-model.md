@@ -43,7 +43,10 @@ An additive Linux-only Unix-socket peer-credential foundation lives under
 the exact accepted socket immediately around `SO_PEERCRED`, and gates protocol
 readers behind an exact numeric UID policy. Its private server wrapper also
 requires protected, non-symlink path components plus exact parent/socket owner
-and mode policies before listening. It has no boot import or production wiring.
+and mode policies before listening. A crash-safe exclusive Linux `flock` must be
+held across stale-socket proof, removal, and bind, preventing concurrent service
+instances from displacing each other's socket inode. It has no boot import or
+production wiring.
 Future Host and SessionKernel Unix transports must reject the physical socket
 before parsing bytes or allocating session state. UID is the principal;
 PID is audit/fencing metadata and never reusable authorization. Socket owner and
