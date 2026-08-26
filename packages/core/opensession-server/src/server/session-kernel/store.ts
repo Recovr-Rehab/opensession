@@ -1793,10 +1793,17 @@ export class SessionKernelStore {
 			"SELECT 1 FROM session_kernel_timers WHERE session_id = ? AND token IS NOT NULL LIMIT 1",
 		).get(sessionId);
 		if (claimedTimer) return false;
-		const pendingEffect = this.db.query(
-			"SELECT 1 FROM session_kernel_outbox WHERE session_id = ? LIMIT 1",
-		).get(sessionId);
-		if (pendingEffect) return false;
+		const pendingEffects = this.db.query(
+			"SELECT kind FROM session_kernel_outbox WHERE session_id = ?",
+		).all(sessionId) as Array<{ kind: string }>;
+		// A terminal turn projection is the durable owner of its exact gateway
+		// commands. Keep that outbox item available to finish after releasing a
+		// proven gateway-restart fence; unrelated effects remain fail-closed.
+		const recoverableTurnOutcomeEffects =
+			!!recoverableSettlement &&
+			pendingEffects.length > 0 &&
+			pendingEffects.every((effect) => effect.kind === "turn_outcome_project");
+		if (pendingEffects.length > 0 && !recoverableTurnOutcomeEffects) return false;
 		if (commandKind === "agent_operation") {
 			try {
 				assertAgentOperationRows28(this.db, sessionId);

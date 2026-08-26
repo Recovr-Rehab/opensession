@@ -262,6 +262,12 @@ describe("SessionKernel", () => {
 				event: "prompt",
 				currentRunId: "live-run",
 			});
+			const outcomeEffect = durableStore.enqueueOutbox(
+				"projection-repair",
+				"turn_outcome_project",
+				{ projectionId: "outcome:live-run" },
+				"outcome:live-run",
+			);
 			durableStore.quarantineSession(
 				"projection-repair",
 				"actor restarted after execution began",
@@ -277,8 +283,11 @@ describe("SessionKernel", () => {
 				status: "failed",
 				retryable: false,
 			});
-		// Releasing the gateway fence does not invent a terminal run outcome. The
-		// still-owned run can now finish its ordinary settlement in the same session.
+			expect(durableStore.pendingOutbox(Date.now(), 10)).toContainEqual(
+				expect.objectContaining({ id: outcomeEffect, kind: "turn_outcome_project" }),
+			);
+			// Releasing the gateway fence does not invent a terminal run outcome. The
+			// still-owned run can now finish its ordinary settlement in the same session.
 			expect(durableStore.runState("projection-repair")).toMatchObject({
 				state: "running",
 				currentRunId: "live-run",
@@ -287,6 +296,24 @@ describe("SessionKernel", () => {
 			durableStore.close();
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	test("keeps unrelated pending effects fail-closed during gateway repair", () => {
+		store.enqueueOutbox(
+			"effect-repair",
+			"human_ask_deliver",
+			{ askId: "ask-one", skipUi: false },
+			"ask-one",
+		);
+		store.quarantineSession(
+			"effect-repair",
+			"actor restarted after execution began",
+			"gateway:complete",
+		);
+		expect(store.quarantinedSession("effect-repair")).toMatchObject({
+			repairable: false,
+		});
+		expect(store.releaseQuarantine("effect-repair")).toBe(false);
 	});
 
 	test("accepts an exact replay-safe completion from a caller that survived actor restart", () => {
