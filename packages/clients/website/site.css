@@ -1596,6 +1596,30 @@ summary:focus-visible {
 	background: rgba(var(--ink-rgb), 0.12);
 }
 
+/* In dark mode the filled action trades white ink for the product's blue:
+   a white slab is the brightest thing in the dialog and reads as a bare
+   surface, while the blue matches the page's one filled control
+   (.button-primary), lit top edge and all. Light mode keeps black on white,
+   where the blue would fight the screenshot above it. The soft PWA button
+   stays an ink wash in both modes so the pair keeps its hierarchy. */
+@media (prefers-color-scheme: dark) {
+	.download-card-action:not(.download-card-action-soft) {
+		background-color: var(--accent-blue);
+		background-image: linear-gradient(
+			180deg,
+			var(--accent-blue) 0%,
+			var(--accent-blue-deep) 100%
+		);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+		color: #fff;
+		transition: filter 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+	}
+
+	.download-card-action:not(.download-card-action-soft):hover {
+		filter: brightness(1.08);
+	}
+}
+
 .download-steps-back {
 	display: inline-flex;
 	align-items: center;
