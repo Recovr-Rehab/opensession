@@ -475,20 +475,31 @@ export class SessionKernelStoreHost {
       1,
       Math.min(RUNTIME_WAKE_CANDIDATE_BATCH, limit),
     );
-    let candidates = this.central.isolatedWakeCandidates(
-      now,
-      candidateLimit,
-      this.runtimeCursor,
-    );
-    if (candidates.length < candidateLimit && this.runtimeCursor) {
-      const wrapped = this.central.isolatedWakeCandidates(
+    // Reserve a small part of every batch for the most recently dirtied
+    // actors. This keeps live creates/deliveries responsive while the cursor
+    // continues a large conservative migration or crash-recovery sweep.
+    const recentLimit = Math.min(4, candidateLimit);
+    const candidates = this.central.isolatedRecentDirtyWakeCandidates(recentLimit);
+    const seen = new Set(candidates);
+    const appendFairCandidates = (afterSessionId = "") => {
+      const remaining = candidateLimit - candidates.length;
+      if (remaining <= 0) return;
+      const fair = this.central.isolatedWakeCandidates(
         now,
-        candidateLimit - candidates.length,
+        remaining + seen.size,
+        afterSessionId,
       );
-      const seen = new Set(candidates);
-      candidates = [...candidates, ...wrapped.filter((sessionId) => !seen.has(sessionId))];
-    }
-    if (candidates.length > 0) this.runtimeCursor = candidates.at(-1)!;
+      for (const sessionId of fair) {
+        if (seen.has(sessionId)) continue;
+        seen.add(sessionId);
+        candidates.push(sessionId);
+        this.runtimeCursor = sessionId;
+        if (candidates.length >= candidateLimit) break;
+      }
+    };
+    appendFairCandidates(this.runtimeCursor);
+    if (candidates.length < candidateLimit && this.runtimeCursor)
+      appendFairCandidates();
     const quota = Math.max(1, Math.ceil(limit / (candidates.length + 1)));
     const timers = this.central.dueTimers(now, Math.min(quota, limit), timerKinds);
     const outbox = this.central.pendingOutbox(now, Math.min(quota, limit), effectKinds);

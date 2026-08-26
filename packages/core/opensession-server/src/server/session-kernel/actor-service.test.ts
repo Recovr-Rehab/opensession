@@ -76,6 +76,67 @@ async function rpc(request: KernelActorTransportEnvelope["request"]) {
 }
 
 describe("session kernel actor service", () => {
+  test("global runtime work does not wait for an active read-only session turn", async () => {
+    const isolatedService = await startSessionKernelService({
+      port: 0,
+      token,
+      workerCount: 1,
+      responseTimeoutMs: 700,
+      workerUrl: new URL("./testing/read-barrier-worker.ts", import.meta.url),
+    });
+    const call = async (
+      request: KernelActorTransportEnvelope["request"],
+      epoch?: string,
+    ) => fetch(`${isolatedService.url}/rpc`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        version: SESSION_KERNEL_TRANSPORT_VERSION,
+        actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+        ...(epoch ? { serviceEpoch: epoch } : {}),
+        request,
+      }),
+    });
+    try {
+      const helloResponse = await call({
+        t: "hello",
+        rpcId: "read-barrier-handshake",
+        version: SESSION_KERNEL_ACTOR_VERSION,
+      });
+      const hello = await helloResponse.json() as { serviceEpoch: string };
+      const read = call({
+        t: "call",
+        rpcId: "slow-session-read",
+        outputBytes: 1024,
+        request: { t: "store", method: "turnSnapshot", args: ["busy-session"] },
+      }, hello.serviceEpoch);
+      await Bun.sleep(25);
+
+      const startedAt = Date.now();
+      const runtime = await call({
+        t: "runtime_work",
+        rpcId: "runtime-during-read",
+        now: Date.now(),
+        timerKinds: [],
+        effectKinds: [],
+        limit: 100,
+      }, hello.serviceEpoch);
+      expect(runtime.status).toBe(200);
+      expect(Date.now() - startedAt).toBeLessThan(150);
+      expect(await runtime.json()).toMatchObject({
+        t: "runtime_work_result",
+        timers: [],
+        outbox: [],
+      });
+      expect((await read).status).toBe(200);
+    } finally {
+      isolatedService.stop();
+    }
+  });
+
   test("restarts the catalog lane instead of the service after a read timeout", async () => {
     const isolatedService = await startSessionKernelService({
       port: 0,

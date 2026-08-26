@@ -81,7 +81,11 @@ type SessionMailbox = {
   normal: QueuedSessionTurn[];
   priority: QueuedSessionTurn[];
   priorityBurst: number;
-  tail: Promise<void>;
+  /** Only mutations participate in the next global compatibility barrier.
+   * Read-only transcript/range turns are safe to overlap with catalog work;
+   * making the barrier wait for them let a busy viewer stall every durable
+   * timer and outbox effect in the service. */
+  mutationTail: Promise<void>;
 };
 
 export type SessionKernelServiceOptions = {
@@ -533,6 +537,7 @@ export async function startSessionKernelService(
   function enqueueSession(
     sessionId: string,
     request: KernelActorTransportEnvelope["request"],
+    mutation: boolean,
   ): Promise<KernelActorResponse> {
     let mailbox = sessionMailboxes.get(sessionId);
     if (!mailbox) {
@@ -541,7 +546,7 @@ export async function startSessionKernelService(
         normal: [],
         priority: [],
         priorityBurst: 0,
-        tail: Promise.resolve(),
+        mutationTail: Promise.resolve(),
       };
       sessionMailboxes.set(sessionId, mailbox);
     }
@@ -561,7 +566,7 @@ export async function startSessionKernelService(
     queuedSessionTurns += 1;
     let settleTail!: () => void;
     const settled = new Promise<void>((resolve) => { settleTail = resolve; });
-    mailbox.tail = mailbox.tail.then(() => settled);
+    if (mutation) mailbox.mutationTail = mailbox.mutationTail.then(() => settled);
     const response = new Promise<KernelActorResponse>((resolve, reject) => {
       const turn: QueuedSessionTurn = {
         request,
@@ -601,7 +606,7 @@ export async function startSessionKernelService(
   ): Promise<KernelActorResponse> {
     const route = sessionActorServiceRoute(request);
     if (route.scope === "session")
-      return enqueueSession(route.sessionId, request);
+      return enqueueSession(route.sessionId, request, route.mutation);
     if (route.scope === "outbox")
       return enqueueSession(
         await resolveOutboxSession(
@@ -609,6 +614,7 @@ export async function startSessionKernelService(
           isPrioritySessionActorRequest(request),
         ),
         request,
+        route.mutation,
       );
     if (route.scope === "catalog_read")
       return sendToSlot(slots[0], request);
@@ -617,7 +623,9 @@ export async function startSessionKernelService(
     if (queuedGlobalTurns >= MAX_GLOBAL_TURNS)
       throw new RetryableActorHostError("Session kernel catalog mailbox is full");
     queuedGlobalTurns += 1;
-    const active = [...sessionMailboxes.values()].map((mailbox) => mailbox.tail);
+    const active = [...sessionMailboxes.values()].map(
+      (mailbox) => mailbox.mutationTail,
+    );
     const operation = globalGate
       .catch(() => {})
       .then(() => new Promise<void>((resolve, reject) => {

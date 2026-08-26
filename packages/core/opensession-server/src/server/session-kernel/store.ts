@@ -6951,6 +6951,26 @@ export class SessionKernelStore {
 			.map((row) => row.session_id);
 	}
 
+	/** Newly dirtied actors outrank the historical wake-index sweep. A restore
+	 * can conservatively mark thousands of old placements dirty; ordering that
+	 * backlog only by session id otherwise leaves a brand-new creation outbox
+	 * undiscoverable for minutes. The ordinary cursor scan still receives the
+	 * rest of each runtime batch, so old work continues to make progress. */
+	isolatedRecentDirtyWakeCandidates(limit = 4): string[] {
+		return (this.db.query(`
+			SELECT session_id FROM session_kernel_placements
+			WHERE placement = 'isolated'
+			  AND needs_scan = 1
+			  AND NOT EXISTS (
+				SELECT 1 FROM session_kernel_quarantine q
+				WHERE q.session_id = session_kernel_placements.session_id
+			  )
+			ORDER BY updated_at DESC, session_id
+			LIMIT ?
+		`).all(Math.max(1, limit)) as Array<{ session_id: string }>)
+			.map((row) => row.session_id);
+	}
+
 	nextTimerWakeAt(): number | undefined {
 		const row = this.db.query(`
 			SELECT MIN(CASE WHEN next_attempt_at > due_at THEN next_attempt_at ELSE due_at END) AS next_at
