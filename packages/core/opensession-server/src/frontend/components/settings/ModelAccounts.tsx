@@ -1107,7 +1107,7 @@ export function ProviderAccountsSection({
 				</>
 			}
 			>
-				<span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+				<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1.5">
 					Subscriptions
 					<Segmented
 						label="Account view"
