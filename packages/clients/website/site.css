@@ -203,6 +203,10 @@ summary:focus-visible {
 	text-align: center;
 }
 
+.rail-actions .button svg {
+	flex: none;
+}
+
 .rail-note {
 	margin: 16px 0 0;
 	color: rgba(var(--ink-rgb), 0.64);
