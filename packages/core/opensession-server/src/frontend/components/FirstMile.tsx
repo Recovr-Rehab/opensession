@@ -401,11 +401,44 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	return (
 		<div
 			data-first-mile
-			className="relative grid h-[100dvh] w-full grid-rows-[minmax(0,1fr)_84px] overflow-hidden bg-surface bg-cover bg-center text-fg phone:grid-rows-[minmax(0,1fr)_112px] phone:pb-[env(safe-area-inset-bottom)]"
+			className="relative grid h-[100dvh] w-full grid-rows-[minmax(0,1fr)_84px] overflow-hidden bg-surface bg-cover bg-center text-fg phone:grid-rows-[minmax(0,1fr)_72px] phone:pb-[env(safe-area-inset-bottom)]"
 			// The vendored marketing artwork keeps first run independent of a CDN.
 			// Painting it on the shell lets a transparent idle footer reveal it.
 			style={{ backgroundImage: `url(${BASE_PATH}/${backdropName}.webp)` }}
 		>
+			<nav
+				className={cn(
+					"absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center rounded-[999px] bg-[color-mix(in_srgb,var(--popup-surface)_72%,transparent)] px-1 shadow-[0_12px_32px_-20px_color-mix(in_srgb,var(--fg)_38%,transparent)] [backdrop-filter:blur(18px)_saturate(1.2)] phone:top-[max(12px,env(safe-area-inset-top))]",
+					index === 0 && "invisible",
+				)}
+				aria-label="Onboarding progress"
+			>
+				{steps.slice(1).map((item, itemIndex) => {
+					const stepIndex = itemIndex + 1;
+					return (
+						<button
+							key={item.id}
+							type="button"
+							aria-label={item.label}
+							aria-current={stepIndex === index ? "step" : undefined}
+							onClick={() => goTo(stepIndex)}
+							className="group focus-ring flex size-10 cursor-pointer items-center justify-center rounded-control"
+						>
+							<span
+								className={cn(
+									"h-2 rounded-full transition-[width,background-color] duration-200",
+									stepIndex === index
+										? "w-8 bg-fg"
+										: stepIndex < index
+											? "w-2 bg-fg/45"
+											: "w-2 bg-faint/35 group-hover:bg-faint/60",
+								)}
+							/>
+						</button>
+					);
+				})}
+			</nav>
+
 			<main
 				ref={mainRef}
 				className="relative z-10 min-h-0 overflow-y-auto px-6 [scrollbar-width:thin] phone:px-4"
@@ -431,9 +464,11 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								ease,
 							}}
 							className={cn(
-								"mx-auto flex min-h-full w-full flex-col items-center py-8 phone:py-5",
+								"mx-auto flex min-h-full w-full flex-col items-center",
 								step.id === "ingress" ? "max-w-[1120px]" : "max-w-[960px]",
-								step.id === "welcome" && "justify-center pb-16 phone:pb-10",
+								step.id === "welcome"
+									? "justify-center py-8 pb-16 phone:py-5 phone:pb-10"
+									: "pb-8 pt-24 phone:pb-5 phone:pt-20",
 							)}
 						>
 							{step.id === "welcome" ? (
@@ -570,7 +605,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					index === 0 && "invisible",
 				)}
 			>
-				<div className="mx-auto grid h-full w-full max-w-[820px] grid-cols-[1fr_auto_1fr] items-center phone:grid-cols-[44px_minmax(0,1fr)] phone:grid-rows-[40px_48px] phone:gap-x-2 phone:gap-y-2">
+				<div className="mx-auto grid h-full w-full max-w-[820px] grid-cols-[1fr_auto_1fr] items-center phone:grid-cols-[44px_minmax(0,1fr)] phone:gap-x-2">
 					<Button
 						variant={footerSeparated ? "ghost" : "overlay"}
 						size="lg"
@@ -578,7 +613,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						onClick={() => goTo(index - 1)}
 						aria-label="Back"
 						className={cn(
-							"justify-self-start phone:col-start-1 phone:row-start-2 phone:size-11 phone:justify-center phone:p-0",
+							"justify-self-start phone:col-start-1 phone:size-11 phone:justify-center phone:p-0",
 							!footerSeparated && "text-white!",
 							index === 0 && "invisible",
 						)}
@@ -586,35 +621,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						<span className="phone:hidden">Back</span>
 					</Button>
 
-					<nav
-						className="flex items-center justify-center phone:col-span-2 phone:col-start-1 phone:row-start-1"
-						aria-label="Onboarding progress"
-					>
-						{steps.slice(1).map((item, itemIndex) => {
-							const stepIndex = itemIndex + 1;
-							return (
-								<button
-									key={item.id}
-									type="button"
-									aria-label={item.label}
-									aria-current={stepIndex === index ? "step" : undefined}
-									onClick={() => goTo(stepIndex)}
-									className="group focus-ring flex size-10 cursor-pointer items-center justify-center rounded-control"
-								>
-									<span
-										className={cn(
-											"h-2 rounded-full transition-[width,background-color] duration-200",
-											stepIndex === index
-												? "w-8 bg-fg"
-												: stepIndex < index
-													? "w-2 bg-fg/45"
-													: "w-2 bg-faint/35 group-hover:bg-faint/60",
-										)}
-									/>
-								</button>
-							);
-						})}
-					</nav>
+					<span className="phone:hidden" />
 
 					<Button
 						variant="primary"
@@ -624,7 +631,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 							else goTo(index + 1);
 						}}
 						disabled={!status || finishing}
-						className="justify-self-end phone:col-start-2 phone:row-start-2 phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
+						className="justify-self-end phone:col-start-2 phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
 					>
 						{step.id === "ingress" && !ingressReady
 							? "Skip for now"
