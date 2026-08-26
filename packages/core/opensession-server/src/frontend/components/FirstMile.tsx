@@ -6,6 +6,7 @@ import { useSetupStatus } from "../hooks/useSetupStatus";
 import { effectiveTheme, onThemeChanged } from "../lib/theme";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
+import { FloatingStatus } from "../ui/floating-status";
 import { duration, ease } from "../ui/motion";
 import { LoadingState } from "../ui/state";
 import { BrandMark } from "./BrandTile";
@@ -326,12 +327,14 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const { status, failed, refetch } = setup;
 	const [index, setIndex] = useState(initialFirstMileIndex);
 	const [direction, setDirection] = useState(1);
+	const [navigationVisible, setNavigationVisible] = useState(true);
 	const [finishing, setFinishing] = useState(false);
 	const [theme, setTheme] = useState(effectiveTheme);
 	const headingRef = useRef<HTMLHeadingElement>(null);
 	const reducedMotion = useReducedMotion();
 	const steps = STEPS;
 	const step = steps[index]!;
+	const activeStepIdRef = useRef<FirstMileStep["id"]>(step.id);
 
 	useEffect(() => {
 		document.title = `Welcome to ${PRODUCT_NAME}`;
@@ -349,6 +352,8 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	async function goTo(next: number) {
 		const nextIndex = Math.min(Math.max(next, 0), steps.length - 1);
 		if (nextIndex === index) return;
+		activeStepIdRef.current = steps[nextIndex]!.id;
+		setNavigationVisible(false);
 		setDirection(nextIndex > index ? 1 : -1);
 		setIndex(nextIndex);
 		void refetch();
@@ -356,9 +361,11 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 
 	async function finish() {
 		if (finishing) return;
+		setNavigationVisible(false);
 		setFinishing(true);
 		await onDone();
 		setFinishing(false);
+		setNavigationVisible(true);
 	}
 
 	const revealTransition = (delay = 0) => ({
@@ -383,12 +390,39 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	return (
 		<div
 			data-first-mile
-			className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-surface bg-cover bg-center p-6 text-fg phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-[max(12px,env(safe-area-inset-top))]"
+			className="relative grid h-[100dvh] w-full grid-rows-[40px_minmax(0,1fr)] gap-y-3 overflow-hidden bg-surface bg-cover bg-center p-6 text-fg phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-[max(12px,env(safe-area-inset-top))]"
 			// The vendored marketing artwork keeps first run independent of a CDN.
 			style={{ backgroundImage: `url(${BASE_PATH}/${backdropName}.webp)` }}
 		>
+			<div className="relative z-20 flex h-10 shrink-0 items-start justify-center">
+				<FloatingStatus
+					role="progressbar"
+					aria-label="Onboarding progress"
+					aria-valuemin={1}
+					aria-valuemax={steps.length}
+					aria-valuenow={index + 1}
+					aria-valuetext={`${step.label}, step ${index + 1} of ${steps.length}`}
+					className="gap-1.5 px-3 py-2.5"
+				>
+					{steps.map((item, stepIndex) => (
+						<span
+							key={item.id}
+							aria-hidden="true"
+							className={cn(
+								"h-1.5 rounded-full transition-[width,background-color,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+								stepIndex === index
+									? "w-6 bg-fg"
+									: stepIndex < index
+										? "w-1.5 bg-fg/45"
+										: "w-1.5 bg-faint/35",
+							)}
+						/>
+					))}
+				</FloatingStatus>
+			</div>
+
 			{!status ? (
-				<div className="flex min-h-40 w-full max-w-[560px] items-center justify-center rounded-2xl bg-palette-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
+				<div className="flex min-h-40 w-full max-w-[560px] self-center justify-self-center items-center justify-center rounded-2xl bg-palette-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
 					<LoadingState>
 						{failed ? "Couldn't load setup." : "Preparing your workspace…"}
 					</LoadingState>
@@ -404,12 +438,8 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						},
 					}}
 					className={cn(
-						"relative z-10 flex max-h-full w-full flex-col overflow-hidden rounded-2xl bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
-						step.id === "welcome"
-							? "max-w-[560px]"
-							: step.id === "ready"
-								? "max-w-[1240px]"
-								: "max-w-[860px]",
+						"relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-2xl bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
+						step.id === "welcome" ? "max-w-[560px]" : "max-w-[860px]",
 					)}
 				>
 					<AnimatePresence initial={false} mode="popLayout" custom={direction}>
@@ -457,6 +487,11 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										: `translateY(-4px) translateX(${direction * -6}px)`,
 								}}
 								transition={revealTransition()}
+								onAnimationComplete={() => {
+									if (step.id === activeStepIdRef.current) {
+										setNavigationVisible(true);
+									}
+								}}
 								className="min-h-0 overflow-y-auto overscroll-contain px-10 pb-9 pt-5 [scrollbar-width:thin] phone:px-4 phone:pb-6 phone:pt-4"
 							>
 								{step.id === "welcome" ? (
@@ -472,7 +507,9 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										className={cn(
 											"mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:text-fg",
 											step.id === "ready" ? "max-w-[1160px]" : "max-w-[780px]",
-											"[&_.bg-settings-plate]:rounded-3xl [&_.bg-settings-plate]:border-divider-soft [&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--popup-surface)_95%,transparent)] [&_.bg-settings-plate]:shadow-[0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:[backdrop-filter:blur(14px)_saturate(1.08)]",
+											step.id === "organization"
+												? "[&_.bg-settings-plate]:border-0 [&_.bg-settings-plate]:bg-transparent! [&_.bg-settings-plate]:shadow-none [&_.bg-settings-plate]:[backdrop-filter:none]"
+												: "[&_.bg-settings-plate]:rounded-3xl [&_.bg-settings-plate]:border-divider-soft [&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--popup-surface)_95%,transparent)] [&_.bg-settings-plate]:shadow-[0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:[backdrop-filter:blur(14px)_saturate(1.08)]",
 											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9",
 										)}
 									>
@@ -526,9 +563,24 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 
 					<motion.footer
 						layout="position"
-						className="relative z-20 shrink-0 border-t border-divider-soft bg-[color-mix(in_srgb,var(--popup-surface)_76%,transparent)] px-6 py-4 [backdrop-filter:blur(18px)_saturate(1.12)] phone:px-3 phone:py-3"
+						initial={false}
+						animate={
+							navigationVisible
+								? { opacity: 1, transform: "translateY(0px)" }
+								: {
+										opacity: 0,
+										transform: reducedMotion ? "none" : "translateY(6px)",
+									}
+						}
+						transition={{ type: "tween", duration: duration.micro, ease }}
+						aria-hidden={!navigationVisible}
+						inert={!navigationVisible}
+						className={cn(
+							"relative z-20 shrink-0 border-t border-divider-soft bg-[color-mix(in_srgb,var(--popup-surface)_76%,transparent)] px-6 py-4 [backdrop-filter:blur(18px)_saturate(1.12)] phone:px-3 phone:py-3",
+							!navigationVisible && "pointer-events-none",
+						)}
 					>
-						<div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+						<div className="flex items-center justify-between gap-3">
 							<Button
 								variant="soft"
 								size="lg"
@@ -536,37 +588,12 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								onClick={() => goTo(index - 1)}
 								aria-label="Back"
 								className={cn(
-									"min-h-11 justify-self-start px-4 phone:size-11 phone:justify-center phone:p-0",
+									"min-h-11 px-4 phone:size-11 phone:justify-center phone:p-0",
 									index === 0 && "invisible pointer-events-none",
 								)}
 							>
 								<span className="phone:hidden">Back</span>
 							</Button>
-
-							<div
-								role="progressbar"
-								aria-label="Onboarding progress"
-								aria-valuemin={1}
-								aria-valuemax={steps.length}
-								aria-valuenow={index + 1}
-								aria-valuetext={`${step.label}, step ${index + 1} of ${steps.length}`}
-								className="flex items-center justify-center gap-1.5"
-							>
-								{steps.map((item, stepIndex) => (
-									<span
-										key={item.id}
-										aria-hidden="true"
-										className={cn(
-											"h-1.5 rounded-full transition-[width,background-color,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
-											stepIndex === index
-												? "w-6 bg-fg"
-												: stepIndex < index
-													? "w-1.5 bg-fg/45"
-													: "w-1.5 bg-faint/35",
-										)}
-									/>
-								))}
-							</div>
 
 							<Button
 								variant="primary"
@@ -576,7 +603,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 									else goTo(index + 1);
 								}}
 								disabled={finishing}
-								className="min-h-11 justify-self-end px-4"
+								className="min-h-11 px-4"
 							>
 								{nextLabel ?? (
 									<>
