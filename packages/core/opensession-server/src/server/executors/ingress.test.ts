@@ -500,6 +500,23 @@ describe("Executor ingress socket lifecycle", () => {
     expect(registry.get("runner-1")?.identity.generation).toBe(2);
   });
 
+  test("ignores delayed callbacks from an old physical socket after ID reuse", async () => {
+    const { ingress, registry } = setup({ createId: () => "reused-id" });
+    const first = await upgrade(ingress);
+    await sendHello(ingress, first.socket!, hello());
+    ingress.websocket.close(first.socket!, 1000, "gone");
+
+    const successor = await upgrade(ingress);
+    await sendHello(ingress, successor.socket!, hello());
+    expect(registry.get("runner-1")?.isReady).toBe(true);
+
+    ingress.websocket.message(first.socket!, new Uint8Array([1]));
+    ingress.websocket.close(first.socket!, 1000, "delayed old close");
+    await tick();
+    expect(successor.socket!.closes).toHaveLength(0);
+    expect(registry.get("runner-1")?.isReady).toBe(true);
+  });
+
   test("rejects a different instance at the same durable generation", async () => {
     const { ingress, registry } = setup();
     const first = await upgrade(ingress);

@@ -60,7 +60,7 @@ interface Pending {
   streamCredits: Map<string, number>;
   streamSequences: Map<string, number>;
   retainedEventBytes: number;
-  cleanupStarted: boolean;
+  cleanup?: Promise<boolean>;
   timeout: ReturnType<typeof setTimeout>;
   resolve: (result: ExecutorSuccess) => void;
   reject: (error: ExecutorFailure) => void;
@@ -71,6 +71,7 @@ export class RemoteExecutorConnection implements Executor {
   readonly identity: ExecutorConnectionIdentity;
   readonly #options: RemoteExecutorConnectionOptions;
   readonly #pending = new Map<string, Pending>();
+  readonly #cleanupInFlight = new Set<Promise<boolean>>();
   readonly #ready: Promise<void>;
   #resolveReady!: () => void;
   #rejectReady!: (error: Error) => void;
@@ -164,7 +165,7 @@ export class RemoteExecutorConnection implements Executor {
           const pending = this.#pending.get(requestId);
           if (!pending) return;
           this.#pending.delete(requestId);
-          void this.#cleanupStreams(requestId, pending);
+          void this.#cleanupOrDisconnect(requestId, pending);
           pending.reject(
             new ExecutorFailure(
               "deadline_exceeded",
@@ -186,7 +187,6 @@ export class RemoteExecutorConnection implements Executor {
         streamCredits: new Map(),
         streamSequences: new Map(),
         retainedEventBytes: 0,
-        cleanupStarted: false,
         timeout,
         resolve,
         reject,
@@ -211,7 +211,7 @@ export class RemoteExecutorConnection implements Executor {
         if (!pending) return;
         this.#pending.delete(requestId);
         clearTimeout(pending.timeout);
-        void this.#cleanupStreams(requestId, pending);
+        void this.#cleanupOrDisconnect(requestId, pending);
         pending.reject(disconnectedFailure(operation, pending.accepted, cause));
       });
     });
@@ -229,22 +229,20 @@ export class RemoteExecutorConnection implements Executor {
       ),
     );
     for (const off of this.#off.splice(0)) off();
-    const cleanup: Promise<void>[] = [];
+    const cleanup = new Set(this.#cleanupInFlight);
     for (const [requestId, pending] of this.#pending) {
       clearTimeout(pending.timeout);
-      cleanup.push(this.#cleanupStreams(requestId, pending));
+      cleanup.add(this.#cleanupStreams(requestId, pending));
       pending.reject(
         disconnectedFailure(pending.operation, pending.accepted, reason),
       );
     }
     this.#pending.clear();
-    if (!cleanup.length) {
-      void this.#options.transport.close?.("remote executor disconnected");
+    if (!cleanup.size) {
+      this.#closeTransport();
       return;
     }
-    void Promise.allSettled(cleanup).finally(() =>
-      this.#options.transport.close?.("remote executor disconnected"),
-    );
+    void Promise.allSettled([...cleanup]).finally(() => this.#closeTransport());
   }
 
   async #receive(value: unknown): Promise<void> {
@@ -306,7 +304,7 @@ export class RemoteExecutorConnection implements Executor {
       }
       this.#pending.delete(message.requestId);
       clearTimeout(pending.timeout);
-      void this.#cleanupStreams(message.requestId, pending);
+      void this.#cleanupOrDisconnect(message.requestId, pending);
       pending.reject(
         new ExecutorFailure(
           message.code === "unsupported_version"
@@ -367,7 +365,7 @@ export class RemoteExecutorConnection implements Executor {
       ) {
         this.#pending.delete(message.requestId);
         clearTimeout(pending.timeout);
-        void this.#cleanupStreams(message.requestId, pending);
+        void this.#cleanupOrDisconnect(message.requestId, pending);
         pending.reject(
           new ExecutorFailure(
             message.error!.code === "unsupported_version"
@@ -439,27 +437,48 @@ export class RemoteExecutorConnection implements Executor {
     } satisfies ExecutorClientMessage);
   }
 
-  async #cleanupStreams(requestId: string, pending: Pending): Promise<void> {
-    if (pending.cleanupStarted || !pending.streamIds.size) return;
-    pending.cleanupStarted = true;
+  async #cleanupOrDisconnect(
+    requestId: string,
+    pending: Pending,
+  ): Promise<void> {
+    if (await this.#cleanupStreams(requestId, pending)) return;
+    if (this.#connected) this.disconnect("required stream cleanup failed");
+  }
+
+  #cleanupStreams(requestId: string, pending: Pending): Promise<boolean> {
+    if (pending.cleanup) return pending.cleanup;
+    if (!pending.streamIds.size) return Promise.resolve(true);
     const streamIds = [...pending.streamIds];
     pending.streamIds.clear();
-    if (!this.#options.cleanupGrant) return;
+    pending.cleanup = this.#runCleanup(requestId, pending, streamIds);
+    this.#cleanupInFlight.add(pending.cleanup);
+    void pending.cleanup.finally(() =>
+      this.#cleanupInFlight.delete(pending.cleanup!),
+    );
+    return pending.cleanup;
+  }
+
+  async #runCleanup(
+    requestId: string,
+    pending: Pending,
+    streamIds: string[],
+  ): Promise<boolean> {
+    if (!this.#options.cleanupGrant) return false;
     const reservation = { active: true };
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<void>((resolve) => {
+    const timeout = new Promise<false>((resolve) => {
       timer = setTimeout(() => {
         reservation.active = false;
-        resolve();
+        resolve(false);
       }, this.#options.cleanupTimeoutMs ?? 2_000);
     });
-    const cleanup = Promise.allSettled(
+    const cleanup = Promise.all(
       streamIds.map(async (streamId) => {
         const cleanupGrant = await this.#options.cleanupGrant!(
           pending.context,
           streamId,
         );
-        if (!reservation.active) return;
+        if (!reservation.active) throw new Error("cleanup reservation expired");
         const cleanupRequestId = this.#id();
         await this.#options.transport.send({
           t: "cancel",
@@ -477,10 +496,20 @@ export class RemoteExecutorConnection implements Executor {
           idempotencyKey: `cleanup:${cleanupRequestId}`,
         } satisfies ExecutorClientMessage);
       }),
-    ).then(() => {});
-    await Promise.race([cleanup, timeout]);
+    ).then(
+      () => true,
+      () => false,
+    );
+    const succeeded = await Promise.race([cleanup, timeout]);
     reservation.active = false;
     if (timer !== undefined) clearTimeout(timer);
+    return succeeded;
+  }
+
+  #closeTransport(): void {
+    void Promise.resolve(
+      this.#options.transport.close?.("remote executor disconnected"),
+    ).catch(() => {});
   }
 
   #id(): string {

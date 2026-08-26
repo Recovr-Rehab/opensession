@@ -103,6 +103,7 @@ interface PendingUpgrade {
 
 interface SocketState {
   data: ExecutorUpgradeData;
+  socket: BunExecutorSocket;
   transport: ExecutorWebSocketTransport;
   phase: "hello" | "claiming" | "ready" | "closed";
   helloTimer?: unknown;
@@ -279,6 +280,7 @@ export class ExecutorIngress {
     );
     const state: SocketState = {
       data: socket.data,
+      socket,
       transport,
       phase: "hello",
       helloTimer: this.#timers.setTimeout(
@@ -298,7 +300,7 @@ export class ExecutorIngress {
     data: string | ArrayBuffer | ArrayBufferView,
   ): void {
     const state = this.#sockets.get(socket.data.connectionId);
-    if (!state) return;
+    if (!state || state.socket !== socket) return;
     if (state.phase === "claiming") {
       state.transport.close(
         "work is not allowed before executor hello completes",
@@ -309,7 +311,9 @@ export class ExecutorIngress {
   }
 
   #close(socket: BunExecutorSocket, reason?: unknown): void {
-    this.#sockets.get(socket.data.connectionId)?.transport.socketClosed(reason);
+    const state = this.#sockets.get(socket.data.connectionId);
+    if (!state || state.socket !== socket) return;
+    state.transport.socketClosed(reason);
   }
 
   async #hello(
@@ -362,7 +366,7 @@ export class ExecutorIngress {
     }
     if (
       !claimed ||
-      !this.#sockets.has(state.data.connectionId) ||
+      this.#sockets.get(state.data.connectionId) !== state ||
       state.phase !== "claiming" ||
       state.claimReservation !== reservation
     ) {
@@ -389,7 +393,8 @@ export class ExecutorIngress {
       void remote
         .ready()
         .then(() => {
-          if (this.#sockets.has(state.data.connectionId)) state.phase = "ready";
+          if (this.#sockets.get(state.data.connectionId) === state)
+            state.phase = "ready";
         })
         .catch(() => state.transport.close("executor registration failed"));
     } catch (error) {
@@ -410,6 +415,7 @@ export class ExecutorIngress {
       this.#timers.clearTimeout(state.claimTimer);
     state.claimReservation = undefined;
     state.helloOff?.();
+    if (this.#sockets.get(state.data.connectionId) !== state) return;
     this.#sockets.delete(state.data.connectionId);
     if (state.remote) this.#options.registry.unregisterConnection(state.remote);
     void reason;

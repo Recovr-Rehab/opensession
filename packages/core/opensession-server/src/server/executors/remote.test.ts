@@ -5,6 +5,7 @@ import {
   type ExecutorGrant,
 } from "@tellahq/opensession-protocol/executor";
 import type { DuplexJsonTransport } from "../../runner-executor/agent";
+import type { ExecutorFailure } from "./contract";
 import { RemoteExecutorConnection } from "./remote";
 import {
   RemoteExecutorRegistrationError,
@@ -14,9 +15,11 @@ import {
 class ManualTransport implements DuplexJsonTransport {
   sent: any[] = [];
   closeReasons: string[] = [];
+  sendError?: Error;
   message?: (message: unknown) => void | Promise<void>;
   closed?: (reason?: unknown) => void;
   send(message: unknown): void {
+    if (this.sendError) throw this.sendError;
     this.sent.push(message);
   }
   onMessage(handler: (message: unknown) => void | Promise<void>): () => void {
@@ -617,6 +620,45 @@ describe("remote Executor connection", () => {
     expect(
       transport.sent.filter((message) => message.t === "cancel"),
     ).toHaveLength(0);
+  });
+
+  test("poisons the incarnation when required cleanup rejects, send fails, or times out", async () => {
+    const exercise = async (
+      cleanupGrant: () => ExecutorGrant | Promise<ExecutorGrant>,
+      failSend = false,
+    ) => {
+      const transport = new ManualTransport();
+      const remote = new RemoteExecutorConnection({
+        ...identity,
+        capabilities: [...identity.capabilities],
+        transport,
+        grant,
+        cleanupGrant,
+        cleanupTimeoutMs: 5,
+        deadlineMs: () => Date.now() + 8,
+      });
+      transport.receive(hello);
+      await remote.ready();
+      let failure: ExecutorFailure | undefined;
+      const settled = remote
+        .execute(context, { kind: "fs.read", path: "x" })
+        .catch((error: ExecutorFailure) => {
+          failure = error;
+        });
+      await tick();
+      transport.receive(successWithStream(false));
+      await tick();
+      if (failSend) transport.sendError = new Error("send failed");
+      await settled;
+      expect(failure).toMatchObject({ ambiguous: false });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(remote.connected).toBe(false);
+      expect(transport.closeReasons).toEqual(["remote executor disconnected"]);
+    };
+
+    await exercise(() => Promise.reject(new Error("grant failed")));
+    await exercise(() => grant, true);
+    await exercise(() => new Promise<ExecutorGrant>(() => {}));
   });
 
   test("treats read disconnects as retryable uncertainty", async () => {
