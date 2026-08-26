@@ -268,6 +268,14 @@ describe("SessionKernel", () => {
 				{ projectionId: "outcome:live-run" },
 				"outcome:live-run",
 			);
+			const oldDeadEffect = durableStore.enqueueOutbox(
+				"projection-repair",
+				"human_ask_deliver",
+				{ askId: "old-dead-ask", skipUi: false },
+				"old-dead-ask",
+			);
+			for (let attempt = 0; attempt < 20; attempt += 1)
+				durableStore.noteOutboxFailure(oldDeadEffect, "already abandoned", 20);
 			durableStore.quarantineSession(
 				"projection-repair",
 				"actor restarted after execution began",

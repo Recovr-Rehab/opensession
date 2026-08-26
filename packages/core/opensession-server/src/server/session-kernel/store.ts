@@ -1794,7 +1794,8 @@ export class SessionKernelStore {
 		).get(sessionId);
 		if (claimedTimer) return false;
 		const pendingEffects = this.db.query(
-			"SELECT kind FROM session_kernel_outbox WHERE session_id = ?",
+			`SELECT kind FROM session_kernel_outbox
+			 WHERE session_id = ? AND dead_lettered_at IS NULL`,
 		).all(sessionId) as Array<{ kind: string }>;
 		// A terminal turn projection is the durable owner of its exact gateway
 		// commands. Keep that outbox item available to finish after releasing a
