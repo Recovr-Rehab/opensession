@@ -1741,7 +1741,7 @@ export class SessionKernelStore {
 		sessionId: string,
 		commandKind: string,
 		reason?: string,
-	): Array<{ requestId: string; retryable: true }> | undefined {
+	): Array<{ requestId: string; retryable: boolean }> | undefined {
 		if (
 			(commandKind !== "delivery:complete_submit_command" &&
 				commandKind !== "delivery:fail_submit_command") ||
@@ -1754,12 +1754,20 @@ export class SessionKernelStore {
 			 FROM session_kernel_commands
 			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate')`,
 		).all(sessionId) as Array<Record<string, unknown>>;
-		if (!rows.every((row) =>
-			row.type === "submit_prompt" && Number(row.replay_safe) === 1
-		)) return;
+		if (!rows.every((row) => {
+			const replaySafeSubmit =
+				row.type === "submit_prompt" && Number(row.replay_safe) === 1;
+			const strandedGatewaySettlement =
+				row.status === "indeterminate" &&
+				Number(row.replay_safe) === 0 &&
+				GATEWAY_COMMAND_OPERATIONS.includes(
+					String(row.type) as (typeof GATEWAY_COMMAND_OPERATIONS)[number],
+				);
+			return replaySafeSubmit || strandedGatewaySettlement;
+		})) return;
 		return rows.map((row) => ({
 			requestId: String(row.request_id),
-			retryable: true as const,
+			retryable: row.type === "submit_prompt",
 		}));
 	}
 

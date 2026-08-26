@@ -476,6 +476,11 @@ describe("SessionKernel", () => {
 			identity: { content: "hello", attachmentsHash: "none" },
 		};
 		try {
+			expect(durableStore.requestGatewayCommand({
+				sessionId: input.sessionId,
+				requestId: "older-transcript-write",
+				operation: "transcript_append",
+			})).toEqual({ status: "execute" });
 			expect(durableStore.requestSubmitPromptCommand(input)).toEqual({
 				status: "execute",
 			});
@@ -509,6 +514,11 @@ describe("SessionKernel", () => {
 				status: "failed",
 				replaySafe: true,
 				retryable: true,
+			});
+			expect(durableStore.command(input.sessionId, "older-transcript-write")).toMatchObject({
+				status: "failed",
+				replaySafe: false,
+				retryable: false,
 			});
 			expect(durableStore.requestSubmitPromptCommand(recovery)).toEqual({
 				status: "execute",
