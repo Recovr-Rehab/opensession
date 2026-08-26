@@ -44,6 +44,7 @@ const sessions: UnifiedSession[] = [
 							"## What changed\n\nWorkspace presence is now visible at a glance. The sidebar rolls everyone viewing a session into a compact facepile, while the session header shows who is collaborating with you.",
 						shots: [
 							{
+								before: "/demo/workspace-presence-before.webp",
 								after: "/demo/workspace-presence-after.webp",
 								caption: "Workspace presence in the sidebar and session header",
 							},
