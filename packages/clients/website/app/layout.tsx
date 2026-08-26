@@ -15,7 +15,7 @@ export const metadata: Metadata = {
       "Start parallel agents, collaborate with your team, and review and ship every session from one self-hosted workspace.",
     images: [
       {
-        url: "/opensession-social.png",
+        url: "/opensession-social-landing.png",
         width: 1200,
         height: 600,
         alt: "Open Session",
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     title: "Open Session · Your team’s control room for coding agents",
     description:
       "The open-source workspace for teams running coding agents together.",
-    images: ["/opensession-social.png"],
+    images: ["/opensession-social-landing.png"],
   },
   icons: { icon: "/icon.png" },
 };
