@@ -85,6 +85,17 @@ describe("public ingress settings", () => {
     expect(publicIngressHealth("cloudflare", "unreachable", { a: [], aaaa: [] }, server)).toBe("unreachable");
   });
 
+  test("gives a newly started Funnel time to become reachable", () => {
+    const startedAt = 10_000;
+    const addresses = { a: [], aaaa: [] };
+    expect(publicIngressHealth("tailscale", "unreachable", addresses, addresses, startedAt, startedAt + 30_000))
+      .toBe("starting");
+    expect(publicIngressHealth("tailscale", "ready", addresses, addresses, startedAt, startedAt + 30_000))
+      .toBe("ready");
+    expect(publicIngressHealth("tailscale", "unreachable", addresses, addresses, startedAt, startedAt + 60_000))
+      .toBe("unreachable");
+  });
+
   test("uses proven healthy DNS when a NATed server cannot detect its public IP", () => {
     const dns = { a: ["203.0.113.10"], aaaa: [] };
     expect(displayedServerAddresses({ a: [], aaaa: [] }, dns, "ready")).toEqual(dns);

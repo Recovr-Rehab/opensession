@@ -35,16 +35,18 @@ import {
 export const PUBLIC_INGRESS_PORT = 3860;
 const CADDYFILE = process.env.OPENSESSION_CADDYFILE || "/etc/caddy/Caddyfile";
 const CLOUDFLARE_TOKEN_PATH = stateDir("cloudflared-tunnel-token");
+const FUNNEL_STARTING_GRACE_MS = 60_000;
 const runtime = globalThis as typeof globalThis & {
   __opensessionCloudflared?: ReturnType<typeof Bun.spawn>;
   __opensessionCloudflaredRestart?: ReturnType<typeof setTimeout>;
+  __opensessionTailscaleFunnelStartedAt?: number;
 };
 
 export interface IngressStatus {
   canManage: boolean;
   publicBaseUrl: string;
   exposure: IngressExposure | null;
-  health: "ready" | "waiting_dns" | "unreachable" | "not_configured";
+  health: "ready" | "starting" | "waiting_dns" | "unreachable" | "not_configured";
   localUrl: string;
   hostname: string;
   app: {
@@ -290,8 +292,16 @@ export function publicIngressHealth(
   probed: "ready" | "unreachable" | "not_configured",
   dns: { a: string[]; aaaa: string[] },
   server: { a: string[]; aaaa: string[] },
+  funnelStartedAt = 0,
+  now = Date.now(),
 ): IngressStatus["health"] {
-  if (exposure !== "custom" || probed !== "unreachable") return probed;
+  if (probed !== "unreachable") return probed;
+  if (
+    exposure === "tailscale" &&
+    funnelStartedAt > 0 &&
+    now - funnelStartedAt < FUNNEL_STARTING_GRACE_MS
+  ) return "starting";
+  if (exposure !== "custom") return probed;
   const expectedAddresses = [...server.a, ...server.aaaa];
   const resolvedAddresses = [...dns.a, ...dns.aaaa];
   const dnsPointsHere = expectedAddresses.length
@@ -326,7 +336,13 @@ export async function publicIngressStatus(
     publicServerAddresses(),
     privateAppDomainStatus(appBaseUrl, tailnetIpv4),
   ]);
-  const health = publicIngressHealth(configured.exposure, probedHealth, dns, serverAddresses);
+  const health = publicIngressHealth(
+    configured.exposure,
+    probedHealth,
+    dns,
+    serverAddresses,
+    runtime.__opensessionTailscaleFunnelStartedAt,
+  );
   // A healthy direct Caddy origin proves its resolved addresses reach this
   // listener. Reuse that exact answer on NATed hosts whose cloud metadata is
   // disabled, so an already-working setup still tells the operator which
@@ -493,6 +509,7 @@ export async function enableTailscaleFunnel(): Promise<string> {
   // Persist the successful command immediately so a slow edge does not leave a
   // running Funnel reported as an entirely failed setup. The UI probes health.
   await savePublicIngress({ publicBaseUrl: origin, exposure: "tailscale" });
+  runtime.__opensessionTailscaleFunnelStartedAt = Date.now();
   return origin;
 }
 

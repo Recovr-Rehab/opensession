@@ -24,6 +24,7 @@ export const INGRESS_METHODS: Array<{
 
 export function ingressHealthLabel(health: PublicIngressSettings["health"]): string {
 	if (health === "ready") return "Ready";
+	if (health === "starting") return "Starting";
 	if (health === "waiting_dns") return "Waiting for DNS";
 	if (health === "unreachable") return "Not reachable";
 	return "Not configured";
@@ -31,7 +32,7 @@ export function ingressHealthLabel(health: PublicIngressSettings["health"]): str
 
 export function ingressHealthDot(health: PublicIngressSettings["health"]): string {
 	if (health === "ready") return "var(--green)";
-	if (health === "waiting_dns") return "var(--yellow)";
+	if (health === "starting" || health === "waiting_dns") return "var(--yellow)";
 	if (health === "unreachable") return "var(--red)";
 	return "var(--text-faint)";
 }

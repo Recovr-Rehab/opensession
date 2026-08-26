@@ -5,6 +5,8 @@ import {
 	customCaddyConfig,
 	customDnsRecords,
 	INGRESS_METHODS,
+	ingressHealthDot,
+	ingressHealthLabel,
 	ingressHostname,
 	privateAppCaddyConfig,
 	privateAppDnsRecord,
@@ -26,6 +28,11 @@ const settings = {
 } as PublicIngressSettings;
 
 describe("public ingress form", () => {
+	test("shows a newly started connector as pending rather than failed", () => {
+		expect(ingressHealthLabel("starting")).toBe("Starting");
+		expect(ingressHealthDot("starting")).toBe("var(--yellow)");
+	});
+
 	test("presents three distinct ways to publish the same callback endpoint", () => {
 		expect(INGRESS_METHODS).toEqual([
 			{

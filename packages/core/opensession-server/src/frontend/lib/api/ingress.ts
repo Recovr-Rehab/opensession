@@ -6,7 +6,7 @@ export interface PublicIngressSettings {
 	canManage: boolean;
 	publicBaseUrl: string;
 	exposure: IngressExposure | null;
-	health: "ready" | "waiting_dns" | "unreachable" | "not_configured";
+	health: "ready" | "starting" | "waiting_dns" | "unreachable" | "not_configured";
 	localUrl: string;
 	hostname: string;
 	app: {
