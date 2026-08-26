@@ -1182,6 +1182,16 @@ summary:focus-visible {
 	}
 }
 
+@media (max-width: 720px) {
+	.landing-setup-step-icon {
+		display: none;
+	}
+
+	.landing-setup-step-copy {
+		margin-top: 0;
+	}
+}
+
 @media (max-width: 560px) {
 	.shell {
 		width: min(100% - 32px, 1400px);
