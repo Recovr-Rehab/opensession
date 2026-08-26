@@ -224,7 +224,10 @@ setBusy(false);
 	);
 	const organizationNameInput = (
 		<input
-			className={cn(NAME_INPUT_CLASS, onboarding && "w-full!")}
+			className={cn(
+				NAME_INPUT_CLASS,
+				onboarding && "h-11! min-h-11! w-full! px-3.5!",
+			)}
 			// data-setup-field: FirstMile promotes this to the large field step.
 			data-setup-field="org-name"
 			value={draft}
@@ -256,8 +259,8 @@ setBusy(false);
 						{onboarding ? (
 							<div className="p-6 pb-7 phone:p-5 phone:pb-6">
 								<div className="flex justify-center">{iconEditor}</div>
-								<div className="mx-auto mt-5 grid w-full max-w-[320px] grid-cols-1 gap-3">
-									<Field label="Organization name">
+								<div className="mx-auto mt-5 grid w-full max-w-[360px] grid-cols-1 gap-4">
+									<Field label={<span className="text-fg">Organization name</span>}>
 										{organizationNameInput}
 									</Field>
 									<IdentityRows compact showProductName={false} />

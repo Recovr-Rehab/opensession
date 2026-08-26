@@ -111,13 +111,22 @@ toast(e?.message || "Failed to save", { variant: "error" });
 
 	if (compact) {
 		return (
-			<Field label="Agent name">
+			<Field
+				label={
+					<span className="flex flex-col gap-0.5">
+						<span className="text-fg">Agent name</span>
+						<span className="text-supporting font-normal text-dim">
+							Shown in prompts, Slack messages, and the app.
+						</span>
+					</span>
+				}
+			>
 				<IdentityInput
 					label="Agent name"
 					value={identity?.personaName ?? AGENT_NAME}
 					placeholder="Assistant"
 					onSave={(next) => save({ personaName: next })}
-					className="w-full!"
+					className="h-11! min-h-11! w-full! px-3.5!"
 				/>
 			</Field>
 		);
