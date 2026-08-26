@@ -515,7 +515,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 									    artwork. Keep the app's settings layout, but use that material here. */}
 									<div
 										className={cn(
-											"w-full pb-8 [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body",
+											"w-full pb-8 [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-hint]]:text-dim",
 											// The final review uses the full canvas for larger tiles; forms stay focused.
 											step.id === "ready" ? "max-w-[960px]" : "max-w-[780px]",
 											// Match opensession.com's card glass: translucent paper, a quiet
@@ -585,14 +585,13 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			>
 				<div className="mx-auto grid h-full w-full max-w-[820px] grid-cols-[1fr_auto_1fr] items-center phone:grid-cols-[44px_minmax(0,1fr)] phone:gap-x-2">
 					<Button
-						variant={footerSeparated ? "ghost" : "overlay"}
+						variant="soft"
 						size="lg"
 						icon={<IconChevronLeft size={18} />}
 						onClick={() => goTo(index - 1)}
 						aria-label="Back"
 						className={cn(
-							"justify-self-start phone:col-start-1 phone:size-11 phone:justify-center phone:p-0",
-							!footerSeparated && "text-white!",
+							"min-h-11 justify-self-start phone:col-start-1 phone:size-11 phone:justify-center phone:p-0",
 							index === 0 && "invisible",
 						)}
 					>
@@ -609,7 +608,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 							else goTo(index + 1);
 						}}
 						disabled={!status || finishing}
-						className="justify-self-end phone:col-start-2 phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
+						className="min-h-11 justify-self-end phone:col-start-2 phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
 					>
 						{index === 0
 							? "Continue"
