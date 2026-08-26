@@ -32,6 +32,7 @@ export function TeamSection({
 	title,
 	addLabel = "Add member",
 	githubOnly = false,
+	onboarding = false,
 	compact = false,
 	showCount = false,
 }: {
@@ -40,8 +41,10 @@ export function TeamSection({
 	title?: React.ReactNode;
 	/** Action copy for the add flow. */
 	addLabel?: string;
-	/** Keep onboarding focused on the GitHub identity used for sign-in. */
+	/** Keep the roster focused on the GitHub identity used for sign-in. */
 	githubOnly?: boolean;
+	/** Use the roomier, quiet action treatment in first-run onboarding. */
+	onboarding?: boolean;
 	compact?: boolean;
 	/** Append the loaded roster size to an explicit title. */
 	showCount?: boolean;
@@ -100,7 +103,9 @@ await load();
 				className={title ? undefined : "mt-0"}
 				actions={
 					<Button
-						size="sm"
+						size={onboarding ? "md" : "sm"}
+						variant={onboarding ? "soft" : "default"}
+						className={onboarding ? "phone:min-h-11" : undefined}
 						icon={<IconPlus size={16} />}
 						onClick={() => {
 							setEditing(null);
