@@ -316,17 +316,23 @@ summary:focus-visible {
 	border: 0;
 	border-radius: calc(11px * var(--rf));
 	corner-shape: var(--cs);
-	background: var(--ink);
-	color: var(--surface);
+	background-color: var(--accent-blue);
+	background-image: linear-gradient(
+		180deg,
+		var(--accent-blue) 0%,
+		var(--accent-blue-deep) 100%
+	);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+	color: #fff;
 	cursor: pointer;
 	font-size: 13px;
 	font-weight: 600;
 	white-space: nowrap;
-	transition: background-color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+	transition: filter 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .landing-setup-step-action:hover {
-	background: rgba(var(--ink-rgb), 0.82);
+	filter: brightness(1.06);
 }
 
 .landing-setup-step-action svg {
@@ -335,11 +341,13 @@ summary:focus-visible {
 
 .landing-setup-step-action-secondary {
 	background: rgba(var(--ink-rgb), 0.075);
+	box-shadow: none;
 	color: var(--ink);
 }
 
 .landing-setup-step-action-secondary:hover {
 	background: rgba(var(--ink-rgb), 0.12);
+	filter: none;
 }
 
 .landing-setup-step-action:active {
