@@ -178,6 +178,11 @@ describe("deploy/self-deploy.sh", () => {
 		expect(source).toContain("Environment=OPENSESSION_BUN_BIN=${process.execPath}");
 		expect(source).toContain("Environment=OPENSESSION_STATE_DIR=");
 		expect(source).toContain("Environment=OPENSESSION_SESSIONS_DIR=");
+		const deployTool = source.indexOf("async (args: { sha?: string; confirm: boolean })");
+		const stateDir = source.indexOf("const stateDir = deployStateDir();", deployTool);
+		const runtime = source.indexOf("const runtime = `${stateDir}/current`;", deployTool);
+		expect(stateDir).toBeGreaterThan(deployTool);
+		expect(stateDir).toBeLessThan(runtime);
 		const helper = await Bun.file(
 			resolve(import.meta.dir, "../../../../../deploy/opensession-run-host"),
 		).text();

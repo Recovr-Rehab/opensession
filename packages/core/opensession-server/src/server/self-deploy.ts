@@ -233,6 +233,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 					);
 				}
 				const checkout = deployCheckout();
+				const stateDir = deployStateDir();
 				const script = `${REPO_ROOT}/deploy/self-deploy.sh`;
 				if (!existsSync(script)) {
 					return text(`Refusing: pinned deploy controller not found at ${script}.`);
@@ -267,7 +268,6 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 					}
 					const unit = `opensession-self-deploy-${Date.now()}`;
 					await launchDeployUnit(unit, targetSha);
-					const stateDir = deployStateDir();
 					return text(
 						`Deploy launched${ctx.user ? ` by ${ctx.user}` : ""}: unit ${unit} → immutable release ${targetSha.slice(0, 10)}.\n` +
 							`Result will land in ${stateDir}/last-result.json (log: ${stateDir}/self-deploy.log).\n` +
