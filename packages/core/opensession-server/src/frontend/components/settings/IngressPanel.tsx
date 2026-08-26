@@ -215,7 +215,7 @@ function PrivateAppSetup({
 				<div>
 					<div className="text-item-title font-medium text-fg">Optional friendly domain</div>
 					<p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">
-						Give your team a memorable HTTPS address while keeping the app on your private Tailscale network.
+						Give your team a memorable HTTPS address while keeping the app private.
 					</p>
 				</div>
 				{status === "ready" && !settings.app.domain.credentialConfigured && (

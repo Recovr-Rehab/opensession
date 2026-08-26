@@ -99,15 +99,16 @@ separate app listener on 3850 serves the private UI and API.
 - Optional: **Docker** (sandboxed sessions —
   [self-hosting-sandboxes](../self-hosting-sandboxes.md)), **Caddy** (direct
   HTTPS for public callbacks and TLS for live previews), **cloudflared**
-  (custom-domain public callbacks without inbound ports),
+  (custom-domain public callbacks, or an externally configured Access-protected
+  private tunnel, without inbound ports),
   `whisper.cpp`/Groq/OpenAI key (voice dictation).
 
 ## Network model
 
 Open Session uses two separate addresses:
 
-- The **private app** is for teammates. Keep it on Tailscale or another private
-  network. A friendly private domain is optional.
+- The **private app** is for teammates. Keep it on a private network or behind
+  an identity-gated access layer. A friendly private domain is optional.
 - **Public callbacks** are for webhooks and remote Sandboxes. Choose exactly one
   exposure method: Tailscale Funnel, Cloudflare Tunnel, or Direct HTTPS with
   Caddy. This endpoint never serves the app.

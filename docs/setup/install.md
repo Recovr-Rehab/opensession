@@ -352,7 +352,7 @@ credentials its setup page marks as required. Common operator-facing variables:
 
 | Var | Default | Purpose |
 | --- | --- | --- |
-| `HOST` | `127.0.0.1` | bind address for the main server. Bind to a Tailscale IP to share it with your team — there is no auth layer (see the [trust model](README.md#trust-model-read-this)) |
+| `HOST` | `127.0.0.1` | bind address for the main server. Keep loopback behind an identity-gated private tunnel, or bind to a Tailscale IP; never use a public wildcard without authentication (see the [trust model](README.md#trust-model-read-this)) |
 | `PORT` | `3850` | private app server (UI + API at the server root) |
 | `OPENSESSION_UI_BASE` | `http://127.0.0.1:<port>` | private app base used in session links |
 | `OPENSESSION_INGRESS_BASE` | unset | public origin for webhooks, remote Sandbox callbacks and workload identity |

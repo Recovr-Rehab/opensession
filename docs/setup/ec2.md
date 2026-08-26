@@ -334,9 +334,12 @@ registered webhook URLs, must be updated unless you use stable addressing.
 
 ### Stable private and public addresses
 
-**For the private UI, use Tailscale.** Its tailnet address survives EC2
-stop/start and is not public. If the UI is all you need, you do not need an
-Elastic IP. See [networking.md](networking.md).
+**For the private UI, use a private or identity-gated access path.** Tailscale
+is the simplest built-in option: its tailnet address survives EC2 stop/start and
+is not public. An identity-gated Cloudflare Tunnel can also keep Open Session on
+loopback, but a bare Tunnel hostname is public and is not sufficient. If the UI
+is all you need, you do not need an Elastic IP. See
+[networking.md](networking.md).
 
 **For public callbacks without inbound ports, use Tailscale Funnel or Cloudflare
 Tunnel.** Both give webhooks and remote Sandbox callbacks a stable HTTPS origin

@@ -18,21 +18,23 @@ external services. Configuring one never exposes the other.
 
 | Connection | Used by | Address | Setup |
 | --- | --- | --- | --- |
-| **Private app** | Teammates and server administrators | A Tailscale address, optionally with a friendly private domain | Connect the server and teammates to the same tailnet |
+| **Private app** | Teammates and server administrators | A private-network or access-controlled HTTPS address | Use Tailscale, an SSH tunnel, or an identity-gated private tunnel |
 | **Public callbacks** | GitHub webhooks and remote Sandboxes | A different public HTTPS address | Choose exactly one: Tailscale Funnel, Cloudflare Tunnel, or Direct HTTPS with Caddy |
 
 Tailscale and Tailscale Funnel have different jobs. Tailscale keeps teammate and
 server traffic private. Funnel publishes only the restricted callback listener,
-not the app.
+not the app. Cloudflare Tunnel can front the private app only when Cloudflare
+Access or an equivalent identity policy protects it. A bare Tunnel hostname is
+public and must never route directly to the private app.
 
 ### Private app quick reference
 
 | | |
 | --- | --- |
 | Default | binds `127.0.0.1`, reachable only from the box itself |
-| Sharing with a team | bind a **Tailscale** IP |
+| Sharing with a team | bind a **Tailscale** IP, or keep loopback behind an identity-gated private tunnel |
 | Occasional access | leave it on `127.0.0.1`, use an **SSH tunnel** |
-| Never | expose port 3850 publicly with `HOST=0.0.0.0` or a public reverse proxy |
+| Never | expose port 3850 with `HOST=0.0.0.0`, a bare Cloudflare Tunnel, or an unprotected public reverse proxy |
 
 ## Tailscale for private access (recommended)
 
@@ -179,8 +181,13 @@ reach it. The name is not the security boundary. Private network reachability is
 
 ### Managed setup with Cloudflare or Vercel DNS
 
-Open **Settings → Domains and ingress → Private app**, choose **Managed**, and
-provide:
+This built-in friendly-domain flow uses Tailscale as its private network.
+Cloudflare and Vercel authorize DNS-01 certificate issuance; they do not expose
+or carry app traffic. For a private Cloudflare Tunnel, keep Open Session on
+loopback and protect the Tunnel application with Cloudflare Access instead.
+
+Open **Settings → Domains and ingress → Private app**, choose the DNS provider,
+and provide:
 
 1. A domain managed by Cloudflare or Vercel, such as `os.company.dev`.
 2. An email address for Let’s Encrypt expiry notices.
@@ -207,11 +214,12 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
   | bash -s -- --caddy --no-onboard
 ```
 
-### Bring your own certificate
+### Externally managed certificate
 
-Choose **Bring your own** only when existing infrastructure already issues and
-renews the certificate. Open Session shows the DNS record, certificate paths,
-and generated Caddy site, but does not take over certificate ownership.
+Expand **Use an externally managed certificate** only when existing
+infrastructure already issues and renews the certificate. Open Session shows the
+DNS record, certificate paths, and generated Caddy site, but does not take over
+certificate ownership.
 
 Your host is not reachable from the internet, so HTTP-01 cannot work. Use
 **DNS-01**, which proves control of the domain by writing a temporary TXT record.
