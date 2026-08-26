@@ -1,5 +1,6 @@
 import {
   decodeAgentOperationRequestV1,
+  hashAgentMcpArgumentsV1,
   hashAgentMcpPayloadV1,
   hashAgentModelPayloadV1,
   hashAgentOperationDescriptorV1,
@@ -63,12 +64,24 @@ export interface AgentGatewayAdapter {
   readonly version: string;
   execute(
     request: Readonly<{
-      descriptor: AgentOperationIdentity["descriptor"];
+      identity: Readonly<AgentOperationIdentity>;
       payload: unknown;
     }>,
     signal: AbortSignal,
   ): Promise<AgentGatewayAdapterResult>;
 }
+export type AgentGatewayDecodedPayload =
+  | Readonly<{
+      kind: "model";
+      value: unknown;
+      canonicalBytes: Uint8Array;
+    }>
+  | Readonly<{
+      kind: "mcp";
+      value: unknown;
+      canonicalBytes: Uint8Array;
+      canonicalArgumentsBytes: Uint8Array;
+    }>;
 export interface AgentGatewayTranscriptTerminal {
   readonly refs: readonly AgentTranscriptReceiptRefV1[];
   readonly kernelTerminal: Readonly<AgentOperationKernelTerminalV1>;
@@ -84,15 +97,19 @@ export interface AgentOperationGatewayOptions {
   readonly adapterFor: (
     request: AgentOperationRequestV1,
   ) => AgentGatewayAdapter | undefined;
-  readonly encodePayload: (
+  /** Strictly decodes one raw snapshot into an immutable adapter value and canonical bytes. */
+  readonly decodePayload: (
     kind: "model" | "mcp",
     payload: unknown,
-  ) => Uint8Array;
+  ) => AgentGatewayDecodedPayload | undefined;
   /** Required for MCP, whose descriptor intentionally does not carry a transcript anchor. */
   readonly resolveTranscriptAnchor?: (
     request: AgentOperationRequestV1,
-    payload: unknown,
-  ) => AgentOperationIdentity["transcriptAnchor"];
+    toolUseEntryId: string,
+  ) =>
+    | AgentOperationIdentity["transcriptAnchor"]
+    | undefined
+    | Promise<AgentOperationIdentity["transcriptAnchor"] | undefined>;
   readonly appendTerminal: (
     identity: AgentOperationIdentity,
     result: AgentGatewayAdapterResult,
@@ -194,18 +211,40 @@ export class AgentOperationGateway {
     );
     if (descriptorDigest !== request.descriptorDigest)
       throw new AgentGatewayAuthorizationError("descriptor digest mismatch");
-    let payloadBytes: Uint8Array;
+    let decoded: AgentGatewayDecodedPayload | undefined;
     try {
-      payloadBytes = this.#options.encodePayload(request.kind, payload);
+      decoded = this.#options.decodePayload(request.kind, payload);
     } catch {
       throw new AgentGatewayRequestError("invalid payload");
     }
-    if (!(payloadBytes instanceof Uint8Array))
-      throw new AgentGatewayRequestError("invalid payload encoding");
+    if (
+      !decoded ||
+      decoded.kind !== request.kind ||
+      !(decoded.canonicalBytes instanceof Uint8Array) ||
+      (decoded.kind === "mcp" &&
+        !(decoded.canonicalArgumentsBytes instanceof Uint8Array))
+    )
+      throw new AgentGatewayRequestError("invalid payload decoding");
+    let adapterPayload: unknown;
+    try {
+      adapterPayload = snapshotDecodedValue(decoded.value);
+    } catch {
+      throw new AgentGatewayRequestError("invalid decoded payload");
+    }
+    const payloadBytes = decoded.canonicalBytes.slice();
     const payloadDigest =
       request.kind === "model"
         ? await hashAgentModelPayloadV1(payloadBytes)
         : await hashAgentMcpPayloadV1(payloadBytes);
+    if (request.kind === "mcp") {
+      if (decoded.kind !== "mcp" || request.descriptor.kind !== "mcp")
+        throw new AgentGatewayRequestError("invalid MCP payload decoding");
+      const argumentsDigest = await hashAgentMcpArgumentsV1(
+        decoded.canonicalArgumentsBytes.slice(),
+      );
+      if (argumentsDigest !== request.descriptor.argumentsDigest)
+        throw new AgentGatewayAuthorizationError("arguments digest mismatch");
+    }
     const authority = verified.authority;
     if (!sameFence(request.fence, authority.fence))
       throw new AgentGatewayAuthorizationError("supervision fence mismatch");
@@ -213,9 +252,12 @@ export class AgentOperationGateway {
     if (!adapter)
       throw new AgentGatewayAuthorizationError("adapter unavailable");
     const transcriptAnchor =
-      request.kind === "model"
+      request.descriptor.kind === "model"
         ? request.descriptor.transcript
-        : this.#options.resolveTranscriptAnchor?.(request, payload);
+        : await this.#options.resolveTranscriptAnchor?.(
+            request,
+            request.descriptor.toolUseEntryId,
+          );
     if (!transcriptAnchor)
       throw new AgentGatewayRequestError("missing transcript anchor");
     const identity = this.#provisionalIdentity(
@@ -261,7 +303,7 @@ export class AgentOperationGateway {
     );
     await this.#hit("after_executing", executing);
     const result = await adapter.execute(
-      { descriptor: identity.descriptor, payload },
+      Object.freeze({ identity, payload: adapterPayload }),
       signal,
     );
     const appended = await this.#options.appendTerminal(identity, result);
@@ -305,7 +347,7 @@ export class AgentOperationGateway {
       hostGeneration: authority.hostGeneration,
       hostIncarnation: authority.hostIncarnation,
       transcriptAnchor,
-      ...(request.kind === "mcp"
+      ...(request.descriptor.kind === "mcp"
         ? { toolUseEntryId: request.descriptor.toolUseEntryId }
         : {}),
       descriptor: request.descriptor,
@@ -346,6 +388,64 @@ export class AgentOperationGateway {
       .catch(() => undefined);
     return next;
   }
+}
+
+function snapshotDecodedValue(value: unknown): unknown {
+  const snapshot = immutableSnapshot(value);
+  // structuredClone rejects Proxy objects. Run it only after the descriptor walk,
+  // which rejects accessors without invoking them.
+  structuredClone(value);
+  return snapshot;
+}
+
+function immutableSnapshot(value: unknown): unknown {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value))
+  )
+    return value;
+  if (Array.isArray(value)) {
+    if (Object.getPrototypeOf(value) !== Array.prototype)
+      throw new TypeError("invalid decoded payload array");
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const keys = Reflect.ownKeys(descriptors);
+    if (
+      keys.some((key) => typeof key !== "string") ||
+      keys.length !== value.length + 1
+    )
+      throw new TypeError("invalid decoded payload array");
+    const snapshot = Array.from({ length: value.length }, (_, index) => {
+      const descriptor = descriptors[String(index)];
+      if (!descriptor || !("value" in descriptor) || !descriptor.enumerable)
+        throw new TypeError("invalid decoded payload array");
+      return immutableSnapshot(descriptor.value);
+    });
+    return Object.freeze(snapshot);
+  }
+  if (typeof value !== "object")
+    throw new TypeError("invalid decoded payload value");
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null)
+    throw new TypeError("invalid decoded payload object");
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const snapshot: Record<string, unknown> = Object.create(null);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== "string")
+      throw new TypeError("invalid decoded payload object");
+    const descriptor = descriptors[key];
+    if (
+      !descriptor ||
+      !("value" in descriptor) ||
+      !descriptor.enumerable ||
+      descriptor.value === undefined ||
+      /^(?:__proto__|prototype|constructor)$/.test(key)
+    )
+      throw new TypeError("invalid decoded payload object");
+    snapshot[key] = immutableSnapshot(descriptor.value);
+  }
+  return Object.freeze(snapshot);
 }
 
 function grantExpectation(
