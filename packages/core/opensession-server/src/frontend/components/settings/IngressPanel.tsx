@@ -459,9 +459,10 @@ export function IngressPanel({
 	const invalidInput =
 		method !== "tailscale" && !url.trim() ||
 		method === "cloudflare" && (!tunnelId.trim() || (!tunnelToken.trim() && !settings?.cloudflare.tokenConfigured));
+	const selectedMethod = INGRESS_METHODS.find((option) => option.value === method)!;
 
 	return (
-		<SettingsPanel className={onboarding ? "mx-auto" : "relative"}>
+		<SettingsPanel className={onboarding ? "mx-auto max-w-[820px]" : "relative"}>
 			{!onboarding && (
 				<SettingsHeader
 					title="Domains and ingress"
@@ -547,34 +548,33 @@ export function IngressPanel({
 					{onboarding && (
 						<SettingsHint className="mt-2 mb-3">Optional. Skip this if you do not need webhooks, remote Sandbox callbacks, or public workload identity.</SettingsHint>
 					)}
-					<SettingsForm>
-						<p className="m-0 text-supporting leading-relaxed text-dim">
-							A separate public endpoint for webhooks and remote Sandboxes. It never serves the app.
-						</p>
-						<div className="grid grid-cols-[minmax(0,280px)_minmax(0,1fr)] items-start gap-x-5 gap-y-3 phone:grid-cols-1">
-							<div className="grid gap-2">
-								<div className="text-label font-medium text-dim">How external services connect</div>
-								<SettingCard>
-									<RadioGroup
-										aria-label="Public callback method"
-										value={method}
-										disabled={!!busy || !settings.canManage}
-										onValueChange={(next) => setMethod(next as IngressExposure)}
-										className="[&>*+*]:relative [&>*+*]:before:pointer-events-none [&>*+*]:before:absolute [&>*+*]:before:inset-x-5 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-line [&>*+*]:before:content-['']"
-									>
-										{INGRESS_METHODS.map((option) => (
-											<label key={option.value} className="flex min-h-11 cursor-pointer items-start gap-3 px-5 py-3.5 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-hover">
-												<Radio value={option.value} className="mt-0.5" />
-												<span className="min-w-0">
-													<span className="block text-item-title font-medium text-fg">{option.label}</span>
-													<span className="mt-1 block text-supporting text-dim">{option.description}</span>
-												</span>
-											</label>
-										))}
-									</RadioGroup>
-								</SettingCard>
-							</div>
+					<div className="grid grid-cols-[minmax(0,300px)_minmax(0,1fr)] items-stretch gap-3 phone:grid-cols-1">
+						<SettingsForm className="m-0 self-stretch p-3">
+							<div className="px-2 pt-1 text-item-title font-semibold text-fg">Connection method</div>
+							<RadioGroup
+								aria-label="Public callback method"
+								value={method}
+								disabled={!!busy || !settings.canManage}
+								onValueChange={(next) => setMethod(next as IngressExposure)}
+								className="grid gap-2"
+							>
+								{INGRESS_METHODS.map((option) => (
+									<label key={option.value} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl px-3.5 py-3.5 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed">
+										<span className="min-w-0 flex-1">
+											<span className="block text-item-title font-medium text-fg">{option.label}</span>
+											<span className="mt-1 block text-supporting text-dim">{option.description}</span>
+										</span>
+										<Radio value={option.value} className="mt-0.5 shrink-0" />
+									</label>
+								))}
+							</RadioGroup>
+						</SettingsForm>
 
+						<SettingsForm className="m-0 min-w-0">
+							<div>
+								<div className="text-item-title font-semibold text-fg">{selectedMethod.label}</div>
+								<p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">{selectedMethod.description}</p>
+							</div>
 							<div className="grid min-w-0 content-start gap-3.5">
 							{method === "tailscale" && (
 								<SetupSteps>
@@ -682,21 +682,21 @@ export function IngressPanel({
 								</>
 							)}
 							</div>
-						</div>
 
-						{settings.health === "unreachable" && settings.exposure === method && (
-							<InlineAlert>The public URL is configured but its health check is not reachable. Verify DNS, the connector, and any firewall rules, then check again.</InlineAlert>
-						)}
+							{settings.health === "unreachable" && settings.exposure === method && (
+								<InlineAlert>The public URL is configured but its health check is not reachable. Verify DNS, the connector, and any firewall rules, then check again.</InlineAlert>
+							)}
 
-						<SettingsFormActions className="phone:flex-col-reverse">
-							<Button variant="soft" disabled={!!busy || !settings.canManage || !settings.publicBaseUrl} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void run("test", testPublicIngress, (next) => next.health === "ready" ? "Public callbacks are reachable" : "Public callbacks are not ready yet") }>
-								{busy === "test" ? "Checking…" : settings.health === "waiting_dns" ? "Check again" : "Test connection"}
-							</Button>
-							<Button variant="primary" disabled={!!busy || !settings.canManage || !!missingTool || invalidInput} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void applyMethod()}>
-								{busy === "apply" ? "Setting up…" : method === "tailscale" ? "Start Funnel" : method === "custom" ? settings.exposure === "custom" ? "Update Caddy" : "Configure Caddy" : "Start tunnel"}
-							</Button>
-						</SettingsFormActions>
-					</SettingsForm>
+							<SettingsFormActions className="phone:flex-col-reverse">
+								<Button variant="soft" disabled={!!busy || !settings.canManage || !settings.publicBaseUrl} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void run("test", testPublicIngress, (next) => next.health === "ready" ? "Public callbacks are reachable" : "Public callbacks are not ready yet") }>
+									{busy === "test" ? "Checking…" : settings.health === "waiting_dns" ? "Check again" : "Test connection"}
+								</Button>
+								<Button variant="primary" disabled={!!busy || !settings.canManage || !!missingTool || invalidInput} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void applyMethod()}>
+									{busy === "apply" ? "Setting up…" : method === "tailscale" ? "Start Funnel" : method === "custom" ? settings.exposure === "custom" ? "Update Caddy" : "Configure Caddy" : "Start tunnel"}
+								</Button>
+							</SettingsFormActions>
+						</SettingsForm>
+					</div>
 					<SettingsHint>
 						Unknown methods and paths return 404. This endpoint never serves sessions, APIs, or the app UI.
 					</SettingsHint>
