@@ -1,5 +1,11 @@
 import { Database } from "bun:sqlite";
-import { chmodSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import {
   TranscriptStore,
@@ -134,21 +140,17 @@ function verifySourceCoherence(db: Database, sessionId: string): void {
       (!Number.isSafeInteger(row.import_watermark) || row.import_watermark < 0))
   ) throw new Error(`${sessionId} transcript import metadata is incoherent`);
 
+  // The outline was introduced as a lazy projection: an old session may have
+  // no rows (or only the pages a client has visited) and the actor store will
+  // finish that backfill on demand. Existing rows still must map exactly to a
+  // canonical event; orphaned or mismatched projection evidence fails closed.
   const outlineMismatch = scalar(db, `
     SELECT COUNT(*) AS value FROM (
-      SELECT seq, uuid FROM (
-        SELECT seq, uuid FROM source.transcript_events WHERE session_id = ?
-        EXCEPT
-        SELECT seq, uuid FROM source.transcript_outline WHERE session_id = ?
-      )
-      UNION ALL
-      SELECT seq, uuid FROM (
-        SELECT seq, uuid FROM source.transcript_outline WHERE session_id = ?
-        EXCEPT
-        SELECT seq, uuid FROM source.transcript_events WHERE session_id = ?
-      )
+      SELECT seq, uuid FROM source.transcript_outline WHERE session_id = ?
+      EXCEPT
+      SELECT seq, uuid FROM source.transcript_events WHERE session_id = ?
     )
-  `, sessionId, sessionId, sessionId, sessionId);
+  `, sessionId, sessionId);
   if (outlineMismatch !== 0)
     throw new Error(`${sessionId} transcript outline is incoherent`);
 
@@ -267,27 +269,34 @@ function readonlySourceSnapshot(
   try {
     snapshotDir = mkdtempSync(join(dirname(centralPath), ".transcript-source-"));
     const snapshotPath = join(snapshotDir, "transcripts.db");
-    // `Database.serialize()` materializes the whole store in one JS buffer and
-    // cannot represent production transcript databases above Bun's buffer
-    // limit. SQLite streams a transactionally consistent, self-contained copy.
-    // Run it in a short-lived Bun process: Bun's SQLite binding keeps VACUUM's
-    // VFS state alive for the process lifetime on macOS, which can make later
-    // actor WAL opens fail with SQLITE_IOERR_VNODE in the migration process.
-    const vacuum = Bun.spawnSync([
-      process.execPath,
-      "-e",
-      `import { Database } from "bun:sqlite";
-       const source = new Database(process.argv[1], { readonly: true });
-       source.run("VACUUM INTO ?", [process.argv[2]]);
-       source.close();`,
-      sourceTranscriptPath,
-      snapshotPath,
-    ], { stdout: "pipe", stderr: "pipe" });
-    if (vacuum.exitCode !== 0)
-      throw new Error(
-        `Could not snapshot transcript source: ${vacuum.stderr.toString().trim()}`,
-      );
-    chmodSync(snapshotPath, 0o400);
+    if (statSync(sourceTranscriptPath).size <= 512 * 1024 * 1024) {
+      const original = new Database(sourceTranscriptPath, { readonly: true });
+      try {
+        writeFileSync(snapshotPath, original.serialize(), { mode: 0o400 });
+      } finally {
+        original.close();
+      }
+    } else {
+      // Database.serialize() materializes the whole store in one JS buffer and
+      // cannot represent production transcript databases above Bun's buffer
+      // limit. SQLite streams large snapshots in a short-lived process so its
+      // VACUUM VFS state cannot affect later actor WAL opens in this process.
+      const vacuum = Bun.spawnSync([
+        process.execPath,
+        "-e",
+        `import { Database } from "bun:sqlite";
+         const source = new Database(process.argv[1], { readonly: true });
+         source.run("VACUUM INTO ?", [process.argv[2]]);
+         source.close();`,
+        sourceTranscriptPath,
+        snapshotPath,
+      ], { stdout: "pipe", stderr: "pipe" });
+      if (vacuum.exitCode !== 0)
+        throw new Error(
+          `Could not snapshot transcript source: ${vacuum.stderr.toString().trim()}`,
+        );
+      chmodSync(snapshotPath, 0o400);
+    }
     const source = new Database(snapshotPath, { readonly: true });
     return {
       source,

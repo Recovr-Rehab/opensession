@@ -164,6 +164,25 @@ describe("offline actor transcript migration", () => {
     expect(readFileSync(paths.sourceTranscriptPath)).toEqual(beforeBytes);
   });
 
+  test("allows legacy lazy-outline gaps and backfills them after cutover", async () => {
+    const paths = await fixture();
+    const sourceDb = new Database(paths.sourceTranscriptPath);
+    sourceDb.run("DELETE FROM transcript_outline WHERE session_id = ?", [paths.sessionId]);
+    sourceDb.close();
+
+    const result = migrateActorTranscriptsOffline(paths);
+    expect(result.migrated).toBe(2);
+    const target = new TranscriptStore(
+      sessionKernelSessionDbPath(paths.sessionId, paths.isolatedRoot),
+    );
+    expect(target.readTranscriptIndex(paths.sessionId).entries).toHaveLength(0);
+    await target.ensureTranscriptOutline(paths.sessionId);
+    expect(target.readTranscriptIndex(paths.sessionId).entries).toHaveLength(
+      target.countEvents(paths.sessionId),
+    );
+    target.close();
+  });
+
   test("rollback fails closed after post-cutover append, import, or replace", async () => {
     for (const operation of ["append", "import", "replace"] as const) {
       const paths = await fixture();
