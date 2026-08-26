@@ -63,9 +63,10 @@ loopback, filesystem modes, and caller names are not fallbacks when peer
 verification fails.
 
 An import-inert encrypted Host recovery ledger v1 and conservative physical
-accounting prototype now exist under `src/agent-host/`, but remain entirely
-production-unwired: boot, Host composition, drivers, providers, and MCP routing
-do not open or use it. Recovery-bearing values use application-level
+accounting prototype now exist under `src/agent-host/`. The disabled detached
+Agent Host entrypoint opens only its generation-isolated ledger after its
+ExecStartPre doctor; boot, gateway routing, drivers, providers, and MCP routing
+remain production-unwired and no socket instance is enabled. Recovery-bearing values use application-level
 AES-256-GCM and HMAC-derived opaque lookup keys; this does not encrypt SQLite
 schema, phases, bounded counters, timestamps, key IDs, or opaque keys. It does
 not use SQLCipher or a custom VFS. Bun SQLite does not expose dirty-page or

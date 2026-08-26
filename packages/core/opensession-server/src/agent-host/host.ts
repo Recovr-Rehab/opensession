@@ -10,6 +10,11 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, parse, resolve } from "node:path";
 import { connect, createServer, type Server, type Socket } from "node:net";
+import { createLinuxPeerCredentialVerifier } from "../server/security/transport/linux-peer-credentials";
+import {
+  createVerifiedUnixSocketServer,
+  type VerifiedUnixSocketServer,
+} from "../server/security/transport/unix-socket-security";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
   AGENT_HOST_SUPERVISION_AUDIENCE,
@@ -66,7 +71,12 @@ export type AgentHostFailpoint =
   | "afterDriverDeliveryBeforeStreamAck"
   | "onReconnectDeadline";
 export interface AgentHostOptions {
-  socketPath: string;
+  /** Legacy test/development listener. Production must use inheritedFd. */
+  socketPath?: string;
+  /** Already-listening AF_UNIX descriptor supplied by systemd socket activation. */
+  inheritedFd?: number;
+  /** Exact non-root gateway UID accepted through SO_PEERCRED. */
+  expectedPeerUid?: number;
   createDriver: AgentTurnDriverFactory;
   readonly hostId: string;
   readonly hostGeneration: number;
@@ -156,6 +166,8 @@ const rank = (s: AgentOperationReceiptV1["state"]) =>
 
 export class AgentHost {
   private server?: Server;
+  private inheritedServer?: VerifiedUnixSocketServer;
+  private peerVerifier?: Awaited<ReturnType<typeof createLinuxPeerCredentialVerifier>>;
   private starting?: Promise<void>;
   private stopping?: Promise<void>;
   private active?: Turn;
@@ -222,6 +234,42 @@ export class AgentHost {
   private async listen() {
     if (this.poisoned)
       throw new Error("Agent Host requires process replacement");
+    if (this.options.inheritedFd !== undefined) {
+      if (this.options.socketPath !== undefined)
+        throw new Error("Agent Host inherited listener cannot name a socket path");
+      const expectedPeerUid = this.options.expectedPeerUid;
+      if (
+        !Number.isSafeInteger(expectedPeerUid) ||
+        expectedPeerUid! <= 0 ||
+        expectedPeerUid! > 0xffff_ffff
+      )
+        throw new Error("Agent Host inherited listener requires an exact non-root gateway UID");
+      const verifier = await createLinuxPeerCredentialVerifier();
+      this.peerVerifier = verifier;
+      const inherited = createVerifiedUnixSocketServer(
+        verifier,
+        { uid: expectedPeerUid! },
+        (accepted) => {
+          accepted.assertCurrent();
+          this.accept(accepted.socket);
+          accepted.socket.resume();
+        },
+        () => {},
+        { listenerMode: "inherited-fd-only" },
+      );
+      this.inheritedServer = inherited;
+      try {
+        await inherited.listen({ inheritedFd: this.options.inheritedFd });
+        return;
+      } catch (error) {
+        verifier.close();
+        this.peerVerifier = undefined;
+        this.inheritedServer = undefined;
+        throw error;
+      }
+    }
+    if (!this.options.socketPath)
+      throw new Error("Agent Host listener is unavailable");
     await this.prepareParent();
     try {
       await this.claim();
@@ -246,12 +294,11 @@ export class AgentHost {
   private async stopInner() {
     await this.starting?.catch(() => {});
     const server = this.server;
+    const inheritedServer = this.inheritedServer;
     this.server = undefined;
-    if (this.active) {
-      this.poisoned = true;
-      this.invoke(() => this.active!.driver.cancel());
-      this.invoke(() => this.active!.driver.shutdown());
-    }
+    this.inheritedServer = undefined;
+    const active = this.active;
+    if (active) this.poisoned = true;
     for (const p of this.peers) {
       p.closed = true;
       p.socket.destroy();
@@ -259,11 +306,22 @@ export class AgentHost {
     this.peers.clear();
     if (server?.listening)
       await new Promise<void>((ok) => server.close(() => ok()));
-    await this.unlinkSocket();
-    if (!this.active) await this.releaseClaim();
+    if (inheritedServer) await inheritedServer.closeAndDrain(5_000);
+    if (active) {
+      await Promise.allSettled([
+        Promise.resolve().then(() => active.driver.cancel()),
+        Promise.resolve().then(() => active.driver.shutdown()),
+      ]);
+    }
+    this.peerVerifier?.close();
+    this.peerVerifier = undefined;
+    if (this.options.socketPath) {
+      await this.unlinkSocket();
+      if (!this.active) await this.releaseClaim();
+    }
   }
   private async prepareParent() {
-    const path = this.options.socketPath;
+    const path = this.options.socketPath!;
     if (!isAbsolute(path) || resolve(path) !== path)
       throw new Error("Agent Host socket path must be absolute and normalized");
     const parent = dirname(path),
@@ -288,7 +346,7 @@ export class AgentHost {
     await chmod(parent, 0o700);
   }
   private get claimPath() {
-    return `${this.options.socketPath}.claim`;
+    return `${this.options.socketPath!}.claim`;
   }
   private async claim() {
     const nonce = crypto.randomUUID(),
@@ -330,24 +388,26 @@ export class AgentHost {
     }
   }
   private async removeStale() {
+    const path = this.options.socketPath!;
     try {
-      const st = await lstat(this.options.socketPath);
+      const st = await lstat(path);
       if (!st.isSocket() || st.isSymbolicLink())
         throw new Error("unsafe socket");
       if (await this.probe())
         throw Object.assign(new Error("Agent Host socket is already live"), {
           code: "EADDRINUSE",
         });
-      const old = `${this.options.socketPath}.stale-${crypto.randomUUID()}`;
-      await rename(this.options.socketPath, old);
+      const old = `${path}.stale-${crypto.randomUUID()}`;
+      await rename(path, old);
       await unlink(old);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     }
   }
   private probe() {
+    const path = this.options.socketPath!;
     return new Promise<boolean>((ok, fail) => {
-      const s = connect(this.options.socketPath);
+      const s = connect(path);
       let done = false;
       const finish = (v: boolean, e?: Error) => {
         if (done) return;
@@ -373,19 +433,20 @@ export class AgentHost {
     });
   }
   private async unlinkSocket() {
+    const path = this.options.socketPath!;
     const i = this.socketIdentity;
     this.socketIdentity = undefined;
     if (!i) return;
     try {
-      const st = await lstat(this.options.socketPath);
+      const st = await lstat(path);
       if (
         st.isSocket() &&
         !st.isSymbolicLink() &&
         st.dev === i.dev &&
         st.ino === i.ino
       ) {
-        const q = `${this.options.socketPath}.cleanup-${crypto.randomUUID()}`;
-        await rename(this.options.socketPath, q);
+        const q = `${path}.cleanup-${crypto.randomUUID()}`;
+        await rename(path, q);
         await unlink(q);
       }
     } catch {}
@@ -1074,11 +1135,6 @@ export class AgentHost {
       p.closed = true;
       p.socket.destroy();
     }
-  }
-  private invoke(f: () => void | Promise<void>) {
-    try {
-      void Promise.resolve(f()).catch(() => {});
-    } catch {}
   }
 }
 export function createAgentHost(options: AgentHostOptions) {

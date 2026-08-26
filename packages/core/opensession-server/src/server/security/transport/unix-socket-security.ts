@@ -300,7 +300,7 @@ function assertInheritedPeerPolicy(policy: PeerCredentialPolicy): void {
 }
 
 /** Proves the inherited descriptor is an already-listening AF_UNIX socket. */
-async function assertInheritedUnixListenerDescriptor(fd: number): Promise<void> {
+export async function assertInheritedUnixListenerDescriptor(fd: number): Promise<void> {
   if (process.platform !== "linux") throw new Error("Inherited Unix listeners are supported only on linux");
   const ffi = await import("bun:ffi");
   const library = ffi.dlopen("libc.so.6", {

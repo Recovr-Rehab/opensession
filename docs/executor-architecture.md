@@ -141,7 +141,10 @@ not make an Agent operation an Executor operation and never accepts an
 `ExecutorGrant` in its place.
 
 The Agent Host contracts define these boundaries but do not route production
-turns or wire boot.
+turns or wire boot. The disabled detached process and systemd socket-activation
+foundation is documented in [Agent Host deployment](agent-host-deployment.md).
+Installing its privileged templates requires a full root deploy; installation
+does not enable or start them.
 
 ## Rollback compatibility
 
