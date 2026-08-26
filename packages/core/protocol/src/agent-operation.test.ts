@@ -358,6 +358,72 @@ describe("Agent operation protocol v1", () => {
         kernelTerminal: undefined,
       }),
     ).toBeUndefined();
+    const indeterminate = {
+      ...receipt,
+      state: "indeterminate" as const,
+      executingAtMs: 2,
+      completedAtMs: 3,
+      transcriptRefs,
+      errorCode: "reconciliation_failed" as const,
+      kernelTerminal: {
+        ...kernelTerminal,
+        outcomeCode: "reconciliation_failed",
+      },
+    };
+    expect(decodeAgentOperationReceiptV1(indeterminate)).toEqual(indeterminate);
+    expect(
+      decodeAgentOperationReceiptV1({
+        ...indeterminate,
+        kernelTerminal: {
+          ...indeterminate.kernelTerminal,
+          outcomeCode: "ambiguous_completion",
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  test("strictly binds terminal reservations only to executing receipts", () => {
+    const terminalReservation = {
+      reservationId: `reservation:${"1".repeat(64)}`,
+      reason: "reconciliation_unsupported" as const,
+      reservedAtMs: 3,
+    };
+    const executing = {
+      ...receipt,
+      state: "executing" as const,
+      executingAtMs: 2,
+      terminalReservation,
+    };
+    expect(decodeAgentOperationReceiptV1(executing)).toEqual(executing);
+    expect(serializeAgentOperationReceiptV1(executing)).toEqual(
+      serializeAgentOperationReceiptV1(
+        decodeAgentOperationReceiptV1(executing)!,
+      ),
+    );
+    expect(
+      decodeAgentOperationReceiptV1({
+        ...executing,
+        terminalReservation: {
+          ...terminalReservation,
+          reservedAtMs: 1,
+        },
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeAgentOperationReceiptV1({
+        ...executing,
+        terminalReservation: {
+          ...terminalReservation,
+          reason: "operation_failed",
+        },
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeAgentOperationReceiptV1({
+        ...receipt,
+        terminalReservation,
+      }),
+    ).toBeUndefined();
   });
 
   test("receipts are strict bounded metadata and cannot contain bodies or secrets", () => {

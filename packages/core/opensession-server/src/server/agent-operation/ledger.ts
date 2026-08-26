@@ -35,8 +35,14 @@ export type AgentOperationQuarantineReason =
   | "claim_identity_mismatch"
   | "get_identity_mismatch"
   | "transition_identity_mismatch";
+export interface AgentOperationTerminalReservation {
+  reservationId: string;
+  reason: AgentOperationIndeterminateReason;
+  reservedAtMs: number;
+}
 export interface AgentOperationRecord extends AgentOperationIdentity {
   receipt: AgentOperationReceiptV1;
+  terminalReservation?: Readonly<AgentOperationTerminalReservation>;
   quarantineReason?: AgentOperationQuarantineReason;
 }
 export interface AgentOperationSettlement {
@@ -69,9 +75,14 @@ export interface AgentOperationLedger {
     identity: AgentOperationIdentity,
     settlement: AgentOperationSettlement,
   ): Promise<AgentOperationRecord>;
-  markIndeterminate(
+  reserveIndeterminate(
     identity: AgentOperationIdentity,
     reason: AgentOperationIndeterminateReason,
+    reservedAtMs: number,
+  ): Promise<Readonly<AgentOperationTerminalReservation>>;
+  markIndeterminate(
+    identity: AgentOperationIdentity,
+    reservation: Readonly<AgentOperationTerminalReservation>,
     completedAtMs: number,
     kernelTerminal: Readonly<AgentOperationKernelTerminalV1>,
   ): Promise<AgentOperationRecord>;
@@ -89,6 +100,12 @@ export class AgentOperationConflictError extends Error {
   constructor(message = "agent operation identity conflict") {
     super(message);
     this.name = "AgentOperationConflictError";
+  }
+}
+export class AgentOperationTerminalReservedError extends Error {
+  constructor() {
+    super("agent operation terminal is reserved as indeterminate");
+    this.name = "AgentOperationTerminalReservedError";
   }
 }
 export class AgentOperationNotFoundError extends Error {
@@ -144,7 +161,7 @@ export async function reconcileExecutingOperation(
   reconciler: ExecutingOperationReconciler | undefined,
   createIndeterminateTerminal: (
     record: AgentOperationRecord,
-    reason: AgentOperationIndeterminateReason,
+    reservation: Readonly<AgentOperationTerminalReservation>,
   ) => Promise<Readonly<AgentOperationKernelTerminalV1>>,
   completedAtMs: number,
 ): Promise<AgentOperationRecord> {
@@ -153,6 +170,25 @@ export async function reconcileExecutingOperation(
       record.receipt.state,
       "indeterminate",
     );
+  const finalizeReservation = async (
+    reservation: Readonly<AgentOperationTerminalReservation>,
+  ): Promise<AgentOperationRecord> => {
+    try {
+      // Callers bind append identity to reservationId, making restart and
+      // concurrent reservation recovery destination-idempotent.
+      const terminal = await createIndeterminateTerminal(record, reservation);
+      return await ledger.markIndeterminate(
+        record,
+        reservation,
+        completedAtMs,
+        terminal,
+      );
+    } catch (error) {
+      const latest = await ledger.getExact(record);
+      if (latest?.receipt.state === "indeterminate") return latest;
+      throw error;
+    }
+  };
   const failClosed = async (
     reason:
       | "reconciliation_unsupported"
@@ -160,12 +196,10 @@ export async function reconcileExecutingOperation(
       | "ambiguous_completion",
   ): Promise<AgentOperationRecord> => {
     try {
-      const terminal = await createIndeterminateTerminal(record, reason);
-      return await ledger.markIndeterminate(
-        record,
-        reason,
-        completedAtMs,
-        terminal,
+      // This durable reservation wins terminal ownership before transcript I/O.
+      // Settlement checks the same row and cannot commit once it exists.
+      return await finalizeReservation(
+        await ledger.reserveIndeterminate(record, reason, completedAtMs),
       );
     } catch (error) {
       const latest = await ledger.getExact(record);
@@ -178,6 +212,9 @@ export async function reconcileExecutingOperation(
       throw error;
     }
   };
+  // Once terminal ownership is reserved, never consult the adapter again.
+  if (record.terminalReservation)
+    return finalizeReservation(record.terminalReservation);
   if (!reconciler) return failClosed("reconciliation_unsupported");
   let result: unknown;
   try {

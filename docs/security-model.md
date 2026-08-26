@@ -127,12 +127,17 @@ entry identity. Every terminal receipt also carries the exact bounded
 SessionKernel replay material: output digest, outcome code, ordered transcript
 receipt references and, for model operations, ordered pending tool-use entry
 IDs. Settled and indeterminate receipts lacking this material fail strict
-decoding. Recovery must durably append a visible indeterminate transcript entry
-before marking the gateway receipt indeterminate, so a restart can repair the
-actor terminal without retrying physical provider or MCP work.
+decoding. Recovery must first durably reserve indeterminate terminal ownership,
+then append a visible entry whose destination identity is derived from that
+reservation, and finally mark the receipt indeterminate. Settlement cannot
+commit after the reservation. The reservation survives restart, so recovery can
+repair the actor terminal without retrying physical provider or MCP work or
+leaving a false indeterminate entry after a competing settlement.
 
-The only durable state progression is `prepared -> executing -> settled |
-indeterminate`. A recovered `prepared` operation may be reauthorized later.
+The receipt state progression is `prepared -> executing -> settled |
+indeterminate`; an executing row may additionally carry the durable terminal
+reservation while transcript proof is being committed. A recovered `prepared`
+operation may be reauthorized later.
 A recovered `executing` operation is never retried by default. Initial
 production model and MCP adapters must use unsupported reconciliation, which
 produces a durable visible `indeterminate` receipt unless a later adapter

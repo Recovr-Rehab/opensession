@@ -42,10 +42,23 @@ const STOP_REASONS: readonly AgentOperationStopReasonV1[] = [
   "cancelled",
   "error",
 ];
+const RESERVATION_REASONS = [
+  "reconciliation_unsupported",
+  "reconciliation_failed",
+  "ambiguous_completion",
+  "identity_mismatch",
+  "cancellation_ambiguous",
+  "timeout_ambiguous",
+  "disconnect_ambiguous",
+] as const;
 const ERROR_CODES = [
   "reconciliation_unsupported",
   "reconciliation_failed",
   "ambiguous_completion",
+  "identity_mismatch",
+  "cancellation_ambiguous",
+  "timeout_ambiguous",
+  "disconnect_ambiguous",
   "invalid_response",
   "operation_failed",
 ] as const;
@@ -116,8 +129,7 @@ export interface AgentMcpOperationDescriptorV1 {
   adapterRequestVersion: string;
 }
 export type AgentOperationDescriptorV1 =
-  | AgentModelOperationDescriptorV1
-  | AgentMcpOperationDescriptorV1;
+  AgentModelOperationDescriptorV1 | AgentMcpOperationDescriptorV1;
 export type AgentOperationKind = AgentOperationDescriptorV1["kind"];
 export interface AgentOperationRequestV1 {
   version: 1;
@@ -140,10 +152,7 @@ export interface AgentOperationQueryV1 {
   payloadDigest: AgentOperationDigest;
 }
 export type AgentOperationState =
-  | "prepared"
-  | "executing"
-  | "settled"
-  | "indeterminate";
+  "prepared" | "executing" | "settled" | "indeterminate";
 export interface AgentOperationUsageV1 {
   inputTokens?: number;
   outputTokens?: number;
@@ -196,6 +205,11 @@ export interface AgentOperationActorIdentityV1 {
   transcriptAnchor: Readonly<AgentTranscriptAnchorV1>;
   toolUseEntryId?: string;
 }
+export interface AgentOperationTerminalReservationV1 {
+  reservationId: string;
+  reason: (typeof RESERVATION_REASONS)[number];
+  reservedAtMs: number;
+}
 export interface AgentOperationKernelTerminalV1 {
   outputDigest: AgentOperationDigest;
   outcomeCode: string;
@@ -219,6 +233,8 @@ export interface AgentOperationReceiptV1 {
   completedAtMs?: number;
   outcome?: AgentOperationOutcomeV1;
   transcriptRefs?: readonly AgentTranscriptReceiptRefV1[];
+  /** Durable terminal ownership, present only while executing. */
+  terminalReservation?: Readonly<AgentOperationTerminalReservationV1>;
   /** Exact actor-terminal replay material, durable before actor settlement. */
   kernelTerminal?: Readonly<AgentOperationKernelTerminalV1>;
   providerRef: AgentOperationProviderRefV1;
@@ -226,6 +242,10 @@ export interface AgentOperationReceiptV1 {
     | "reconciliation_unsupported"
     | "reconciliation_failed"
     | "ambiguous_completion"
+    | "identity_mismatch"
+    | "cancellation_ambiguous"
+    | "timeout_ambiguous"
+    | "disconnect_ambiguous"
     | "invalid_response"
     | "operation_failed";
 }
@@ -625,7 +645,9 @@ function decodeActorIdentity(
     hostGeneration: value.hostGeneration,
     hostIncarnation: value.hostIncarnation,
     transcriptAnchor,
-    ...(kind === "mcp" ? { toolUseEntryId: value.toolUseEntryId as string } : {}),
+    ...(kind === "mcp"
+      ? { toolUseEntryId: value.toolUseEntryId as string }
+      : {}),
   });
 }
 function decodeKernelTerminal(
@@ -703,6 +725,7 @@ export function decodeAgentOperationReceiptV1(
     "completedAtMs",
     "outcome",
     "transcriptRefs",
+    "terminalReservation",
     "kernelTerminal",
     "providerRef",
     "errorCode",
@@ -790,6 +813,34 @@ export function decodeAgentOperationReceiptV1(
       ...(decodedUsage === undefined ? {} : { usage: decodedUsage }),
     }) as AgentOperationOutcomeV1;
   }
+  const terminalReservation = (() => {
+    if (value.terminalReservation === undefined) return undefined;
+    if (
+      !record(value.terminalReservation) ||
+      !exact(value.terminalReservation, [
+        "reservationId",
+        "reason",
+        "reservedAtMs",
+      ]) ||
+      typeof value.terminalReservation.reservationId !== "string" ||
+      !/^reservation:[a-f0-9]{64}$/.test(
+        value.terminalReservation.reservationId,
+      ) ||
+      !RESERVATION_REASONS.includes(
+        value.terminalReservation
+          .reason as (typeof RESERVATION_REASONS)[number],
+      ) ||
+      !time(value.terminalReservation.reservedAtMs)
+    )
+      return null;
+    return Object.freeze({
+      reservationId: value.terminalReservation.reservationId,
+      reason: value.terminalReservation
+        .reason as (typeof RESERVATION_REASONS)[number],
+      reservedAtMs: value.terminalReservation.reservedAtMs as number,
+    });
+  })();
+  if (terminalReservation === null) return undefined;
   const kernelTerminal = decodeKernelTerminal(
     value.kind as AgentOperationKind,
     value.kernelTerminal,
@@ -800,7 +851,8 @@ export function decodeAgentOperationReceiptV1(
     (JSON.stringify(kernelTerminal.transcriptRefs) !== JSON.stringify(refs) ||
       (outcome?.outputDigest !== undefined &&
         outcome.outputDigest !== kernelTerminal.outputDigest) ||
-      (outcome?.code !== undefined && outcome.code !== kernelTerminal.outcomeCode))
+      (outcome?.code !== undefined &&
+        outcome.code !== kernelTerminal.outcomeCode))
   )
     return undefined;
   const state = value.state as AgentOperationState;
@@ -810,6 +862,7 @@ export function decodeAgentOperationReceiptV1(
         value.completedAtMs !== undefined ||
         outcome ||
         value.transcriptRefs !== undefined ||
+        terminalReservation !== undefined ||
         kernelTerminal !== undefined ||
         value.providerRef.requestId !== undefined ||
         value.providerRef.responseId !== undefined ||
@@ -817,6 +870,8 @@ export function decodeAgentOperationReceiptV1(
     (state === "executing" &&
       (!time(value.executingAtMs) ||
         value.completedAtMs !== undefined ||
+        (terminalReservation !== undefined &&
+          terminalReservation.reservedAtMs < value.executingAtMs) ||
         outcome ||
         value.transcriptRefs !== undefined ||
         kernelTerminal !== undefined ||
@@ -824,7 +879,9 @@ export function decodeAgentOperationReceiptV1(
         value.providerRef.responseId !== undefined ||
         value.errorCode !== undefined)) ||
     ((state === "settled" || state === "indeterminate") &&
-      (!time(value.executingAtMs) || !time(value.completedAtMs))) ||
+      (!time(value.executingAtMs) ||
+        !time(value.completedAtMs) ||
+        terminalReservation !== undefined)) ||
     (time(value.executingAtMs) && value.executingAtMs < value.acceptedAtMs) ||
     (time(value.completedAtMs) &&
       value.completedAtMs <
@@ -836,7 +893,10 @@ export function decodeAgentOperationReceiptV1(
     (state === "indeterminate" &&
       (outcome !== undefined ||
         !kernelTerminal ||
-        !ERROR_CODES.includes(value.errorCode as (typeof ERROR_CODES)[number])))
+        !ERROR_CODES.includes(
+          value.errorCode as (typeof ERROR_CODES)[number],
+        ) ||
+        kernelTerminal.outcomeCode !== value.errorCode))
   )
     return undefined;
   return Object.freeze({
@@ -845,6 +905,7 @@ export function decodeAgentOperationReceiptV1(
     actorIdentity,
     ...(outcome === undefined ? {} : { outcome }),
     ...(refs === undefined ? {} : { transcriptRefs: Object.freeze(refs) }),
+    ...(terminalReservation === undefined ? {} : { terminalReservation }),
     ...(kernelTerminal === undefined ? {} : { kernelTerminal }),
   }) as AgentOperationReceiptV1;
 }
@@ -1010,6 +1071,15 @@ export function serializeAgentOperationReceiptV1(
               throughChangeSeq: ref.throughChangeSeq,
               requestDigest: ref.requestDigest,
             })),
+          }),
+      ...(v.terminalReservation === undefined
+        ? {}
+        : {
+            terminalReservation: {
+              reservationId: v.terminalReservation.reservationId,
+              reason: v.terminalReservation.reason,
+              reservedAtMs: v.terminalReservation.reservedAtMs,
+            },
           }),
       ...(v.kernelTerminal === undefined
         ? {}

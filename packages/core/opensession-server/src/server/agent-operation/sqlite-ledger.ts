@@ -8,7 +8,7 @@ import {
   mkdirSync,
   openSync,
 } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { dirname, parse, resolve } from "node:path";
 import {
   AGENT_OPERATION_DESCRIPTOR_DIGEST_DOMAIN,
@@ -23,6 +23,7 @@ import {
   AgentOperationLedgerFullError,
   AgentOperationNotFoundError,
   AgentOperationSessionActiveError,
+  AgentOperationTerminalReservedError,
   AgentOperationTransitionError,
   type AgentOperationIdentity,
   type AgentOperationIndeterminateReason,
@@ -30,6 +31,7 @@ import {
   type AgentOperationQuarantineReason,
   type AgentOperationRecord,
   type AgentOperationSettlement,
+  type AgentOperationTerminalReservation,
 } from "./ledger";
 
 const SCHEMA_VERSION = 1;
@@ -42,6 +44,7 @@ const TABLE_SQL = `CREATE TABLE agent_operation_receipts (
   adapter_id TEXT NOT NULL, adapter_version TEXT NOT NULL,
   state TEXT NOT NULL CHECK(state IN ('prepared','executing','settled','indeterminate')),
   accepted_at INTEGER NOT NULL, executing_at INTEGER, completed_at INTEGER,
+  terminal_reservation_id TEXT, terminal_reservation_reason TEXT CHECK(terminal_reservation_reason IN ('reconciliation_unsupported','reconciliation_failed','ambiguous_completion','identity_mismatch','cancellation_ambiguous','timeout_ambiguous','disconnect_ambiguous')), terminal_reserved_at INTEGER,
   descriptor_json TEXT NOT NULL, receipt_json TEXT NOT NULL,
   quarantine_reason TEXT CHECK(quarantine_reason IN ('claim_identity_mismatch','get_identity_mismatch','transition_identity_mismatch')),
   ordinal INTEGER NOT NULL,
@@ -68,6 +71,9 @@ type Row = {
   accepted_at: unknown;
   executing_at: unknown;
   completed_at: unknown;
+  terminal_reservation_id: unknown;
+  terminal_reservation_reason: unknown;
+  terminal_reserved_at: unknown;
   descriptor_json: unknown;
   receipt_json: unknown;
   quarantine_reason: unknown;
@@ -167,17 +173,15 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
         return { record: decoded, claimed: false };
       }
       const count = this.#db
-        .query<
-          { count: number },
-          []
-        >("SELECT COUNT(*) AS count FROM agent_operation_receipts")
+        .query<{ count: number }, []>(
+          "SELECT COUNT(*) AS count FROM agent_operation_receipts",
+        )
         .get()!.count;
       if (count >= this.#capacity) throw new AgentOperationLedgerFullError();
       const ordinal = this.#db
-        .query<
-          { value: number },
-          []
-        >("SELECT COALESCE(MAX(ordinal), 0) + 1 AS value FROM agent_operation_receipts")
+        .query<{ value: number }, []>(
+          "SELECT COALESCE(MAX(ordinal), 0) + 1 AS value FROM agent_operation_receipts",
+        )
         .get()!.value;
       this.#db
         .query(
@@ -220,6 +224,71 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
       executingAtMs,
     }));
   }
+  async reserveIndeterminate(
+    identity: AgentOperationIdentity,
+    reason: AgentOperationIndeterminateReason,
+    reservedAtMs: number,
+  ): Promise<Readonly<AgentOperationTerminalReservation>> {
+    this.#open();
+    validateIdentity(identity);
+    validIndeterminateReason(reason);
+    validTime(reservedAtMs, "reservedAtMs");
+    return Promise.resolve(
+      this.#transaction(() => {
+        const row = this.#select(
+          identity.fence.sessionId,
+          identity.operationId,
+        );
+        if (!row) throw new AgentOperationNotFoundError();
+        const current = decodeRow(row, this.#maxRowBytes);
+        if (!sameIdentity(current, identity))
+          this.#conflict(identity, "transition_identity_mismatch");
+        if (current.quarantineReason)
+          throw new AgentOperationConflictError(
+            "agent operation is quarantined",
+          );
+        if (current.receipt.state !== "executing")
+          throw new AgentOperationTransitionError(
+            current.receipt.state,
+            "indeterminate",
+          );
+        if (current.terminalReservation)
+          return structuredClone(current.terminalReservation);
+        if (reservedAtMs < current.receipt.executingAtMs!)
+          throw new TypeError("reservation precedes execution");
+        const reservation = Object.freeze({
+          reservationId: `reservation:${randomBytes(32).toString("hex")}`,
+          reason,
+          reservedAtMs,
+        });
+        const receipt = {
+          ...current.receipt,
+          terminalReservation: reservation,
+        } as AgentOperationReceiptV1;
+        const receiptJson = encodeReceipt(receipt, this.#maxRowBytes);
+        rowLimit(
+          canonicalDescriptorJson(current),
+          receiptJson,
+          this.#maxRowBytes,
+        );
+        const result = this.#db
+          .query(
+            "UPDATE agent_operation_receipts SET terminal_reservation_id=?, terminal_reservation_reason=?, terminal_reserved_at=?, receipt_json=? WHERE session_id=? AND operation_id=? AND state='executing' AND terminal_reservation_id IS NULL",
+          )
+          .run(
+            reservation.reservationId,
+            reservation.reason,
+            reservation.reservedAtMs,
+            receiptJson,
+            identity.fence.sessionId,
+            identity.operationId,
+          );
+        if (result.changes !== 1)
+          throw new AgentOperationTerminalReservedError();
+        return reservation;
+      }),
+    );
+  }
   async settle(
     identity: AgentOperationIdentity,
     settlement: AgentOperationSettlement,
@@ -234,54 +303,62 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
           : "operation_failed");
     if (settlement.kernelTerminal.outcomeCode !== expectedOutcomeCode)
       throw new TypeError("settled terminal outcome contradicts settlement");
-    return this.#transition(identity, "executing", "settled", (current) => ({
-      ...current.receipt,
-      state: "settled",
-      completedAtMs: settlement.completedAtMs,
-      outcome: settlement.outcome,
-      transcriptRefs: settlement.transcriptRefs,
-      kernelTerminal: settlement.kernelTerminal,
-      providerRef: {
-        adapterId: current.adapterId,
-        adapterVersion: current.adapterVersion,
-        ...(settlement.providerRequestRef === undefined
-          ? {}
-          : { requestId: settlement.providerRequestRef }),
-        ...(settlement.providerResponseRef === undefined
-          ? {}
-          : { responseId: settlement.providerResponseRef }),
-      },
-    }));
+    return this.#transition(
+      identity,
+      "executing",
+      "settled",
+      (current) => ({
+        ...current.receipt,
+        state: "settled",
+        completedAtMs: settlement.completedAtMs,
+        outcome: settlement.outcome,
+        transcriptRefs: settlement.transcriptRefs,
+        kernelTerminal: settlement.kernelTerminal,
+        providerRef: {
+          adapterId: current.adapterId,
+          adapterVersion: current.adapterVersion,
+          ...(settlement.providerRequestRef === undefined
+            ? {}
+            : { requestId: settlement.providerRequestRef }),
+          ...(settlement.providerResponseRef === undefined
+            ? {}
+            : { responseId: settlement.providerResponseRef }),
+        },
+      }),
+      { rejectTerminalReservation: true },
+    );
   }
   async markIndeterminate(
     identity: AgentOperationIdentity,
-    reason: AgentOperationIndeterminateReason,
+    reservation: Readonly<AgentOperationTerminalReservation>,
     completedAtMs: number,
     kernelTerminal: AgentOperationReceiptV1["kernelTerminal"],
   ): Promise<AgentOperationRecord> {
     validTime(completedAtMs, "completedAtMs");
     if (!kernelTerminal)
       throw new TypeError("indeterminate terminal evidence is required");
-    if (kernelTerminal.outcomeCode !== reason)
+    validateTerminalReservation(reservation);
+    if (completedAtMs < reservation.reservedAtMs)
+      throw new TypeError("completion precedes terminal reservation");
+    if (kernelTerminal.outcomeCode !== reservation.reason)
       throw new TypeError("indeterminate terminal outcome contradicts reason");
-    const code =
-      reason === "reconciliation_unsupported" ||
-      reason === "reconciliation_failed" ||
-      reason === "ambiguous_completion"
-        ? reason
-        : "ambiguous_completion";
     return this.#transition(
       identity,
       "executing",
       "indeterminate",
-      (current) => ({
-        ...current.receipt,
-        state: "indeterminate",
-        completedAtMs,
-        transcriptRefs: kernelTerminal.transcriptRefs,
-        kernelTerminal,
-        errorCode: code,
-      }),
+      (current) => {
+        const { terminalReservation: _reservation, ...receipt } =
+          current.receipt;
+        return {
+          ...receipt,
+          state: "indeterminate",
+          completedAtMs,
+          transcriptRefs: kernelTerminal.transcriptRefs,
+          kernelTerminal,
+          errorCode: reservation.reason,
+        };
+      },
+      { terminalReservation: reservation },
     );
   }
   async getExact(
@@ -314,10 +391,9 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
     validText(sessionId, "sessionId");
     return this.#transaction(() => {
       const active = this.#db
-        .query<
-          { count: number },
-          [string]
-        >("SELECT COUNT(*) AS count FROM agent_operation_receipts WHERE session_id=? AND state IN ('prepared','executing')")
+        .query<{ count: number }, [string]>(
+          "SELECT COUNT(*) AS count FROM agent_operation_receipts WHERE session_id=? AND state IN ('prepared','executing')",
+        )
         .get(sessionId)!.count;
       if (active) throw new AgentOperationSessionActiveError();
       return this.#db
@@ -347,6 +423,10 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
     expected: "prepared" | "executing",
     next: "executing" | "settled" | "indeterminate",
     update: (record: AgentOperationRecord) => AgentOperationReceiptV1,
+    options: {
+      rejectTerminalReservation?: boolean;
+      terminalReservation?: Readonly<AgentOperationTerminalReservation>;
+    } = {},
   ): Promise<AgentOperationRecord> {
     this.#open();
     validateIdentity(identity);
@@ -366,6 +446,16 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
           );
         if (current.receipt.state !== expected)
           throw new AgentOperationTransitionError(current.receipt.state, next);
+        if (options.rejectTerminalReservation && current.terminalReservation)
+          throw new AgentOperationTerminalReservedError();
+        if (
+          options.terminalReservation &&
+          !sameTerminalReservation(
+            current.terminalReservation,
+            options.terminalReservation,
+          )
+        )
+          throw new AgentOperationTerminalReservedError();
         const receipt = update(current);
         const receiptJson = encodeReceipt(receipt, this.#maxRowBytes);
         rowLimit(
@@ -375,12 +465,21 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
         );
         const result = this.#db
           .query(
-            "UPDATE agent_operation_receipts SET state=?, executing_at=?, completed_at=?, receipt_json=? WHERE session_id=? AND operation_id=? AND state=?",
+            "UPDATE agent_operation_receipts SET state=?, executing_at=?, completed_at=?, terminal_reservation_id=?, terminal_reservation_reason=?, terminal_reserved_at=?, receipt_json=? WHERE session_id=? AND operation_id=? AND state=?",
           )
           .run(
             receipt.state,
             receipt.executingAtMs ?? null,
             receipt.completedAtMs ?? null,
+            next === "executing"
+              ? (current.terminalReservation?.reservationId ?? null)
+              : null,
+            next === "executing"
+              ? (current.terminalReservation?.reason ?? null)
+              : null,
+            next === "executing"
+              ? (current.terminalReservation?.reservedAtMs ?? null)
+              : null,
             receiptJson,
             identity.fence.sessionId,
             identity.operationId,
@@ -388,7 +487,10 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
           );
         if (result.changes !== 1)
           throw new AgentOperationTransitionError(current.receipt.state, next);
-        return { ...current, receipt };
+        if (next === "executing") return { ...current, receipt };
+        const { terminalReservation: _reservation, ...withoutReservation } =
+          current;
+        return { ...withoutReservation, receipt };
       }),
     );
   }
@@ -492,6 +594,30 @@ function decodeRow(row: Row, max: number): AgentOperationRecord {
     adapterVersion: row.adapter_version,
   } as AgentOperationIdentity;
   validateIdentity(identity);
+  const hasTerminalReservation =
+    row.terminal_reservation_id !== null ||
+    row.terminal_reservation_reason !== null ||
+    row.terminal_reserved_at !== null;
+  let terminalReservation: AgentOperationTerminalReservation | undefined;
+  if (hasTerminalReservation) {
+    terminalReservation = {
+      reservationId: row.terminal_reservation_id as string,
+      reason:
+        row.terminal_reservation_reason as AgentOperationIndeterminateReason,
+      reservedAtMs: row.terminal_reserved_at as number,
+    };
+    try {
+      validateTerminalReservation(terminalReservation);
+    } catch {
+      throw new Error("corrupt Agent operation terminal reservation");
+    }
+    if (
+      receipt.state !== "executing" ||
+      receipt.executingAtMs === undefined ||
+      terminalReservation.reservedAtMs < receipt.executingAtMs
+    )
+      throw new Error("contradictory Agent operation terminal reservation");
+  }
   if (
     receipt.operationId !== identity.operationId ||
     receipt.kind !== identity.kind ||
@@ -505,6 +631,8 @@ function decodeRow(row: Row, max: number): AgentOperationRecord {
     row.accepted_at !== receipt.acceptedAtMs ||
     row.executing_at !== (receipt.executingAtMs ?? null) ||
     row.completed_at !== (receipt.completedAtMs ?? null) ||
+    JSON.stringify(receipt.terminalReservation ?? null) !==
+      JSON.stringify(terminalReservation ?? null) ||
     !Number.isSafeInteger(row.ordinal) ||
     (row.ordinal as number) < 1 ||
     row.descriptor_json !== canonicalDescriptorJson(identity) ||
@@ -523,6 +651,7 @@ function decodeRow(row: Row, max: number): AgentOperationRecord {
   return {
     ...identity,
     receipt,
+    ...(terminalReservation === undefined ? {} : { terminalReservation }),
     ...(quarantineReason === null ? {} : { quarantineReason }),
   };
 }
@@ -619,6 +748,38 @@ function validateIdentity(v: AgentOperationIdentity): void {
     if (!/^sha256:[a-f0-9]{64}$/.test(value))
       throw new TypeError("invalid digest");
 }
+function validIndeterminateReason(
+  value: unknown,
+): asserts value is AgentOperationIndeterminateReason {
+  if (
+    value !== "reconciliation_unsupported" &&
+    value !== "reconciliation_failed" &&
+    value !== "ambiguous_completion" &&
+    value !== "identity_mismatch" &&
+    value !== "cancellation_ambiguous" &&
+    value !== "timeout_ambiguous" &&
+    value !== "disconnect_ambiguous"
+  )
+    throw new TypeError("invalid indeterminate reason");
+}
+function validateTerminalReservation(
+  value: Readonly<AgentOperationTerminalReservation>,
+): void {
+  if (!/^reservation:[a-f0-9]{64}$/.test(value.reservationId))
+    throw new TypeError("invalid terminal reservation ID");
+  validIndeterminateReason(value.reason);
+  validTime(value.reservedAtMs, "reservedAtMs");
+}
+function sameTerminalReservation(
+  a: Readonly<AgentOperationTerminalReservation> | undefined,
+  b: Readonly<AgentOperationTerminalReservation>,
+): boolean {
+  return (
+    a?.reservationId === b.reservationId &&
+    a.reason === b.reason &&
+    a.reservedAtMs === b.reservedAtMs
+  );
+}
 function validText(v: string, name: string): void {
   if (
     !v ||
@@ -657,10 +818,9 @@ function initialize(db: Database): void {
     throw new Error(`unsupported Agent operation ledger schema: ${version}`);
   if (version === 0) {
     const tables = db
-      .query<
-        { name: string },
-        []
-      >("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+      )
       .all();
     if (tables.length)
       throw new Error(
@@ -695,7 +855,7 @@ function initialize(db: Database): void {
   if (
     !tableList ||
     tableList.type !== "table" ||
-    tableList.ncol !== 20 ||
+    tableList.ncol !== 23 ||
     tableList.wr !== 0 ||
     tableList.strict !== 1
   )
@@ -730,6 +890,9 @@ function initialize(db: Database): void {
     "accepted_at",
     "executing_at",
     "completed_at",
+    "terminal_reservation_id",
+    "terminal_reservation_reason",
+    "terminal_reserved_at",
     "descriptor_json",
     "receipt_json",
     "quarantine_reason",
@@ -738,6 +901,9 @@ function initialize(db: Database): void {
   const nullable = new Set([
     "executing_at",
     "completed_at",
+    "terminal_reservation_id",
+    "terminal_reservation_reason",
+    "terminal_reserved_at",
     "quarantine_reason",
   ]);
   if (
@@ -751,6 +917,7 @@ function initialize(db: Database): void {
             "accepted_at",
             "executing_at",
             "completed_at",
+            "terminal_reserved_at",
             "ordinal",
           ].includes(column.name)
             ? "INTEGER"
@@ -768,10 +935,9 @@ function initialize(db: Database): void {
   )
     throw new Error("Agent operation ledger schema columns do not match");
   const objects = db
-    .query<
-      { name: string; type: string; sql: string | null },
-      []
-    >("SELECT name,type,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name")
+    .query<{ name: string; type: string; sql: string | null }, []>(
+      "SELECT name,type,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name",
+    )
     .all();
   if (
     objects.length !== 2 ||

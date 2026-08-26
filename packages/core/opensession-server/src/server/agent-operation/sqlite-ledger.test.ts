@@ -14,11 +14,13 @@ import { join } from "node:path";
 import type {
   AgentOperationIdentity,
   AgentOperationIndeterminateReason,
+  AgentOperationTerminalReservation,
 } from "./ledger";
 import {
   AgentOperationConflictError,
   AgentOperationLedgerFullError,
   AgentOperationSessionActiveError,
+  AgentOperationTerminalReservedError,
   AgentOperationTransitionError,
   reconcileExecutingOperation,
 } from "./ledger";
@@ -97,15 +99,16 @@ const settlement = {
     pendingToolUseEntryIds: [] as string[],
   },
 };
-const indeterminateTerminal = async (
-  _record?: AgentOperationIdentity,
-  reason: AgentOperationIndeterminateReason = "ambiguous_completion",
-) => ({
+const terminalFor = (reason: AgentOperationIndeterminateReason) => ({
   outputDigest: d("3"),
   outcomeCode: reason,
   transcriptRefs,
   pendingToolUseEntryIds: [] as string[],
 });
+const indeterminateTerminal = async (
+  _record: AgentOperationIdentity,
+  reservation: Readonly<AgentOperationTerminalReservation>,
+) => terminalFor(reservation.reason);
 
 describe("SQLite Agent operation ledger", () => {
   test("persists exact prepared, executing and settled replay across every reopen boundary", async () => {
@@ -245,12 +248,7 @@ describe("SQLite Agent operation ledger", () => {
       AgentOperationTransitionError,
     );
     await expect(
-      ledger.markIndeterminate(
-        exact,
-        "ambiguous_completion",
-        4,
-        await indeterminateTerminal(),
-      ),
+      ledger.reserveIndeterminate(exact, "ambiguous_completion", 4),
     ).rejects.toBeInstanceOf(AgentOperationTransitionError);
     await ledger.close();
   });
@@ -279,10 +277,7 @@ describe("SQLite Agent operation ledger", () => {
       state: "indeterminate",
       errorCode: "reconciliation_unsupported",
       transcriptRefs,
-      kernelTerminal: await indeterminateTerminal(
-        active[1],
-        "reconciliation_unsupported",
-      ),
+      kernelTerminal: terminalFor("reconciliation_unsupported"),
     });
     expect((await ledger.scanActive()).map((r) => r.receipt.state)).toEqual([
       "prepared",
@@ -292,6 +287,81 @@ describe("SQLite Agent operation ledger", () => {
     expect((await ledger.getExact(active[1]))!.receipt).toEqual(
       recovered.receipt,
     );
+    await ledger.close();
+  });
+
+  test("reserves indeterminate ownership before transcript I/O and survives restart", async () => {
+    const dbPath = path();
+    const exact = identity();
+    let ledger = new SQLiteAgentOperationLedger({ dbPath });
+    await ledger.claimPrepared(exact, 1);
+    await ledger.markExecuting(exact, 2);
+    const reservation = await ledger.reserveIndeterminate(
+      exact,
+      "reconciliation_unsupported",
+      3,
+    );
+    await ledger.close();
+
+    ledger = new SQLiteAgentOperationLedger({ dbPath });
+    const reservedRecord = (await ledger.getExact(exact))!;
+    expect(reservedRecord.terminalReservation).toEqual(reservation);
+    expect(
+      await ledger.reserveIndeterminate(exact, "reconciliation_failed", 4),
+    ).toEqual(reservation);
+    await expect(ledger.settle(exact, settlement)).rejects.toBeInstanceOf(
+      AgentOperationTerminalReservedError,
+    );
+    let callbackCalls = 0;
+    let adapterCalls = 0;
+    const recovered = await reconcileExecutingOperation(
+      ledger,
+      reservedRecord,
+      {
+        reconcile: async () => {
+          adapterCalls += 1;
+          throw new Error("reserved recovery must not consult adapter");
+        },
+      },
+      async (record, owned) => {
+        callbackCalls += 1;
+        expect(owned).toEqual(reservation);
+        await expect(ledger.settle(record, settlement)).rejects.toBeInstanceOf(
+          AgentOperationTerminalReservedError,
+        );
+        return terminalFor(owned.reason);
+      },
+      4,
+    );
+    expect(adapterCalls).toBe(0);
+    expect(callbackCalls).toBe(1);
+    expect(recovered.receipt).toMatchObject({
+      state: "indeterminate",
+      errorCode: "reconciliation_unsupported",
+    });
+    expect(recovered.terminalReservation).toBeUndefined();
+    await ledger.close();
+  });
+
+  test("does not append indeterminate evidence after settlement wins terminal ownership", async () => {
+    const ledger = new SQLiteAgentOperationLedger({ dbPath: path() });
+    const exact = identity();
+    await ledger.claimPrepared(exact, 1);
+    const staleExecuting = await ledger.markExecuting(exact, 2);
+    const settled = await ledger.settle(exact, settlement);
+    let callbackCalls = 0;
+    const recovered = await reconcileExecutingOperation(
+      ledger,
+      staleExecuting,
+      undefined,
+      async () => {
+        callbackCalls += 1;
+        return terminalFor("reconciliation_unsupported");
+      },
+      4,
+    );
+    expect(callbackCalls).toBe(0);
+    expect(recovered.receipt).toEqual(settled.receipt);
     await ledger.close();
   });
 
@@ -377,13 +447,14 @@ describe("SQLite Agent operation ledger", () => {
       const exact = identity();
       await ledger.claimPrepared(exact, 1);
       await ledger.markExecuting(exact, 2);
+      const reservation = await ledger.reserveIndeterminate(exact, reason, 3);
       expect(
         (
           await ledger.markIndeterminate(
             exact,
-            reason,
+            reservation,
             3,
-            await indeterminateTerminal(undefined, reason),
+            terminalFor(reason),
           )
         ).receipt.state,
       ).toBe("indeterminate");
@@ -439,10 +510,9 @@ describe("SQLite Agent operation ledger", () => {
     await ledger.claimPrepared(identity(), 1);
     const inspection = new Database(dbPath, { readonly: true });
     const sql = inspection
-      .query<
-        { sql: string },
-        [string]
-      >("SELECT sql FROM sqlite_master WHERE name=?")
+      .query<{ sql: string }, [string]>(
+        "SELECT sql FROM sqlite_master WHERE name=?",
+      )
       .get("agent_operation_receipts")!.sql;
     const columns = inspection
       .query<{ name: string }, []>(
@@ -513,6 +583,29 @@ describe("SQLite Agent operation ledger", () => {
     ledger = new SQLiteAgentOperationLedger({ dbPath: tampered });
     await expect(ledger.scanActive()).rejects.toThrow(
       "corrupt Agent operation ledger row",
+    );
+    await ledger.close();
+
+    const reservationPath = path();
+    ledger = new SQLiteAgentOperationLedger({ dbPath: reservationPath });
+    await ledger.claimPrepared(identity(), 1);
+    await ledger.markExecuting(identity(), 2);
+    await ledger.reserveIndeterminate(
+      identity(),
+      "reconciliation_unsupported",
+      3,
+    );
+    await ledger.close();
+    const reservationTamper = new Database(reservationPath);
+    reservationTamper
+      .query(
+        "UPDATE agent_operation_receipts SET terminal_reservation_reason=?",
+      )
+      .run("reconciliation_failed");
+    reservationTamper.close();
+    ledger = new SQLiteAgentOperationLedger({ dbPath: reservationPath });
+    await expect(ledger.scanActive()).rejects.toThrow(
+      "tampered Agent operation ledger receipt",
     );
     await ledger.close();
 
