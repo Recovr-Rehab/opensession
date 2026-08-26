@@ -1,9 +1,9 @@
 # Open Session
 
 Self-hosted agent-infrastructure server: a web UI plus Slack, Linear, Plain,
-and GitHub agents, driving coding sessions through the Pi engine
-(supported model providers) in git worktrees on your own box, or in isolated
+and GitHub agents, driving coding sessions through the Pi engine in git worktrees on your own box, or in isolated
 sandboxes.
+Supports multiple Codex and Claude subscriptions and model APIs.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/readme-hero-roomy-dark.webp">
