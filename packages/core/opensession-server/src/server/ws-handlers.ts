@@ -587,7 +587,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
       const targetsRun =
         msg.type === "cancel" || msg.type === "interrupt_prompt";
       const targetRun = targetsRun
-        ? sessionKernel(commandSessionId).runState()
+        ? sessionKernel(commandSessionId).runStateProjection()
         : undefined;
       const persistedCancel =
         msg.type === "cancel"
@@ -603,10 +603,10 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               requestId,
             )
           : undefined;
-      const priorCommandPayload = durableSessionCommand(
+      const priorCommandPayload = (await durableSessionCommand(
         commandSessionId,
         requestId,
-      )?.payload as
+      ))?.payload as
         | {
             command?: string;
             targetRunId?: string | null;
@@ -665,7 +665,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             ? { result: plan.result, duplicate: true }
             : await withSessionMutationLock(commandSessionId, async () => {
           if (targetRunId !== undefined) {
-            const current = sessionKernel(commandSessionId).runState();
+            const current = sessionKernel(commandSessionId).runStateProjection();
             const currentTargetId =
               current.currentRunId ||
               (current.state === "starting" || current.state === "preparing"

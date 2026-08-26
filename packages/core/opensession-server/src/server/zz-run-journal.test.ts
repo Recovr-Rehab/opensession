@@ -9,7 +9,7 @@ import * as shared from "./runner-shared";
 import type { StreamEvent } from "./run-events";
 import { makeFakeEngine } from "./testing/fake-engine";
 import { stripContext } from "./prompt-context";
-import { sessionKernelStore } from "./session-kernel/kernel";
+import { __sessionKernelStoreForTest } from "./session-kernel/kernel";
 
 // __setActiveRunsPathForTest repoints the LIVE ACTIVE_RUNS_PATH binding, so
 // agent-runner.ts's own (already-cached, possibly earlier-imported-with-the-
@@ -233,7 +233,7 @@ describe("run journal", () => {
   it("preserves a stopped journal owned by a durable cancel effect", async () => {
     const sessionId = `durable-stop-recovery-${crypto.randomUUID()}`;
     const runKey = `rh-${crypto.randomUUID()}`;
-    const store = sessionKernelStore();
+    const store = __sessionKernelStoreForTest();
     try {
       store.applyRunEvent({ sessionId, event: "prompt" });
       store.applyRunEvent({ sessionId, event: "run_registered", runKey });
@@ -254,7 +254,7 @@ describe("run journal", () => {
         cwd: "/tmp",
         startedAt: new Date().toISOString(),
       };
-      expect(agent.durableCancelOwnsRecovery(recovery)).toBe(true);
+      expect(await agent.durableCancelOwnsRecovery(recovery)).toBe(true);
       store.settleTurnCancel({
         sessionId,
         cancelId: `stop:${runKey}`,
@@ -278,7 +278,7 @@ describe("run journal", () => {
   it("retires abnormal ownership when actor settlement wins the reverse race", async () => {
     const sessionId = `cancel-abnormal-reverse-${crypto.randomUUID()}`;
     const runKey = `rh-${crypto.randomUUID()}`;
-    const store = sessionKernelStore();
+    const store = __sessionKernelStoreForTest();
     const record: mod.ActiveRunRecord = {
       runKey,
       hostId: runKey,
@@ -312,7 +312,7 @@ describe("run journal", () => {
         cancelId: `stop:${runKey}`,
         outcome: "confirmed",
       });
-      expect(mod.journalRetireSettledCancelAbnormal(sessionId, runKey)).toBe(true);
+      expect(await mod.journalRetireSettledCancelAbnormal(sessionId, runKey)).toBe(true);
       expect(mod.activeRunRecords().some((run) => run.runKey === runKey)).toBe(false);
     } finally {
       mod.journalClear(runKey);
@@ -321,7 +321,7 @@ describe("run journal", () => {
   });
 
   it("retires confirmed interrupt abnormal ownership in both race orders", async () => {
-    const store = sessionKernelStore();
+    const store = __sessionKernelStoreForTest();
     for (const sourceFirst of [true, false]) {
       const sessionId = `interrupt-abnormal-${sourceFirst}-${crypto.randomUUID()}`;
       const runKey = `rh-${crypto.randomUUID()}`;
@@ -423,7 +423,7 @@ describe("run journal", () => {
     const sessionId = `pre-journal-terminal-${crypto.randomUUID()}`;
     const token = await agent.markSessionStarting(sessionId);
     try {
-      expect(sessionKernelStore().runState(sessionId)).toMatchObject({
+      expect(__sessionKernelStoreForTest().runState(sessionId)).toMatchObject({
         state: "starting",
         currentRunId: token,
       });
@@ -442,7 +442,7 @@ describe("run journal", () => {
     const sessionId = `preparation-winner-${crypto.randomUUID()}`;
     const firstToken = await agent.markSessionStarting(sessionId);
     const secondToken = await agent.markSessionStarting(sessionId);
-    const store = sessionKernelStore();
+    const store = __sessionKernelStoreForTest();
     try {
       expect(secondToken).not.toBe(firstToken);
       expect(agent.isAgentSessionCancelled(sessionId, secondToken)).toBe(true);
@@ -480,7 +480,7 @@ describe("run journal", () => {
       expect(rejected).not.toBe(stableToken);
       expect(agent.isAgentSessionCancelled(sessionId, rejected)).toBe(true);
       expect(agent.currentAgentRunToken(sessionId)).toBe(stableToken);
-      expect(sessionKernelStore().runState(sessionId)).toMatchObject({
+      expect(__sessionKernelStoreForTest().runState(sessionId)).toMatchObject({
         currentRunId: stableToken,
       });
     } finally {
@@ -498,7 +498,7 @@ describe("run journal", () => {
     try {
       expect(agent.isAgentSessionCancelled(sessionId, rejectedToken)).toBe(true);
       expect(agent.currentAgentRunToken(sessionId)).toBeUndefined();
-      expect(sessionKernelStore().runState(sessionId)).toMatchObject({
+      expect(__sessionKernelStoreForTest().runState(sessionId)).toMatchObject({
         state: "starting",
         currentRunId: firstToken,
       });
@@ -1560,7 +1560,7 @@ describe("restart recovery reattach", () => {
       kind: "prompt",
       startedAt: new Date().toISOString(),
     };
-    const store = sessionKernelStore();
+    const store = __sessionKernelStoreForTest();
     try {
       store.applyRunEvent({ sessionId, event: "prompt" });
       store.applyRunEvent({ sessionId, event: "run_registered", runKey: hostId });

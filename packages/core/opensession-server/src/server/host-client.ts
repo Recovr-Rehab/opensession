@@ -318,7 +318,7 @@ async function* hostedEventsWithJournal(
 ): AsyncGenerator<StreamEvent> {
   const record = hostedRunRecord(spec);
   const owner = await hostedKernelCall(spec, "initial_owner_read", () =>
-    sessionKernel(spec.osSessionId).runState(),
+    sessionKernel(spec.osSessionId).runStateProjection(),
   );
   if (
     owner.currentRunId &&
@@ -344,7 +344,7 @@ async function* hostedEventsWithJournal(
   try {
     for await (const ev of handle.events()) {
       const isCurrent = await hostedKernelCall(spec, "event_owner_read", () =>
-        sessionKernel(spec.osSessionId).isCurrentRun(record.runKey),
+        sessionKernel(spec.osSessionId).isCurrentRunProjection(record.runKey),
       );
       if (!isCurrent) {
         handle.requestCancel();
@@ -1023,7 +1023,7 @@ export class HostHandle {
 
   private acceptsSideEffectFrame(frameType: string): boolean {
     const kernel = sessionKernel(this.spec.osSessionId);
-    if (kernel.isCurrentRun(this.logicalRunId)) return true;
+    if (kernel.isCurrentRunProjection(this.logicalRunId)) return true;
     // Transcript frames are idempotent uuid-keyed upserts of history the host
     // already durably wrote (transcript-relay replay on every reattach). They
     // must survive the run SETTLING before the replay lands: a restart can
@@ -1035,7 +1035,7 @@ export class HostHandle {
     // session — that is the cross-run interleaving the fence exists for; a
     // settled session has no writer to race with.
     if (frameType === "transcript") {
-      const current = kernel.runState();
+      const current = kernel.runStateProjection();
       const ownedByAnotherLiveRun =
         ["running", "ask_blocked", "interrupted", "reattaching"].includes(
           current.state,

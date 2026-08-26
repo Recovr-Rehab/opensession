@@ -65,9 +65,11 @@ import { notifyMentions } from "../mentions";
 import { reviewTeamFor } from "../people";
 import { sendPushToUser } from "../push";
 import {
+  sessionChangesSince,
   sessionGatewayCommand,
 	sessionKernel,
-	sessionKernelStore,
+	sessionRunStateProjection,
+	sessionTombstoneState,
 	sessionProjectionOr,
 	tombstoneSessionKernel,
 } from "../session-kernel";
@@ -879,7 +881,7 @@ export async function handleSessionsRoutes(
 			const requestId = suppliedRequestId || crypto.randomUUID();
 			const actorScope = ctx.authUser?.login || actor || "anonymous";
 			const targetId = sessionIdForRequest(actorScope, requestId);
-			const duplicate = !!sessionKernel(targetId).creationState();
+			const duplicate = !!await sessionKernel(targetId).creationState();
 			const created = await getSessionControl().createSession({
 						id: targetId,
 						requestId,
@@ -1157,11 +1159,11 @@ export async function handleSessionsRoutes(
 				500,
 				Math.max(1, Number(url.searchParams.get("limit") || 200) || 200),
 			);
-			const store = sessionKernelStore();
+			const runState = sessionRunStateProjection(sessionId);
 			return Response.json({
 				sessionId,
-				changeSeq: store.runState(sessionId).changeSeq,
-				changes: store.changesSince(sessionId, after, limit),
+				changeSeq: runState.changeSeq,
+				changes: await sessionChangesSince(sessionId, after, limit),
 			});
 		}
 	}
@@ -1475,7 +1477,7 @@ export async function handleSessionsRoutes(
         session.id,
       )
     ) {
-      const target = sessionKernel(session.id).runState();
+      const target = sessionKernel(session.id).runStateProjection();
       const targetRunId =
         target.currentRunId ||
         (target.state === "starting" || target.state === "preparing"
@@ -1842,7 +1844,7 @@ export async function handleSessionsRoutes(
 				return Response.json({ error: e.message }, { status: 500 });
 			}
 		};
-		if (sessionKernelStore().isTombstoned(session.id))
+		if (await sessionTombstoneState(session.id))
 			return recoverTombstonedDeletion();
 
     const deleteRequestId = `delete:${session.id}`;
@@ -1921,7 +1923,7 @@ export async function handleSessionsRoutes(
 			// A concurrent delete can write the tombstone after the check above but
 			// before this request reaches the mailbox. Treat that race as the same
 			// idempotent recovery instead of surfacing a false failure.
-			if (sessionKernelStore().isTombstoned(session.id))
+			if (await sessionTombstoneState(session.id))
 				return recoverTombstonedDeletion();
 			throw error;
 		}

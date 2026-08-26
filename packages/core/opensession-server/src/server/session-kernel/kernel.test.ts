@@ -475,9 +475,9 @@ describe("SessionKernel", () => {
 		try {
 			await transitionRunState(id, "prompt");
 			await transitionRunState(id, "run_registered", { run_key: "run-new" });
-			const generation = sessionKernel(id).runState().generation;
+			const generation = sessionKernel(id).runStateProjection().generation;
 			await transitionRunState(id, "run_registered", { run_key: "run-old" });
-			expect(sessionKernel(id).runState()).toMatchObject({
+			expect(sessionKernel(id).runStateProjection()).toMatchObject({
 				state: "running",
 				currentRunId: "run-new",
 				generation,
@@ -508,7 +508,7 @@ describe("SessionKernel", () => {
 
 	test("persists run state and monotonic change sequence", async () => {
 		const kernel = sessionKernel("s1");
-		expect(kernel.runState().state).toBe("idle");
+		expect(kernel.runStateProjection().state).toBe("idle");
 		expect(store.setRunState({ sessionId: "a", state: "starting", event: "prompt" }).changeSeq,).toBe(1);
 		const running = store.setRunState({
       sessionId: "a",
@@ -1462,10 +1462,10 @@ describe("SessionKernel", () => {
       }),
     ]);
     const { isUserStopped, liftUserStop } = await import("../queue-state");
-    expect(isUserStopped("cancel-starting")).toBe(true);
+    expect(await isUserStopped("cancel-starting")).toBe(true);
     await liftUserStop("cancel-starting");
     expect(store.runState("cancel-starting").state).toBe("idle");
-    expect(isUserStopped("cancel-starting")).toBe(true);
+    expect(await isUserStopped("cancel-starting")).toBe(true);
     expect(store.applyRunEvent({
       sessionId: "cancel-starting",
       event: "run_registered",
@@ -1476,7 +1476,7 @@ describe("SessionKernel", () => {
       cancelId: "cancel-starting",
       outcome: "confirmed",
     });
-    expect(isUserStopped("cancel-starting")).toBe(false);
+    expect(await isUserStopped("cancel-starting")).toBe(false);
     expect(store.applyRunEvent({
       sessionId: "cancel-starting",
       event: "prompt",

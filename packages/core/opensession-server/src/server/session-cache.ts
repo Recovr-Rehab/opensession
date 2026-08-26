@@ -40,10 +40,11 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 import type { UnifiedSession, NativeSessionFile } from "./types";
 import {
   sessionDeliveryProjection,
+  sessionDeliveryProjectionCached,
   sessionGatewayCommand,
   sessionKernel,
-  sessionKernelStore,
   sessionKernelActorActive,
+  sessionRunStateProjections,
   sessionTurn,
 } from "./session-kernel";
 import { withSessionMutationLock } from "./session-mutation-lock";
@@ -143,7 +144,7 @@ export function enrichSessionRuntime(
 	// idle. Small detail updates keep the targeted accessor to avoid copying the
 	// whole projection for a single session.
 	const runStateBySession = data.length > 32
-		? new Map(sessionKernelStore().runStates().map((state) => [state.sessionId, state]))
+		? new Map(sessionRunStateProjections().map((state) => [state.sessionId, state]))
 		: undefined;
 	// Sessions driven from the web UI run in-process; surface those too
 	for (const s of data) {
@@ -336,7 +337,7 @@ export function isRunSettled(sessionId: string): boolean {
 	}
 	// Queue authority lives in the actor. Read its per-session delivery snapshot
 	// directly rather than reaching through queue-state's former global map.
-	if (sessionKernelStore().deliverySnapshot(id).queued.length > 0)
+	if (sessionDeliveryProjectionCached(id).queued.length > 0)
 		return false;
 	return true;
 }
@@ -779,7 +780,7 @@ export async function recordRunOutcome(
 		});
 	if (opts?.projectionId && opts.runId && sessionKernelActorActive()) {
 		const runGeneration =
-			opts.runGeneration ?? sessionKernel(id).runState().generation;
+			opts.runGeneration ?? sessionKernel(id).runStateProjection().generation;
 		await sessionTurn({
 			op: "prepare_outcome_projection",
 			sessionId: id,

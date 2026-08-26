@@ -11,7 +11,6 @@ import {
   type KernelActorClientCallRequest,
   type KernelActorServiceCall,
   type KernelActorServiceResponse,
-  type KernelActorSyncRequest,
 } from "./actor-protocol";
 import { isDeliveryReadRequest } from "./delivery-protocol";
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
@@ -59,10 +58,10 @@ export function startSessionKernelActorWorker(): void {
     self.postMessage(message);
   }
 
-  function syncStore(request: KernelActorSyncRequest): string | undefined {
-    const control = new Int32Array(request.control);
-    let overflowBody: string | undefined;
-    const output = new Uint8Array(request.output);
+  function executeCall(
+    request: KernelActorServiceCall["request"],
+    outputBytes: number,
+  ): { status: -1 | 1 | 2; length: number; body: string } {
     let store = host.central;
     let requestSessionId: string | undefined;
     try {
@@ -269,19 +268,8 @@ export function startSessionKernelActorWorker(): void {
         result = host.call(request.method, request.args);
       }
       const body = JSON.stringify({ ok: true, result });
-      const bytes = new TextEncoder().encode(body);
-      if (bytes.length > output.length) {
-        overflowBody = body;
-        // Large read-only snapshots retry with an exactly-sized buffer. Mutating
-        // calls are never retried by the client, so this signal cannot repeat a
-        // committed reduction.
-        Atomics.store(control, 1, bytes.length);
-        Atomics.store(control, 0, 2);
-      } else {
-        output.set(bytes);
-        Atomics.store(control, 1, bytes.length);
-        Atomics.store(control, 0, 1);
-      }
+      const length = Buffer.byteLength(body);
+      return { status: length > outputBytes ? 2 : 1, length, body };
     } catch (error) {
       let failStop = false;
       let responseCode: "actor_fatal" | "session_quarantined" | undefined;
@@ -320,64 +308,38 @@ export function startSessionKernelActorWorker(): void {
         responseCode = error.code;
         responseSessionId = error.sessionId;
       }
-      const bytes = new TextEncoder().encode(
-        JSON.stringify({
-          ok: false,
-          error: (error instanceof Error ? error.message : String(error)).slice(0, 8_000),
-          ...(responseCode ? { code: responseCode } : {}),
-          ...(responseSessionId ? { sessionId: responseSessionId } : {}),
-        }),
-      );
-      output.set(bytes.subarray(0, output.length));
-      Atomics.store(control, 1, Math.min(bytes.length, output.length));
-      Atomics.store(control, 0, -1);
+      const body = JSON.stringify({
+        ok: false,
+        error: (error instanceof Error ? error.message : String(error)).slice(0, 8_000),
+        ...(responseCode ? { code: responseCode } : {}),
+        ...(responseSessionId ? { sessionId: responseSessionId } : {}),
+      });
       if (failStop) queueMicrotask(() => self.close());
+      return { status: -1, length: Buffer.byteLength(body), body };
     }
-    Atomics.notify(control, 0);
-    return overflowBody;
   }
 
   function asyncCall(request: KernelActorClientCallRequest): void {
-    // Bounded allocation with an exactly-sized retry: most results are small,
-    // so starting at max response size would churn hundreds of MiB per call.
-    // A status-2 response is safe to replay only for a provable read. A
-    // mutation may already have committed before its encoded result overflowed.
     const retryableRead = request.t === "reduce"
       ? isReadReducer(request.command)
       : READ_METHODS.has(request.method);
     let outputBytes = 256 * 1024;
     for (;;) {
-      const control = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 2);
-      const output = new SharedArrayBuffer(outputBytes);
-      const overflowBody = syncStore(
-        { ...request, control, output } as unknown as KernelActorSyncRequest,
-      );
-      const view = new Int32Array(control);
-      const status = Atomics.load(view, 0) as -1 | 1 | 2;
-      const length = Atomics.load(view, 1);
+      const result = executeCall(request, outputBytes);
       if (
-        status === 2 &&
-        retryableRead &&
-        length > outputBytes &&
-        length <= SESSION_KERNEL_MAX_RESPONSE_BYTES
+        result.status === 2 && retryableRead &&
+        result.length > outputBytes &&
+        result.length <= SESSION_KERNEL_MAX_RESPONSE_BYTES
       ) {
-        outputBytes = length;
+        outputBytes = result.length;
         continue;
       }
       post({
         t: "call_result",
         rpcId: request.rpcId,
-        status: status === 2 && !retryableRead ? 1 : status,
-        length,
-        ...(status === 2 && !retryableRead
-          ? { body: overflowBody }
-          : status === 2
-            ? {}
-            : {
-                body: new TextDecoder().decode(
-                  new Uint8Array(output, 0, Math.min(length, output.byteLength)),
-                ),
-              }),
+        status: result.status === 2 && !retryableRead ? 1 : result.status,
+        length: result.length,
+        ...(result.status === 2 && retryableRead ? {} : { body: result.body }),
       });
       return;
     }
@@ -386,45 +348,24 @@ export function startSessionKernelActorWorker(): void {
   function serviceCall(request: KernelActorServiceCall): void {
     const outputBytes = Math.floor(request.outputBytes);
     if (outputBytes <= 0 || outputBytes > SESSION_KERNEL_MAX_RESPONSE_BYTES) {
-      post({
-        t: "error",
-        rpcId: request.rpcId,
-        error: "Invalid kernel actor response bound",
-      });
+      post({ t: "error", rpcId: request.rpcId, error: "Invalid kernel actor response bound" });
       return;
     }
-    const control = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 2);
-    const output = new SharedArrayBuffer(outputBytes);
     const retryableRead = request.request.t === "reduce"
       ? isReadReducer(request.request.command)
       : READ_METHODS.has(request.request.method);
-    const overflowBody = syncStore(
-      { ...request.request, control, output } as KernelActorSyncRequest,
-    );
-    const view = new Int32Array(control);
-    const status = Atomics.load(view, 0) as -1 | 1 | 2;
-    const length = Atomics.load(view, 1);
+    const result = executeCall(request.request, outputBytes);
     post({
       t: "call_result",
       rpcId: request.rpcId,
-      status: status === 2 && !retryableRead ? 1 : status,
-      length,
-      ...(status === 2 && !retryableRead
-        ? { body: overflowBody }
-        : status === 2
-          ? {}
-        : {
-            body: new TextDecoder().decode(
-              new Uint8Array(output, 0, Math.min(length, outputBytes)),
-            ),
-          }),
+      status: result.status === 2 && !retryableRead ? 1 : result.status,
+      length: result.length,
+      ...(result.status === 2 && retryableRead ? {} : { body: result.body }),
     });
   }
 
   self.onmessage = (
-    event: MessageEvent<
-      KernelActorAsyncRequest | KernelActorSyncRequest | KernelActorServiceCall
-    >,
+    event: MessageEvent<KernelActorAsyncRequest | KernelActorClientCallRequest | KernelActorServiceCall>,
   ) => {
     const request = event.data;
     if (request.t === "call") {
@@ -432,8 +373,7 @@ export function startSessionKernelActorWorker(): void {
       return;
     }
     if (request.t === "store" || request.t === "reduce") {
-      if ("control" in request) syncStore(request);
-      else asyncCall(request);
+      asyncCall(request);
       return;
     }
     if (request.t === "hello") {

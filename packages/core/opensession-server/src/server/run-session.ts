@@ -182,8 +182,8 @@ import {
 	sessionIsQuarantined,
   sessionDelivery,
 	sessionKernel,
-	sessionKernelStore,
   sessionTurn,
+  sessionTurnSnapshot,
 } from "./session-kernel";
 
 const interruptExecutorGlobal = globalThis as typeof globalThis & {
@@ -342,7 +342,7 @@ export async function requestTurnCancel(
   session: UnifiedSession,
   request: TurnCancelRequest,
 ): Promise<{ requeued: number }> {
-  const existingCancel = sessionKernelStore().turnSnapshot(sessionId).cancel;
+  const existingCancel = (await sessionTurnSnapshot(sessionId)).cancel;
   const exactReplay =
     existingCancel?.cancelId === request.cancelId &&
     existingCancel.runId === request.expectedRunId &&
@@ -383,7 +383,7 @@ export async function requestTurnCancel(
 
 export async function settleCreationOpeningForStop(sessionId: string): Promise<boolean> {
 	const kernel = sessionKernel(sessionId);
-	const creation = kernel.creationState();
+	const creation = await kernel.creationState();
 	const effectId = creation?.currentEffectId;
 	if (
 		creation?.state !== "opening_dispatched" ||
@@ -400,8 +400,8 @@ export async function settleCreationOpeningForStop(sessionId: string): Promise<b
 	return true;
 }
 
-export function creationOwnsPrompt(sessionId: string, promptEntryId: string): boolean {
-	const creation = sessionKernel(sessionId).creationState();
+export async function creationOwnsPrompt(sessionId: string, promptEntryId: string): Promise<boolean> {
+	const creation = await sessionKernel(sessionId).creationState();
 	return (
 		creation?.state === "opening_dispatched" &&
 		creation.currentEffectId === `opening:${promptEntryId}`
@@ -415,7 +415,7 @@ export async function settleRecoveredCreationOpening(
 	failure?: string,
 	runId?: string,
 ): Promise<boolean> {
-	const creation = sessionKernel(sessionId).creationState();
+	const creation = await sessionKernel(sessionId).creationState();
 	const effectId = `opening:${promptEntryId}`;
 	if (
 		!creation ||
@@ -423,7 +423,7 @@ export async function settleRecoveredCreationOpening(
 		creation.state !== "opening_dispatched"
 	)
 		return false;
-	const cancel = sessionKernelStore().turnSnapshot(sessionId).cancel;
+	const cancel = (await sessionTurnSnapshot(sessionId)).cancel;
 	if (runId && cancel?.runId === runId) {
 		await settleCreationCancelled(
 			sessionId,
@@ -458,7 +458,7 @@ setJournalSetListener(async (record) => {
 	if (
 		record.osSessionId &&
 		record.promptEntryId &&
-		creationOwnsPrompt(record.osSessionId, record.promptEntryId)
+		await creationOwnsPrompt(record.osSessionId, record.promptEntryId)
 	)
 		return;
 	await acknowledgePromptDispatch(record.osSessionId, record.promptEntryId);
@@ -759,18 +759,30 @@ export async function restorePromptQueues(resumedSessionIds: Set<string>): Promi
 		},
 	});
 	const dispatchEntries = await sessionDelivery({ op: "entries", slot: "dispatch" });
-	for (const [sessionId, value] of dispatchEntries) {
-		const dispatch = value as PromptDispatch;
-		if (dispatch.kind !== "create") continue;
-		void import("./session-create")
-			.then((module) => module.resumePlannedCreate(sessionId))
-			.then((resumed) => {
-				if (!resumed)
-					console.error(`[create] No durable plan could resume ${sessionId}`);
-			})
-			.catch((error) =>
-				console.error(`[create] Failed to resume ${sessionId}:`, error),
-			);
+	const restoredCreates = [...new Set(dispatchEntries
+		.filter(([, value]) => (value as PromptDispatch).kind === "create")
+		.map(([sessionId]) => sessionId))];
+	if (restoredCreates.length) {
+		void import("./session-create").then(async (module) => {
+			let next = 0;
+			const worker = async () => {
+				while (next < restoredCreates.length) {
+					const sessionId = restoredCreates[next++]!;
+					try {
+						if (!await module.resumePlannedCreate(sessionId))
+							console.error(`[create] No durable plan could resume ${sessionId}`);
+					} catch (error) {
+						console.error(`[create] Failed to resume ${sessionId}:`, error);
+					}
+				}
+			};
+			await Promise.all(Array.from(
+				{ length: Math.min(4, restoredCreates.length) },
+				worker,
+			));
+		}).catch((error) =>
+			console.error("[create] Restored-create recovery pool failed:", error),
+		);
 	}
 	for (const sessionId of restored.queuedSessionIds) {
 		watchExternalRunAndDrain(sessionId);
@@ -1192,7 +1204,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 	while ((queue = promptQueues.get(sessionId)) && queue.length > 0) {
 		// The user pressed stop: leave the queue visible-but-parked until their
 		// next explicit action instead of restarting the run they just stopped.
-    if (isUserStopped(sessionId)) return;
+    if (await isUserStopped(sessionId)) return;
 		// Graceful shutdown: park the queue instead of starting a turn. A turn
 		// started after the shutdown snapshot races the drain deadline (an
 		// in-process one is SIGKILLed there and redone from the journal), and
@@ -1317,39 +1329,75 @@ export async function runSessionPromptAndDrain(
 	await drainQueue(sessionId);
 }
 
-// Messages queued while a run we didn't start is in flight (Slack runs, CLI
-// sessions in tmux, automations) have no drain loop of their own — watch the
-// busy state and deliver the queue once the external run finishes.
-const drainWatchers: Set<string> = (g.__drainWatchers ??= new Set());
+// Messages queued while a run we did not start is in flight have no drain
+// loop of their own. Each session gets one self-scheduling poll, never an
+// overlapping async interval.
+type DrainWatcher = { timer?: ReturnType<typeof setTimeout>; failures: number };
+const drainWatchers: Map<string, DrainWatcher> = (g.__asyncDrainWatchers ??= new Map());
+
+function drainWatcherDelay(failures: number): number {
+	const base = Math.min(60_000, 3_000 * 2 ** Math.min(failures, 5));
+	return Math.round(base * (0.8 + Math.random() * 0.4));
+}
+
 export function watchExternalRunAndDrain(sessionId: string): void {
 	if (drainWatchers.has(sessionId)) return;
-	drainWatchers.add(sessionId);
-	const timer = setInterval(async () => {
-		const session = findSession(sessionId);
-		if (!session || !(promptQueues.get(sessionId) || []).length) {
-			clearInterval(timer);
-			drainWatchers.delete(sessionId);
-			return;
-		}
-		if (
-			isAgentSessionBusy(
+	const watcher: DrainWatcher = { failures: 0 };
+	drainWatchers.set(sessionId, watcher);
+
+	const stop = () => {
+		if (watcher.timer) clearTimeout(watcher.timer);
+		if (drainWatchers.get(sessionId) === watcher) drainWatchers.delete(sessionId);
+	};
+	const schedule = (delayMs: number) => {
+		watcher.timer = setTimeout(() => {
+			void tick().catch((error) => {
+				// tick owns every fallible operation. This terminal observer is a
+				// final process-safety fence and always preserves the durable queue.
+				console.error(`[queue] Drain watcher crashed for ${sessionId}:`, error);
+				watcher.failures += 1;
+				schedule(drainWatcherDelay(watcher.failures));
+			});
+		}, delayMs);
+		watcher.timer.unref?.();
+	};
+	const tick = async (): Promise<void> => {
+		try {
+			const session = findSession(sessionId);
+			if (!session) {
+				stop();
+				return;
+			}
+			const delivery = await sessionDelivery({ op: "snapshot", sessionId });
+			if (!delivery.queued.length) {
+				stop();
+				return;
+			}
+			if (isAgentSessionBusy(
 				session.claudeSessionId,
 				session.codexThreadId,
 				session.id,
-			)
-		)
-			return;
-		clearInterval(timer);
-		drainWatchers.delete(sessionId);
-		try {
+			)) {
+				watcher.failures = 0;
+				schedule(drainWatcherDelay(0));
+				return;
+			}
 			await drainQueue(sessionId);
-		} catch (e) {
+			watcher.failures = 0;
+			const remaining = await sessionDelivery({ op: "snapshot", sessionId });
+			if (remaining.queued.length) schedule(drainWatcherDelay(0));
+			else stop();
+		} catch (error) {
+			watcher.failures += 1;
 			console.error(
-				`[queue] Drain after external run failed for ${sessionId}:`,
-				e,
+				`[queue] Drain after external run failed for ${sessionId}; retrying:`,
+				error,
 			);
+			schedule(drainWatcherDelay(watcher.failures));
 		}
-	}, 3000);
+	};
+
+	schedule(drainWatcherDelay(0));
 }
 
 /**
@@ -1382,7 +1430,7 @@ export async function abortTurnAndDrain(
 	// The effect retries against the fenced run generation after a crash, while
 	// the queue anchor prevents a stale result from crossing into later work.
   const dispatchId =
-    sessionKernel(sessionId).runState().currentRunId ||
+    sessionKernel(sessionId).runStateProjection().currentRunId ||
     currentAgentRunToken(sessionId);
   if (!dispatchId) return false;
   await preparePromptInterrupt(sessionId, interruptAnchorId, dispatchId, soloId);
@@ -1849,7 +1897,7 @@ export async function maybeQueueAutoContinue(opts: {
 		if (
 			session.source === "opensession" &&
 			!session.automation &&
-      !isUserStopped(sessionId)
+      !await isUserStopped(sessionId)
 		) {
 			const trailing = trailingUserTexts(session).filter(
 				(t) =>
@@ -1920,7 +1968,7 @@ export async function maybeQueueAutoContinue(opts: {
 	if (runFailure) return suppressed("run_failure");
 	if (session.source !== "opensession") return suppressed(`source_${session.source}`);
 	if (session.automation) return suppressed("automation_session");
-  if (isUserStopped(sessionId)) return suppressed("user_stop");
+  if (await isUserStopped(sessionId)) return suppressed("user_stop");
 	if (autoContinueNudged.has(sessionId)) return suppressed("already_nudged");
 	if (!(announcesNextAction(assistantText) || endedOnFabricatedTranscript)) return false;
 	autoContinueNudged.add(sessionId);
@@ -2504,7 +2552,7 @@ async function runSessionPromptInner(
 			startToken
 				? {
 						runId: startToken,
-						runGeneration: sessionKernel(session.id).runState().generation,
+						runGeneration: sessionKernel(session.id).runStateProjection().generation,
 						projectionId: `outcome:${startToken}`,
 					}
 				: undefined,
@@ -3008,7 +3056,7 @@ async function runSessionPromptInner(
 		...(startToken
 			? {
 					runId: startToken,
-					runGeneration: sessionKernel(session.id).runState().generation,
+					runGeneration: sessionKernel(session.id).runStateProjection().generation,
 					projectionId: `outcome:${startToken}`,
 				}
 			: {}),

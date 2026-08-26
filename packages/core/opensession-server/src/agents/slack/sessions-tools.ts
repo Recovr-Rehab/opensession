@@ -722,7 +722,7 @@ export function createSessionsMcpServer(
         async () => {
           const sessionId = ctx.currentSessionId;
           if (!sessionId) return text("This run has no Open Session id.");
-          const wait = getAgentWait(sessionId);
+          const wait = await getAgentWait(sessionId);
           if (!wait) return text("No background wait is registered for this session.");
           if (wait.kind === "timer")
             return text(`Timer wait \`${wait.id}\` wakes at ${new Date(wait.dueAt).toISOString()}.`);

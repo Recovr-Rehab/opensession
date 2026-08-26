@@ -20,6 +20,7 @@ import {
   startSessionKernelService,
 } from "./actor-service";
 import { sessionKernelSessionDbPath } from "./store";
+import { SessionKernelActorClient } from "./actor-client";
 
 const token = "test-session-kernel-token";
 const stateDir = mkdtempSync(join(tmpdir(), "opensession-kernel-service-"));
@@ -111,6 +112,41 @@ describe("session kernel actor service", () => {
       });
     } finally {
       worker.terminate();
+      if (previousToken === undefined)
+        delete process.env.OPENSESSION_SESSION_KERNEL_TOKEN;
+      else process.env.OPENSESSION_SESSION_KERNEL_TOKEN = previousToken;
+      if (previousUrl === undefined)
+        delete process.env.OPENSESSION_SESSION_KERNEL_URL;
+      else process.env.OPENSESSION_SESSION_KERNEL_URL = previousUrl;
+    }
+  });
+
+  test("reconnects and re-handshakes after the service incarnation changes", async () => {
+    const previousToken = process.env.OPENSESSION_SESSION_KERNEL_TOKEN;
+    const previousUrl = process.env.OPENSESSION_SESSION_KERNEL_URL;
+    process.env.OPENSESSION_SESSION_KERNEL_TOKEN = token;
+    process.env.OPENSESSION_SESSION_KERNEL_URL = service.url;
+    const worker = new Worker(
+      new URL("../../session-kernel-transport-worker.ts", import.meta.url),
+      { type: "module" },
+    );
+    const client = new SessionKernelActorClient(worker);
+    try {
+      await client.hello();
+      const port = Number(new URL(service.url).port);
+      service.stop();
+      service = await startSessionKernelService({
+        port,
+        token,
+        responseTimeoutMs: 700,
+        databasePath: join(stateDir, "sessions", "session-kernel.sqlite"),
+      });
+      await expect(client.callAsync(
+        { t: "store", method: "creationState", args: ["after-restart"] },
+        "creationState",
+      )).resolves.toBeUndefined();
+    } finally {
+      client.terminate();
       if (previousToken === undefined)
         delete process.env.OPENSESSION_SESSION_KERNEL_TOKEN;
       else process.env.OPENSESSION_SESSION_KERNEL_TOKEN = previousToken;
@@ -275,6 +311,10 @@ describe("session kernel actor service", () => {
       t: "hello",
       rpcId: "version-handshake",
       version: SESSION_KERNEL_ACTOR_VERSION,
+    });
+    expect(await rpc({ t: "stats", rpcId: "fenced-stats" })).toMatchObject({
+      t: "stats_result",
+      serviceEpoch,
     });
     for (const envelope of [
       {

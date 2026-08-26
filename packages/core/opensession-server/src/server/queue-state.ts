@@ -30,9 +30,9 @@ import {
 	sessionDelivery,
 	sessionDeliveryMigrationComplete,
   sessionKernel,
-	sessionKernelStore,
 	sessionQuarantineSnapshot,
   sessionTurn,
+  sessionTurnSnapshot,
 } from "./session-kernel";
 import type { DurableSteerTarget } from "./session-kernel/store";
 
@@ -235,11 +235,11 @@ export const stoppedSessions = new EphemeralSessionSet();
 
 /** Durable Stop ownership survives a gateway restart until an explicit prompt
  * advances the actor run state out of `stopped`. */
-export function isUserStopped(sessionId: string): boolean {
-  const cancel = sessionKernelStore().turnSnapshot(sessionId).cancel;
+export async function isUserStopped(sessionId: string): Promise<boolean> {
+  const cancel = (await sessionTurnSnapshot(sessionId)).cancel;
   return (
     stoppedSessions.has(sessionId) ||
-    sessionKernel(sessionId).runState().state === "stopped" ||
+    sessionKernel(sessionId).runStateProjection().state === "stopped" ||
     cancel?.phase === "prepared" ||
     cancel?.phase === "executing"
   );
@@ -255,7 +255,7 @@ export function isUserStopped(sessionId: string): boolean {
  */
 export async function liftUserStop(sessionId: string): Promise<void> {
   stoppedSessions.delete(sessionId);
-  if (sessionKernel(sessionId).runState().state === "stopped")
+  if (sessionKernel(sessionId).runStateProjection().state === "stopped")
     // Intake only releases the durable Stop latch. The later physical run
     // reservation owns `prompt` -> `starting` and supplies its run token.
     // Advancing to `starting` here makes the intake busy-check observe its own
@@ -438,9 +438,9 @@ export async function hydratePersistedQueueState(storePath = QUEUE_STORE): Promi
 export async function restorePersistedQueueState(options: {
 	storePath?: string;
 	sessionExists: (sessionId: string) => boolean;
-	sessionQuarantined?: (sessionId: string) => boolean;
+	sessionQuarantined?: (sessionId: string) => boolean | Promise<boolean>;
 	journalOwnsPrompt: (sessionId: string, promptEntryId: string) => boolean;
-	creationOwnsPrompt?: (sessionId: string, promptEntryId: string) => boolean;
+	creationOwnsPrompt?: (sessionId: string, promptEntryId: string) => boolean | Promise<boolean>;
 	runOwnsSteers: (sessionId: string) => boolean;
 	deliveredUserTexts: (sessionId: string) => string[];
 	effects?: boolean;
@@ -490,12 +490,14 @@ export async function restorePersistedQueueState(options: {
 		const quarantined = new Set(
 			(await Promise.all(
 				[...actorSessionIds].map(async (sessionId) =>
-					(await sessionQuarantineSnapshot(sessionId)) ? sessionId : undefined,
+					(await sessionQuarantineSnapshot(sessionId)) ||
+					(await options.sessionQuarantined?.(sessionId))
+						? sessionId
+						: undefined,
 				),
 			)).filter((sessionId): sessionId is string => !!sessionId),
 		);
-		const restorable = (sessionId: string) =>
-			!quarantined.has(sessionId) && !options.sessionQuarantined?.(sessionId);
+		const restorable = (sessionId: string) => !quarantined.has(sessionId);
 		for (const sessionId of Object.keys(data.queued || {})) {
 			if (!restorable(sessionId)) continue;
 			if (!options.sessionExists(sessionId)) await promptQueues.delete(sessionId);
@@ -504,7 +506,7 @@ export async function restorePersistedQueueState(options: {
 			if (!restorable(sessionId)) continue;
 			const creationOwned =
 				dispatch.kind === "create" &&
-				(options.creationOwnsPrompt?.(sessionId, dispatch.promptEntryId) ||
+				((await options.creationOwnsPrompt?.(sessionId, dispatch.promptEntryId)) ||
 					!options.journalOwnsPrompt(sessionId, dispatch.promptEntryId));
 			// Creation dispatches intentionally precede the session file. The actor
 			// opening plan and effect remain their recovery authority in this window.
@@ -579,7 +581,7 @@ export async function restorePersistedQueueState(options: {
 		if (
 			dispatch?.kind === "create" &&
 			dispatch.promptEntryId &&
-			(options.creationOwnsPrompt?.(sessionId, dispatch.promptEntryId) ||
+			((await options.creationOwnsPrompt?.(sessionId, dispatch.promptEntryId)) ||
 				!options.journalOwnsPrompt(sessionId, dispatch.promptEntryId))
 		) {
 			const createDispatch: PromptDispatch =

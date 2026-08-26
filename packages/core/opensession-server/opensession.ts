@@ -792,7 +792,7 @@ if (!g.__opensessionBooted) {
               ...(recoveredRun?.runKey
                 ? {
                     runId: recoveredRun.runKey,
-                    runGeneration: sessionKernel(bksSessionId).runState().generation,
+                    runGeneration: sessionKernel(bksSessionId).runStateProjection().generation,
                     projectionId: `outcome:${recoveredRun.runKey}`,
                   }
                 : {}),

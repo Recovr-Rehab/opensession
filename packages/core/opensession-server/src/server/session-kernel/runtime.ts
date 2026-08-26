@@ -4,9 +4,11 @@ import {
 	sessionCoreAsync,
 	sessionKernel,
 	sessionKernelRuntimeWork,
-	sessionKernelStore,
 	maintainSessionKernel,
+	sessionIsQuarantined,
+	sessionRunStateProjections,
 	sessionTimer,
+	sessionTimerSnapshot,
 } from "./kernel";
 import type { DurableOutboxItem, DurableTimer } from "./store";
 import {
@@ -174,7 +176,7 @@ export async function fireStoredSessionTimer(
 	sessionId: string,
 	timerId: string,
 ): Promise<boolean> {
-	const timer = sessionKernelStore().timer(sessionId, timerId);
+	const timer = await sessionTimerSnapshot(sessionId, timerId);
 	return timer ? fireSessionTimer(timer) : false;
 }
 
@@ -317,7 +319,8 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				maintenanceNow + MAINTENANCE_CONTINUATION_DELAY_MS;
 			runtime.maintenancePending = await maintainSessionKernel();
 			if (maintenanceSweepDue) {
-				pruneCreatePlans(sessionKernelStore());
+				// Legacy create-plan files are forensic evidence. Their asynchronous
+				// receipt sweep runs outside the gateway/kernel compatibility store.
 				runtime.lastCompactAt = maintenanceNow;
 			}
 			if (!runtime.maintenancePending)
@@ -369,11 +372,11 @@ export async function reconcileSessionKernelOwnership(
 		"reattaching",
 	]);
 	const settled: string[] = [];
-	for (const state of sessionKernelStore().runStates()) {
+	for (const state of sessionRunStateProjections()) {
 		if (
 			!unsettled.has(state.state) ||
 			ownedSessionIds.has(state.sessionId) ||
-			sessionKernelStore().quarantinedSession(state.sessionId)
+			await sessionIsQuarantined(state.sessionId)
 		)
 			continue;
 		await sessionKernel(state.sessionId).applyRunEvent({

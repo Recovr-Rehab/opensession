@@ -78,7 +78,10 @@ export type CreationOpeningIntent = {
 };
 
 type CreationIntentKernel = {
-  creationState: ReturnType<typeof sessionKernel>["creationState"];
+  creationState: () =>
+    | DurableCreationState
+    | undefined
+    | Promise<DurableCreationState | undefined>;
   applyCreationEvent: (
     input: Parameters<ReturnType<typeof sessionKernel>["applyCreationEvent"]>[0],
   ) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
@@ -126,7 +129,7 @@ export async function ensureCreationPlanned(
   identity: string,
   kernel: CreationIntentKernel = sessionKernel(sessionId),
 ): Promise<DurableCreationState> {
-  const existing = kernel.creationState();
+  const existing = await kernel.creationState();
   if (existing) {
     assertIdentity(existing, identity);
     return existing;
@@ -164,7 +167,7 @@ export async function settleCreationCancelled(
   kernel: CreationIntentKernel = sessionKernel(sessionId),
   effectId?: string,
 ): Promise<DurableCreationState> {
-  const existing = kernel.creationState();
+  const existing = await kernel.creationState();
   if (existing?.identity !== undefined && existing.identity !== identity)
     throw new Error("Create request identity crossed durable session ownership");
   // Terminal states are idempotent, mirroring settleCreationSucceeded/
@@ -197,7 +200,7 @@ export async function settleCreationFailed(
   kernel: CreationIntentKernel = sessionKernel(sessionId),
   effectId?: string,
 ): Promise<DurableCreationState> {
-  const existing = kernel.creationState();
+  const existing = await kernel.creationState();
   if (existing?.identity !== undefined && existing.identity !== identity)
     throw new Error("Create request identity crossed durable session ownership");
   if (existing?.state === "failed" || existing?.state === "cancelled")
@@ -261,7 +264,7 @@ export async function requestCreationAttachment(
         `Creation attachment effect ${effectId} remains durably pending`,
       );
     await Bun.sleep(options.pollMs ?? 25);
-    const current = kernel.creationState();
+    const current = await kernel.creationState();
     if (!current)
       throw new Error("Creation state disappeared while attachment was pending");
     assertIdentity(current, input.identity);
@@ -290,7 +293,7 @@ export async function requestCreationOpening(
         `Creation effect ${state.currentEffectId} must settle before ${effectId}`,
       );
     await Bun.sleep(options.pollMs ?? 25);
-    const current = kernel.creationState();
+    const current = await kernel.creationState();
     if (!current)
       throw new Error("Creation state disappeared before opening dispatch");
     if (current.identity !== input.identity)
@@ -350,7 +353,7 @@ export async function requestCreationOpening(
     if (Date.now() >= deadline)
       throw new Error(`Creation opening effect ${effectId} remains durably pending`);
     await Bun.sleep(options.pollMs ?? 25);
-    const current = kernel.creationState();
+    const current = await kernel.creationState();
     if (!current)
       throw new Error("Creation state disappeared while opening was pending");
     if (current.identity !== input.identity)
@@ -408,7 +411,7 @@ export async function requestCreationWorkspace(
         `Creation workspace effect ${effectId} remains durably pending`,
       );
     await Bun.sleep(options.pollMs ?? 25);
-    const current = kernel.creationState();
+    const current = await kernel.creationState();
     if (!current)
       throw new Error("Creation state disappeared while workspace work was pending");
     assertIdentity(current, input.identity);
@@ -463,7 +466,7 @@ export async function requestCreationBranch(
     if (Date.now() >= deadline)
       throw new Error(`Creation branch effect ${effectId} remains durably pending`);
     await Bun.sleep(options.pollMs ?? 25);
-    const current = kernel.creationState();
+    const current = await kernel.creationState();
     if (!current)
       throw new Error("Creation state disappeared while branch work was pending");
     assertIdentity(current, input.identity);
@@ -515,7 +518,7 @@ export async function requestCreationCredential(
         `Creation credential effect ${effectId} remains durably pending`,
       );
     await Bun.sleep(options.pollMs ?? 25);
-    const current = kernel.creationState();
+    const current = await kernel.creationState();
     if (!current)
       throw new Error(
         "Creation state disappeared while credential work was pending",
@@ -577,7 +580,7 @@ export async function requestCreationSandbox(
         `Creation sandbox effect ${effectId} remains durably pending`,
       );
     await Bun.sleep(options.pollMs ?? 25);
-    const current = kernel.creationState();
+    const current = await kernel.creationState();
     if (!current)
       throw new Error("Creation state disappeared while sandbox work was pending");
     assertIdentity(current, input.identity);

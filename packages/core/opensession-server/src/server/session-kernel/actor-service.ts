@@ -709,10 +709,7 @@ export async function startSessionKernelService(
         // Supervision issuer fields are never accepted from or rewritten for the
         // gateway. A future trusted actor construction injects the issuer out of band.
         const response = await actorRequest(envelope.request);
-        const fencedResponse = response.t === "ready"
-          ? { ...response, serviceEpoch }
-          : response;
-        const body = JSON.stringify(fencedResponse);
+        const body = JSON.stringify({ ...response, serviceEpoch });
         if (Buffer.byteLength(body) > SESSION_KERNEL_MAX_RESPONSE_BYTES + 1024)
           return json({ error: "Response is too large" }, { status: 507 });
         return new Response(body, {

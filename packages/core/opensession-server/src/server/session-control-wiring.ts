@@ -543,7 +543,7 @@ registerSessionControl({
 		const createIdentity = new Bun.CryptoHasher("sha256")
 			.update(canonicalCommandPayload(ownedInput))
 			.digest("hex");
-		const durableCreation = sessionKernel(bksId).creationState();
+		const durableCreation = await sessionKernel(bksId).creationState();
 		if (durableCreation && durableCreation.identity !== createIdentity)
 			throw new Error("Create request identity crossed durable session ownership");
 		let completedCreate = findSession(requestedId);
@@ -1141,6 +1141,7 @@ ${createMentionsNote}`;
 		// Run in the background; watchers (web UI) see the live stream, the same
 		// as a UI-created session. The tool returns once the session file exists
 		// (the announce), while engine startup continues behind it.
+		const openingCreationState = await sessionKernel(bksId).creationState();
 		return await new Promise<{ id: string; createdBy: string; createdAt: string }>(
 			(resolve, reject) => {
 				const opening = runOpeningCreateOnce(spec, {
@@ -1162,7 +1163,7 @@ ${createMentionsNote}`;
 						createdAt:
 							existing?.createdAt ||
 							new Date(
-								sessionKernel(bksId).creationState()?.updatedAt ?? Date.now(),
+								openingCreationState?.updatedAt ?? Date.now(),
 							).toISOString(),
 					});
 					return;

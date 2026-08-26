@@ -57,7 +57,7 @@ export type KernelActorServiceCall = {
   outputBytes: number;
 };
 
-export type KernelActorServiceResponse =
+export type KernelActorServiceResponse = (
   | KernelActorAsyncResponse
   | {
       t: "call_result";
@@ -65,7 +65,8 @@ export type KernelActorServiceResponse =
       status: -1 | 1 | 2;
       length: number;
       body?: string;
-    };
+    }
+) & { serviceEpoch: string };
 
 export type KernelActorClientRequest =
   KernelActorAsyncRequest | KernelActorClientCallRequest;
@@ -80,15 +81,6 @@ export type KernelActorTransportEnvelope = {
   serviceEpoch?: string;
   request: KernelActorAsyncRequest | KernelActorServiceCall;
 };
-
-type SyncBuffers = {
-  control: SharedArrayBuffer;
-  output: SharedArrayBuffer;
-};
-
-export type KernelActorSyncRequest =
-  | ({ t: "store"; method: string; args: unknown[] } & SyncBuffers)
-  | ({ t: "reduce"; command: SessionActorReducerCommand } & SyncBuffers);
 
 export type KernelActorRunEventResult = RunEventDecisionResult;
 

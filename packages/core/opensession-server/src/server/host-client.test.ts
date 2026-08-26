@@ -20,7 +20,7 @@ import { transcriptLineUser } from "./transcript-persistence";
 import {
   SessionKernelStore,
   __setSessionKernelStoreForTest,
-  sessionKernelStore,
+  __sessionKernelStoreForTest,
 } from "./session-kernel";
 import { hostRunBusy } from "./host-registry";
 import {
@@ -32,7 +32,7 @@ import {
 const roots: string[] = [];
 
 function registerTestRun(sessionId: string, runId: string): void {
-  const store = sessionKernelStore();
+  const store = __sessionKernelStoreForTest();
   const prior = store.runState(sessionId);
   store.setRunState({
     sessionId,
