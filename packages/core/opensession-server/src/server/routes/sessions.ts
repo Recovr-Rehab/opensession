@@ -1755,7 +1755,8 @@ export async function handleSessionsRoutes(
 			const session = await findSessionAsync(sessionId);
 			if (!session)
 				return Response.json({ error: "Session not found" }, { status: 404 });
-			return Response.json(enrichSession(session), {
+			const signals = await sessionListRuntimeSignals();
+			return Response.json(enrichSession(session, signals), {
 				headers: { "Cache-Control": "private, no-cache" },
 			});
 		}

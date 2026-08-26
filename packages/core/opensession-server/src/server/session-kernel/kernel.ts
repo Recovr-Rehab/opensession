@@ -309,6 +309,46 @@ export async function sessionDeliveryProjection(
   return sessionDelivery({ op: "snapshot", sessionId });
 }
 
+async function sessionStoreAsync<TResult>(
+	method: string,
+	args: unknown[] = [],
+	large = false,
+): Promise<TResult> {
+	if (state.actor)
+		return state.actor.callAsync<TResult>(
+			{ t: "store", method, args },
+			method,
+			large,
+		);
+	const store = sessionKernelStore() as unknown as Record<
+		string,
+		(...values: unknown[]) => TResult
+	>;
+	return store[method](...args);
+}
+
+export function sessionAskMigrationComplete(): Promise<boolean> {
+	return sessionStoreAsync("askMigrationComplete");
+}
+
+export function markSessionAskMigrationComplete(): Promise<void> {
+	return sessionStoreAsync("markAskMigrationComplete");
+}
+
+export function sessionDeliveryMigrationComplete(): Promise<boolean> {
+	return sessionStoreAsync("deliveryMigrationComplete");
+}
+
+export function markSessionDeliveryMigrationComplete(): Promise<void> {
+	return sessionStoreAsync("markDeliveryMigrationComplete");
+}
+
+export function sessionQuarantineSnapshot(
+	sessionId: string,
+): Promise<unknown> {
+	return sessionStoreAsync("quarantinedSession", [sessionId]);
+}
+
 export function sessionKernelActorActive(): boolean {
   return !!state.actor;
 }

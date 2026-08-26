@@ -18,18 +18,18 @@
 import { AUTO_CONTINUE_USER } from "./auto-continue";
 import { personaName } from "./config";
 import { currentAgentRunToken, isAgentSessionBusy } from "./agent-runner";
-import { pendingAskAwaitingAnswer, pendingAskAwaitingAnswerSync, pendingAsks } from "./asks";
+import { pendingAskAwaitingAnswer, pendingAsks, type PendingAsk } from "./asks";
 import { relinkAskThreads } from "./human-asks";
 import { SESSION_EFFORTS, type SessionEffort, providerFor, resolveModel } from "./models";
 import { configuredInteractiveDefaultModel } from "./model-catalog";
-import { deliveryQueueState, durableQueueItem, liftUserStop, promptQueues } from "./queue-state";
+import { deliveryQueueState, durableQueueItem, liftUserStop } from "./queue-state";
 import { prepareAndSteerQueuedPrompt } from "./queued-steer";
 import { drainQueue, enqueuePrompt, requestTurnCancel, runSessionPrompt, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
 import { creationAttachmentPath, parseImageDataUrls, prepareCreationAttachmentSources, withUploadsNote } from "./uploads";
 import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
 import { resolveInteractiveSandbox } from "./sandbox/defaults";
-import { findSession, getCachedSessions, invalidateSessionsCache, touchNativeSession } from "./session-cache";
+import { findSession, getCachedSessions, getCachedSessionsAsync, invalidateSessionsCache, touchNativeSession } from "./session-cache";
 import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
 import {
 	getSessionControl,
@@ -79,14 +79,15 @@ import { existsSync, watch } from "fs";
 import { branchNameFromPrompt } from "./suggest-branch";
 
 /** Derive the at-a-glance state + control surface for a session (for the MCP). */
-function buildSummary(s: UnifiedSession): SessionSummary {
+function buildSummary(
+	s: UnifiedSession,
+	pending?: PendingAsk,
+	queuedCount = 0,
+): SessionSummary {
 	const busyHere = isAgentSessionBusy(s.claudeSessionId, s.codexThreadId, s.id);
 	// External runs (CLI in tmux, another process) show as running via PID but
 	// aren't in our activeRuns — observe-only, can't steer/cancel them.
 	const runningExternal = !!s.isRunning && !busyHere;
-	const pending = pendingAskAwaitingAnswerSync(s.id);
-	const queuedCount = promptQueues.get(s.id)?.length || 0;
-
 	let state: SessionState;
 	if (s.archived) state = "archived";
 	else if (pending) state = "waiting_question";
@@ -108,6 +109,57 @@ function buildSummary(s: UnifiedSession): SessionSummary {
 				}
 			: {}),
 	};
+}
+
+const summaryState: {
+	byId: Map<string, SessionSummary>;
+	refresh?: Promise<void>;
+} = ((globalThis as typeof globalThis & {
+	__opensessionSessionSummaryState?: {
+		byId: Map<string, SessionSummary>;
+		refresh?: Promise<void>;
+	};
+}).__opensessionSessionSummaryState ??= { byId: new Map() });
+
+function refreshSessionSummaries(): Promise<void> {
+	if (summaryState.refresh) return summaryState.refresh;
+	summaryState.refresh = (async () => {
+		const [sessions, askEntries, queueEntries] = await Promise.all([
+			getCachedSessionsAsync("include"),
+			sessionAsk({ op: "entries" }),
+			sessionDelivery({ op: "entries", slot: "queued" }),
+		]);
+		const asks = new Map(
+			(askEntries as Array<[string, PendingAsk]>).filter(
+				([, pending]) => !pending.answerReceived,
+			),
+		);
+		const queued = new Map(
+			(queueEntries as Array<[string, unknown[]]>).map(([id, items]) => [
+				id,
+				items.length,
+			]),
+		);
+		const next = new Map<string, SessionSummary>();
+		for (const session of sessions)
+			next.set(
+				session.id,
+				buildSummary(session, asks.get(session.id), queued.get(session.id) ?? 0),
+			);
+		summaryState.byId = next;
+	})().finally(() => {
+		summaryState.refresh = undefined;
+	});
+	return summaryState.refresh;
+}
+
+function listSessionSummaries(): SessionSummary[] {
+	void refreshSessionSummaries().catch((error) =>
+		console.warn("[sessions] summary refresh failed:", error),
+	);
+	return getCachedSessions().map(
+		(session) => summaryState.byId.get(session.id) ?? buildSummary(session),
+	);
 }
 
 // --- Session control surface (powers the opensession-sessions MCP) ---
@@ -134,12 +186,14 @@ class SessionDeliveryError extends Error {
 }
 
 registerSessionControl({
-	listSessions: () =>
-		getCachedSessions().map(buildSummary),
+	listSessions: listSessionSummaries,
 
 	getSession: (id) => {
+		void refreshSessionSummaries().catch((error) =>
+			console.warn("[sessions] summary refresh failed:", error),
+		);
 		const s = findSession(id);
-		return s ? buildSummary(s) : undefined;
+		return s ? summaryState.byId.get(s.id) ?? buildSummary(s) : undefined;
 	},
 
 	transcriptTail: (id, n) => {
@@ -169,7 +223,7 @@ registerSessionControl({
 		// answers, never the retry call's payload.
 		const effective =
 			settled.answers ?? (answers && typeof answers === "object" ? answers : null);
-		const pending = pendingAsks.get(id) as
+		const pending = (await pendingAsks.getAsync(id)) as
 			| { questionId?: string; resolve?: (value: unknown) => void | Promise<void> }
 			| undefined;
 		if (

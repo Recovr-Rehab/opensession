@@ -25,7 +25,11 @@ import {
 } from "./run-state";
 import type { StreamEvent, ImageInput } from "./run-events";
 import { isShuttingDown } from "./shutdown-state";
-import { sessionKernelStore, sessionTurn } from "./session-kernel/kernel";
+import {
+  sessionKernelStore,
+  sessionQuarantineSnapshot,
+  sessionTurn,
+} from "./session-kernel/kernel";
 // Type-only, so the direct engines stay lazily loaded (see the dispatch table
 // below): this pulls in the contract's signatures, never the SDKs.
 // Static import is deliberate: the pi-runner module itself is cheap (the
@@ -1487,11 +1491,18 @@ export async function resumeInterruptedRuns(
   const snapshotSeeds = snapshotLocalHostRuns.filter(
     (run) => !!run.hostId && !run.sandboxId && !run.runnerId,
   );
+  const eligibleSnapshotSeeds = (
+    await Promise.all(
+      snapshotSeeds.map(async (run) =>
+        !run.osSessionId || !(await sessionQuarantineSnapshot(run.osSessionId))
+          ? run
+          : undefined,
+      ),
+    )
+  ).filter((run): run is ActiveRunRecord => !!run);
   const taken = (await takeInterruptedRuns(
-    snapshotSeeds,
-    (run) =>
-      !run.osSessionId ||
-      !sessionKernelStore().quarantinedSession(run.osSessionId),
+    eligibleSnapshotSeeds,
+    () => true,
   )).filter((run) => !deferRecovery?.(run));
   // A graceful shutdown snapshot is intentionally broader than the shared
   // run journal: it also covers turns that finish during the drain. A local
