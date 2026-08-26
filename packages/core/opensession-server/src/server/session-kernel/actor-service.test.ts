@@ -34,6 +34,7 @@ beforeAll(async () => {
   service = await startSessionKernelService({
     port: 0,
     token,
+    workerCount: 4,
     responseTimeoutMs: 700,
     databasePath: join(stateDir, "sessions", "session-kernel.sqlite"),
   });

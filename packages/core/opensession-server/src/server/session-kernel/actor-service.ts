@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
   SESSION_KERNEL_MAX_REQUEST_BYTES,
@@ -24,7 +25,7 @@ const DEFAULT_PORT = 3849;
 // Must remain below the gateway transport's 8s fail-stop budget, including
 // quarantine/restart bookkeeping after an ambiguous lane turn.
 const ACTOR_RESPONSE_TIMEOUT_MS = 5_000;
-const DEFAULT_SESSION_WORKERS = 4;
+const DEFAULT_SESSION_WORKERS = Math.min(32, Math.max(4, availableParallelism()));
 // Mailboxes absorb short ingress bursts; actor turns must still remain bounded
 // and fast. Control traffic has its own reserved class so stop/steer cannot be
 // stranded behind ordinary projections. Operators may tune these independently
@@ -36,7 +37,7 @@ const MAX_PRIORITY_BURST = 4;
 const MAX_GLOBAL_TURNS = 64;
 const GLOBAL_BARRIER_TIMEOUT_MS = 100;
 const RESERVED_PRIORITY_TURNS = 64;
-const MAX_LANE_QUEUE = 16;
+const DEFAULT_LANE_QUEUE = 64;
 const RESERVED_LANE_PRIORITY_TURNS = 4;
 
 class RetryableActorHostError extends Error {
@@ -107,6 +108,7 @@ export type SessionKernelServiceOptions = {
   mutationMailboxLimit?: number;
   readMailboxLimit?: number;
   priorityMailboxLimit?: number;
+  laneQueueLimit?: number;
 };
 
 function mailboxLimit(
@@ -201,6 +203,11 @@ export async function startSessionKernelService(
     options.priorityMailboxLimit,
     "OPENSESSION_SESSION_KERNEL_PRIORITY_MAILBOX",
     DEFAULT_PRIORITY_SESSION_TURNS,
+  );
+  const laneQueueLimit = mailboxLimit(
+    options.laneQueueLimit,
+    "OPENSESSION_SESSION_KERNEL_LANE_QUEUE",
+    DEFAULT_LANE_QUEUE,
   );
 
   // Worker isolates in this independently supervised process share one writer
@@ -448,8 +455,11 @@ export async function startSessionKernelService(
     );
     if (
       pendingCount() >= SESSION_KERNEL_MAX_TRANSPORT_REQUESTS ||
-      slot.queue.length >= MAX_LANE_QUEUE ||
-      (!priority && ordinaryQueued >= MAX_LANE_QUEUE - RESERVED_LANE_PRIORITY_TURNS)
+      slot.queue.length >= laneQueueLimit ||
+      (!priority && ordinaryQueued >= laneQueueLimit - Math.min(
+        RESERVED_LANE_PRIORITY_TURNS,
+        Math.max(0, laneQueueLimit - 1),
+      ))
     ) return Promise.reject(new RetryableActorHostError("Session actor lane is full"));
     return new Promise((resolve, reject) => {
       const turn = { request, allowUnready, priority, resolve, reject };
