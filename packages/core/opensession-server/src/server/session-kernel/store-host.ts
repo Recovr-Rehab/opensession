@@ -425,15 +425,14 @@ export class SessionKernelStoreHost {
   }
 
   allQuarantinedSessions(limit = 100, offset = 0): DurableSessionQuarantine[] {
-    // Advance old-store backfill without making this latency-sensitive read scan
-    // every isolated database in one actor turn. The projection remains durable
-    // across actor restarts and every quarantine mutation refreshes it eagerly.
-    this.repairSparseProjections(SESSION_STORE_MAINTENANCE_BATCH);
+    // This latency-sensitive read stays entirely on the catalog. Runtime
+    // maintenance backfills old stores in bounded turns, and every new
+    // quarantine mutation refreshes its durable projection eagerly.
     const unique = new Map<string, DurableSessionQuarantine>();
     for (const entry of [
       ...this.central.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0),
       ...this.central.isolatedQuarantineProjectionEntries(),
-    ]) unique.set(entry.sessionId, this.quarantinedSession(entry.sessionId) ?? entry);
+    ]) unique.set(entry.sessionId, entry);
     return structuredClone(
       [...unique.values()]
         .sort((a, b) => b.quarantinedAt - a.quarantinedAt)

@@ -465,6 +465,12 @@ describe("per-session session kernel storage", () => {
     host.close();
 
     const recovered = new SessionKernelStoreHost(path.central, path.isolated);
+    Object.defineProperty(recovered, "quarantinedSession", {
+      configurable: true,
+      value: () => {
+        throw new Error("catalog listing must not open authoritative session stores");
+      },
+    });
     Object.defineProperty(
       recovered.storeForSession("unrelated-session"),
       "quarantinedSessions",
