@@ -5,9 +5,8 @@ const Agentation = lazy(() =>
 );
 
 const feedbackHost =
-	["localhost", "127.0.0.1", "os.tella.dev"].includes(
-		window.location.hostname,
-	) || window.location.hostname.endsWith(".ts.net");
+	["localhost", "127.0.0.1"].includes(window.location.hostname) ||
+	window.location.hostname.endsWith(".ts.net");
 const feedbackDevice = !window.matchMedia(
 	"(max-width: 720px), (pointer: coarse)",
 ).matches;
