@@ -457,8 +457,8 @@ export function IngressPanel({
 				<>
 					<div className="mb-5 px-5">
 						<Segmented label="Domain setup" value={surface} onValueChange={(value) => setSurface(value as "app" | "ingress")} className="w-full">
-							<SegmentedOption value="app" className="min-h-10 flex-1 justify-center phone:min-h-11">Private app</SegmentedOption>
-							<SegmentedOption value="ingress" className="min-h-10 flex-1 justify-center phone:min-h-11">Public callbacks</SegmentedOption>
+							<SegmentedOption value="app" className="flex min-h-10 flex-1 items-center justify-center phone:min-h-11">Private app</SegmentedOption>
+							<SegmentedOption value="ingress" className="flex min-h-10 flex-1 items-center justify-center phone:min-h-11">Public callbacks</SegmentedOption>
 						</Segmented>
 					</div>
 					{surface === "app" ? (
@@ -488,7 +488,7 @@ export function IngressPanel({
 								onSaveManual={() => void runPrivateApp("save", () => savePrivateAppDomain(appDomain), "Private app domain saved")}
 							/>
 							{onboarding && settings.health !== "ready" && (
-								<SettingsHint className="mt-4">A friendly private domain is optional. Public callbacks must be ready before GitHub.</SettingsHint>
+								<SettingsHint className="mt-4">Both are optional. Without public callbacks, external services cannot deliver webhooks or remote callbacks.</SettingsHint>
 							)}
 						</>
 					) : (
@@ -525,6 +525,9 @@ export function IngressPanel({
 					>
 						Public callbacks
 					</SettingsGroupLabel>
+					{onboarding && (
+						<SettingsHint className="mt-2 mb-3">Optional. Skip this if you do not need webhooks, remote Sandbox callbacks, or public workload identity.</SettingsHint>
+					)}
 					<SettingsForm>
 						<p className="m-0 text-supporting leading-relaxed text-dim">
 							A separate public endpoint for webhooks and remote Sandboxes. It never serves the app.
