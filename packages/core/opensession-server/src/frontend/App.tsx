@@ -422,6 +422,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"deploys",
 	"papercuts",
 	"audit",
+	"downloads",
 ]);
 
 // Sections that were merged into another one — old links keep working.
