@@ -252,7 +252,7 @@ function githubSetupSteps(): React.ReactNode[] {
 			Install the app only on your organization. Choose all repositories, or select only the repositories Open Session should work in.
 		</>,
 		<>
-			Paste the client id, app slug, installation owner, client secret, and private key above. The private key mints short-lived installation tokens for bot work; the client secret refreshes teammates&rsquo; device-flow tokens.
+			Enter the client id, app slug, installation owner, and client secret above, then upload the private key. The private key mints short-lived installation tokens for bot work; the client secret refreshes teammates&rsquo; device-flow tokens.
 		</>,
 		<>
 			Choose GitHub authentication or None, save, then restart Open Session. With GitHub selected, each teammate connects under Team → Account.
@@ -279,7 +279,7 @@ function githubOnboardingSteps(owner: GithubAppOwnerType): React.ReactNode[] {
 			After GitHub creates the App, choose <strong>Install App</strong> in its sidebar
 			and install it on the {account} entered above.
 		</>,
-		<>Paste the client id, slug, secret, and private key. The installation owner is already filled in.</>,
+		<>Enter the client id, slug, and secret, then upload the private key. The installation owner is already filled in.</>,
 		<>Save, then restart.</>,
 	];
 }

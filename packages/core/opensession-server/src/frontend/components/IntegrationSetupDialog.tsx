@@ -188,7 +188,7 @@ function guideFor(
 				steps: [
 					<>Create an organization-owned GitHub App and turn on <strong>Device Flow</strong>.</>,
 					<>Grant the repository and organization permissions shown below, then install the App only on the repositories Open Session should reach.</>,
-					<>Paste the client id, app slug, installation owner, client secret, and generated private key above.</>,
+					<>Enter the client id, app slug, installation owner, and client secret above, then upload the generated private key.</>,
 					<>
 						Add an organization webhook with content type <strong>application/json</strong> and this payload URL:
 						<Value value={url("/github/webhook")} />

@@ -33,7 +33,7 @@ Configure it from Settings → Integrations, or under
 }
 ```
 
-The private key is not stored in JSON. Paste the PEM in Settings →
+The private key is not stored in JSON. Upload the PEM in Settings →
 Integrations; Open Session writes it atomically with mode 0600 to `~/.opensession/github-app.pem`. Operators
 may instead set `OPENSESSION_GITHUB_APP_KEY` to an externally managed PEM path.
 The UI will not overwrite or delete an operator-managed key.

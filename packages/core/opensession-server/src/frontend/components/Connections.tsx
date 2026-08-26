@@ -45,6 +45,7 @@ import { IconTile } from "./BrandTile";
 import { UserAvatar } from "./UserAvatar";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { ProjectsSection } from "./ProjectsSection";
+import { GithubPrivateKeyField } from "./GithubPrivateKeyField";
 
 interface McpConnection {
   name: string;
@@ -552,8 +553,8 @@ function WizardCheck({ children }: { children: React.ReactNode }) {
 
 /**
  * Guided setup for a bring-your-own GitHub App: create it on GitHub (form
- * pre-filled), paste its id/slug/secret, install it on the repos you pick, then
- * connect. It lives outside the card so saving the client id — which re-renders
+ * pre-filled), enter its id/slug/secret, upload its key, install it on the repos
+ * you pick, then connect. It lives outside the card so saving the client id — which re-renders
  * the card from "no app" to "app configured" — doesn't unmount it mid-flow.
  */
 function GithubAppWizard({
@@ -675,7 +676,7 @@ function GithubAppWizard({
   const createReady = appOwner === "you" || !!appOrg.trim();
   const previewSlug = deriveGithubAppSlug(appName);
   const canSave = !!clientId.trim() && !!slug.trim() && !!secret.trim();
-  const titles = ["Create the app", "Paste the details", "Install on your repos", "Connect"];
+  const titles = ["Create the app", "Add the details", "Install on your repos", "Connect"];
 
   return (
     <Modal.Root open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
@@ -861,25 +862,21 @@ function GithubAppWizard({
                   copy it (shown once). Required.
                 </span>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-supporting text-fg">Private key (PEM)</label>
-                <textarea
-                  className={cn(settingsInputClass, "min-h-20 resize-y font-mono")}
-                  value={privateKey}
-                  onChange={(e) => setPrivateKey(e.target.value)}
-                  placeholder="-----BEGIN RSA PRIVATE KEY-----"
-                  aria-label="GitHub App private key (PEM)"
-                  autoCapitalize="none"
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <span className="text-meta leading-snug text-faint">
-                  In <span className="text-dim">Private keys</span>, click{" "}
-                  <span className="text-dim">Generate a private key</span>, then paste
-                  the downloaded .pem here. Lets the bot and PR checks run on the App;
-                  leave blank for sign-in only.
-                </span>
-              </div>
+              <GithubPrivateKeyField
+                configured={false}
+                required={false}
+                saving={saving}
+                value={privateKey}
+                onChange={setPrivateKey}
+                description={
+                  <>
+                    In <span className="text-dim">Private keys</span>, click{" "}
+                    <span className="text-dim">Generate a private key</span>, then choose
+                    the downloaded .pem file. Lets the bot and PR checks run on the App;
+                    leave blank for sign-in only.
+                  </>
+                }
+              />
             </div>
             <Modal.Footer>
               <Button

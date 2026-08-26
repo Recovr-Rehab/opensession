@@ -1,4 +1,4 @@
-import { Badge } from "../ui/badge";
+import { GithubPrivateKeyField } from "./GithubPrivateKeyField";
 import { SecretField, type SetupGithub } from "./setup-shared";
 
 export function GithubAppFields({
@@ -100,35 +100,12 @@ export function GithubAppFields({
 				onChange={onClientSecretChange}
 				onToggleClear={onToggleClientSecretClear}
 			/>
-			<label className="flex flex-col gap-1">
-				<span className="flex items-center justify-between gap-2">
-					<span className="text-label font-medium text-dim">Private key (PEM)</span>
-					{github.privateKeyConfigured ? (
-						<span className="shrink-0 text-meta text-green">Saved</span>
-					) : (
-						<Badge tone="warning">Required</Badge>
-					)}
-				</span>
-				<textarea
-					className="min-h-20 w-full resize-y rounded-md border border-line bg-surface px-2.5 py-1.5 font-mono text-supporting text-fg outline-none focus-ring phone:text-input-phone"
-					value={privateKey}
-					onChange={(event) => onPrivateKeyChange(event.target.value)}
-					placeholder={
-						github.privateKeyConfigured
-							? "Leave blank to keep"
-							: "-----BEGIN RSA PRIVATE KEY-----"
-					}
-					aria-label="GitHub App private key (PEM)"
-					required
-					disabled={saving}
-					autoCapitalize="none"
-					autoComplete="off"
-					spellCheck={false}
-				/>
-				<span className="text-meta leading-snug text-faint">
-					Paste a generated private key, or leave blank to keep the current key.
-				</span>
-			</label>
+			<GithubPrivateKeyField
+				configured={github.privateKeyConfigured}
+				saving={saving}
+				value={privateKey}
+				onChange={onPrivateKeyChange}
+			/>
 		</div>
 	);
 }

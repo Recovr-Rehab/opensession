@@ -70,4 +70,12 @@ describe("GitHub App onboarding actions", () => {
 		);
 		expect(markup).toContain("2. Install GitHub App");
 	});
+
+	test("uploads the private key from a PEM file", () => {
+		const markup = renderGithub(null);
+		expect(markup).toContain('type="file"');
+		expect(markup).toContain('accept=".pem,application/x-pem-file,text/plain"');
+		expect(markup).toContain("Choose PEM file");
+		expect(markup).not.toContain("BEGIN RSA PRIVATE KEY");
+	});
 });
