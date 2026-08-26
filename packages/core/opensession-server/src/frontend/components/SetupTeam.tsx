@@ -105,8 +105,8 @@ await load();
 				className={title ? undefined : "mt-0"}
 				actions={
 					<Button
-						size={onboarding ? "md" : "sm"}
-						variant={onboarding ? "soft" : "default"}
+						size="sm"
+						variant="default"
 						className={onboarding ? "phone:min-h-11" : undefined}
 						icon={<IconPlus size={16} />}
 						onClick={() => {

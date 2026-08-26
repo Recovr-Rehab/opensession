@@ -1087,10 +1087,10 @@ export function ProviderAccountsSection({
 						<Menu.Trigger
 							render={
 								<Button
-									size={onboarding ? "lg" : "sm"}
-									variant={onboarding ? "primary" : "default"}
+									size="sm"
+									variant="default"
 									className="phone:min-h-11"
-									icon={<IconPlus size={onboarding ? 18 : 16} />}
+									icon={<IconPlus size={16} />}
 									caret
 								>
 									Add account

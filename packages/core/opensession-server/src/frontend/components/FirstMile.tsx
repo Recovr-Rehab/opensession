@@ -6,7 +6,6 @@ import { useSetupStatus } from "../hooks/useSetupStatus";
 import { effectiveTheme, onThemeChanged } from "../lib/theme";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
-import { FloatingStatus } from "../ui/floating-status";
 import { duration, ease } from "../ui/motion";
 import { LoadingState } from "../ui/state";
 import { BrandMark } from "./BrandTile";
@@ -17,7 +16,7 @@ import { TeamSection } from "./SetupTeam";
 import { UserAvatar } from "./UserAvatar";
 import { OrganizationProfileSection } from "./settings/GeneralPanel";
 import { ProviderAccountsSection } from "./settings/ModelAccounts";
-import { IconCheck, IconChevronLeft, IconGlobe, IconRepo } from "./icons";
+import { IconCheck, IconGlobe, IconRepo } from "./icons";
 import { githubAuthState, type SetupStatus } from "./setup-shared";
 
 interface FirstMileStep {
@@ -326,7 +325,6 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const setup = useSetupStatus();
 	const { status, failed, refetch } = setup;
 	const [index, setIndex] = useState(initialFirstMileIndex);
-	const [direction, setDirection] = useState(1);
 	const [navigationVisible, setNavigationVisible] = useState(true);
 	const [finishing, setFinishing] = useState(false);
 	const [theme, setTheme] = useState(effectiveTheme);
@@ -354,7 +352,6 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 		if (nextIndex === index) return;
 		activeStepIdRef.current = steps[nextIndex]!.id;
 		setNavigationVisible(false);
-		setDirection(nextIndex > index ? 1 : -1);
 		setIndex(nextIndex);
 		void refetch();
 	}
@@ -390,36 +387,37 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	return (
 		<div
 			data-first-mile
-			className="relative grid h-[100dvh] w-full grid-rows-[40px_minmax(0,1fr)] gap-y-3 overflow-hidden bg-surface bg-cover bg-center p-6 text-fg phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-[max(12px,env(safe-area-inset-top))]"
+			className="relative grid h-[100dvh] w-full grid-rows-[44px_minmax(0,1fr)] gap-y-3 overflow-hidden bg-surface bg-cover bg-center p-6 text-fg phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-[max(12px,env(safe-area-inset-top))]"
 			// The vendored marketing artwork keeps first run independent of a CDN.
 			style={{ backgroundImage: `url(${BASE_PATH}/${backdropName}.webp)` }}
 		>
-			<div className="relative z-20 flex h-10 shrink-0 items-start justify-center">
-				<FloatingStatus
-					role="progressbar"
-					aria-label="Onboarding progress"
-					aria-valuemin={1}
-					aria-valuemax={steps.length}
-					aria-valuenow={index + 1}
-					aria-valuetext={`${step.label}, step ${index + 1} of ${steps.length}`}
-					className="gap-1.5 px-3 py-2.5"
-				>
-					{steps.map((item, stepIndex) => (
+			<nav
+				aria-label="Onboarding progress"
+				className="relative z-20 flex h-11 shrink-0 items-start justify-center"
+			>
+				{steps.map((item, stepIndex) => (
+					<button
+						key={item.id}
+						type="button"
+						onClick={() => goTo(stepIndex)}
+						aria-label={`${item.label}, step ${stepIndex + 1} of ${steps.length}`}
+						aria-current={stepIndex === index ? "step" : undefined}
+						className="group focus-ring flex size-10 items-center justify-center rounded-control phone:size-11"
+					>
 						<span
-							key={item.id}
 							aria-hidden="true"
 							className={cn(
 								"h-1.5 rounded-full transition-[width,background-color,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
 								stepIndex === index
 									? "w-6 bg-fg"
 									: stepIndex < index
-										? "w-1.5 bg-fg/45"
-										: "w-1.5 bg-faint/35",
+										? "w-1.5 bg-fg/45 group-hover:bg-fg/65"
+										: "w-1.5 bg-faint/35 group-hover:bg-faint/60",
 							)}
 						/>
-					))}
-				</FloatingStatus>
-			</div>
+					</button>
+				))}
+			</nav>
 
 			{!status ? (
 				<div className="flex min-h-40 w-full max-w-[560px] self-center justify-self-center items-center justify-center rounded-2xl bg-palette-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
@@ -442,50 +440,32 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						step.id === "welcome" ? "max-w-[560px]" : "max-w-[860px]",
 					)}
 				>
-					<AnimatePresence initial={false} mode="popLayout" custom={direction}>
+					<AnimatePresence initial={false} mode="popLayout">
 						<motion.div key={step.id} layout className="flex min-h-0 flex-col">
 							<header className="shrink-0 px-10 pb-2 pt-9 text-center phone:px-5 phone:pt-6">
 								<motion.h1
 									ref={headingRef}
 									tabIndex={index > 0 ? -1 : undefined}
-									initial={{
-										opacity: 0,
-										transform: reducedMotion ? "none" : "translateY(8px)",
-									}}
+									initial={{ opacity: 0 }}
 									animate={{
 										opacity: 1,
-										transform: "translateY(0px)",
 										transition: revealTransition(0.02),
 									}}
-									exit={{
-										opacity: 0,
-										transform: reducedMotion ? "none" : "translateY(-4px)",
-									}}
+									exit={{ opacity: 0 }}
 									transition={revealTransition()}
-									className="m-0 text-balance text-page-title font-title leading-[1.1] tracking-[-0.025em] text-fg outline-none phone:text-section-title"
+									className="m-0 text-balance text-page-title font-title leading-[1.1] tracking-[-0.012em] text-fg outline-none phone:text-section-title"
 								>
 									{step.title}
 								</motion.h1>
 							</header>
 
 							<motion.div
-								initial={{
-									opacity: 0,
-									transform: reducedMotion
-										? "none"
-										: `translateY(10px) translateX(${direction * 8}px)`,
-								}}
+								initial={{ opacity: 0 }}
 								animate={{
 									opacity: 1,
-									transform: "translateY(0px) translateX(0px)",
 									transition: revealTransition(0.11),
 								}}
-								exit={{
-									opacity: 0,
-									transform: reducedMotion
-										? "none"
-										: `translateY(-4px) translateX(${direction * -6}px)`,
-								}}
+								exit={{ opacity: 0 }}
 								transition={revealTransition()}
 								onAnimationComplete={() => {
 									if (step.id === activeStepIdRef.current) {
@@ -505,11 +485,9 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								) : (
 									<div
 										className={cn(
-											"mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:text-fg",
+											"mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:text-faint",
 											step.id === "ready" ? "max-w-[1160px]" : "max-w-[780px]",
-											step.id === "organization"
-												? "[&_.bg-settings-plate]:border-0 [&_.bg-settings-plate]:bg-transparent! [&_.bg-settings-plate]:shadow-none [&_.bg-settings-plate]:[backdrop-filter:none]"
-												: "[&_.bg-settings-plate]:rounded-3xl [&_.bg-settings-plate]:border-divider-soft [&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--popup-surface)_95%,transparent)] [&_.bg-settings-plate]:shadow-[0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:[backdrop-filter:blur(14px)_saturate(1.08)]",
+											"[&_.bg-settings-plate]:border-0 [&_.bg-settings-plate]:bg-transparent! [&_.bg-settings-plate]:shadow-none [&_.bg-settings-plate]:[backdrop-filter:none]",
 											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9",
 										)}
 									>
@@ -564,36 +542,30 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					<motion.footer
 						layout="position"
 						initial={false}
-						animate={
-							navigationVisible
-								? { opacity: 1, transform: "translateY(0px)" }
-								: {
-										opacity: 0,
-										transform: reducedMotion ? "none" : "translateY(6px)",
-									}
-						}
+						animate={{ opacity: navigationVisible ? 1 : 0 }}
 						transition={{ type: "tween", duration: duration.micro, ease }}
 						aria-hidden={!navigationVisible}
 						inert={!navigationVisible}
 						className={cn(
-							"relative z-20 shrink-0 border-t border-divider-soft bg-[color-mix(in_srgb,var(--popup-surface)_76%,transparent)] px-6 py-4 [backdrop-filter:blur(18px)_saturate(1.12)] phone:px-3 phone:py-3",
+							"relative z-20 shrink-0 px-6 py-4 phone:px-3 phone:py-3",
 							!navigationVisible && "pointer-events-none",
 						)}
 					>
-						<div className="flex items-center justify-between gap-3">
-							<Button
-								variant="soft"
-								size="lg"
-								icon={<IconChevronLeft size={18} />}
-								onClick={() => goTo(index - 1)}
-								aria-label="Back"
-								className={cn(
-									"min-h-11 px-4 phone:size-11 phone:justify-center phone:p-0",
-									index === 0 && "invisible pointer-events-none",
-								)}
-							>
-								<span className="phone:hidden">Back</span>
-							</Button>
+						<div
+							className={cn(
+								"flex items-center gap-3",
+								index === 0 ? "justify-center" : "justify-between",
+							)}
+						>
+							{index > 0 && (
+								<Button
+									variant="soft"
+									size="lg"
+									onClick={() => goTo(index - 1)}
+								>
+									Back
+								</Button>
+							)}
 
 							<Button
 								variant="primary"
