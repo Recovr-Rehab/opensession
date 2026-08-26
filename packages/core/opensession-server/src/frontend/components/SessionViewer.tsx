@@ -191,6 +191,7 @@ import {
 	unhideForSession,
 } from "../lib/hides";
 import {
+	markPendingBusy,
 	markPendingStarted,
 	type OptimisticPendingPrompt,
 	reconcilePending,
@@ -1402,19 +1403,33 @@ export function SessionViewer({
 		const stopObserving = promptOutbox.observeDelivery((item, result) => {
 			if (item.sessionId !== session.id) return;
 			const pendingId = `outbox-${item.clientId}`;
+			const deliveredPrompt: OptimisticPendingPrompt = {
+				id: pendingId,
+				content: item.content,
+				user: item.user || getCurrentUser(),
+				sentAt: item.createdAt,
+				...(item.images?.length ? { images: item.images } : {}),
+			};
 			if (result.status === "started") {
 				// Placement guessed from local running state can lose a turn-end race.
 				// The server started a turn, so this is an optimistic transcript bubble,
-				// not a queued row. Restore it if a transient admission-queue echo had
-				// already claimed it before the REST response arrived.
+				// not a queued row.
 				setPending((current) =>
-					markPendingStarted(current, {
-						id: pendingId,
-						content: item.content,
-						user: item.user || getCurrentUser(),
-						sentAt: item.createdAt,
-						...(item.images?.length ? { images: item.images } : {}),
-					}),
+					markPendingStarted(current, deliveredPrompt),
+				);
+				setIsRunningLive(true);
+				return;
+			}
+			if (result.status === "queued" || result.status === "steered") {
+				// The queue's admission echo may arrive before this response. Only now
+				// is it authoritative placement rather than the transient dispatch record
+				// every idle prompt passes through.
+				setPending((current) =>
+					markPendingBusy(
+						current,
+						deliveredPrompt,
+						result.status === "queued" ? "queue" : "steer",
+					),
 				);
 				setIsRunningLive(true);
 				return;

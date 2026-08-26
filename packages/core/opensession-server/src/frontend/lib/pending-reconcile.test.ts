@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	markPendingBusy,
 	markPendingStarted,
 	type OptimisticPendingPrompt,
 	PENDING_GIVE_UP_MS,
@@ -45,6 +46,27 @@ describe("markPendingStarted", () => {
 	});
 });
 
+describe("markPendingBusy", () => {
+	const delivered: OptimisticPendingPrompt = {
+		id: "outbox-a",
+		content: "ship it",
+		user: "michiel",
+		sentAt: SENT,
+	};
+
+	test("moves a stale idle send to its authoritative queue surface", () => {
+		expect(markPendingBusy([delivered], delivered, "queue")).toEqual([
+			{ ...delivered, busyMode: "queue" },
+		]);
+	});
+
+	test("restores a queued row if an early admission echo claimed it", () => {
+		expect(markPendingBusy([], delivered, "steer")).toEqual([
+			{ ...delivered, busyMode: "steer" },
+		]);
+	});
+});
+
 describe("reconcilePending", () => {
 	test("a transcript user entry claims its bubble as landed", () => {
 		const { landed, expired } = reconcilePending(
@@ -57,14 +79,24 @@ describe("reconcilePending", () => {
 		expect(expired.size).toBe(0);
 	});
 
-	test("a queue or steer echo claims its bubble", () => {
+	test("an authoritative queue or steer echo claims its busy row", () => {
 		const { landed } = reconcilePending(
-			[bubble("outbox-a", "ship it")],
+			[{ ...bubble("outbox-a", "ship it"), busyMode: "queue" }],
 			[],
-			[{ content: "ship it" }],
+			[{ id: "a", content: "ship it" }],
 			SENT,
 		);
 		expect([...landed]).toEqual(["outbox-a"]);
+	});
+
+	test("a transient admission echo does not claim an idle outbox bubble", () => {
+		const { landed } = reconcilePending(
+			[bubble("outbox-a", "ship it")],
+			[],
+			[{ id: "a", content: "ship it" }],
+			SENT,
+		);
+		expect(landed.size).toBe(0);
 	});
 
 	test("a transient queue echo does not claim a server-started bubble", () => {
