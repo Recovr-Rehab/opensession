@@ -307,8 +307,10 @@ is not actor lifecycle evidence.
 
 ## Detached Agent Host supervision
 
-Schema 25 is an additive migration from live schema 24 and raises the normal
-`user_version` rollback floor, so a schema-24 actor refuses the migrated store.
+Schema 26 is an additive migration from live schemas 24 and 25 and raises the
+normal `user_version` rollback floor, so an older actor refuses the migrated
+store. Its receipt and plan backfill is transactional, crash-resumable, and
+validates every canonical authority before raising that floor.
 It adds a v2 Agent Host supervision authority alongside the
 existing Host implementation. Before any claim, a short typed SessionKernel
 reduction registers the exact current run/generation, turn ID, and canonical
@@ -327,7 +329,8 @@ transcripts, provider/model configuration, MCP payloads, or credentials, and it
 performs no provider, executor, model, socket, or signing work. Superseded and settled receipts remain replayable through their lease and clock
 skew. The actor prunes only expired non-active receipts before enforcing its
 fixed capacity; active and unexpired receipts are never pruned, and the separate
-supervisor high-water mark survives pruning and restart. The returned payload is deliberately unsigned
+supervisor and Host-generation high-water marks survive terminal runs, pruning,
+and restart. The returned payload is deliberately unsigned
 and provides no Host authentication. Service-side Ed25519 signing and a keyring
 are the mandatory next slice before this authority can be used.
 

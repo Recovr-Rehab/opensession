@@ -7,11 +7,13 @@ import {
   AGENT_HOST_SUPERVISION_AUDIENCE,
   AGENT_HOST_SUPERVISION_PURPOSE,
   MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS,
+  serializeAgentHostSupervisionAuthorityV2,
 } from "@tellahq/opensession-protocol/agent-host";
 import { SessionKernelStore } from "./store";
-import type {
-  AgentHostPlanRegistration,
-  AgentHostSupervisionClaim,
+import {
+  authorityFromAgentHostSupervisionClaim,
+  type AgentHostPlanRegistration,
+  type AgentHostSupervisionClaim,
 } from "./agent-host-supervision-protocol";
 
 const planHash = `sha256:${"a".repeat(64)}`;
@@ -55,6 +57,88 @@ function claim(
     ...overrides,
   };
 }
+function legacyReceipt(
+  input: AgentHostSupervisionClaim,
+  supervisorEpoch: number,
+  status: "active" | "superseded" | "settled",
+) {
+  const authority = authorityFromAgentHostSupervisionClaim(
+    input,
+    supervisorEpoch,
+  )!;
+  const bytes = serializeAgentHostSupervisionAuthorityV2(authority);
+  const text = Buffer.from(bytes).toString("utf8");
+  const requestText = JSON.stringify([
+    input.op,
+    input.claimId,
+    input.sessionId,
+    input.runId,
+    input.turnId,
+    input.generation,
+    input.planHash,
+    input.hostId,
+    input.hostGeneration,
+    input.hostIncarnation,
+    input.hostChallenge,
+    input.audience,
+    input.purpose,
+    input.issuedAtMs,
+    input.expiresAtMs,
+    input.nonce,
+    input.keyId,
+    input.kernelServiceEpoch,
+  ]);
+  return {
+    input,
+    authority,
+    status,
+    authorityText: JSON.stringify(authority),
+    authorityBytes: Buffer.from(bytes).toString("base64"),
+    authorityHash: `sha256:${new Bun.CryptoHasher("sha256").update(text).digest("hex")}`,
+    requestHash: `sha256:${new Bun.CryptoHasher("sha256").update(requestText).digest("hex")}`,
+  };
+}
+
+function insertLegacyReceipt(
+  database: Database,
+  receipt: ReturnType<typeof legacyReceipt>,
+  expiresAt?: number,
+): void {
+  const columns =
+    expiresAt === undefined
+      ? "authority_hash, created_at"
+      : "authority_hash, expires_at, created_at";
+  const placeholders = expiresAt === undefined ? "?, ?" : "?, ?, ?";
+  database.run(
+    `INSERT INTO session_kernel_agent_host_supervision
+     (session_id, supervisor_epoch, claim_id, request_hash, run_id,
+      run_generation, host_id, host_generation, host_incarnation,
+      kernel_service_epoch, challenge, nonce, status, authority,
+      authority_bytes, ${columns})
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${placeholders})`,
+    [
+      receipt.input.sessionId,
+      receipt.authority.supervisorEpoch,
+      receipt.input.claimId,
+      receipt.requestHash,
+      receipt.input.runId,
+      receipt.input.generation,
+      receipt.input.hostId,
+      receipt.input.hostGeneration,
+      receipt.input.hostIncarnation,
+      receipt.input.kernelServiceEpoch,
+      receipt.input.hostChallenge,
+      receipt.input.nonce,
+      receipt.status,
+      receipt.authorityText,
+      receipt.authorityBytes,
+      receipt.authorityHash,
+      ...(expiresAt === undefined ? [] : [expiresAt]),
+      receipt.input.issuedAtMs,
+    ],
+  );
+}
+
 function runningStore(path = ":memory:"): SessionKernelStore {
   const store = new SessionKernelStore(path);
   expect(
@@ -98,14 +182,72 @@ describe("Agent Host supervision actor state", () => {
       );
       PRAGMA user_version = 24;
     `);
+    const receipts = [
+      legacyReceipt(
+        claim({
+          claimId: "legacy-claim-1",
+          hostGeneration: 1,
+          hostChallenge: "legacy-challenge-00001",
+          nonce: "legacy-nonce-000000001",
+        }),
+        1,
+        "superseded",
+      ),
+      legacyReceipt(
+        claim({
+          claimId: "legacy-claim-2",
+          hostGeneration: 2,
+          hostIncarnation: "legacy-incarnation-02",
+          hostChallenge: "legacy-challenge-00002",
+          nonce: "legacy-nonce-000000002",
+        }),
+        2,
+        "superseded",
+      ),
+      legacyReceipt(
+        claim({
+          claimId: "legacy-claim-3",
+          hostGeneration: 2,
+          hostIncarnation: "legacy-incarnation-03",
+          hostChallenge: "legacy-challenge-00003",
+          nonce: "legacy-nonce-000000003",
+        }),
+        3,
+        "active",
+      ),
+    ];
+    for (const receipt of receipts) insertLegacyReceipt(legacy, receipt);
     legacy.close();
     const store = new SessionKernelStore(path);
+    expect(
+      store.applyRunEvent({
+        sessionId: "session-1",
+        event: "prompt",
+        runKey: "run-1",
+      }).accepted,
+    ).toBe(true);
+    expect(store.registerAgentHostPlan(plan())).toEqual({
+      accepted: true,
+      replayed: true,
+    });
+    const recovered = store.claimAgentHostSupervision(
+      claim({
+        claimId: "legacy-claim-recovered",
+        hostGeneration: 2,
+        hostIncarnation: "legacy-incarnation-04",
+        hostChallenge: "legacy-challenge-recover",
+        nonce: "legacy-nonce-recover-001",
+      }),
+    );
+    expect(
+      recovered.accepted && recovered.receipt.authority.supervisorEpoch,
+    ).toBe(4);
     store.close();
     const migrated = new Database(path, { readonly: true });
     expect(
       (migrated.query("PRAGMA user_version").get() as { user_version: number })
         .user_version,
-    ).toBe(25);
+    ).toBe(26);
     expect(
       migrated
         .query(
@@ -120,6 +262,140 @@ describe("Agent Host supervision actor state", () => {
           .all() as Array<{ name: string }>
       ).some((column) => column.name === "expires_at"),
     ).toBe(true);
+    migrated.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  test("resumes interrupted schema 24 expiry and plan backfill transactionally", () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), "agent-host-schema24-partial-"),
+    );
+    const path = join(directory, "kernel.sqlite");
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE session_kernel_agent_host_supervision (
+        session_id TEXT NOT NULL,
+        supervisor_epoch INTEGER NOT NULL,
+        claim_id TEXT NOT NULL,
+        request_hash TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        run_generation INTEGER NOT NULL,
+        host_id TEXT NOT NULL,
+        host_generation INTEGER NOT NULL,
+        host_incarnation TEXT NOT NULL,
+        kernel_service_epoch TEXT NOT NULL,
+        challenge TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        status TEXT NOT NULL,
+        authority TEXT NOT NULL,
+        authority_bytes TEXT NOT NULL,
+        authority_hash TEXT NOT NULL,
+        expires_at INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, supervisor_epoch)
+      );
+      PRAGMA user_version = 24;
+    `);
+    const receipts = [
+      legacyReceipt(
+        claim({
+          claimId: "partial-claim-1",
+          hostChallenge: "partial-challenge-0001",
+          nonce: "partial-nonce-00000001",
+        }),
+        1,
+        "superseded",
+      ),
+      legacyReceipt(
+        claim({
+          claimId: "partial-claim-2",
+          hostChallenge: "partial-challenge-0002",
+          nonce: "partial-nonce-00000002",
+        }),
+        2,
+        "active",
+      ),
+    ];
+    insertLegacyReceipt(
+      legacy,
+      receipts[0]!,
+      receipts[0]!.input.expiresAtMs + 999,
+    );
+    insertLegacyReceipt(legacy, receipts[1]!, 0);
+    legacy.close();
+
+    const store = new SessionKernelStore(path);
+    expect(store.claimAgentHostSupervision(receipts[1]!.input)).toMatchObject({
+      accepted: true,
+      replayed: true,
+    });
+    store.close();
+    const migrated = new Database(path, { readonly: true });
+    const rows = migrated
+      .query(
+        `SELECT supervisor_epoch, expires_at, authority_bytes
+       FROM session_kernel_agent_host_supervision ORDER BY supervisor_epoch`,
+      )
+      .all() as Array<{
+      supervisor_epoch: number;
+      expires_at: number;
+      authority_bytes: string;
+    }>;
+    expect(rows).toEqual(
+      receipts.map((receipt) => ({
+        supervisor_epoch: receipt.authority.supervisorEpoch,
+        expires_at: receipt.input.expiresAtMs,
+        authority_bytes: receipt.authorityBytes,
+      })),
+    );
+    expect(
+      (migrated.query("PRAGMA user_version").get() as { user_version: number })
+        .user_version,
+    ).toBe(26);
+    migrated.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  test("migrates live schema 25 plan-only state", () => {
+    const directory = mkdtempSync(join(tmpdir(), "agent-host-schema25-"));
+    const path = join(directory, "kernel.sqlite");
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE session_kernel_agent_host_plan (
+        session_id TEXT PRIMARY KEY,
+        registration_id TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        run_generation INTEGER NOT NULL,
+        turn_id TEXT NOT NULL,
+        plan_hash TEXT NOT NULL,
+        host_id TEXT,
+        supervisor_high_water INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO session_kernel_agent_host_plan
+       (session_id, registration_id, run_id, run_generation, turn_id,
+        plan_hash, host_id, supervisor_high_water, updated_at)
+       VALUES ('session-1', 'plan-registration-0001', 'run-1', 1, 'turn-1',
+               '${planHash}', NULL, 0, 1);
+      PRAGMA user_version = 25;
+    `);
+    legacy.close();
+    const store = new SessionKernelStore(path);
+    store.close();
+    const migrated = new Database(path, { readonly: true });
+    expect(
+      (migrated.query("PRAGMA user_version").get() as { user_version: number })
+        .user_version,
+    ).toBe(26);
+    expect(
+      (
+        migrated
+          .query(
+            "SELECT host_generation_high_water FROM session_kernel_agent_host_plan WHERE session_id = 'session-1'",
+          )
+          .get() as { host_generation_high_water: number }
+      ).host_generation_high_water,
+    ).toBe(0);
     migrated.close();
     rmSync(directory, { recursive: true, force: true });
   });
@@ -296,6 +572,63 @@ describe("Agent Host supervision actor state", () => {
         }),
       ),
     ).toEqual({ accepted: false, reason: "stale_host" });
+    store.close();
+  });
+
+  test("preserves Host generation high-water across terminal runs", () => {
+    const store = runningStore();
+    register(store);
+    expect(
+      store.claimAgentHostSupervision(
+        claim({
+          hostGeneration: 2,
+        }),
+      ).accepted,
+    ).toBe(true);
+    expect(
+      store.applyRunEvent({
+        sessionId: "session-1",
+        event: "run_failed",
+        runKey: "run-1",
+      }).accepted,
+    ).toBe(true);
+    expect(
+      store.applyRunEvent({
+        sessionId: "session-1",
+        event: "prompt",
+        runKey: "run-2",
+      }).accepted,
+    ).toBe(true);
+    register(
+      store,
+      plan({
+        registrationId: "plan-registration-run-2",
+        runId: "run-2",
+        turnId: "turn-2",
+        generation: 2,
+        planHash: `sha256:${"b".repeat(64)}`,
+      }),
+    );
+    const nextRunClaim = (hostGeneration: number, suffix: string) =>
+      claim({
+        claimId: `claim-run-2-${suffix}`,
+        runId: "run-2",
+        turnId: "turn-2",
+        generation: 2,
+        planHash: `sha256:${"b".repeat(64)}`,
+        hostGeneration,
+        hostIncarnation: `incarnation-run-2-${suffix}`,
+        hostChallenge: `challenge-run-2-${suffix}`,
+        nonce: `nonce-run-2-${suffix}`,
+      });
+    expect(store.claimAgentHostSupervision(nextRunClaim(1, "lower"))).toEqual({
+      accepted: false,
+      reason: "stale_host",
+    });
+    const recovered = store.claimAgentHostSupervision(nextRunClaim(2, "same"));
+    expect(
+      recovered.accepted && recovered.receipt.authority.supervisorEpoch,
+    ).toBe(2);
     store.close();
   });
 

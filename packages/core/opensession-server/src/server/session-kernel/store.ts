@@ -240,7 +240,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 25;
+export const SESSION_KERNEL_SCHEMA_VERSION = 26;
 export const SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS = 64;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
@@ -318,6 +318,7 @@ export function sessionKernelSessionDbPath(
 
 type DurableAgentHostPlan = AgentHostPlanRegistration & {
   hostId?: string;
+  hostGenerationHighWater: number;
   supervisorHighWater: number;
 };
 
@@ -336,14 +337,190 @@ function decodeDurableAgentHostPlan(
     planHash: row.plan_hash,
   });
   const hostId = row.host_id == null ? undefined : decodeExecutorId(row.host_id);
+  const hostGenerationHighWater = Number(row.host_generation_high_water);
   const supervisorHighWater = Number(row.supervisor_high_water);
   if (
     !plan ||
     (row.host_id != null && !hostId) ||
+    !Number.isSafeInteger(hostGenerationHighWater) ||
+    hostGenerationHighWater < 0 ||
     !Number.isSafeInteger(supervisorHighWater) ||
     supervisorHighWater < 0
   ) throw new Error("Invalid durable Agent Host plan");
-  return { ...plan, hostId, supervisorHighWater };
+  return {
+    ...plan,
+    hostId,
+    hostGenerationHighWater,
+    supervisorHighWater,
+  };
+}
+
+type DurableAgentHostSupervisionRow = {
+  session_id: string;
+  supervisor_epoch: number;
+  run_id: string;
+  run_generation: number;
+  host_id: string;
+  host_generation: number;
+  host_incarnation: string;
+  kernel_service_epoch: string;
+  challenge: string;
+  nonce: string;
+  status: "active" | "superseded" | "settled";
+  authority: string;
+  authority_bytes: string;
+  authority_hash: string;
+  expires_at: number;
+};
+
+function decodeDurableAgentHostAuthority(
+  row: DurableAgentHostSupervisionRow,
+) {
+  const authority = decodeAgentHostSupervisionAuthorityV2(parsed(row.authority));
+  if (!authority)
+    throw new Error("Invalid durable Agent Host authority during migration");
+  const bytes = serializeAgentHostSupervisionAuthorityV2(authority);
+  const text = Buffer.from(bytes).toString("utf8");
+  if (
+    authority.fence.sessionId !== row.session_id ||
+    authority.fence.runId !== row.run_id ||
+    authority.fence.generation !== row.run_generation ||
+    authority.supervisorEpoch !== row.supervisor_epoch ||
+    authority.hostId !== row.host_id ||
+    authority.hostGeneration !== row.host_generation ||
+    authority.hostIncarnation !== row.host_incarnation ||
+    authority.kernelServiceEpoch !== row.kernel_service_epoch ||
+    authority.hostChallenge !== row.challenge ||
+    authority.nonce !== row.nonce ||
+    Buffer.from(bytes).toString("base64") !== row.authority_bytes ||
+    `sha256:${digest(text)}` !== row.authority_hash
+  ) throw new Error("Contradictory durable Agent Host authority during migration");
+  return authority;
+}
+
+function migrateAgentHostSupervisionSchema(
+  db: Database,
+  schemaVersion: number,
+): void {
+  if (schemaVersion >= 26) return;
+  const tx = db.transaction(() => {
+    const supervisionColumns = new Set(
+      (db.query(
+        "PRAGMA table_info(session_kernel_agent_host_supervision)",
+      ).all() as Array<{ name: string }>).map((column) => column.name),
+    );
+    if (!supervisionColumns.has("expires_at"))
+      db.exec(
+        "ALTER TABLE session_kernel_agent_host_supervision ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0",
+      );
+    const planColumns = new Set(
+      (db.query(
+        "PRAGMA table_info(session_kernel_agent_host_plan)",
+      ).all() as Array<{ name: string }>).map((column) => column.name),
+    );
+    if (!planColumns.has("host_generation_high_water"))
+      db.exec(
+        "ALTER TABLE session_kernel_agent_host_plan ADD COLUMN host_generation_high_water INTEGER NOT NULL DEFAULT 0",
+      );
+
+    const rows = db.query(
+      `SELECT session_id, supervisor_epoch, run_id, run_generation, host_id,
+              host_generation, host_incarnation, kernel_service_epoch,
+              challenge, nonce, status, authority, authority_bytes,
+              authority_hash, expires_at
+       FROM session_kernel_agent_host_supervision
+       ORDER BY session_id, supervisor_epoch`,
+    ).all() as DurableAgentHostSupervisionRow[];
+    const bySession = new Map<string, Array<{
+      row: DurableAgentHostSupervisionRow;
+      authority: ReturnType<typeof decodeDurableAgentHostAuthority>;
+    }>>();
+    for (const row of rows) {
+      const authority = decodeDurableAgentHostAuthority(row);
+      if (row.expires_at !== authority.expiresAtMs)
+        db.run(
+          `UPDATE session_kernel_agent_host_supervision SET expires_at = ?
+           WHERE session_id = ? AND supervisor_epoch = ?`,
+          [authority.expiresAtMs, row.session_id, row.supervisor_epoch],
+        );
+      const entries = bySession.get(row.session_id) ?? [];
+      entries.push({ row, authority });
+      bySession.set(row.session_id, entries);
+    }
+
+    for (const [sessionId, entries] of bySession) {
+      const hostIds = new Set(entries.map(({ authority }) => authority.hostId));
+      if (hostIds.size !== 1)
+        throw new Error("Contradictory durable Agent Host IDs during migration");
+      const active = entries.filter(({ row }) => row.status === "active");
+      if (active.length > 1)
+        throw new Error("Multiple active Agent Host authorities during migration");
+      const selected = active[0] ?? entries.at(-1)!;
+      const supervisorHighWater = Math.max(
+        ...entries.map(({ authority }) => authority.supervisorEpoch),
+      );
+      const hostGenerationHighWater = Math.max(
+        ...entries.map(({ authority }) => authority.hostGeneration),
+      );
+      const hostId = selected.authority.hostId;
+      const prior = decodeDurableAgentHostPlan(
+        sessionId,
+        db.query(
+          `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
+                  host_id, host_generation_high_water, supervisor_high_water
+           FROM session_kernel_agent_host_plan WHERE session_id = ?`,
+        ).get(sessionId) as Record<string, unknown> | null,
+      );
+      if (prior) {
+        if (prior.hostId && prior.hostId !== hostId)
+          throw new Error("Agent Host plan ID contradicted receipts during migration");
+        const sameFence =
+          prior.runId === selected.authority.fence.runId &&
+          prior.generation === selected.authority.fence.generation;
+        if (
+          (active.length > 0 || sameFence) &&
+          (!sameFence ||
+            prior.turnId !== selected.authority.fence.turnId ||
+            prior.planHash !== selected.authority.planHash)
+        ) throw new Error("Agent Host plan contradicted receipts during migration");
+        db.run(
+          `UPDATE session_kernel_agent_host_plan
+           SET host_id = ?, host_generation_high_water = ?,
+               supervisor_high_water = ?, updated_at = ?
+           WHERE session_id = ?`,
+          [
+            hostId,
+            Math.max(prior.hostGenerationHighWater, hostGenerationHighWater),
+            Math.max(prior.supervisorHighWater, supervisorHighWater),
+            Date.now(),
+            sessionId,
+          ],
+        );
+      } else {
+        db.run(
+          `INSERT INTO session_kernel_agent_host_plan
+           (session_id, registration_id, run_id, run_generation, turn_id,
+            plan_hash, host_id, host_generation_high_water,
+            supervisor_high_water, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            sessionId,
+            `migration:${selected.authority.supervisorEpoch}`,
+            selected.authority.fence.runId,
+            selected.authority.fence.generation,
+            selected.authority.fence.turnId,
+            selected.authority.planHash,
+            hostId,
+            hostGenerationHighWater,
+            supervisorHighWater,
+            Date.now(),
+          ],
+        );
+      }
+    }
+    db.exec("PRAGMA user_version = 26");
+  });
+  tx.immediate();
 }
 
 export type RunEventDecision = {
@@ -596,6 +773,7 @@ export class SessionKernelStore {
         turn_id TEXT NOT NULL,
         plan_hash TEXT NOT NULL,
         host_id TEXT,
+        host_generation_high_water INTEGER NOT NULL DEFAULT 0,
         supervisor_high_water INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
@@ -721,37 +899,6 @@ export class SessionKernelStore {
       this.db.exec(
         "ALTER TABLE session_kernel_creation ADD COLUMN setup_plan TEXT",
       );
-    const supervisionColumns = new Set(
-      (
-        this.db
-          .query("PRAGMA table_info(session_kernel_agent_host_supervision)")
-          .all() as Array<{ name: string }>
-      ).map((column) => column.name),
-    );
-    if (!supervisionColumns.has("expires_at")) {
-      this.db.exec(
-        "ALTER TABLE session_kernel_agent_host_supervision ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0",
-      );
-      const rows = this.db.query(
-        "SELECT session_id, supervisor_epoch, authority FROM session_kernel_agent_host_supervision",
-      ).all() as Array<{
-        session_id: string;
-        supervisor_epoch: number;
-        authority: string;
-      }>;
-      for (const row of rows) {
-        const authority = decodeAgentHostSupervisionAuthorityV2(
-          parsed(row.authority),
-        );
-        if (!authority)
-          throw new Error("Invalid durable Agent Host authority during schema 25 migration");
-        this.db.run(
-          `UPDATE session_kernel_agent_host_supervision SET expires_at = ?
-           WHERE session_id = ? AND supervisor_epoch = ?`,
-          [authority.expiresAtMs, row.session_id, row.supervisor_epoch],
-        );
-      }
-    }
 		const commandColumns = new Set(
 			(
         this.db
@@ -950,6 +1097,7 @@ export class SessionKernelStore {
     this.db.exec(
       "DROP INDEX IF EXISTS idx_skc_updated; DROP INDEX IF EXISTS idx_skc_status_created;",
     );
+    migrateAgentHostSupervisionSchema(this.db, schemaVersion);
 		this.db.exec(`PRAGMA user_version = ${SESSION_KERNEL_SCHEMA_VERSION}`);
 		if (path !== ":memory:") {
 			try {
@@ -1654,7 +1802,7 @@ export class SessionKernelStore {
       input.sessionId,
       this.db.query(
         `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
-                host_id, supervisor_high_water
+                host_id, host_generation_high_water, supervisor_high_water
          FROM session_kernel_agent_host_plan WHERE session_id = ?`,
       ).get(input.sessionId) as Record<string, unknown> | null,
     );
@@ -1670,8 +1818,9 @@ export class SessionKernelStore {
     this.db.run(
       `INSERT INTO session_kernel_agent_host_plan
        (session_id, registration_id, run_id, run_generation, turn_id,
-        plan_hash, host_id, supervisor_high_water, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        plan_hash, host_id, host_generation_high_water,
+        supervisor_high_water, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(session_id) DO UPDATE SET
         registration_id = excluded.registration_id,
         run_id = excluded.run_id,
@@ -1679,6 +1828,7 @@ export class SessionKernelStore {
         turn_id = excluded.turn_id,
         plan_hash = excluded.plan_hash,
         host_id = excluded.host_id,
+        host_generation_high_water = excluded.host_generation_high_water,
         supervisor_high_water = excluded.supervisor_high_water,
         updated_at = excluded.updated_at`,
       [
@@ -1689,6 +1839,7 @@ export class SessionKernelStore {
         input.turnId,
         input.planHash,
         prior?.hostId ?? null,
+        prior?.hostGenerationHighWater ?? 0,
         prior?.supervisorHighWater ?? 0,
         Date.now(),
       ],
@@ -1739,7 +1890,7 @@ export class SessionKernelStore {
       input.sessionId,
       this.db.query(
         `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
-                host_id, supervisor_high_water
+                host_id, host_generation_high_water, supervisor_high_water
          FROM session_kernel_agent_host_plan WHERE session_id = ?`,
       ).get(input.sessionId) as Record<string, unknown> | null,
     );
@@ -1751,6 +1902,8 @@ export class SessionKernelStore {
       plan.planHash !== input.planHash
     ) return { accepted: false, reason: "plan_mismatch" };
     if (plan.hostId != null && plan.hostId !== input.hostId)
+      return { accepted: false, reason: "stale_host" };
+    if (input.hostGeneration < plan.hostGenerationHighWater)
       return { accepted: false, reason: "stale_host" };
 
     const current = this.db.query(
@@ -1819,9 +1972,12 @@ export class SessionKernelStore {
           receipt.authorityHash, input.expiresAtMs, Date.now()]);
       this.db.run(
         `UPDATE session_kernel_agent_host_plan
-         SET host_id = COALESCE(host_id, ?), supervisor_high_water = ?, updated_at = ?
+         SET host_id = COALESCE(host_id, ?), host_generation_high_water = ?,
+             supervisor_high_water = ?, updated_at = ?
          WHERE session_id = ? AND run_id = ? AND run_generation = ?`,
-        [input.hostId, supervisorEpoch, Date.now(), input.sessionId,
+        [input.hostId,
+          Math.max(plan.hostGenerationHighWater, input.hostGeneration),
+          supervisorEpoch, Date.now(), input.sessionId,
           input.runId, input.generation],
       );
     });
