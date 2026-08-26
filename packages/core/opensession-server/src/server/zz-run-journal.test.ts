@@ -141,18 +141,39 @@ describe("run journal", () => {
 		await clearRunState(sessionId);
 		expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
 		let terminal: StreamEvent | undefined;
+		let settlementStarted = false;
+		const observerStarted = Promise.withResolvers<void>();
+		const observerGate = Promise.withResolvers<void>();
 		const errorLog = spyOn(console, "error").mockImplementation(() => {});
 		try {
-			const handled = await agent.resumeInterruptedRuns((_id, event) => {
-				terminal = event;
-				throw new Error("observer failed");
-			});
-			expect(handled).toEqual([sessionId]);
+			const recovery = agent.resumeInterruptedRuns(
+				(_id, event) => {
+					settlementStarted = true;
+					terminal = event;
+				},
+				undefined,
+				undefined,
+				undefined,
+				async () => {
+					observerStarted.resolve();
+					await observerGate.promise;
+					throw new Error("observer failed");
+				},
+			);
+			await observerStarted.promise;
+			expect(settlementStarted).toBe(false);
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+			observerGate.resolve();
+			expect(await recovery).toEqual([sessionId]);
 			expect(terminal).toMatchObject({
 				type: "error",
 				content:
 					"Restart recovery failed twice. Send the prompt again to continue.",
 			});
+			expect(errorLog).toHaveBeenCalledWith(
+				expect.stringContaining("Recovered event observer failed"),
+				expect.objectContaining({ message: "observer failed" }),
+			);
 			expect(agent.isAgentSessionBusy(sessionId)).toBe(false);
 			expect(mod.activeRunRecords()).toEqual([]);
 		} finally {

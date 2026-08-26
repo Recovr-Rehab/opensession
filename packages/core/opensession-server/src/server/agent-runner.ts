@@ -1293,7 +1293,7 @@ export async function resumeInterruptedRuns(
   askHandlerFor?: (osSessionId: string) => AskHandler | undefined,
   inProcessMcpFor?: (osSessionId: string, user?: string) => Record<string, unknown> | undefined,
   reposNoteFor?: (osSessionId: string) => string | undefined,
-  onEvent?: (osSessionId: string, event: StreamEvent) => void,
+  onEvent?: (osSessionId: string, event: StreamEvent) => void | Promise<void>,
   snapshotLocalHostRuns: ActiveRunRecord[] = [],
   deferRecovery?: (run: ActiveRunRecord) => boolean,
 ): Promise<string[]> {
@@ -1304,10 +1304,13 @@ export async function resumeInterruptedRuns(
     if (run.osSessionId && !resumed.includes(run.osSessionId))
       resumed.push(run.osSessionId);
   };
-  const emitRecoveryEvent = (run: ActiveRunRecord, event: StreamEvent) => {
+  const emitRecoveryEvent = async (
+    run: ActiveRunRecord,
+    event: StreamEvent,
+  ): Promise<void> => {
     if (!run.osSessionId) return;
     try {
-      onEvent?.(run.osSessionId, event);
+      await onEvent?.(run.osSessionId, event);
     } catch (e) {
       console.error(`[runner] Recovered event observer failed for ${run.runKey}:`, e);
     }
@@ -1318,7 +1321,7 @@ export async function resumeInterruptedRuns(
     settlingRunKeys.add(run.runKey);
     rememberHandledSession(run);
     try {
-      emitRecoveryEvent(run, event);
+      await emitRecoveryEvent(run, event);
       try {
         await onResumed?.(run.osSessionId, event, run);
       } catch (e) {
@@ -1364,10 +1367,10 @@ export async function resumeInterruptedRuns(
       (current.firstJournaledAt || current.startedAt) === expectedLineage
     );
   };
-  const abandonStoppedRecovery = (
+  const abandonStoppedRecovery = async (
     run: ActiveRunRecord,
     cancelOwnership: "owned" | "none" | "unknown",
-  ): boolean => {
+  ): Promise<boolean> => {
     const stopped =
       !!run.osSessionId && getRunState(run.osSessionId) === "stopped";
     // The durable effect owns this exact physical dispatch. Keep recovery
@@ -1385,7 +1388,7 @@ export async function resumeInterruptedRuns(
       // source completion. A pre-engine in-process journal has no surviving
       // process after this boot and must never be re-run.
       const detached = !!(run.hostId || run.runnerId || run.sandboxId);
-      if (detached) reissueDurableRecoveryCancel(run);
+      if (detached) await reissueDurableRecoveryCancel(run);
       return !detached;
     }
     const cancelled = cancelledRecoveries.delete(run);
@@ -1406,7 +1409,7 @@ export async function resumeInterruptedRuns(
       ownershipBackoffMs = Math.min(5_000, ownershipBackoffMs * 2);
       ownership = durableCancelRecoveryOwnership(run);
     }
-    return abandonStoppedRecovery(run, ownership);
+    return await abandonStoppedRecovery(run, ownership);
   };
   const recoveryTask = (
     run: ActiveRunRecord,
@@ -1583,7 +1586,7 @@ export async function resumeInterruptedRuns(
             markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = (await settleRecovery(run, event)) || terminalSeen;
-            } else emitRecoveryEvent(run, event);
+            } else await emitRecoveryEvent(run, event);
           }
           if (await checkpointStoppedRecovery(run)) return;
           if (!terminalSeen) {
@@ -1674,7 +1677,7 @@ export async function resumeInterruptedRuns(
             if (event.type === "done" || event.type === "error") {
               terminalSeen = (await settleRecovery(run, event)) || terminalSeen;
               recordRecovery(event.type === "done" ? "ok" : "failed", event.type);
-            } else emitRecoveryEvent(run, event);
+            } else await emitRecoveryEvent(run, event);
           }
           if (await checkpointStoppedRecovery(run)) return;
           if (!terminalSeen) {
@@ -1809,7 +1812,7 @@ export async function resumeInterruptedRuns(
             markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = (await settleRecovery(run, event)) || terminalSeen;
-            } else emitRecoveryEvent(run, event);
+            } else await emitRecoveryEvent(run, event);
           }
           if (await checkpointStoppedRecovery(run)) return;
           if (!terminalSeen && recoveryStillOwnsJournal(run)) {
@@ -1907,7 +1910,7 @@ export async function resumeInterruptedRuns(
             markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = (await settleRecovery(run, event)) || terminalSeen;
-            } else emitRecoveryEvent(run, event);
+            } else await emitRecoveryEvent(run, event);
           }
           if (await checkpointStoppedRecovery(run)) return;
           if (!terminalSeen)
@@ -1995,7 +1998,7 @@ export async function resumeInterruptedRuns(
           markRecoveryProgress(run, event);
           if (event.type === "done" || event.type === "error") {
             recoverySettled = (await settleRecovery(run, event)) || recoverySettled;
-          } else emitRecoveryEvent(run, event);
+          } else await emitRecoveryEvent(run, event);
         }
         if (await checkpointStoppedRecovery(run)) return;
         if (!recoverySettled)
