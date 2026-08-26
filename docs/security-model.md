@@ -128,8 +128,9 @@ SessionKernel replay material: output digest, outcome code, ordered transcript
 receipt references and, for model operations, ordered pending tool-use entry
 IDs. Settled and indeterminate receipts lacking this material fail strict
 decoding. Recovery must first durably reserve indeterminate terminal ownership,
-then append a visible entry whose destination identity is derived from that
-reservation, and finally mark the receipt indeterminate. Settlement cannot
+then re-read and authenticate that reservation from the durable row before
+appending a visible entry whose destination identity is derived from it, and
+finally mark the receipt indeterminate. Settlement cannot
 commit after the reservation. The reservation survives restart, so recovery can
 repair the actor terminal without retrying physical provider or MCP work or
 leaving a false indeterminate entry after a competing settlement.

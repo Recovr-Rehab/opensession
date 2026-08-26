@@ -170,21 +170,55 @@ export async function reconcileExecutingOperation(
       record.receipt.state,
       "indeterminate",
     );
+  const authenticateReservation = async (
+    expected: Readonly<AgentOperationTerminalReservation>,
+  ): Promise<
+    | { terminal: AgentOperationRecord }
+    | {
+        record: AgentOperationRecord;
+        reservation: Readonly<AgentOperationTerminalReservation>;
+      }
+  > => {
+    const latest = await ledger.getExact(record);
+    if (!latest) throw new AgentOperationNotFoundError();
+    if (
+      latest.receipt.state === "settled" ||
+      latest.receipt.state === "indeterminate"
+    )
+      return { terminal: latest };
+    if (
+      latest.receipt.state !== "executing" ||
+      !latest.terminalReservation ||
+      !sameTerminalReservation(latest.terminalReservation, expected)
+    )
+      throw new AgentOperationConflictError(
+        "agent operation terminal reservation mismatch",
+      );
+    return {
+      record: latest,
+      reservation: latest.terminalReservation,
+    };
+  };
   const finalizeReservation = async (
-    reservation: Readonly<AgentOperationTerminalReservation>,
+    expected: Readonly<AgentOperationTerminalReservation>,
   ): Promise<AgentOperationRecord> => {
+    const authenticated = await authenticateReservation(expected);
+    if ("terminal" in authenticated) return authenticated.terminal;
     try {
       // Callers bind append identity to reservationId, making restart and
       // concurrent reservation recovery destination-idempotent.
-      const terminal = await createIndeterminateTerminal(record, reservation);
+      const terminal = await createIndeterminateTerminal(
+        authenticated.record,
+        authenticated.reservation,
+      );
       return await ledger.markIndeterminate(
-        record,
-        reservation,
+        authenticated.record,
+        authenticated.reservation,
         completedAtMs,
         terminal,
       );
     } catch (error) {
-      const latest = await ledger.getExact(record);
+      const latest = await ledger.getExact(authenticated.record);
       if (latest?.receipt.state === "indeterminate") return latest;
       throw error;
     }
@@ -264,6 +298,16 @@ export async function reconcileExecutingOperation(
   )
     return failClosed(result.reason);
   return failClosed("reconciliation_failed");
+}
+function sameTerminalReservation(
+  a: Readonly<AgentOperationTerminalReservation>,
+  b: Readonly<AgentOperationTerminalReservation>,
+): boolean {
+  return (
+    a.reservationId === b.reservationId &&
+    a.reason === b.reason &&
+    a.reservedAtMs === b.reservedAtMs
+  );
 }
 const plain = (value: unknown): value is Record<string, unknown> =>
   !!value &&

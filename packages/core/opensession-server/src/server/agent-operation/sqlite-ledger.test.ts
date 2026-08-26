@@ -14,6 +14,7 @@ import { join } from "node:path";
 import type {
   AgentOperationIdentity,
   AgentOperationIndeterminateReason,
+  AgentOperationRecord,
   AgentOperationTerminalReservation,
 } from "./ledger";
 import {
@@ -362,6 +363,64 @@ describe("SQLite Agent operation ledger", () => {
     );
     expect(callbackCalls).toBe(0);
     expect(recovered.receipt).toEqual(settled.receipt);
+    await ledger.close();
+  });
+
+  test("authenticates a recovered reservation before transcript I/O", async () => {
+    const ledger = new SQLiteAgentOperationLedger({ dbPath: path() });
+    const exact = identity();
+    await ledger.claimPrepared(exact, 1);
+    const executing = await ledger.markExecuting(exact, 2);
+    let callbackCalls = 0;
+    const callback = async (
+      _record: AgentOperationRecord,
+      reservation: Readonly<AgentOperationTerminalReservation>,
+    ) => {
+      callbackCalls += 1;
+      return terminalFor(reservation.reason);
+    };
+    const forgedReservation = {
+      reservationId: `reservation:${"9".repeat(64)}`,
+      reason: "reconciliation_unsupported" as const,
+      reservedAtMs: 3,
+    };
+    await expect(
+      reconcileExecutingOperation(
+        ledger,
+        { ...executing, terminalReservation: forgedReservation },
+        undefined,
+        callback,
+        3,
+      ),
+    ).rejects.toBeInstanceOf(AgentOperationConflictError);
+    expect(callbackCalls).toBe(0);
+    expect((await ledger.getExact(exact))?.terminalReservation).toBeUndefined();
+
+    const durable = await ledger.reserveIndeterminate(
+      exact,
+      "reconciliation_unsupported",
+      3,
+    );
+    const reserved = (await ledger.getExact(exact))!;
+    await expect(
+      reconcileExecutingOperation(
+        ledger,
+        {
+          ...reserved,
+          terminalReservation: {
+            ...durable,
+            reservationId: `reservation:${"8".repeat(64)}`,
+          },
+        },
+        undefined,
+        callback,
+        4,
+      ),
+    ).rejects.toBeInstanceOf(AgentOperationConflictError);
+    expect(callbackCalls).toBe(0);
+    expect((await ledger.getExact(exact))?.terminalReservation).toEqual(
+      durable,
+    );
     await ledger.close();
   });
 
