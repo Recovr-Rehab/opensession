@@ -1145,6 +1145,7 @@ summary:focus-visible {
 	position: relative;
 	overflow: hidden;
 	aspect-ratio: 16 / 10;
+	margin-inline: 0;
 	border-radius: calc(28px * var(--rf));
 	corner-shape: var(--cs);
 	background: url("./demo-background.webp") center / cover;
