@@ -86,6 +86,8 @@ type RuntimeState = {
 	handle?: ReturnType<typeof setInterval>;
 	draining?: boolean;
 	lastCompactAt?: number;
+	startedAt?: number;
+	nextMaintenanceAt?: number;
 	maintenancePending?: boolean;
 	activeTimers?: Set<string>;
 	activeOutbox?: Set<number>;
@@ -99,6 +101,15 @@ const globalRuntime = globalThis as typeof globalThis & {
 const runtime: RuntimeState = (globalRuntime.__opensessionSessionKernelRuntime ??= {
 	timerHandlers: new Map(),
 });
+runtime.startedAt ??= Date.now();
+
+// Maintenance is actor work, not a readiness prerequisite. Starting it in the
+// first runtime poll made a recovering gateway compete with global SQLite
+// barriers while it was restoring runs. Continue a large sweep in small,
+// spaced slices after startup has settled instead.
+const BOOT_MAINTENANCE_DELAY_MS = 5 * 60_000;
+const MAINTENANCE_SWEEP_INTERVAL_MS = 60 * 60_000;
+const MAINTENANCE_CONTINUATION_DELAY_MS = 15_000;
 
 export function registerSessionTimerHandler(
 	kind: string,
@@ -286,15 +297,32 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				.finally(() => active.delete(item.id));
 		}
 		passivateIdleSessionKernels();
+		const maintenanceNow = Date.now();
+		const maintenanceScheduleDue =
+			maintenanceNow >=
+			(runtime.nextMaintenanceAt ??
+				(runtime.startedAt ?? maintenanceNow) + BOOT_MAINTENANCE_DELAY_MS);
 		const maintenanceSweepDue =
-			!runtime.lastCompactAt ||
-			Date.now() - runtime.lastCompactAt > 60 * 60_000;
-		if (runtime.maintenancePending || maintenanceSweepDue) {
+			!runtime.maintenancePending &&
+			maintenanceScheduleDue &&
+			(!runtime.lastCompactAt ||
+				maintenanceNow - runtime.lastCompactAt >=
+					MAINTENANCE_SWEEP_INTERVAL_MS);
+		const maintenanceContinuationDue =
+			!!runtime.maintenancePending && maintenanceScheduleDue;
+		if (maintenanceSweepDue || maintenanceContinuationDue) {
+			// Set the retry point before awaiting so a failed actor call cannot turn
+			// the one-second runtime ticker into a maintenance request storm.
+			runtime.nextMaintenanceAt =
+				maintenanceNow + MAINTENANCE_CONTINUATION_DELAY_MS;
 			runtime.maintenancePending = await maintainSessionKernel();
 			if (maintenanceSweepDue) {
 				pruneCreatePlans(sessionKernelStore());
-				runtime.lastCompactAt = Date.now();
+				runtime.lastCompactAt = maintenanceNow;
 			}
+			if (!runtime.maintenancePending)
+				runtime.nextMaintenanceAt =
+					maintenanceNow + MAINTENANCE_SWEEP_INTERVAL_MS;
 		}
 	} finally {
 		runtime.draining = false;

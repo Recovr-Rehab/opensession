@@ -220,7 +220,8 @@ describe("per-session session kernel storage", () => {
     expect(host.quarantinedSession("stats-broken")).toMatchObject({
       commandKind: "global:stats",
     });
-    expect(() => host.maintain()).not.toThrow();
+    for (let pass = 0; pass < 8 && !host.quarantinedSession("maintenance-broken"); pass += 1)
+      expect(() => host.maintain()).not.toThrow();
     expect(host.quarantinedSession("maintenance-broken")).toMatchObject({
       commandKind: "maintenance:store",
     });
@@ -496,5 +497,31 @@ describe("per-session session kernel storage", () => {
     expect(recovered.central.isolatedOutboxSessionId(successorId))
       .toBe("successor-session");
     recovered.close();
+  });
+
+  test("rotates through due isolated work in bounded runtime batches", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const dueAt = Date.now() - 1;
+    for (let index = 0; index < 24; index += 1) {
+      host.call("scheduleTimer", [{
+        sessionId: `bounded-runtime-${index.toString().padStart(2, "0")}`,
+        timerId: "wake",
+        kind: "known_timer",
+        dueAt,
+        payload: null,
+      }]);
+    }
+
+    const first = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
+    const second = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
+
+    expect(first.timers).toHaveLength(16);
+    expect(second.timers).toHaveLength(16);
+    expect(new Set([
+      ...first.timers.map((timer) => timer.sessionId),
+      ...second.timers.map((timer) => timer.sessionId),
+    ]).size).toBe(24);
+    host.close();
   });
 });

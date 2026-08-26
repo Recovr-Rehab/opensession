@@ -18,6 +18,13 @@ function minDefined(values: Array<number | undefined>): number | undefined {
 }
 
 const CENTRAL_STORE_FAILURE = "SESSION_KERNEL_CENTRAL_STORE_FAILURE";
+// Global runtime turns share the actor service with latency-sensitive session
+// commands. Keep every turn small: the cursor makes progress across calls,
+// while a bounded slice prevents startup recovery from opening hundreds of
+// SQLite databases behind one global barrier.
+const RUNTIME_WAKE_CANDIDATE_BATCH = 16;
+const OUTBOX_ROUTE_MAINTENANCE_BATCH = 8;
+const SESSION_STORE_MAINTENANCE_BATCH = 1;
 
 export function isSessionKernelCentralStoreFailure(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error &&
@@ -332,7 +339,10 @@ export class SessionKernelStoreHost {
     effectKinds: string[],
     limit: number,
   ): { timers: DurableTimer[]; outbox: DurableOutboxItem[] } {
-    const candidateLimit = Math.max(100, limit * 4);
+    const candidateLimit = Math.max(
+      1,
+      Math.min(RUNTIME_WAKE_CANDIDATE_BATCH, limit),
+    );
     let candidates = this.central.isolatedWakeCandidates(
       now,
       candidateLimit,
@@ -419,12 +429,15 @@ export class SessionKernelStoreHost {
 
   maintain(): boolean {
     let routes = this.central.isolatedOutboxRoutes(
-      50,
+      OUTBOX_ROUTE_MAINTENANCE_BATCH,
       this.outboxRouteMaintenanceCursor,
     );
     if (routes.length === 0 && this.outboxRouteMaintenanceCursor !== 0) {
       this.outboxRouteMaintenanceCursor = 0;
-      routes = this.central.isolatedOutboxRoutes(50, 0);
+      routes = this.central.isolatedOutboxRoutes(
+        OUTBOX_ROUTE_MAINTENANCE_BATCH,
+        0,
+      );
     }
     for (const route of routes) {
       this.outboxRouteMaintenanceCursor = route.id;
@@ -437,10 +450,11 @@ export class SessionKernelStoreHost {
       if (routedSession.ok && routedSession.value !== route.sessionId)
         this.central.forgetIsolatedOutboxRoute(route.id);
     }
-    let pending = routes.length === 50 || this.central.maintain();
-    const maintenanceBatch = 8;
+    let pending =
+      routes.length === OUTBOX_ROUTE_MAINTENANCE_BATCH ||
+      this.central.maintain();
     const placements = this.central.isolatedSessionPlacements(
-      maintenanceBatch,
+      SESSION_STORE_MAINTENANCE_BATCH,
       this.maintenanceSessionCursor,
     );
     if (placements.length === 0 && this.maintenanceSessionCursor) {
@@ -456,7 +470,8 @@ export class SessionKernelStoreHost {
         );
         if (result.ok) pending = result.value || pending;
       }
-      pending = placements.length === maintenanceBatch || pending;
+      pending =
+        placements.length === SESSION_STORE_MAINTENANCE_BATCH || pending;
     }
     return pending;
   }
