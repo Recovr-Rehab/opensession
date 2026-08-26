@@ -29,15 +29,20 @@ export const metadata: Metadata = {
 export default function AnnouncementPage() {
 	return (
 		<main className="announcement-page" aria-labelledby="announcement-title">
-			<a className="announcement-home" href="/">
-				Back to home
-			</a>
+			<nav className="announcement-page-nav" aria-label="Announcement navigation">
+				<a className="announcement-page-logo" href="/" aria-label="Open Session home">
+					<img src="/icon.png" alt="" />
+				</a>
+				<a className="announcement-home" href="/">
+					Back to home
+				</a>
+			</nav>
 			<div className="announcement-page-hero">
 				<div className="stage">
 					<ProductDemo />
 				</div>
 			</div>
-			<AnnouncementArticle showMark />
+			<AnnouncementArticle />
 		</main>
 	);
 }
