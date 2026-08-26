@@ -4,6 +4,7 @@ import {
 	useState,
 	type MouseEvent as ReactMouseEvent,
 	type ReactNode,
+	type RefObject,
 } from "react";
 import { createRoot } from "react-dom/client";
 import markAsset from "../mac/build/icon-512.png";
@@ -13,7 +14,6 @@ import {
 	IconArrowUpRight,
 	IconBranches,
 	IconCheck,
-	IconChevronLeft,
 	IconClock,
 	IconCopy,
 	IconGlobe,
@@ -130,37 +130,11 @@ function Question({ q, children }: { q: string; children: ReactNode }) {
  * their own copies on purpose - this one is plain CSS on the landing page's
  * tokens, the app's is built on its own UI primitives.
  */
-function DownloadAppsCards() {
-	const [help, setHelp] = useState(false);
-
-	if (help)
-		return (
-			<div className="download-steps">
-				<button
-					type="button"
-					className="download-steps-back"
-					onClick={() => setHelp(false)}
-				>
-					<IconChevronLeft size={18} />
-					Back to apps
-				</button>
-				<ol>
-					<li>
-						<strong>Open in your browser</strong>
-						<span>Use Safari on iPhone or iPad, or Chrome on Android and desktop.</span>
-					</li>
-					<li>
-						<strong>Open the browser menu</strong>
-						<span>On iPhone or iPad, tap Share. Elsewhere, open the browser menu.</span>
-					</li>
-					<li>
-						<strong>Add Open Session</strong>
-						<span>Choose Add to Home Screen, Install app, or Add to Dock.</span>
-					</li>
-				</ol>
-			</div>
-		);
-
+function DownloadAppsCards({
+	onShowInstallHelp,
+}: {
+	onShowInstallHelp: () => void;
+}) {
 	return (
 		<div className="download-cards">
 			<section className="download-card">
@@ -192,13 +166,61 @@ function DownloadAppsCards() {
 					<button
 						type="button"
 						className="download-card-action download-card-action-soft"
-						onClick={() => setHelp(true)}
+						onClick={onShowInstallHelp}
 					>
 						How to install
 					</button>
 				</div>
 			</section>
 		</div>
+	);
+}
+
+function InstallHelpDialog({
+	dialogRef,
+	onClose,
+}: {
+	dialogRef: RefObject<HTMLDialogElement | null>;
+	onClose: () => void;
+}) {
+	return (
+		<dialog
+			ref={dialogRef}
+			className="pwa-guide setup-guide"
+			aria-labelledby="install-help-title"
+			onClose={onClose}
+			onClick={(event) => {
+				if (event.target === event.currentTarget) event.currentTarget.close();
+			}}
+		>
+			<div className="pwa-guide-panel">
+				<button
+					type="button"
+					className="pwa-guide-close"
+					aria-label="Close"
+					onClick={() => dialogRef.current?.close()}
+				>
+					<IconX size={22} />
+				</button>
+				<h2 id="install-help-title">Install the web app</h2>
+				<div className="download-steps">
+					<ol>
+						<li>
+							<strong>Open in your browser</strong>
+							<span>Use Safari on iPhone or iPad, or Chrome on Android and desktop.</span>
+						</li>
+						<li>
+							<strong>Open the browser menu</strong>
+							<span>On iPhone or iPad, tap Share. Elsewhere, open the browser menu.</span>
+						</li>
+						<li>
+							<strong>Add Open Session</strong>
+							<span>Choose Add to Home Screen, Install app, or Add to Dock.</span>
+						</li>
+					</ol>
+				</div>
+			</div>
+		</dialog>
 	);
 }
 
@@ -209,6 +231,8 @@ function SetupGuide({
 	description,
 	secondary = false,
 	children,
+	dialogRef: externalDialogRef,
+	triggerRef,
 }: {
 	triggerLabel: string;
 	triggerIcon?: ReactNode;
@@ -216,13 +240,17 @@ function SetupGuide({
 	description?: string;
 	secondary?: boolean;
 	children: ReactNode;
+	dialogRef?: RefObject<HTMLDialogElement | null>;
+	triggerRef?: RefObject<HTMLButtonElement | null>;
 }) {
-	const dialogRef = useRef<HTMLDialogElement>(null);
+	const localDialogRef = useRef<HTMLDialogElement>(null);
+	const dialogRef = externalDialogRef ?? localDialogRef;
 	const titleId = `setup-guide-${title.toLowerCase().replaceAll(" ", "-")}`;
 
 	return (
 		<>
 			<button
+				ref={triggerRef}
 				type="button"
 				className={`landing-setup-step-action${secondary ? " landing-setup-step-action-secondary" : ""}`}
 				onClick={() => dialogRef.current?.showModal()}
@@ -304,6 +332,10 @@ function InstallCommand() {
 }
 
 function SetupOverview() {
+	const downloadTriggerRef = useRef<HTMLButtonElement>(null);
+	const downloadDialogRef = useRef<HTMLDialogElement>(null);
+	const installDialogRef = useRef<HTMLDialogElement>(null);
+
 	return (
 		<section className="card landing-setup-overview">
 			<h2>Set up is easy</h2>
@@ -368,11 +400,22 @@ function SetupOverview() {
 						triggerLabel="Download apps"
 						triggerIcon={<AppleMark />}
 						title="Download the apps"
+						dialogRef={downloadDialogRef}
+						triggerRef={downloadTriggerRef}
 					>
-						<DownloadAppsCards />
+						<DownloadAppsCards
+							onShowInstallHelp={() => {
+								downloadDialogRef.current?.close();
+								requestAnimationFrame(() => installDialogRef.current?.showModal());
+							}}
+						/>
 					</SetupGuide>
 				</li>
 			</ol>
+			<InstallHelpDialog
+				dialogRef={installDialogRef}
+				onClose={() => downloadTriggerRef.current?.focus({ preventScroll: true })}
+			/>
 		</section>
 	);
 }
