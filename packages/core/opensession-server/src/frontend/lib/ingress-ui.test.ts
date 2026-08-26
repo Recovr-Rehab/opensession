@@ -56,7 +56,7 @@ describe("public ingress form", () => {
 	test("keeps one draft and display URL per exposure method", () => {
 		expect(configuredIngressDrafts(settings)).toEqual({
 			tailscale: "https://server.example.ts.net",
-			cloudflare: "https://ingress.example.test",
+			cloudflare: "https://ingress.os.example.test",
 			custom: "old.example.test",
 		});
 		expect(publicUrlForMethod(settings, "tailscale", "ignored.example.test")).toBe(
@@ -73,7 +73,7 @@ describe("public ingress form", () => {
 		expect(privateAppDnsRecord(settings, "team.example.test")).toBe(
 			"A team.example.test 100.64.0.10",
 		);
-		expect(suggestedPublicIngressDomain("os.example.test")).toBe("ingress.example.test");
+		expect(suggestedPublicIngressDomain("os.example.test")).toBe("ingress.os.example.test");
 		expect(suggestedPublicIngressDomain("private.example.test")).toBe("ingress.private.example.test");
 		const caddy = privateAppCaddyConfig(settings, "team.example.test");
 		expect(caddy).toContain("team.example.test {");

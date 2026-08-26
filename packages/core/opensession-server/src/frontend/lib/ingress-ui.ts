@@ -65,12 +65,7 @@ export function customDnsRecords(
 
 export function suggestedPublicIngressDomain(privateDomain: string): string {
 	const hostname = ingressHostname(privateDomain, "");
-	if (!hostname) return "";
-	const labels = hostname.split(".");
-	if (labels.length >= 3 && ["app", "opensession", "os"].includes(labels[0])) {
-		return `ingress.${labels.slice(1).join(".")}`;
-	}
-	return `ingress.${hostname}`;
+	return hostname ? `ingress.${hostname}` : "";
 }
 
 export function publicUrlForMethod(

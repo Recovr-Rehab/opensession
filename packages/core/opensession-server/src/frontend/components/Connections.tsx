@@ -501,7 +501,7 @@ function buildGithubAppCreateUrl(name: string, org: string): string {
     name,
     url: "http://localhost:3850",
     public: "false",
-    hook_url: `${WEBHOOK_BASE_URL.replace(/\/$/, "")}/github/webhook`,
+    webhook_url: `${WEBHOOK_BASE_URL.replace(/\/$/, "")}/github/webhook`,
     webhook_active: "true",
     // The canonical grant set — the same permissions the install tokens mint
     // request, so the App is not born missing `issues` or `checks` (the drift

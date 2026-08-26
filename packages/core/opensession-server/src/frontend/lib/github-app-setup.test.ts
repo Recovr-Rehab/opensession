@@ -15,7 +15,7 @@ describe("GitHub App creation owner", () => {
 	});
 
 	test("switches account level without dropping prefilled App settings", () => {
-		const original = "https://github.com/settings/apps/new?name=Open+Session&hook_url=https%3A%2F%2Fingress.example.test%2Fgithub%2Fwebhook";
+		const original = "https://github.com/settings/apps/new?name=Open+Session&webhook_url=https%3A%2F%2Fingress.example.test%2Fgithub%2Fwebhook";
 		const organization = new URL(
 			githubAppCreateUrlForOwner(original, "organization", "acme inc"),
 		);
@@ -23,7 +23,7 @@ describe("GitHub App creation owner", () => {
 			"/organizations/acme%20inc/settings/apps/new",
 		);
 		expect(organization.searchParams.get("name")).toBe("Open Session");
-		expect(organization.searchParams.get("hook_url")).toBe(
+		expect(organization.searchParams.get("webhook_url")).toBe(
 			"https://ingress.example.test/github/webhook",
 		);
 
