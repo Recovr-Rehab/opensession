@@ -13,6 +13,7 @@ import {
   assertTranscriptActorResponse,
   TRANSCRIPT_ACTOR_MAX_ENTRIES,
   TRANSCRIPT_ACTOR_MAX_READ_LIMIT,
+  TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
   TRANSCRIPT_ACTOR_MAX_REQUEST_BYTES,
   TRANSCRIPT_ACTOR_MAX_RESPONSE_BYTES,
 } from "./session-kernel/transcript-protocol";
@@ -52,6 +53,20 @@ describe("actor transcript request bounds", () => {
       op: "tail",
       sessionId: "bounded",
       limit: TRANSCRIPT_ACTOR_MAX_READ_LIMIT + 1,
+    })).toThrow("read limit");
+    expect(() => assertTranscriptActorRequest({
+      op: "range",
+      sessionId: "bounded",
+      fromSeq: 1,
+      toSeq: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
+      limit: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
+    })).not.toThrow();
+    expect(() => assertTranscriptActorRequest({
+      op: "range",
+      sessionId: "bounded",
+      fromSeq: 1,
+      toSeq: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT + 1,
+      limit: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT + 1,
     })).toThrow("read limit");
     expect(() => assertTranscriptActorRequest({
       op: "append",

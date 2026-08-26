@@ -16,6 +16,7 @@ export const TRANSCRIPT_ACTOR_MAX_ENTRIES = 10_000;
 export const TRANSCRIPT_ACTOR_MAX_REQUEST_BYTES = 80 * 1024 * 1024;
 export const TRANSCRIPT_ACTOR_MAX_RESPONSE_BYTES = 80 * 1024 * 1024;
 export const TRANSCRIPT_ACTOR_MAX_READ_LIMIT = 200;
+export const TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT = 500;
 export const TRANSCRIPT_ACTOR_SNAPSHOT_PAGE_LIMIT = 1_400;
 export const TRANSCRIPT_ACTOR_OUTLINE_PAGE_LIMIT = 2_000;
 const TRANSCRIPT_ACTOR_MAX_STRING_BYTES = 72 * 1024 * 1024;
@@ -228,7 +229,9 @@ export function assertTranscriptActorRequest(request: TranscriptActorRequest): v
   if ("limit" in request && request.limit !== undefined) {
     const ceiling = request.op === "outline"
       ? TRANSCRIPT_ACTOR_OUTLINE_PAGE_LIMIT
-      : TRANSCRIPT_ACTOR_MAX_READ_LIMIT;
+      : request.op === "range"
+        ? TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT
+        : TRANSCRIPT_ACTOR_MAX_READ_LIMIT;
     if (!Number.isSafeInteger(request.limit) || request.limit < 1 || request.limit > ceiling)
       throw new RangeError("Transcript actor read limit is invalid");
   }

@@ -742,7 +742,7 @@ const EMPTY_TRANSCRIPT_ENTRIES: TranscriptEntry[] = [];
 // One visible range can span several actor pages. Keep the client comfortably
 // below the per-session mailbox bound so a reconnect cannot enqueue a whole
 // outline at once and crowd out live transcript reads for the same session.
-const TRANSCRIPT_RANGE_CONCURRENCY = 4;
+const TRANSCRIPT_RANGE_CONCURRENCY = 6;
 
 export function SessionViewer({
 	session,

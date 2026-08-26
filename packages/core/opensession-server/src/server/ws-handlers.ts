@@ -74,6 +74,7 @@ import {
   targetForTurnCancel,
 } from "./session-kernel";
 import { publicSessionSafety } from "./session-safety";
+import { TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT } from "./session-kernel/transcript-protocol";
 
 // Who likely triggered the restart that booted THIS process — read once from
 // the marker the previous process wrote in gracefulShutdown, and only trusted
@@ -1024,7 +1025,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						firstSeq,
 						lastSeq,
 						afterSeq,
-						200,
+						TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
 					);
 					ws.send(
 						JSON.stringify({
