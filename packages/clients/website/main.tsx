@@ -318,8 +318,7 @@ function SetupOverview() {
 							<span aria-hidden="true">1. </span>Get a server
 						</strong>
 						<span>
-							Use a machine (VPS, Hetzner, or Mac mini) you can leave powered on
-							and connected.
+							Use a VPS or Mac mini you can leave powered on and connected.
 						</span>
 					</div>
 					<SetupGuide
@@ -341,8 +340,7 @@ function SetupOverview() {
 							<span aria-hidden="true">2. </span>Expose it safely
 						</strong>
 						<span>
-							Use a Tailscale network to connect from phone or share Open Session with
-							your team.
+							Use Tailscale to connect from your phone or share with your team.
 						</span>
 					</div>
 					<a
