@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   TranscriptStore,
@@ -263,15 +263,31 @@ function readonlySourceSnapshot(
   sourceTranscriptPath: string,
   centralPath: string,
 ): { source: Database; snapshotPath: string; close: () => void } {
-  const original = new Database(sourceTranscriptPath, { readonly: true });
-  let originalOpen = true;
   let snapshotDir = "";
   try {
     snapshotDir = mkdtempSync(join(dirname(centralPath), ".transcript-source-"));
     const snapshotPath = join(snapshotDir, "transcripts.db");
-    writeFileSync(snapshotPath, original.serialize(), { mode: 0o400 });
-    original.close();
-    originalOpen = false;
+    // `Database.serialize()` materializes the whole store in one JS buffer and
+    // cannot represent production transcript databases above Bun's buffer
+    // limit. SQLite streams a transactionally consistent, self-contained copy.
+    // Run it in a short-lived Bun process: Bun's SQLite binding keeps VACUUM's
+    // VFS state alive for the process lifetime on macOS, which can make later
+    // actor WAL opens fail with SQLITE_IOERR_VNODE in the migration process.
+    const vacuum = Bun.spawnSync([
+      process.execPath,
+      "-e",
+      `import { Database } from "bun:sqlite";
+       const source = new Database(process.argv[1], { readonly: true });
+       source.run("VACUUM INTO ?", [process.argv[2]]);
+       source.close();`,
+      sourceTranscriptPath,
+      snapshotPath,
+    ], { stdout: "pipe", stderr: "pipe" });
+    if (vacuum.exitCode !== 0)
+      throw new Error(
+        `Could not snapshot transcript source: ${vacuum.stderr.toString().trim()}`,
+      );
+    chmodSync(snapshotPath, 0o400);
     const source = new Database(snapshotPath, { readonly: true });
     return {
       source,
@@ -282,7 +298,6 @@ function readonlySourceSnapshot(
       },
     };
   } catch (error) {
-    if (originalOpen) original.close();
     if (snapshotDir) rmSync(snapshotDir, { recursive: true, force: true });
     throw error;
   }
