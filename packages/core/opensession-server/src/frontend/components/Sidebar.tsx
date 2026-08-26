@@ -2898,8 +2898,8 @@ setClosingPrUrls((current) => {
 	// "Group, filter & sort" — and the strip at the top is the way out.
 	// Support is the one tool whose visibility is not its own: it and the Plain
 	// band are two doors onto one queue, and both at once would list the same
-	// tickets twice. The band wins when the stored lists still say both, which
-	// is every account that had arranged its tools before the tool existed.
+	// tickets twice. The tool wins when the independent stored lists say both,
+	// because it is the default placement and the band is the alternate.
 	const supportSurface = supportSurfaceOf(
 		!hiddenTools.has(PLAIN_ID),
 		!hiddenFeeds.has(PLAIN_ID),
