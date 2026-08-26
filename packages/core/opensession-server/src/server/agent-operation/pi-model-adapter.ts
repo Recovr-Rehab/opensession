@@ -257,37 +257,57 @@ export function createPiModelAgentOperationAdapter(
         registered.binding.model.id !== registered.modelId
       ) return failed();
 
-      const consumed = invocations.consumeAdapterPayloadExact(lookup, payload);
-      if (!consumed) return failed();
-
-      let sequence = 0;
-      let previousDigest: AgentOperationDigest | null = null;
-      let invoked = false;
       let rejectAbort: ((reason: unknown) => void) | undefined;
-      const onAbort = () => rejectAbort?.(new DOMException("aborted", "AbortError"));
+      let abortObserved = false;
+      const onAbort = () => {
+        abortObserved = true;
+        rejectAbort?.(new DOMException("aborted", "AbortError"));
+      };
       const abort = new Promise<never>((_resolve, reject) => {
         rejectAbort = reject;
         signal.addEventListener("abort", onAbort, { once: true });
+        if (signal.aborted) onAbort();
       });
+      if (abortObserved) {
+        void abort.catch(() => undefined);
+        signal.removeEventListener("abort", onAbort);
+        return cancelled();
+      }
+
+      const consumed = invocations.consumeAdapterPayloadExact(lookup, payload);
+      if (!consumed) {
+        signal.removeEventListener("abort", onAbort);
+        return failed();
+      }
+
+      let sequence = 0;
+      let previousDigest: AgentOperationDigest | null = null;
+      let publishTail: Promise<void> = Promise.resolve();
+      let invoked = false;
       try {
         invoked = true;
         const physical = executor.execute(Object.freeze({
           binding: registered.binding,
           invocation: consumed.invocation,
           signal,
-          publish: async (eventPayload: Uint8Array) => {
-            const envelope = encodePiModelEventV1({
-              operationId: request.identity.operationId,
-              eventSeq: sequence,
-              previousDigest,
-              payload: eventPayload,
+          publish: (eventPayload: Uint8Array) => {
+            const queued = publishTail.then(async () => {
+              const envelope = encodePiModelEventV1({
+                operationId: request.identity.operationId,
+                eventSeq: sequence,
+                previousDigest,
+                payload: eventPayload,
+              });
+              await sink.publish(envelope);
+              sequence++;
+              previousDigest = envelope.eventDigest;
             });
-            await sink.publish(envelope);
-            sequence++;
-            previousDigest = envelope.eventDigest;
+            publishTail = queued;
+            return queued;
           },
         }));
         const result = await Promise.race([physical, abort]);
+        await Promise.race([publishTail, abort]);
         return Object.freeze({
           outcome: result.outcome,
           transcript: result.transcript,

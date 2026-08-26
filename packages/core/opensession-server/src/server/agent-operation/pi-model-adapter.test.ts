@@ -357,6 +357,65 @@ describe("Pi model operation adapter", () => {
     expect(h.calls()).toBe(1);
   });
 
+  test("serializes concurrent publishes and drains them when executor returns early", async () => {
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const h = setup({ executor: async ({ publish }) => {
+      void publish(new Uint8Array([1]));
+      void publish(new Uint8Array([2]));
+      return { outcome: { status: "succeeded", code: "ok" }, transcript: {} };
+    } });
+    let active = 0;
+    let maxActive = 0;
+    h.sink.publish = async (event: unknown) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      h.events.push(event);
+      if (h.events.length === 1) await firstGate;
+      active--;
+    };
+    let settled = false;
+    const pending = h.adapter.execute(request(h.decoded.value), new AbortController().signal, h.sink).then((result) => {
+      settled = true;
+      return result;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(h.events).toHaveLength(1);
+    releaseFirst();
+    expect((await pending).outcome.status).toBe("succeeded");
+    expect(maxActive).toBe(1);
+    const chain = new PiModelEventChainDecoder(identity.operationId);
+    expect(chain.decode(h.events[0])?.payloadBytes).toEqual(new Uint8Array([1]));
+    expect(chain.decode(h.events[1])?.payloadBytes).toEqual(new Uint8Array([2]));
+  });
+
+  test("propagates an unawaited queued publish failure as ambiguous", async () => {
+    const h = setup({ executor: async ({ publish }) => {
+      void publish(new Uint8Array([1]));
+      return { outcome: { status: "succeeded", code: "ok" }, transcript: {} };
+    } });
+    h.sink.publish = async () => { throw new Error("stream failed"); };
+    await expect(h.adapter.execute(request(h.decoded.value), new AbortController().signal, h.sink)).rejects.toMatchObject({ reason: "disconnect_ambiguous" });
+    expect(h.calls()).toBe(1);
+  });
+
+  test("closes the abort race between the initial check and listener installation", async () => {
+    const h = setup();
+    let reads = 0;
+    const racingSignal = {
+      get aborted() { reads++; return false; },
+      addEventListener(_type: string, listener: () => void) { listener(); },
+      removeEventListener() {},
+    } as unknown as AbortSignal;
+    const result = await h.adapter.execute(request(h.decoded.value), racingSignal, h.sink);
+    expect(result.outcome.status).toBe("cancelled");
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(h.calls()).toBe(0);
+    expect(h.invocations.peekForDecode((h.decoded.value as any).identity)).toBeDefined();
+  });
+
   test("pre-abort, missing sink, and missing binding make zero physical calls without consuming", async () => {
     for (const mode of ["abort", "sink", "binding"] as const) {
       const h = setup({ bind: mode !== "binding" });
