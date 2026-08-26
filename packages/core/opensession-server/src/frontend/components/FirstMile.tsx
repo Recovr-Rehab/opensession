@@ -65,7 +65,7 @@ const STEPS: FirstMileStep[] = [
 	{
 		id: "team",
 		label: "Members",
-		title: "Add members",
+		title: "Team members",
 		description: "Add yourself and anyone else sessions can act as. GitHub usernames are optional.",
 	},
 	{
@@ -325,6 +325,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const setup = useSetupStatus();
 	const { status, failed, refetch } = setup;
 	const [index, setIndex] = useState(initialFirstMileIndex);
+	const [contentVisible, setContentVisible] = useState(true);
 	const [navigationVisible, setNavigationVisible] = useState(true);
 	const [finishing, setFinishing] = useState(false);
 	const [theme, setTheme] = useState(effectiveTheme);
@@ -347,10 +348,23 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 		if (index > 0) headingRef.current?.focus({ preventScroll: true });
 	}, [index]);
 
+	// `onLayoutAnimationComplete` is the exact reveal signal. This timeout is a
+	// fallback for steps whose measured modal geometry happens to be identical,
+	// in which case Motion has no layout animation to complete.
+	useEffect(() => {
+		if (contentVisible) return;
+		const reveal = window.setTimeout(
+			() => setContentVisible(true),
+			(reducedMotion ? duration.micro : duration.large) * 1000,
+		);
+		return () => window.clearTimeout(reveal);
+	}, [contentVisible, index, reducedMotion]);
+
 	async function goTo(next: number) {
 		const nextIndex = Math.min(Math.max(next, 0), steps.length - 1);
 		if (nextIndex === index) return;
 		activeStepIdRef.current = steps[nextIndex]!.id;
+		setContentVisible(false);
 		setNavigationVisible(false);
 		setIndex(nextIndex);
 		void refetch();
@@ -402,7 +416,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						onClick={() => goTo(stepIndex)}
 						aria-label={`${item.label}, step ${stepIndex + 1} of ${steps.length}`}
 						aria-current={stepIndex === index ? "step" : undefined}
-						className="group focus-ring flex size-10 items-center justify-center rounded-control phone:size-11"
+						className="group focus-ring flex h-10 w-8 items-center justify-center rounded-control phone:h-11 phone:w-9"
 					>
 						<span
 							aria-hidden="true"
@@ -428,6 +442,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			) : (
 				<motion.section
 					layout
+					onLayoutAnimationComplete={() => setContentVisible(true)}
 					transition={{
 						layout: {
 							type: "spring",
@@ -441,14 +456,28 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					)}
 				>
 					<AnimatePresence initial={false} mode="popLayout">
-						<motion.div key={step.id} layout className="flex min-h-0 flex-col">
+						<motion.div key={step.id} className="flex min-h-0 flex-col">
 							<header className="shrink-0 px-10 pb-2 pt-9 text-center phone:px-5 phone:pt-6">
+								{step.id === "welcome" && (
+									<motion.img
+										src={`${BASE_PATH}/mac-app-icon.png`}
+										alt=""
+										initial={{ opacity: 0 }}
+										animate={{
+											opacity: contentVisible ? 1 : 0,
+											transition: revealTransition(),
+										}}
+										exit={{ opacity: 0 }}
+										transition={revealTransition()}
+										className="mx-auto mb-7 size-20 scale-[1.13] [filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.16))] phone:mb-6 phone:size-16"
+									/>
+								)}
 								<motion.h1
 									ref={headingRef}
 									tabIndex={index > 0 ? -1 : undefined}
 									initial={{ opacity: 0 }}
 									animate={{
-										opacity: 1,
+										opacity: contentVisible ? 1 : 0,
 										transition: revealTransition(0.02),
 									}}
 									exit={{ opacity: 0 }}
@@ -462,30 +491,27 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 							<motion.div
 								initial={{ opacity: 0 }}
 								animate={{
-									opacity: 1,
+									opacity: contentVisible ? 1 : 0,
 									transition: revealTransition(0.11),
 								}}
 								exit={{ opacity: 0 }}
 								transition={revealTransition()}
 								onAnimationComplete={() => {
-									if (step.id === activeStepIdRef.current) {
+									if (contentVisible && step.id === activeStepIdRef.current) {
 										setNavigationVisible(true);
 									}
 								}}
-								className="min-h-0 overflow-y-auto overscroll-contain px-10 pb-9 pt-5 [scrollbar-width:thin] phone:px-4 phone:pb-6 phone:pt-4"
+								className={cn(
+									"min-h-0",
+									step.id === "welcome"
+										? "h-4 shrink-0"
+										: "overflow-y-auto overscroll-contain px-10 pb-9 pt-5 [scrollbar-width:thin] phone:px-4 phone:pb-6 phone:pt-4",
+								)}
 							>
-								{step.id === "welcome" ? (
-									<div className="mx-auto flex max-w-[420px] flex-col items-center py-5 text-center phone:py-3">
-										<img
-											src={`${BASE_PATH}/mac-app-icon.png`}
-											alt=""
-											className="size-20 scale-[1.13] [filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.16))] phone:size-16"
-										/>
-									</div>
-								) : (
+								{step.id !== "welcome" && (
 									<div
 										className={cn(
-											"mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:text-faint",
+											"mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:leading-[1.5] [&_[data-settings-hint]]:text-faint [&_[data-onboarding-caption]]:leading-[1.5]",
 											step.id === "ready" ? "max-w-[1160px]" : "max-w-[780px]",
 											"[&_.bg-settings-plate]:border-0 [&_.bg-settings-plate]:bg-transparent! [&_.bg-settings-plate]:shadow-none [&_.bg-settings-plate]:[backdrop-filter:none]",
 											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9",
@@ -562,6 +588,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 									variant="soft"
 									size="lg"
 									onClick={() => goTo(index - 1)}
+									className="phone:min-h-11"
 								>
 									Back
 								</Button>
@@ -575,7 +602,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 									else goTo(index + 1);
 								}}
 								disabled={finishing}
-								className="min-h-11 px-4"
+								className="px-4 phone:min-h-11"
 							>
 								{nextLabel ?? (
 									<>

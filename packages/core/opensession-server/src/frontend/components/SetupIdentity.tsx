@@ -119,7 +119,10 @@ toast(e?.message || "Failed to save", { variant: "error" });
 					onSave={(next) => save({ personaName: next })}
 					className="h-12! min-h-12! w-full! px-3.5! text-base!"
 				/>
-				<span className="text-supporting font-normal text-dim">
+				<span
+					data-onboarding-caption=""
+					className="text-supporting font-normal text-dim"
+				>
 					Shown in prompts, Slack messages, and the app.
 				</span>
 			</Field>

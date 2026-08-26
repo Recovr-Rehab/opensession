@@ -118,8 +118,10 @@ await load();
 					</Button>
 				}
 			>
-				{title ?? "Team members"}
-				{members && (showCount || !title) ? ` · ${members.length}` : ""}
+				{showCount && members
+					? `${members.length} ${members.length === 1 ? "member" : "members"}`
+					: title ?? "Team members"}
+				{members && !showCount && !title ? ` · ${members.length}` : ""}
 			</SettingsGroupLabel>
 			{githubSyncError && (
 				<InlineAlert
