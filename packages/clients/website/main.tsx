@@ -415,12 +415,12 @@ function AnnouncementDialog({
 		>
 			<button
 				type="button"
-				className="announcement-close"
+				className="pwa-guide-close"
 				aria-label="Close announcement"
 				autoFocus
 				onClick={onRequestClose}
 			>
-				<IconX size={24} />
+				<IconX size={20} />
 			</button>
 			<div className="announcement-scroll">
 				<AnnouncementArticle />
