@@ -114,6 +114,22 @@ development.
 Active hosts are still controlled directly through their private host protocol;
 the executor is not their parent and does not own session lifecycle.
 
+### Agent Host execution binding
+
+An Agent Host turn carries an immutable Executor binding: executor and root IDs,
+generation, deadline, and an opaque Agent Host access capability. That access
+capability authorizes only bounded control-plane dispatch requests. It is
+branded separately from an `ExecutorGrant` and is never valid at an
+`ExecutorBroker` or Executor daemon. The control plane must issue a fresh,
+exact operation-scoped `ExecutorGrant` for each eventual dispatch. The v1 token
+is short-lived IPC authority; a future durable v2 contract must persist a
+non-secret descriptor and reacquire the token after recovery. Model and MCP
+access are likewise reacquired through supervised gateway RPC rather than
+persisted in the turn contract.
+
+The Agent Host contract defines this boundary but does not route production
+turns or wire boot.
+
 ## Rollback compatibility
 
 The session-kernel schema has a tracked compatibility version. Before restarting

@@ -13,7 +13,7 @@ import { createServer, connect, type Server, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
   decodeAgentHostHello,
-  decodeExecutorGrant,
+  decodeAgentHostStartTurn,
   isAgentTurnFence,
   type AgentHostClientMessage,
   type AgentHostServerMessage,
@@ -114,103 +114,6 @@ function sameFence(left: AgentTurnFence, right: AgentTurnFence): boolean {
   return sameLineage(left, right) && left.generation === right.generation;
 }
 
-function validTurnSpec(value: unknown): value is AgentTurnSpec {
-  if (
-    !record(value) ||
-    !allowed(value, [
-      "fence",
-      "input",
-      "mode",
-      "modelPolicy",
-      "mcpPolicy",
-      "transcriptPolicy",
-      "executorGrant",
-    ])
-  )
-    return false;
-  const { fence, input, modelPolicy, mcpPolicy, transcriptPolicy } = value;
-  if (
-    !isAgentTurnFence(fence) ||
-    !record(input) ||
-    !allowed(input, ["prompt", "promptEntryId", "images"])
-  )
-    return false;
-  if (
-    typeof input.prompt !== "string" ||
-    (input.promptEntryId !== undefined && !nonempty(input.promptEntryId)) ||
-    (input.images !== undefined && !Array.isArray(input.images))
-  )
-    return false;
-  if (!(["ask", "code", "scratch"] as unknown[]).includes(value.mode))
-    return false;
-  if (
-    !record(modelPolicy) ||
-    !allowed(modelPolicy, [
-      "model",
-      "effort",
-      "fastMode",
-      "accessGrant",
-      "fallbackModel",
-    ]) ||
-    !nonempty(modelPolicy.model)
-  )
-    return false;
-  if (
-    modelPolicy.effort !== undefined &&
-    typeof modelPolicy.effort !== "string"
-  )
-    return false;
-  if (
-    modelPolicy.fastMode !== undefined &&
-    typeof modelPolicy.fastMode !== "boolean"
-  )
-    return false;
-  if (
-    modelPolicy.accessGrant !== undefined &&
-    typeof modelPolicy.accessGrant !== "string"
-  )
-    return false;
-  if (
-    modelPolicy.fallbackModel !== undefined &&
-    typeof modelPolicy.fallbackModel !== "string"
-  )
-    return false;
-  if (!record(mcpPolicy) || !allowed(mcpPolicy, ["servers", "accessGrant"]))
-    return false;
-  if (!(
-    mcpPolicy.servers === "all" ||
-    (Array.isArray(mcpPolicy.servers) && mcpPolicy.servers.every(nonempty))
-  ))
-    return false;
-  if (
-    mcpPolicy.accessGrant !== undefined &&
-    typeof mcpPolicy.accessGrant !== "string"
-  )
-    return false;
-  if (
-    !record(transcriptPolicy) ||
-    !allowed(transcriptPolicy, [
-      "afterChangeSeq",
-      "maxAppendBytes",
-      "requireAck",
-    ])
-  )
-    return false;
-  if (
-    transcriptPolicy.afterChangeSeq !== undefined &&
-    (!Number.isSafeInteger(transcriptPolicy.afterChangeSeq) ||
-      (transcriptPolicy.afterChangeSeq as number) < 0)
-  )
-    return false;
-  if (
-    !Number.isSafeInteger(transcriptPolicy.maxAppendBytes) ||
-    (transcriptPolicy.maxAppendBytes as number) < 1 ||
-    transcriptPolicy.requireAck !== true
-  )
-    return false;
-  return decodeExecutorGrant(value.executorGrant) !== undefined;
-}
-
 function decodeMessage(value: unknown): AgentHostClientMessage | undefined {
   if (
     !record(value) ||
@@ -220,12 +123,7 @@ function decodeMessage(value: unknown): AgentHostClientMessage | undefined {
   )
     return undefined;
   if (value.t === "hello") return decodeAgentHostHello(value);
-  if (value.t === "start_turn") {
-    return allowed(value, ["t", "version", "requestId", "spec"]) &&
-      validTurnSpec(value.spec)
-      ? (value as unknown as AgentHostClientMessage)
-      : undefined;
-  }
+  if (value.t === "start_turn") return decodeAgentHostStartTurn(value);
   if (!isAgentTurnFence(value.fence)) return undefined;
   switch (value.t) {
     case "steer":

@@ -1,6 +1,7 @@
 import { connect, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
+  decodeAgentTurnSpec,
   isAgentTurnFence,
   type AgentHostClientMessage,
   type AgentHostServerMessage,
@@ -226,6 +227,8 @@ export class AgentHostClient {
     if (this.connecting || !this.ready || !this.socket || this.socket.destroyed)
       throw new Error("Agent Host handshake is not complete");
     if (this.fence) throw new Error("Agent Host client already owns a turn");
+    if (!decodeAgentTurnSpec(spec))
+      throw new Error("Invalid Agent Host turn specification");
     const requestId = this.nextRequestId();
     this.fence = { ...spec.fence };
     try {

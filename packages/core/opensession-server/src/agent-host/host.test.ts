@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { connect, createServer, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
-  decodeExecutorGrant,
+  decodeAgentExecutorAccessGrant,
   type AgentHostClientMessage,
   type AgentHostServerMessage,
   type AgentTurnSpec,
@@ -19,7 +19,7 @@ import type {
 import { createAgentHost, type AgentHost } from "./host";
 import { BoundedNdjsonDecoder, encodeNdjsonFrame } from "./socket-framing";
 
-const grant = decodeExecutorGrant("test-executor-grant")!;
+const accessGrant = decodeAgentExecutorAccessGrant("test-agent-host-access")!;
 const fence = {
   sessionId: "session-1",
   runId: "run-1",
@@ -31,13 +31,25 @@ const spec: AgentTurnSpec = {
   input: { prompt: "Build it" },
   mode: "code",
   modelPolicy: { model: "test-model" },
+  enginePolicy: {},
   mcpPolicy: { servers: [] },
   transcriptPolicy: { maxAppendBytes: 4096, requireAck: true },
-  executorGrant: grant,
+  runPolicy: { trustProfile: "interactive", runKind: "prompt" },
+  identityPolicy: {},
+  environmentPolicy: {},
+  workspacePolicy: { executionRoot: "/work/session-1" },
+  executorPolicy: {
+    executorId: "executor-1",
+    rootId: "root-1",
+    generation: fence.generation,
+    accessGrant,
+    deadlineMs: Date.now() + 60 * 60_000,
+  },
 };
 
 class FakeDriver implements AgentTurnDriver {
   output?: AgentTurnOutput;
+  seenSpec?: AgentTurnSpec;
   steers: string[] = [];
   answers: string[] = [];
   acks: string[] = [];
@@ -49,7 +61,8 @@ class FakeDriver implements AgentTurnDriver {
   readonly completion = new Promise<AgentTurnResult>((resolve) => {
     this.resolve = resolve;
   });
-  run(_spec: AgentTurnSpec, output: AgentTurnOutput) {
+  run(turnSpec: AgentTurnSpec, output: AgentTurnOutput) {
+    this.seenSpec = turnSpec;
     this.output = output;
     return this.completion;
   }
@@ -109,6 +122,7 @@ describe("Agent Host transport", () => {
     });
     await client.connect();
     await client.startTurn(spec);
+    expect(driver.seenSpec?.executorPolicy).toEqual(spec.executorPolicy);
     driver.output!.event({ type: "text_chunk", text: "hello" });
     driver.output!.proposeTranscript("append-1", [
       {
@@ -151,6 +165,10 @@ describe("Agent Host transport", () => {
       client.startTurn({
         ...spec,
         fence: { ...fence, generation: fence.generation - 1 },
+        executorPolicy: {
+          ...spec.executorPolicy,
+          generation: fence.generation - 1,
+        },
       }),
     ).rejects.toThrow("stale_generation");
     client.close();
@@ -198,6 +216,10 @@ describe("Agent Host transport", () => {
     await client.startTurn({
       ...spec,
       fence: { ...fence, generation: fence.generation + 1 },
+      executorPolicy: {
+        ...spec.executorPolicy,
+        generation: fence.generation + 1,
+      },
     });
     driver.finish();
     await tick();
@@ -372,6 +394,33 @@ describe("Agent Host transport", () => {
     });
     expect(driver.cancelled).toBe(0);
     client.close();
+  });
+
+  test("rejects the old turn-wide Executor grant contract", async () => {
+    const { socketPath } = await setup();
+    const { executorPolicy: _, ...withoutExecutorPolicy } = spec;
+    const messages = await rawExchange(
+      socketPath,
+      [
+        {
+          t: "hello",
+          version: AGENT_HOST_PROTOCOL_VERSION,
+          requestId: "hello",
+        },
+        {
+          t: "start_turn",
+          version: AGENT_HOST_PROTOCOL_VERSION,
+          requestId: "old-contract",
+          spec: { ...withoutExecutorPolicy, executorGrant: accessGrant },
+        },
+      ],
+      2,
+    );
+    expect(messages.at(-1)).toMatchObject({
+      t: "error",
+      requestId: "old-contract",
+      code: "invalid_request",
+    });
   });
 
   test("fails closed on a malformed frame and cancels on owner disconnect", async () => {
@@ -554,6 +603,7 @@ describe("Agent Host transport", () => {
       second.startTurn({
         ...spec,
         fence: { ...fence, turnId: "turn-2", generation: 4 },
+        executorPolicy: { ...spec.executorPolicy, generation: 4 },
       }),
     ).rejects.toThrow("host_busy");
     drivers[0]!.output!.event({ type: "text_chunk", text: "late" });
@@ -565,6 +615,7 @@ describe("Agent Host transport", () => {
       second.startTurn({
         ...spec,
         fence: { ...fence, turnId: "turn-3", generation: 5 },
+        executorPolicy: { ...spec.executorPolicy, generation: 5 },
       }),
     ).rejects.toThrow("host_busy");
     second.close();
