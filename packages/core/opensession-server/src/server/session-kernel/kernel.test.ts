@@ -57,6 +57,29 @@ test("refuses an unsafe schema downgrade", async () => {
 	}
 });
 
+test("active command recovery uses the selective status index", () => {
+	const dir = mkdtempSync(join(tmpdir(), "session-kernel-active-index-"));
+	const path = join(dir, "kernel.sqlite");
+	const durableStore = new SessionKernelStore(path);
+	durableStore.close();
+	const db = new Database(path, { readonly: true });
+	try {
+		const plan = db
+			.query(`EXPLAIN QUERY PLAN
+				SELECT request_id, type, status, replay_safe
+				FROM session_kernel_commands
+				WHERE session_id = ?
+				  AND status IN ('pending', 'processing', 'indeterminate')`)
+			.all("indexed-session") as Array<{ detail: string }>;
+		expect(plan.map((row) => row.detail).join("\n")).toContain(
+			"idx_skc_active_session_status",
+		);
+	} finally {
+		db.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
 test("read-only mirrors observe later WAL commits and cannot mutate", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "session-kernel-read-mirror-"));
 	const path = join(dir, "kernel.sqlite");

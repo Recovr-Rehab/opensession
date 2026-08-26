@@ -1658,6 +1658,9 @@ export class SessionKernelStore {
 			CREATE INDEX IF NOT EXISTS idx_skc_active_created
 				ON session_kernel_commands(created_at)
 				WHERE status IN ('pending', 'processing', 'indeterminate');
+			CREATE INDEX IF NOT EXISTS idx_skc_active_session_status
+				ON session_kernel_commands(session_id, status, created_at)
+				WHERE status IN ('pending', 'processing', 'indeterminate');
 			CREATE INDEX IF NOT EXISTS idx_skc_compact
 				ON session_kernel_commands(acknowledged_at)
 				WHERE status = 'completed' AND terminal_failure = 0
