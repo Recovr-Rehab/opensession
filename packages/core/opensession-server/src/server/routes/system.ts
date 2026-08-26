@@ -19,7 +19,11 @@ import { MAX_UPLOAD_BYTES, stageHttpUpload } from "../uploads";
 import { systemStats } from "../system-stats";
 import { BOOT_ID, broadcastToAll } from "../ws-hub";
 import { executorClientHealth, executorClientReady } from "../executor-client";
-import { sessionKernelHealth, sessionKernelStore } from "../session-kernel";
+import {
+	sessionKernelHealth,
+	sessionKernelReadinessSnapshot,
+	sessionKernelStore,
+} from "../session-kernel";
 import { requireWorkspaceAdmin } from "../workspace-auth";
 import { audit } from "../audit";
 import { serviceReadiness } from "../service-readiness";
@@ -163,7 +167,7 @@ export async function handleSystemRoutes(
 
 	if (path === "/ready" && req.method === "GET") {
 		try {
-			const kernel = await sessionKernelHealth();
+			const kernel = sessionKernelReadinessSnapshot();
 			const executor = executorClientHealth();
 			const executorReadiness = await executorClientReady();
 			const readiness = serviceReadiness();
