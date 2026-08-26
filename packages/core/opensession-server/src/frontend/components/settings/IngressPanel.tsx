@@ -47,7 +47,8 @@ import {
 } from "../../ui/settings";
 import { InlineAlert } from "../../ui/state";
 import { toast } from "../../ui/toast";
-import { IconCopy } from "../icons";
+import { markTileClass, markTileGradient, markTileInk, markTileShadow, type MarkTone } from "../../lib/mark-tile";
+import { IconCopy, IconGlobe, IconServer, IconShieldCheck } from "../icons";
 import { SetupRestart } from "../SetupRestart";
 
 const EMPTY_DRAFTS: Record<IngressExposure, string> = {
@@ -55,6 +56,33 @@ const EMPTY_DRAFTS: Record<IngressExposure, string> = {
 	cloudflare: "",
 	custom: "",
 };
+
+/** Each method's plate, so a choice reads the same in the list and in the
+ *  panel it opens — the leading mark is what ties the two halves together in
+ *  the server setup this mirrors. */
+const METHOD_MARKS: Record<IngressExposure, { tone: MarkTone; icon: typeof IconGlobe }> = {
+	tailscale: { tone: "indigo", icon: IconShieldCheck },
+	cloudflare: { tone: "sky", icon: IconGlobe },
+	custom: { tone: "orange", icon: IconServer },
+};
+
+function MethodMark({ method, size = 44 }: { method: IngressExposure; size?: number }) {
+	const { tone, icon: Icon } = METHOD_MARKS[method];
+	return (
+		<span
+			className={`${markTileClass(size)} plate-sheen`}
+			style={{
+				width: size,
+				height: size,
+				backgroundImage: markTileGradient(tone),
+				color: "#fff",
+				boxShadow: markTileShadow(markTileInk(tone)),
+			}}
+		>
+			<Icon size={Math.round(size * 0.5)} />
+		</span>
+	);
+}
 
 function CodeBlock({ children }: { children: string }) {
 	const { copied, copy } = useCopy();
@@ -559,7 +587,8 @@ export function IngressPanel({
 								className="grid gap-2"
 							>
 								{INGRESS_METHODS.map((option) => (
-									<label key={option.value} className="flex cursor-pointer items-center gap-3.5 rounded-xl bg-settings-plate px-4 py-4 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed">
+									<label key={option.value} className="flex min-h-20 cursor-pointer items-center gap-3.5 rounded-xl bg-settings-plate px-4 py-3.5 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed">
+										<MethodMark method={option.value} />
 										<span className="min-w-0 flex-1">
 											<span className="block text-item-title font-medium text-fg">{option.label}</span>
 											<span className="mt-1 block text-supporting text-dim">{option.description}</span>
@@ -571,9 +600,12 @@ export function IngressPanel({
 						</div>
 
 						<SettingsForm className="m-0 min-w-0">
-							<div>
-								<div className="text-item-title font-semibold text-fg">{selectedMethod.label}</div>
-								<p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">{selectedMethod.description}</p>
+							<div className="flex items-center gap-3">
+								<MethodMark method={method} size={40} />
+								<div className="min-w-0">
+									<div className="text-item-title font-semibold text-fg">{selectedMethod.label}</div>
+									<p className="mt-0.5 mb-0 text-supporting leading-relaxed text-dim">{selectedMethod.description}</p>
+								</div>
 							</div>
 							<div className="grid min-w-0 content-start gap-3.5">
 							{method === "tailscale" && (
