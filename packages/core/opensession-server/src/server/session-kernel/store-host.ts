@@ -399,11 +399,6 @@ export class SessionKernelStoreHost {
   }
 
   allAskEntries(): Array<[string, unknown]> {
-    const projectionPending = this.repairSparseProjections();
-    if (projectionPending)
-      throw new SparseProjectionBackfillPendingError(
-        "Sparse session projection backfill is still in progress",
-      );
     const entries = [
       ...this.central.askEntries(),
       ...this.central.isolatedAskProjectionEntries(),
@@ -412,11 +407,6 @@ export class SessionKernelStoreHost {
   }
 
   allDeliveryEntries(slot: Parameters<SessionKernelStoreApi["deliveryEntries"]>[0]) {
-    const projectionPending = this.repairSparseProjections();
-    if (projectionPending)
-      throw new SparseProjectionBackfillPendingError(
-        "Sparse session projection backfill is still in progress",
-      );
     const entries = [
       ...this.central.deliveryEntries(slot),
       ...this.central.isolatedDeliveryProjectionEntries(slot),

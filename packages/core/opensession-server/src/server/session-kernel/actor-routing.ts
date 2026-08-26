@@ -80,11 +80,12 @@ export function sessionActorServiceRoute(
   if (request.t === "call") {
     if (request.request.t === "reduce")
       return sessionActorReducerRoute(request.request.command);
-    // Quarantine listing is a durable catalog projection. It may be read
-    // concurrently with unrelated session mailboxes; waiting for every session
-    // turn would make the ordinary sessions API disappear during long runs.
-    if (request.request.method === "quarantinedSessions")
-      return { scope: "catalog_read" };
+    // These lists are durable catalog projections. They may be read concurrently
+    // with unrelated session mailboxes; waiting for every session turn would
+    // make the ordinary sessions API disappear during long runs.
+    if (["askEntries", "deliveryEntries", "quarantinedSessions"].includes(
+      request.request.method,
+    )) return { scope: "catalog_read" };
     return sessionKernelStoreRoute(
       request.request.method,
       request.request.args,

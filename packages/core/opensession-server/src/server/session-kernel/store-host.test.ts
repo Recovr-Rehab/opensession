@@ -501,6 +501,7 @@ describe("per-session session kernel storage", () => {
       }]);
 
     expect((host as any).repairSparseProjections(4)).toBe(true);
+    while ((host as any).repairSparseProjections(4)) {}
     expect(host.allAskEntries()).toEqual([]);
     expect(host.central.sparseProjectionMigrationComplete()).toBe(true);
     host.close();

@@ -734,6 +734,16 @@ describe("session kernel actor service", () => {
           args: [100, 0],
         },
       })).toMatchObject({ t: "call_result", status: 1 });
+      expect(await rpc({
+        t: "call",
+        rpcId: "barrier-timeout-asks",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "askEntries",
+          args: [],
+        },
+      })).toMatchObject({ t: "call_result", status: 1 });
       expect(Date.now() - catalogReadStartedAt).toBeLessThan(400);
 
       const startedAt = Date.now();
