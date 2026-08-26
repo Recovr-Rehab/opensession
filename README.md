@@ -33,6 +33,16 @@ it prints. Without `TS_AUTHKEY`, installing the client does not join a tailnet.
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale
 ```
 
+For custom domains, `--caddy` installs Caddy and the lego certificate helper.
+For public ingress through Cloudflare Tunnel, `--cloudflare` installs
+`cloudflared`. Finish configuring either option under Settings → Domains and
+ingress.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --caddy
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --cloudflare
+```
+
 Already installed Open Session? You do not need to reinstall it. Follow [Add
 Tailscale after a normal
 install](docs/setup/install.md#add-tailscale-after-a-normal-install).
