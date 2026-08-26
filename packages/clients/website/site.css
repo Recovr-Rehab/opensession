@@ -627,7 +627,6 @@ dialog::backdrop {
 	   square. */
 	container-type: size;
 	aspect-ratio: 3 / 2;
-	border: 1px solid var(--line);
 	border-radius: calc(28px * var(--rf));
 	corner-shape: var(--cs);
 	background: var(--stage-bg);
