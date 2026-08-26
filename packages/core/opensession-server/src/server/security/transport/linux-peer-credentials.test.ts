@@ -109,7 +109,12 @@ describe("Linux peer credentials", () => {
       socket.once("data", () => events.push("data"));
       socket.resume();
     });
-    await gate.listen(path);
+    await gate.listen({
+      path,
+      parentPolicy: { uid, gid, mode: 0o700 },
+      socketPolicy: { uid, gid, mode: 0o600 },
+    });
+    expect((await lstat(path)).mode & 0o7777).toBe(0o600);
     cleanups.push(async () => { await gate.closeAndDrain(); await rm(dir, { recursive: true, force: true }); });
     const first = connect(path); first.write("before-connect");
     await Bun.sleep(30);
@@ -127,12 +132,32 @@ describe("Linux peer credentials", () => {
     const rejectedPath = join(rejectedDir, "peer.sock");
     const rejecting = await createLinuxPeerCredentialVerifier();
     const rejectedServer = createVerifiedUnixSocketServer(rejecting, { uid: uid + 1 }, () => { throw new Error("must not run"); });
-    await rejectedServer.listen(rejectedPath);
+    await rejectedServer.listen({
+      path: rejectedPath,
+      parentPolicy: { uid, gid, mode: 0o700 },
+      socketPolicy: { uid, gid, mode: 0o600 },
+    });
     cleanups.push(async () => { await rejectedServer.closeAndDrain(); await rm(rejectedDir, { recursive: true, force: true }); });
     const rejected = await dial(rejectedPath);
     await new Promise<void>((resolve) => rejected.once("close", () => resolve()));
     expect(rejected.destroyed).toBe(true);
     rejecting.close();
+  });
+
+  test("bounds drain when an accepted handler never settles", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "os-peer-drain-"));
+    const path = join(dir, "peer.sock");
+    const verifier = await createLinuxPeerCredentialVerifier();
+    const server = createVerifiedUnixSocketServer(verifier, { uid }, () => new Promise<void>(() => {}));
+    await server.listen({
+      path,
+      parentPolicy: { uid, gid, mode: 0o700 },
+      socketPolicy: { uid, gid, mode: 0o600 },
+    });
+    const client = await dial(path);
+    await expect(server.closeAndDrain(20)).rejects.toThrow("drain timed out");
+    client.destroy(); verifier.close();
+    await rm(dir, { recursive: true, force: true });
   });
 
   test("rejects a real TCP socket before SO_PEERCRED authorization", async () => {
@@ -159,6 +184,8 @@ describe("Linux peer credentials", () => {
     const report = await doctorLinuxPeerCredentials(accepted, uid, createLinuxPeerCredentialVerifier);
     expect(report.ok).toBe(true);
     expect(Object.keys(report).sort()).toEqual(["expectedUid", "ok", "platform", "runtime"]);
+    const rootReport = await doctorLinuxPeerCredentials(accepted, 0, createLinuxPeerCredentialVerifier);
+    expect(rootReport).toMatchObject({ ok: false, expectedUid: 0, reason: "Root peer policy requires explicit allowRoot" });
     client.destroy(); accepted.destroy();
   });
 });
@@ -172,6 +199,13 @@ describe("Unix socket paths", () => {
     await expect(validateUnixSocketPath(path, { uid, gid, mode: 0o666 })).rejects.toThrow("mode");
     const link = `${path}.link`; await symlink(path, link);
     await expect(validateUnixSocketPath(link, { uid, gid, mode: 0o600 })).rejects.toThrow("symlink");
+
+    const unsafeAncestor = join(dir, "unsafe");
+    const protectedLeaf = join(unsafeAncestor, "leaf");
+    await mkdir(unsafeAncestor, { mode: 0o700 });
+    await chmod(unsafeAncestor, 0o770);
+    await mkdir(protectedLeaf, { mode: 0o700 });
+    await expect(validateUnixSocketParent(protectedLeaf, { uid, gid, mode: 0o700 })).rejects.toThrow("writable by an untrusted principal");
   });
 
   test("accepts only ECONNREFUSED as stale-socket proof", () => {
@@ -191,18 +225,30 @@ describe("Unix socket paths", () => {
     await child.exited;
     await chmod(path, 0o600);
     const before = await lstat(path);
-    await removeProvenStaleUnixSocket(path, { uid, gid, mode: 0o600 });
+    await removeProvenStaleUnixSocket(
+      path,
+      { uid, gid, mode: 0o600 },
+      { uid, gid, mode: 0o700 },
+    );
     await expect(lstat(path)).rejects.toThrow();
     expect(before.isSocket()).toBe(true);
 
     await mkdir(join(dir, "not-socket"), { mode: 0o700 });
-    await expect(removeProvenStaleUnixSocket(join(dir, "not-socket"), { uid, gid, mode: 0o700 })).rejects.toThrow("file type");
+    await expect(removeProvenStaleUnixSocket(
+      join(dir, "not-socket"),
+      { uid, gid, mode: 0o700 },
+      { uid, gid, mode: 0o700 },
+    )).rejects.toThrow("file type");
 
     const activePath = join(dir, "active.sock");
     const active = createServer();
     await new Promise<void>((resolve) => active.listen(activePath, resolve));
     await chmod(activePath, 0o600);
-    await expect(removeProvenStaleUnixSocket(activePath, { uid, gid, mode: 0o600 })).rejects.toThrow("active");
+    await expect(removeProvenStaleUnixSocket(
+      activePath,
+      { uid, gid, mode: 0o600 },
+      { uid, gid, mode: 0o700 },
+    )).rejects.toThrow("active");
     await new Promise<void>((resolve) => active.close(() => resolve()));
   });
 });
