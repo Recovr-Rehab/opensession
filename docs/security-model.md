@@ -38,6 +38,18 @@ credentials, private signing-key provisioning only to SessionKernel, strict
 public keyring provisioning to Hosts, and a detached Host service deployment.
 The current shared Ubuntu identity is explicitly not that boundary.
 
+An additive Linux-only Unix-socket peer-credential foundation lives under
+`src/server/security/transport/`. It explicitly loads and closes libc, checks
+the exact accepted socket immediately around `SO_PEERCRED`, and gates protocol
+readers behind an exact numeric UID policy. It has no boot import or production
+wiring. Future Host and SessionKernel Unix transports must reject the physical
+socket before parsing bytes or allocating session state. UID is the principal;
+PID is audit/fencing metadata and never reusable authorization. Socket owner and
+mode checks are defense in depth, not an identity substitute. Activation must
+use separate service users and an exact expected non-root UID (or an explicit,
+audited root exception); bearer tokens, loopback, filesystem modes, and caller
+names are not fallbacks when peer verification fails.
+
 An import-inert encrypted Host recovery ledger v1 and conservative physical
 accounting prototype now exist under `src/agent-host/`, but remain entirely
 production-unwired: boot, Host composition, drivers, providers, and MCP routing

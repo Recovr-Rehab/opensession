@@ -83,9 +83,14 @@ transaction. Production has no signing credential and therefore fails signed
 claim issuance closed. Legacy unsigned receipts remain explicitly
 non-authorizing. The exact protocol-v3 Host attach path now verifies that foundation with only
 a strict public keyring and fresh socket-bound challenges, but remains
-production-unwired. Separate Host and gateway service identities, peer
-credentials, private/public key provisioning, and detached Host deployment are
-still required before it can authorize production work.
+production-unwired. A separate import-inert Linux Unix-socket gate can verify
+`SO_PEERCRED` before reading protocol bytes, but is likewise not composed into
+the Host or SessionKernel services. Socket path ownership and modes are defense
+in depth; future activation requires an exact allowed numeric UID and must fail
+closed rather than falling back to a token, loopback, or socket permissions.
+Separate Host, SessionKernel, and gateway service identities, private/public key
+provisioning, and detached Host deployment are still required before it can
+authorize production work.
 
 ## Durable state
 
