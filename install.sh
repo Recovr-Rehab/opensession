@@ -54,6 +54,10 @@
 #
 # With --tailscale the client is installed but not joined to a network, since
 # joining needs your account. Set TS_AUTHKEY to have the installer do that too.
+# On Linux, managed Tailscale Funnel also needs one-time local operator access
+# for the Open Session service user. The installer explains the command after
+# network setup but does not grant it automatically because Tailscale permits
+# one local operator and a new assignment replaces the existing one.
 #
 set -euo pipefail
 
@@ -738,6 +742,14 @@ else
       info "2. ${C}opensession bind${N}"
     fi
   fi
+fi
+
+if [ "$WITH_TAILSCALE" = "1" ] \
+  && command -v tailscale >/dev/null 2>&1 \
+  && [ "$OS" != "Darwin" ]; then
+  muted "For managed Tailscale Funnel, allow the Open Session service user once:"
+  info "${C}sudo tailscale set --operator=\"$(id -un)\"${N}"
+  muted "Tailscale permits one local operator; this replaces an existing assignment."
 fi
 
 # Public ingress is configured in /welcome or Settings after the service is
