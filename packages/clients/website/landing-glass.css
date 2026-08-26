@@ -6,9 +6,9 @@
 	--page-art: url("./landing-background.webp");
 	--card-glass: oklch(1 0 0 / 0.8);
 	--glass-line: oklch(0 0 0 / 0.07);
-	/* Marketing dialogs use a slightly denser version of the section material
-	   through WebsiteModal, keeping its hue while quieting the artwork beneath. */
-	--modal-surface: oklch(1 0 0 / 0.88);
+	/* Marketing dialogs use the section material through WebsiteModal, keeping
+	   its hue while letting a little of the artwork show through. */
+	--modal-surface: oklch(1 0 0 / 0.82);
 	--modal-filter: blur(14px) saturate(1.08);
 	--modal-ring: var(--glass-line);
 	--button-glass: oklch(1 0 0 / 0.52);
@@ -16,10 +16,11 @@
 	--primary-pop: oklch(0.965 0.179 112.029);
 	--primary-pop-deep: oklch(0.939 0.182 111.784);
 	--primary-pop-ink: oklch(0.192 0.041 105.17);
-	/* The colour Safari paints wherever the artwork itself cannot reach (the
-	   safe-area bands and rubber-band overscroll). Sampled from the artwork's
-	   edges so those regions read as more sky instead of a white bar. */
-	--page-under: #aed1d7;
+	/* The gradient Safari paints wherever the artwork itself cannot reach (the
+	   safe-area bands and rubber-band overscroll). Its stops are sampled from the
+	   artwork's top and bottom, so the lower edge continues into stronger blue. */
+	--page-under-top: oklch(0.85 0.034 198.854);
+	--page-under-bottom: oklch(0.792 0.077 225.688);
 }
 
 /* Safari paints exposed safe-area and rubber-band regions from the root
@@ -27,8 +28,10 @@
    canvas so those regions cannot fall back to the body's white background. */
 html {
 	min-height: 100%;
-	background-color: var(--page-under);
-	background-image: var(--page-art);
+	background-color: var(--page-under-bottom);
+	background-image:
+		var(--page-art),
+		linear-gradient(to bottom, var(--page-under-top), var(--page-under-bottom));
 	background-position: center;
 	background-repeat: no-repeat;
 	background-size: cover;
@@ -119,7 +122,8 @@ body::before {
 @media (prefers-color-scheme: dark) {
 	:root {
 		--page-art: url("./landing-background-dark.webp");
-		--page-under: #16323f;
+		--page-under-top: oklch(0.358 0.033 217.347);
+		--page-under-bottom: oklch(0.316 0.068 237.979);
 		--card-glass: oklch(0.245 0.025 190 / 0.7);
 		--modal-surface: oklch(0.22 0.025 190 / 0.8);
 		--glass-line: oklch(1 0 0 / 0.08);
