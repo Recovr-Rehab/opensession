@@ -99,10 +99,23 @@ body::before {
 	background: var(--button-glass-hover);
 }
 
+/* Give light-mode guides a little more breathing room on screens where that
+   space is available. The reading modal keeps its full-bleed article layout. */
+@media (prefers-color-scheme: light) and (min-width: 561px) {
+	.pwa-guide .website-modal-panel {
+		padding: 34px;
+	}
+
+	.setup-guide:has(.download-cards) .website-modal-panel,
+	.setup-guide:has(.download-steps) .website-modal-panel {
+		padding: 40px;
+	}
+}
+
 @media (prefers-color-scheme: dark) {
 	:root {
 		--page-art: url("./landing-background-dark.webp");
-		--card-glass: oklch(0.22 0.025 190 / 0.7);
+		--card-glass: oklch(0.245 0.025 190 / 0.7);
 		--modal-surface: oklch(0.22 0.025 190 / 0.8);
 		--glass-line: oklch(1 0 0 / 0.08);
 		--button-glass: oklch(1 0 0 / 0.12);
