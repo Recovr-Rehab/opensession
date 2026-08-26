@@ -145,17 +145,6 @@
 	   has halved it. Light needs the firmer line for the opposite reason, the
 	   one --popup-surface gives below: a white box on white. */
 	--dialog-ring: color-mix(in srgb, var(--text) 26%, var(--bg));
-	/* Dialog material. Dark dialogs used to paint the opaque L1 `--bg-raised`
-	   over a black scrim, which compressed the page, shell and controls into the
-	   same near-black band. Lift the material toward the foreground, then thin it
-	   enough for blurred page colour and shape to remain visible. The sticky
-	   header gets the same apparent tone as the glass but stays opaque so
-	   scrolling copy cannot show through it. Light mode keeps its existing paper
-	   shell below. */
-	--dialog-surface: color-mix(in srgb, var(--popup-surface) 88%, var(--text));
-	--dialog-glass: color-mix(in srgb, var(--dialog-surface) 78%, transparent);
-	--dialog-header: color-mix(in srgb, var(--dialog-surface) 78%, var(--bg));
-	--dialog-scrim: color-mix(in srgb, black 14%, transparent);
 	/* Glass. The same fill, thinned so the page shows through, over a blur
 	   heavy enough that what shows through is colour and shape rather than
 	   somebody else's sentence — a popup you can read a row title through is
@@ -559,12 +548,6 @@ html[data-theme="light"] {
 	   paragraph, so it takes the composer's line rather than a mix of its
 	   own — the palette already did, and the two shells are one surface. */
 	--dialog-ring: var(--popup-ring);
-	/* Preserve the light theme's paper dialog while the dark theme above takes
-	   the lighter translucent material. */
-	--dialog-surface: var(--popup-surface);
-	--dialog-glass: var(--dialog-surface);
-	--dialog-header: var(--dialog-surface);
-	--dialog-scrim: color-mix(in srgb, black 25%, transparent);
 	--composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), 0 14px 36px rgba(0, 0, 0, 0.08);
 	/* See :root. Here the backdrop is silver and the card is white on top of
 	   it, so the cast is what says the card is in front. It is the scale's `lg`
@@ -665,8 +648,6 @@ html[data-theme="light"] {
 	:root {
 		--popup-glass: var(--popup-surface);
 		--palette-glass: var(--popup-surface);
-		--dialog-glass: var(--dialog-surface);
-		--dialog-header: var(--dialog-surface);
 		/* The page colour, which is what these controls were painted in before
 		   they became glass: without a blur behind it a thinned fill is just a
 		   window onto whatever is scrolling past. */
@@ -678,8 +659,6 @@ html[data-theme="light"] {
 	:root {
 		--popup-glass: var(--popup-surface);
 		--palette-glass: var(--popup-surface);
-		--dialog-glass: var(--dialog-surface);
-		--dialog-header: var(--dialog-surface);
 		--mobile-header-control-surface: var(--bg);
 	}
 }

@@ -245,7 +245,7 @@ export function ResponsiveDialog({
 			{!phonePage && (
 				<div
 					className={cn(
-						"absolute inset-0 bg-dialog-scrim backdrop-blur-[1px]",
+						"absolute inset-0 bg-black/45",
 						backdropClassName,
 						animated && [
 							"transition-opacity",
@@ -264,14 +264,13 @@ export function ResponsiveDialog({
 				className={cn(
 					// Radii are authored the way base.css authors every corner in the
 					// app, `calc(<px> * var(--rf))`, so they follow the squircle bump
-					// and its circular fallback with everything else. The shared dialog
-					// material stays translucent only where backdrop-filter can support it.
-					"absolute flex flex-col overflow-hidden outline-none [--smooth-ring-color:var(--dialog-ring)] [corner-shape:squircle]",
+					// and its circular fallback with everything else.
+					"absolute flex flex-col overflow-hidden outline-none [corner-shape:squircle]",
 					phone
 						? phonePage
 							? "inset-0 h-dvh max-h-none rounded-none bg-surface pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-none"
-							: "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))] bg-dialog-glass pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)] [backdrop-filter:var(--popup-blur)]"
-						: "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[calc(18px*var(--rf))] bg-dialog-glass smooth-shadow-ring-lg [backdrop-filter:var(--popup-blur)]",
+							: "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
+						: "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[calc(18px*var(--rf))] bg-raised smooth-shadow-ring-lg",
 					animated &&
 						(phone
 							? [

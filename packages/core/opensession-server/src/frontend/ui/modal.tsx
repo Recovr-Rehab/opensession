@@ -128,11 +128,12 @@ function Content({
 							"fixed left-1/2 top-1/2 z-[10001] w-[90vw] -translate-x-1/2 -translate-y-1/2",
 							widthClassName ?? "max-w-[28rem]",
 							"max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
-							// A lighter glass shell in dark mode keeps some blurred page colour
-							// visible instead of stacking an opaque near-black card over a dark
-							// scrim. Light mode resolves the token to opaque paper, and reduced
-							// transparency gets the solid fallback in base.css.
-							"rounded-[calc(22px*var(--rf))] bg-dialog-glass [backdrop-filter:var(--popup-blur)]",
+							// A restrained dialog shell: lifted surface, soft edge,
+							// and enough radius to read as a modal without becoming a card.
+							// The edge is --dialog-ring rather than the shared hairline: on
+							// a scrim the fill's step above the page all but disappears, so
+							// the line is what holds the shape (base.css).
+							"rounded-[calc(22px*var(--rf))] bg-raised",
 							"[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
 							"p-6",
 							"flex flex-col gap-4",
@@ -163,7 +164,7 @@ function Content({
 					// inside the palette as a grey wash over its own fill.
 					palette
 						? "z-[6000] bg-black/22 backdrop-blur-[6px] duration-[var(--dur-micro)]"
-						: "z-[10000] bg-dialog-scrim backdrop-blur-[1px] duration-[var(--dur)]",
+						: "z-[10000] bg-black/25 backdrop-blur-[1px] duration-[var(--dur)]",
 					// `palette-backdrop` rides along purely as a runtime marker, and
 					// nothing styles it any more: the window-level chords (archive,
 					// pin, team note, tab switching, open pull request) decline a
@@ -284,7 +285,7 @@ function Header({
 					// pins the MARGIN box, so with `top-0` the negative margin lands
 					// the bar 24px down the shell and leaves a strip of content
 					// sliding past above it (measured). Both are the shell's `p-6`.
-					"sticky -top-6 z-10 flex items-start gap-3 bg-dialog-header",
+					"sticky -top-6 z-10 flex items-start gap-3 bg-raised",
 					// `pb-3` is the air the bar keeps under the title, so text
 					// passing beneath disappears with a gap rather than touching it.
 					// `-mb-3` hands it straight back, leaving the resting header the
