@@ -215,20 +215,31 @@ function WebsiteModal({
 		else dialogRef.current?.close();
 	};
 
+	useEffect(() => {
+		const dialog = dialogRef.current;
+		if (!dialog) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			const modals = document.querySelectorAll<HTMLDialogElement>("dialog:modal");
+			if (modals.item(modals.length - 1) !== dialog) return;
+			event.preventDefault();
+			event.stopPropagation();
+			requestAnimationFrame(() => {
+				if (onRequestClose) onRequestClose();
+				else dialog.close();
+			});
+		};
+		dialog.addEventListener("keydown", handleKeyDown, { capture: true });
+		return () =>
+			dialog.removeEventListener("keydown", handleKeyDown, { capture: true });
+	}, [dialogRef, onRequestClose]);
+
 	return (
 		<dialog
 			ref={dialogRef}
 			className={`website-modal ${className}`}
 			aria-labelledby={labelledBy}
 			onClose={onClose}
-			onCancel={
-				onRequestClose
-					? (event) => {
-							event.preventDefault();
-							requestClose();
-						}
-					: undefined
-			}
 			onClick={(event) => {
 				if (event.target === event.currentTarget) requestClose();
 			}}
@@ -251,17 +262,15 @@ function WebsiteModal({
 
 function InstallHelpDialog({
 	dialogRef,
-	onClose,
 }: {
 	dialogRef: RefObject<HTMLDialogElement | null>;
-	onClose: () => void;
 }) {
 	return (
 		<WebsiteModal
 			dialogRef={dialogRef}
 			className="pwa-guide setup-guide"
 			labelledBy="install-help-title"
-			onClose={onClose}
+			onRequestClose={() => dialogRef.current?.close()}
 		>
 			<h2 id="install-help-title">Install the web app</h2>
 			<div className="download-steps">
@@ -291,8 +300,6 @@ function SetupGuide({
 	description,
 	secondary = false,
 	children,
-	dialogRef: externalDialogRef,
-	triggerRef,
 }: {
 	triggerLabel: string;
 	triggerIcon?: ReactNode;
@@ -300,17 +307,13 @@ function SetupGuide({
 	description?: string;
 	secondary?: boolean;
 	children: ReactNode;
-	dialogRef?: RefObject<HTMLDialogElement | null>;
-	triggerRef?: RefObject<HTMLButtonElement | null>;
 }) {
-	const localDialogRef = useRef<HTMLDialogElement>(null);
-	const dialogRef = externalDialogRef ?? localDialogRef;
+	const dialogRef = useRef<HTMLDialogElement>(null);
 	const titleId = `setup-guide-${title.toLowerCase().replaceAll(" ", "-")}`;
 
 	return (
 		<>
 			<button
-				ref={triggerRef}
 				type="button"
 				className={`landing-setup-step-action${secondary ? " landing-setup-step-action-secondary" : ""}`}
 				onClick={() => dialogRef.current?.showModal()}
@@ -379,8 +382,6 @@ function InstallCommand() {
 }
 
 function SetupOverview() {
-	const downloadTriggerRef = useRef<HTMLButtonElement>(null);
-	const downloadDialogRef = useRef<HTMLDialogElement>(null);
 	const installDialogRef = useRef<HTMLDialogElement>(null);
 
 	return (
@@ -447,22 +448,14 @@ function SetupOverview() {
 						triggerLabel="Download apps"
 						triggerIcon={<AppleMark />}
 						title="Download app"
-						dialogRef={downloadDialogRef}
-						triggerRef={downloadTriggerRef}
 					>
 						<DownloadAppsCards
-							onShowInstallHelp={() => {
-								downloadDialogRef.current?.close();
-								requestAnimationFrame(() => installDialogRef.current?.showModal());
-							}}
+							onShowInstallHelp={() => installDialogRef.current?.showModal()}
 						/>
 					</SetupGuide>
 				</li>
 			</ol>
-			<InstallHelpDialog
-				dialogRef={installDialogRef}
-				onClose={() => downloadTriggerRef.current?.focus({ preventScroll: true })}
-			/>
+			<InstallHelpDialog dialogRef={installDialogRef} />
 		</section>
 	);
 }
