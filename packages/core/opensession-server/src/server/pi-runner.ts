@@ -1532,6 +1532,30 @@ async function* runPiAttempt(
   };
 
   let piSessionId: string | undefined;
+  // Cumulative usage across every assistant request in this attempt. Keep it
+  // outside the run body so failures and cancellations retain the work they
+  // completed before their terminal path.
+  const usageTotal: TurnUsage = {
+    costUsd: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    contextTokens: 0,
+  };
+  let usageRequests = 0;
+  let sawUsage = false;
+  const usageAuditFields = () =>
+    sawUsage
+      ? {
+          input_tokens: usageTotal.inputTokens,
+          output_tokens: usageTotal.outputTokens,
+          cache_read_input_tokens: usageTotal.cacheReadTokens,
+          cache_creation_input_tokens: usageTotal.cacheCreationTokens,
+          total_cost_usd: usageTotal.costUsd,
+          steps: usageRequests,
+        }
+      : {};
   // Utility callers such as oneShot deliberately have no unified session.
   // They still use Pi's native JSONL while alive, but must not emit degraded
   // transcript writes or create a ghost Open Session transcript.
@@ -2540,16 +2564,6 @@ async function* runPiAttempt(
       });
     }
 
-    // Cumulative usage across the run (assistant messages incl. retries).
-    const usageTotal: TurnUsage = {
-      costUsd: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheCreationTokens: 0,
-      contextTokens: 0,
-    };
-    let sawUsage = false;
     // Final assistant outcome (stopReason error/aborted → terminal error).
     let lastStopReason: string | undefined;
     let lastErrorMessage: string | undefined;
@@ -2616,6 +2630,7 @@ async function* runPiAttempt(
               const u = msg.usage;
               if (u && typeof u.input === "number") {
                 sawUsage = true;
+                usageRequests++;
                 usageTotal.inputTokens += u.input || 0;
                 usageTotal.outputTokens += u.output || 0;
                 usageTotal.cacheReadTokens += u.cacheRead || 0;
@@ -2743,6 +2758,7 @@ async function* runPiAttempt(
               const cu = ce.result.usage;
               if (cu && typeof cu.input === "number") {
                 sawUsage = true;
+                usageRequests++;
                 usageTotal.inputTokens += cu.input || 0;
                 usageTotal.outputTokens += cu.output || 0;
                 usageTotal.cacheReadTokens += cu.cacheRead || 0;
@@ -2988,14 +3004,8 @@ async function* runPiAttempt(
       ok: terminal.type === "done",
       pi_session_id: piSessionId,
       saw_settled: sawSettled,
-      ...(terminal.type === "done"
-        ? {
-            input_tokens: usageTotal.inputTokens,
-            output_tokens: usageTotal.outputTokens,
-            cache_read_input_tokens: usageTotal.cacheReadTokens,
-            total_cost_usd: usageTotal.costUsd,
-          }
-        : { error: terminal.content }),
+      ...usageAuditFields(),
+      ...(terminal.type === "done" ? {} : { error: terminal.content }),
     });
     yield terminal;
   } catch (e: any) {
@@ -3027,7 +3037,7 @@ async function* runPiAttempt(
     // usage-limit shape in one of those must not burn a healthy account.
     if (e?.usageLimitExhausted === true && takeAccountRotation(message)) return;
     reachedTerminal = true;
-    endTurn({ ok: false, pi_session_id: piSessionId, error: message });
+    endTurn({ ok: false, pi_session_id: piSessionId, ...usageAuditFields(), error: message });
     yield {
       type: "error",
       content: `pi: ${message}`,
@@ -3039,6 +3049,7 @@ async function* runPiAttempt(
     endTurn({
       ok: false,
       pi_session_id: piSessionId,
+      ...usageAuditFields(),
       status: abort.signal.aborted ? "cancelled" : "abandoned",
     });
     // Consumer teardown without a terminal (hot-reload chaos, shutdown):
