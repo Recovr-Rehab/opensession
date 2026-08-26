@@ -13,6 +13,7 @@ import { pngFromImageFile, pngFromImageUrl } from "../../lib/icon-image";
 import { REPO_TILE_INK, repoColor, repoIconFill } from "../../lib/repo-colors";
 import { cn } from "../../ui/cn";
 import { OverlayAction } from "../../ui/overlay-action";
+import { Field } from "../../ui/input";
 import {
 	SettingCard,
 	SettingCardSkeleton,
@@ -163,6 +164,81 @@ setBusy(false);
 	).toUpperCase();
 	const showIcon = !!settings?.organizationIconUrl && !iconFailed;
 	const fallbackColor = repoColor(settings?.organizationName || "organization");
+	const iconEditor = (
+		<div className="group/overlay-action relative flex shrink-0 flex-col items-center gap-1.5">
+			<button
+				type="button"
+				disabled={busy}
+				onClick={() => fileInput.current?.click()}
+				aria-label={showIcon ? "Change organization icon" : "Upload organization icon"}
+				className={cn(
+					"focus-ring group/upload relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg text-section-title font-semibold outline outline-1 outline-divider disabled:pointer-events-none",
+					onboarding ? "size-16" : "size-14",
+				)}
+				style={
+					showIcon
+						? undefined
+						: {
+								backgroundImage: repoIconFill(fallbackColor),
+								color: REPO_TILE_INK,
+							}
+				}
+			>
+				{showIcon ? (
+					<img
+						src={settings?.organizationIconUrl || undefined}
+						alt=""
+						className="size-full object-cover"
+						onError={() => setIconFailed(true)}
+					/>
+				) : (
+					initials
+				)}
+				<span className="pointer-events-none absolute inset-0 grid place-items-center rounded-[inherit] bg-black/50 text-white opacity-0 transition-opacity duration-150 group-hover/upload:opacity-100 group-focus-visible/upload:opacity-100">
+					<IconArrowUpToLine size={20} />
+				</span>
+			</button>
+			{settings?.organizationIconUrl && (
+				<OverlayAction
+					icon={<IconTrash className="text-red" size={20} />}
+					disabled={busy}
+					onClick={removeIcon}
+					aria-label="Remove organization icon"
+					title="Remove icon"
+					className="phone:pointer-events-auto! phone:opacity-100!"
+				/>
+			)}
+			<input
+				ref={fileInput}
+				type="file"
+				disabled={busy}
+				accept="image/*"
+				className="hidden"
+				onChange={(event) => {
+					const file = event.target.files?.[0];
+					event.target.value = "";
+					if (file) void upload(file);
+				}}
+			/>
+		</div>
+	);
+	const organizationNameInput = (
+		<input
+			className={cn(NAME_INPUT_CLASS, onboarding && "w-full!")}
+			// data-setup-field: FirstMile promotes this to the large field step.
+			data-setup-field="org-name"
+			value={draft}
+			maxLength={80}
+			disabled={busy}
+			onChange={(event) => setDraft(event.target.value)}
+			onBlur={() => void commitName()}
+			onKeyDown={(event) => {
+				if (event.key === "Enter") event.currentTarget.blur();
+				else if (event.key === "Escape") setDraft(settings?.organizationName || "");
+			}}
+			aria-label="Organization name"
+		/>
+	);
 
 	return (
 		<>
@@ -170,99 +246,46 @@ setBusy(false);
 				<InlineAlert onRetry={() => void load()}>{loadError}</InlineAlert>
 			) : settings ? (
 				<>
-					<SettingCard>
-						<SettingRow
-							className={cn(
-								"items-center",
-								onboarding && "px-6 py-5 last:pb-6",
-							)}
-						>
-							<SettingRowText>
-								<SettingRowTitle>Upload icon</SettingRowTitle>
-							</SettingRowText>
-							<SettingRowControl className="flex flex-wrap items-center justify-end gap-2">
-								<div className="group/overlay-action relative flex shrink-0 flex-col items-center gap-1.5">
-									<button
-										type="button"
-										disabled={busy}
-										onClick={() => fileInput.current?.click()}
-										aria-label={showIcon ? "Change organization icon" : "Upload organization icon"}
-										className="focus-ring group/upload relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg text-section-title font-semibold outline outline-1 outline-divider disabled:pointer-events-none"
-										style={
-											showIcon
-												? undefined
-												: {
-														backgroundImage: repoIconFill(fallbackColor),
-														color: REPO_TILE_INK,
-													}
-										}
-									>
-										{showIcon ? (
-											<img
-												src={settings.organizationIconUrl || undefined}
-												alt=""
-												className="size-full object-cover"
-												onError={() => setIconFailed(true)}
-											/>
-										) : (
-											initials
-										)}
-										<span className="pointer-events-none absolute inset-0 grid place-items-center rounded-[inherit] bg-black/50 text-white opacity-0 transition-opacity duration-150 group-hover/upload:opacity-100 group-focus-visible/upload:opacity-100">
-											<IconArrowUpToLine size={20} />
-										</span>
-									</button>
-									{settings.organizationIconUrl && (
-										<OverlayAction
-											icon={<IconTrash className="text-red" size={20} />}
-											disabled={busy}
-											onClick={removeIcon}
-											aria-label="Remove organization icon"
-											title="Remove icon"
-											className="phone:pointer-events-auto! phone:opacity-100!"
-										/>
-									)}
+					<SettingCard
+						className={
+							onboarding
+								? "mx-auto max-w-[560px] bg-[color-mix(in_srgb,var(--popup-surface)_76%,transparent)]!"
+								: undefined
+						}
+					>
+						{onboarding ? (
+							<div className="p-6 pb-7 phone:p-5 phone:pb-6">
+								<div className="flex justify-center">{iconEditor}</div>
+								<div className="mx-auto mt-5 grid w-full max-w-[480px] grid-cols-2 gap-3 phone:gap-2.5">
+									<Field label="Organization name">
+										{organizationNameInput}
+									</Field>
+									<IdentityRows compact showProductName={false} />
 								</div>
-								<input
-									ref={fileInput}
-									type="file"
-									disabled={busy}
-									accept="image/*"
-									className="hidden"
-									onChange={(event) => {
-										const file = event.target.files?.[0];
-										event.target.value = "";
-										if (file) void upload(file);
-									}}
-								/>
-							</SettingRowControl>
-						</SettingRow>
-						<SettingRow className={onboarding ? "px-6 py-5 last:pb-6" : undefined}>
-							<SettingRowText>
-								<SettingRowTitle>Organization name</SettingRowTitle>
-							</SettingRowText>
-							<input
-								className={NAME_INPUT_CLASS}
-								// data-setup-field: FirstMile's onboarding wrapper widens this
-								// field past its settings-page width; settings ignores it.
-								data-setup-field="org-name"
-								value={draft}
-								maxLength={80}
-								disabled={busy}
-								onChange={(event) => setDraft(event.target.value)}
-								onBlur={() => void commitName()}
-								onKeyDown={(event) => {
-									if (event.key === "Enter") event.currentTarget.blur();
-									else if (event.key === "Escape") setDraft(settings.organizationName);
-								}}
-								aria-label="Organization name"
-							/>
-						</SettingRow>
-						<IdentityRows
-							showProductName={!onboarding}
-							rowClassName={onboarding ? "px-6 py-5 last:pb-6" : undefined}
-						/>
+							</div>
+						) : (
+							<>
+								<SettingRow className="items-center">
+									<SettingRowText>
+										<SettingRowTitle>Upload icon</SettingRowTitle>
+									</SettingRowText>
+									<SettingRowControl className="flex flex-wrap items-center justify-end gap-2">
+										{iconEditor}
+									</SettingRowControl>
+								</SettingRow>
+								<SettingRow>
+									<SettingRowText>
+										<SettingRowTitle>Organization name</SettingRowTitle>
+									</SettingRowText>
+									{organizationNameInput}
+								</SettingRow>
+								<IdentityRows />
+							</>
+						)}
 					</SettingCard>
-					<SettingsHint className={onboarding ? "px-6" : undefined}>
+					<SettingsHint
+						className={onboarding ? "mx-auto max-w-[560px] px-6" : undefined}
+					>
 						{onboarding
 							? "Shared by everyone in this organization."
 							: "Shared by everyone in this organization. Clearing the name restores the product name."}

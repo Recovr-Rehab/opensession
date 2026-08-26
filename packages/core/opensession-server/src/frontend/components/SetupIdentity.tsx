@@ -6,6 +6,7 @@ import {
 } from "../lib/api";
 import { AGENT_NAME, PRODUCT_NAME } from "../lib/brand";
 import { cn } from "../ui/cn";
+import { Field } from "../ui/input";
 import {
 	SettingRow,
 	SettingRowDescription,
@@ -26,11 +27,13 @@ function IdentityInput({
 	value,
 	placeholder,
 	onSave,
+	className,
 }: {
 	label: string;
 	value: string;
 	placeholder: string;
 	onSave: (next: string) => Promise<void>;
+	className?: string;
 }) {
 	const [draft, setDraft] = useState(value);
 	const [saving, setSaving] = useState(false);
@@ -53,7 +56,7 @@ setSaving(false);
 	};
 	return (
 		<input
-			className={IDENTITY_INPUT_CLASS}
+			className={cn(IDENTITY_INPUT_CLASS, className)}
 			// data-setup-field: FirstMile's onboarding wrapper widens these fields
 			// past their settings-page width; settings ignores the attribute.
 			data-setup-field="identity"
@@ -76,9 +79,11 @@ setSaving(false);
 export function IdentityRows({
 	showProductName = true,
 	rowClassName,
+	compact = false,
 }: {
 	showProductName?: boolean;
 	rowClassName?: string;
+	compact?: boolean;
 } = {}) {
 	const [identity, setIdentity] = useState<InstanceIdentityDto | null>(null);
 	useEffect(() => {
@@ -103,6 +108,20 @@ toast(e?.message || "Failed to save", { variant: "error" });
 			throw e;
 });
 	};
+
+	if (compact) {
+		return (
+			<Field label="Agent name">
+				<IdentityInput
+					label="Agent name"
+					value={identity?.personaName ?? AGENT_NAME}
+					placeholder="Assistant"
+					onSave={(next) => save({ personaName: next })}
+					className="w-full!"
+				/>
+			</Field>
+		);
+	}
 
 	return (
 		<>
