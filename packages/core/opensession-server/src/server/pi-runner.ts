@@ -61,7 +61,6 @@ import {
   pickOpenaiAccount,
   buildSeededOpenaiAuth,
   maskOpenaiAccount,
-  type SeededOpenaiAuth,
 } from "./openai-auth";
 import {
   INTERACTIVE_KINDS,
@@ -103,6 +102,10 @@ import { ensureAgentAwsCredsFile } from "./aws-creds";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
 import { buildPiAnthropicProvider } from "./pi-anthropic-provider";
+import {
+  createPiRuntimeBinding,
+  prewarmPiSdk as prewarmPiSdkBinding,
+} from "./pi-runtime-binding";
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
 import {
   createMcpRuntime,
@@ -419,30 +422,13 @@ function makePiDialOracleTool(
 
 // ── SDK loading ──────────────────────────────────────────────────────────────
 
-type PiSdk = typeof import("@earendil-works/pi-coding-agent");
-
-/** The pi dep tree is large (~125 packages); Bun's first cold transpile of it
- *  can take >60s once per process. Keep the runtime import dynamic (so this
- *  module stays cheap to import) but cache the promise on globalThis and kick
- *  it in the background at boot when the engine is enabled. The cache is
- *  cleared on rejection so one transient cold-import failure (OOM during the
- *  first transpile, a deploy's bun-install window) doesn't brick the engine
- *  until restart — the next turn retries. Bun permanently caches module
- *  EVALUATION errors, so the retry rescues resolution/load-time failures,
- *  which are the transient class here. */
-function loadPiSdk(): Promise<PiSdk> {
-  return (g.__piSdkPromise ??= import("@earendil-works/pi-coding-agent").catch(
-    (e: unknown) => {
-      g.__piSdkPromise = undefined;
-      throw e;
-    }
-  ));
-}
-
-if (process.env.NODE_ENV !== "test" && piEngineEnabled()) {
-  void loadPiSdk().catch((e) =>
-    console.warn("[pi-runner] pi SDK prewarm failed:", e)
-  );
+/**
+ * Idempotent Pi SDK warm-up for the eventual boot call site. Boot wiring is
+ * intentionally deferred until this extraction is reviewed; turns still load
+ * the SDK on demand through createPiRuntimeBinding.
+ */
+export function prewarmPiSdk() {
+  return prewarmPiSdkBinding();
 }
 
 // ── Live-run registry ────────────────────────────────────────────────────────
@@ -1715,284 +1701,49 @@ async function* runPiAttempt(
         ? githubRunEnv(user || author?.name)
         : {};
 
-    // pi/openai: pick the codex account + build the seeded credential BEFORE
-    // the SDK import or any engine work — a dry/unconfigured pool must fail
-    // cheap, and it must fail FLAGGED: pi has no host-auth fallthrough (the
-    // deliberate ~/.pi isolation), so "no account can serve this model" is
-    // always exhaustion-shaped, which is what the model-fallback walk keys on
-    // (the catch below honors e.usageLimitExhausted). Same sessionKey
-    // convention as previous runner-runner (journal osSessionId || cwd), so HRW
-    // session affinity and the per-(account, model) sideline are ONE shared
-    // state across both engines.
-    let seededOpenaiCredential: SeededOpenaiAuth["openai"] | undefined;
-    let openaiApiKeyCredential: string | undefined;
-    let openaiPickReason: string | undefined;
-    if (parsed.providerID === "openai") {
-      const pickOut: { reason?: string } = {};
-      const picked = pickOpenaiAccount(
-        parsed.modelID,
-        readModelProviderConfig()?.openaiAccounts,
-        opts.accountAffinityKey || journal?.osSessionId || cwd,
-        pickOut,
-        accountUser,
-        opts.accountId,
-        opts.accountStrict,
-        walk.excluded,
-      );
-      if ("error" in picked) {
-        const err = new Error(`pi/openai: ${picked.error}`) as Error & {
-          usageLimitExhausted?: boolean;
-        };
-        err.usageLimitExhausted = true;
-        throw err;
-      }
-      pickedOpenai = picked;
-      openaiPickReason = pickOut.reason;
-      if (picked.kind === "api_key") {
-        // Standard OpenAI API keys use Pi's ordinary OpenAI provider. They do
-        // not enter the OAuth credential store or the ChatGPT backend.
-        openaiApiKeyCredential = picked.value;
-        sidelineableOpenai = picked;
-      } else {
-        const built = buildSeededOpenaiAuth(picked);
-        if ("error" in built) {
-          const err = new Error(`pi/openai: ${built.error}`) as Error & {
-            usageLimitExhausted?: boolean;
-          };
-          err.usageLimitExhausted = true;
-          throw err;
-        }
-        // Pi refreshes OAuth credentials inside their final five minutes. The
-        // placeholder refresh must fail because CODEX_HOME owns the rotating
-        // family, so reject the token before starting the turn.
-        const msLeft = built.seeded.openai.expires - Date.now();
-        if (msLeft <= 6 * 60_000) {
-          const err = new Error(
-            `pi/openai: codex account "${picked.name}" access token expires in ` +
-              `${Math.max(1, Math.ceil(msLeft / 60_000))} min, inside pi's refresh window. ` +
-              "The placeholder refresh deliberately fails, so this account is dry " +
-              "until the codex CLI refreshes the token."
-          ) as Error & { usageLimitExhausted?: boolean };
-          err.usageLimitExhausted = true;
-          throw err;
-        }
-        seededOpenaiCredential = built.seeded.openai;
-        sidelineableOpenai = picked;
-      }
-    }
-
-    audit({
-      ...auditBase,
-      direction: "in",
-      ...(pickedOpenai
-        ? {
-            account: maskOpenaiAccount(pickedOpenai),
-            account_id: pickedOpenai.id.slice(0, 8),
-            pick_reason: openaiPickReason,
-          }
-        : {}),
-      ...(policy.unattended
-        ? { denied_tools: policy.noteGroups.flatMap((grp) => grp.tools) }
-        : {}),
-      ...summarizeText(prompt),
+    const binding = await createPiRuntimeBinding({
+      providerID: parsed.providerID,
+      modelID: parsed.modelID,
+      configuredProvider,
+      affinityKey: opts.accountAffinityKey || journal?.osSessionId || cwd,
+      unifiedSessionId: unifiedSessionId || runKey,
+      accountUser,
+      accountId: opts.accountId,
+      accountStrict: opts.accountStrict,
+      usageCredits: opts.usageCredits,
+      excludedOpenaiAccountIds: walk.excluded,
+      onAccountEvidence: (evidence) => {
+        pickedOpenai = evidence.pickedOpenai;
+        sidelineableOpenai = evidence.sidelineableOpenai;
+      },
+      beforeRuntimeLoad: (evidence) => {
+        audit({
+          ...auditBase,
+          direction: "in",
+          ...(evidence.pickedOpenai
+            ? {
+                account: maskOpenaiAccount(evidence.pickedOpenai),
+                account_id: evidence.pickedOpenai.id.slice(0, 8),
+                pick_reason: evidence.openaiPickReason,
+              }
+            : {}),
+          ...(policy.unattended
+            ? { denied_tools: policy.noteGroups.flatMap((grp) => grp.tools) }
+            : {}),
+          ...summarizeText(prompt),
+        });
+      },
+      dependencies: {
+        readOpenaiAccounts: () => readModelProviderConfig()?.openaiAccounts,
+        pickOpenaiAccount,
+        buildSeededOpenaiAuth,
+        anthropicTransport: piAnthropicTransport,
+        buildAnthropicProvider: buildPiAnthropicProvider,
+        ensureAnthropicBridge,
+        buildThirdPartyProviderPlan: buildPiThirdPartyProviderPlan,
+      },
     });
-
-    const sdk = await loadPiSdk();
-
-    // Full isolation from ~/.pi: in-memory credentials (structural
-    // CredentialStore — pi-ai isn't a direct dep, so the tiny store is
-    // inlined), no models.json, no network catalog refresh.
-    const memCreds = new (class {
-      private data = new Map<string, any>();
-      async read(id: string) {
-        return this.data.get(id);
-      }
-      async list() {
-        return [...this.data.entries()].map(([providerId, c]) => ({
-          providerId,
-          type: c?.type,
-        }));
-      }
-      async modify(id: string, fn: (c: any) => Promise<any>) {
-        const next = await fn(this.data.get(id));
-        if (next !== undefined) this.data.set(id, next);
-        return this.data.get(id);
-      }
-      async delete(id: string) {
-        this.data.delete(id);
-      }
-    })();
-    // Seed the pi/openai oauth credential BEFORE the runtime consumes the
-    // store. This is the whole injection: auth resolves per LLM request by
-    // re-reading the stored credential, and the deliberately-invalid
-    // placeholder refresh inside it means pi would attempt a refresh only in
-    // the final 5 minutes of the ~10-day access token — failing LOUD instead
-    // of rotating the refresh family CODEX_HOME owns. Never
-    // setRuntimeApiKey("openai-codex", …): oauth-only provider, the api-key
-    // override is ignored for auth and would mask the seeded credential.
-    if (seededOpenaiCredential) {
-      const cred = seededOpenaiCredential;
-      await memCreds.modify("openai-codex", async () => cred);
-    }
-    const runtime = await sdk.ModelRuntime.create({
-      credentials: memCreds,
-      modelsPath: null,
-    });
-    let piModel: ReturnType<typeof runtime.getModel>;
-    if (parsed.providerID === "openai" && openaiApiKeyCredential) {
-      // Raw platform keys use Pi's standard OpenAI provider, the same scoped
-      // runtime-key mechanism used by Wafer, Kimi and other API providers.
-      await runtime.setRuntimeApiKey("openai", openaiApiKeyCredential);
-      piModel = runtime.getModel("openai", parsed.modelID);
-      if (!piModel) {
-        runtime.registerProvider("openai", {
-          models: [
-            {
-              id: parsed.modelID,
-              name: parsed.modelID,
-              reasoning: true,
-              thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" },
-              input: ["text", "image"],
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-              contextWindow: 272_000,
-              maxTokens: 128_000,
-            },
-          ],
-        });
-        piModel = runtime.getModel("openai", parsed.modelID);
-      }
-      if (!piModel) {
-        throw new Error(
-          `Unknown OpenAI API model "${parsed.modelID}" (could not register it with pi)`,
-        );
-      }
-    } else if (parsed.providerID === "openai") {
-      // pi's builtin openai-codex provider already carries the right baseUrl
-      // (chatgpt.com backend), API and catalog — our bare slugs match its
-      // model ids exactly. No custom headers toward chatgpt.com: pi's own
-      // defaults only (originator/UA are pi's — consistent with the
-      // no-fingerprint-scrubbing policy).
-      piModel = runtime.getModel("openai-codex", parsed.modelID);
-      if (!piModel) {
-        // Newer slug than the installed catalog — register a fallback entry
-        // (zero cost: subscription-billed; the conservative codex-backend
-        // window; the 5.6-family thinking map) rather than failing.
-        // api/baseUrl inherit from the builtin catalog entry.
-        runtime.registerProvider("openai-codex", {
-          models: [
-            {
-              id: parsed.modelID,
-              name: parsed.modelID,
-              reasoning: true,
-              thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" },
-              input: ["text", "image"],
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-              contextWindow: 272_000,
-              maxTokens: 128_000,
-            },
-          ],
-        });
-        piModel = runtime.getModel("openai-codex", parsed.modelID);
-      }
-      if (!piModel) {
-        throw new Error(
-          `Unknown OpenAI model "${parsed.modelID}" (could not register it with pi)`
-        );
-      }
-    } else if (
-      parsed.providerID === "anthropic" &&
-      piAnthropicTransport() === "inprocess"
-    ) {
-      // In-process native provider (the default): drives the Claude Agent
-      // SDK directly inside this process — token-level streaming, no
-      // loopback HTTP hop, no per-boot bridge key. Designated-account pick,
-      // usage-limit sidelining, the rolling hourly cap and the
-      // pi_anthropic_request audit discipline all live in
-      // pi-anthropic-provider.ts; build throws the bridge's exact
-      // designation error when no config designates accounts — surfaced
-      // as-is by the catch below. The builtin catalog is read BEFORE
-      // registration (registerNativeProvider replaces the builtin provider)
-      // so ids/cost/contextWindow survive; an unknown model id gets the same
-      // zero-cost fallback entry the bridge path minted.
-      const provider = buildPiAnthropicProvider({
-        unifiedSessionId: unifiedSessionId || runKey,
-        user: accountUser,
-        accountId: opts.accountId,
-        accountStrict: opts.accountStrict,
-        usageCredits: opts.usageCredits,
-        builtinModels: runtime.getModels("anthropic"),
-        ensureModelId: parsed.modelID,
-      });
-      runtime.registerNativeProvider(provider);
-      piModel = runtime.getModel("anthropic", parsed.modelID);
-      if (!piModel) {
-        throw new Error(`Unknown Anthropic model "${parsed.modelID}" (could not register it with pi)`);
-      }
-    } else if (parsed.providerID === "anthropic") {
-      // Rollback transport (anthropicTransport: "bridge"): the loopback HTTP
-      // bridge owns account selection and audits every request itself; we
-      // only route to it legitimately. ensure* throws a clear config error
-      // when the bridge is off — surfaced as-is by the catch below.
-      const bridge = ensureAnthropicBridge();
-      const sessionHeader = { "x-opensession-session": unifiedSessionId || runKey };
-      runtime.registerProvider("anthropic", {
-        baseUrl: bridge.url,
-        headers: sessionHeader,
-      });
-      await runtime.setRuntimeApiKey("anthropic", bridge.key);
-      piModel = runtime.getModel("anthropic", parsed.modelID);
-      if (!piModel) {
-        // Not in pi's built-in catalog — register a custom entry (zero cost:
-        // subscription-billed through the bridge; the window/max are safe
-        // Anthropic defaults) rather than failing on a newer model id.
-        runtime.registerProvider("anthropic", {
-          baseUrl: bridge.url,
-          headers: sessionHeader,
-          models: [
-            {
-              id: parsed.modelID,
-              name: parsed.modelID,
-              reasoning: true,
-              input: ["text", "image"],
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-              contextWindow: 200_000,
-              maxTokens: 32_000,
-            },
-          ],
-        });
-        piModel = runtime.getModel("anthropic", parsed.modelID);
-      }
-      if (!piModel) {
-        throw new Error(`Unknown Anthropic model "${parsed.modelID}" (could not register it with pi)`);
-      }
-    } else {
-      // Third-party picker providers share previous runner's configured API key and
-      // optional base URL. buildPiThirdPartyProviderPlan supplies the API
-      // dialect and model metadata — pi's built-in catalog when pi knows the
-      // provider, our own catalog (Wafer) when it does not, a conservative
-      // fallback entry for a model id newer than both — and refuses clearly
-      // for a provider in neither catalog.
-      const plan = buildPiThirdPartyProviderPlan({
-        providerID: parsed.providerID,
-        modelID: parsed.modelID,
-        apiKey: configuredProvider!.apiKey!,
-        baseURL: configuredProvider!.baseURL,
-        builtinModelIds: runtime.getModels(parsed.providerID).map((m) => m.id),
-      });
-      if ("error" in plan) throw new Error(plan.error);
-      runtime.registerProvider(parsed.providerID, plan.config);
-      await runtime.setRuntimeApiKey(
-        parsed.providerID,
-        configuredProvider!.apiKey!,
-      );
-      piModel = runtime.getModel(parsed.providerID, parsed.modelID);
-      if (!piModel) {
-        throw new Error(
-          `Model "${parsed.providerID}/${parsed.modelID}" could not be registered with pi. ` +
-            "Use a model supported by that provider's Pi integration.",
-        );
-      }
-    }
+    const { sdk, runtime, model: piModel } = binding;
 
     // Optional pool credentials for tools the run itself spawns (currently
     // deepsec's Claude Agent SDK and Codex CLI workers). These are explicit
@@ -2304,7 +2055,7 @@ async function* runPiAttempt(
     // socket. Raw OpenAI API keys use Pi's ordinary provider and retain its
     // default transport selection.
     const settingsManager = sdk.SettingsManager.inMemory(
-      seededOpenaiCredential ? { transport: "sse" } : {},
+      binding.usesOpenaiOAuth ? { transport: "sse" } : {},
     );
     const workspaceRoot = resolve(cwd);
     const loader = new sdk.DefaultResourceLoader({
@@ -2406,7 +2157,7 @@ async function* runPiAttempt(
     // payload instead. Restrict this to seeded ChatGPT OAuth credentials: API
     // key accounts use ordinary OpenAI billing and are not the subscription
     // fast mode exposed by the clients.
-    if (opts.fastMode && seededOpenaiCredential) {
+    if (opts.fastMode && binding.usesOpenaiOAuth) {
       enableOpenaiFastMode(session.agent);
     }
     // The first complete provider input only exists after Pi has combined its
