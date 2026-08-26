@@ -180,8 +180,11 @@ export class SessionKernelActorClient {
       response.version !== SESSION_KERNEL_ACTOR_VERSION
     )
       throw new Error("Session kernel actor handshake failed");
+    // Do not fan startup across every isolated session database. The cache is
+    // a replaceable gateway projection, not durable evidence; authoritative
+    // run transitions populate it as recovery and new work proceed. A global
+    // hydration can exceed the actor service deadline and keep /live offline.
     (this.store as RemoteStore).openReadMirror();
-    await (this.store as RemoteStore).hydrateRunStates();
   }
 
   async acknowledgeCommand(
