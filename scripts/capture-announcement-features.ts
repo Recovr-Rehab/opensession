@@ -45,7 +45,11 @@ const shots = [
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function connect(port: number, targetId: string, mediaBody: string) {
+async function connect(
+	port: number,
+	targetId: string,
+	mediaBodies: { before: string; after: string },
+) {
 	const ws = new WebSocket(`ws://127.0.0.1:${port}/devtools/page/${targetId}`);
 	await new Promise((resolve) => (ws.onopen = () => resolve(null)));
 	let id = 0;
@@ -67,7 +71,9 @@ async function connect(port: number, targetId: string, mediaBody: string) {
 				requestId: message.params.requestId,
 				responseCode: 200,
 				responseHeaders: [{ name: "Content-Type", value: "image/webp" }],
-				body: mediaBody,
+				body: message.params.request.url.includes("before")
+					? mediaBodies.before
+					: mediaBodies.after,
 			});
 			return;
 		}
@@ -113,9 +119,14 @@ while (
 }
 
 const scratch = mkdtempSync(join(tmpdir(), "announcement-features-"));
-const mediaBody = Buffer.from(
-	await Bun.file(join(WEBSITE, "demo-poster.webp")).arrayBuffer(),
-).toString("base64");
+const mediaBodies = {
+	before: Buffer.from(
+		await Bun.file(join(WEBSITE, "download-mac.webp")).arrayBuffer(),
+	).toString("base64"),
+	after: Buffer.from(
+		await Bun.file(join(WEBSITE, "demo-poster.webp")).arrayBuffer(),
+	).toString("base64"),
+};
 const lease = await acquireCdpBrowser();
 try {
 	for (const shot of shots) {
@@ -123,7 +134,7 @@ try {
 			`http://127.0.0.1:${lease.port}/json/new?about:blank`,
 			{ method: "PUT" },
 		).then((response) => response.json());
-		const target = await connect(lease.port, created.id, mediaBody);
+		const target = await connect(lease.port, created.id, mediaBodies);
 		try {
 			await target.send("Page.enable");
 			await target.send("Runtime.enable");

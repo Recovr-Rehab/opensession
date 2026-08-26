@@ -1163,13 +1163,17 @@ summary:focus-visible {
 .announcement-feature-collaboration img {
 	top: 7%;
 	left: 7%;
-	width: 82%;
+	width: 93%;
+}
+
+.announcement-feature-automations {
+	aspect-ratio: 2 / 1;
 }
 
 .announcement-feature-automations img {
-	top: 16%;
-	left: 6%;
-	width: 108%;
+	right: 0;
+	bottom: 0;
+	width: 120%;
 }
 
 .announcement-feature-walkthroughs img {
@@ -1357,13 +1361,17 @@ summary:focus-visible {
 	.announcement-feature-collaboration img {
 		top: 6%;
 		left: 5%;
-		width: 100%;
+		width: 95%;
+	}
+
+	.announcement-feature-automations {
+		aspect-ratio: 2 / 1;
 	}
 
 	.announcement-feature-automations img {
-		top: 18%;
-		left: 5%;
-		width: 155%;
+		right: 0;
+		bottom: 0;
+		width: 150%;
 	}
 
 	.announcement-feature-walkthroughs img {
