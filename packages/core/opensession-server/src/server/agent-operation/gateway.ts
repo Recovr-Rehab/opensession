@@ -112,6 +112,7 @@ export interface AgentOperationGatewayOptions {
   readonly decodePayload: (
     kind: "model" | "mcp",
     payload: unknown,
+    request: Readonly<AgentOperationRequestV1>,
   ) => AgentGatewayDecodedPayload | undefined;
   /** Required for MCP, whose descriptor intentionally does not carry a transcript anchor. */
   readonly resolveTranscriptAnchor?: (
@@ -228,7 +229,7 @@ export class AgentOperationGateway {
       throw new AgentGatewayAuthorizationError("descriptor digest mismatch");
     let decoded: AgentGatewayDecodedPayload | undefined;
     try {
-      decoded = this.#options.decodePayload(request.kind, payload);
+      decoded = this.#options.decodePayload(request.kind, payload, request);
     } catch {
       throw new AgentGatewayRequestError("invalid payload");
     }
@@ -242,9 +243,10 @@ export class AgentOperationGateway {
       throw new AgentGatewayRequestError("invalid payload decoding");
     let adapterPayload: unknown;
     try {
-      adapterPayload = decoded.kind === "model" && decoded.retainValueIdentity
-        ? validateDecodedValue(decoded.value)
-        : snapshotDecodedValue(decoded.value);
+      adapterPayload =
+        decoded.kind === "model" && decoded.retainValueIdentity
+          ? validateDecodedValue(decoded.value)
+          : snapshotDecodedValue(decoded.value);
     } catch {
       throw new AgentGatewayRequestError("invalid decoded payload");
     }
