@@ -397,9 +397,7 @@ function SetupOverview() {
 						<strong>
 							<span aria-hidden="true">1. </span>Get a server
 						</strong>
-						<span>
-							Use a VPS or Mac mini you can leave powered on and connected.
-						</span>
+						<span>Use a VPS or Mac mini you can leave connected.</span>
 					</div>
 					<SetupGuide
 						triggerLabel="Run installer"

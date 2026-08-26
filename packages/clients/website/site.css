@@ -263,7 +263,7 @@ summary:focus-visible {
 	padding: 20px;
 	border-radius: calc(18px * var(--rf));
 	corner-shape: var(--cs);
-	background: rgba(var(--ink-rgb), 0.04);
+	background: rgba(var(--ink-rgb), 0.03);
 }
 
 .landing-setup-step-icon,
