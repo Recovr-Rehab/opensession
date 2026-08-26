@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import {
+  directHttpsBindAddress,
   displayedServerAddresses,
   normalizeCustomIngressOrigin,
   normalizeIngressOrigin,
@@ -65,6 +66,15 @@ describe("public ingress settings", () => {
     expect(normalizeCustomIngressOrigin("ingress.example.test")).toBe("https://ingress.example.test");
     expect(normalizeCustomIngressOrigin("https://ingress.example.test/")).toBe("https://ingress.example.test");
     expect(() => normalizeCustomIngressOrigin("http://ingress.example.test")).toThrow("must use HTTPS");
+  });
+
+  test("binds direct HTTPS to the routed interface instead of the private listener", () => {
+    expect(directHttpsBindAddress("54.10.20.30", "172.31.21.26", "100.77.110.100"))
+      .toBe("172.31.21.26");
+    expect(directHttpsBindAddress("54.10.20.30", "100.77.110.100", "100.77.110.100"))
+      .toBeNull();
+    expect(directHttpsBindAddress("2001:db8::10", "172.31.21.26", "100.77.110.100"))
+      .toBeNull();
   });
 
   test("reports DNS propagation separately from a broken listener", () => {

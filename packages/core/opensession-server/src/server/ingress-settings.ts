@@ -1,5 +1,6 @@
 /** Public-ingress configuration, discovery and managed exposure helpers. */
 import { randomBytes } from "crypto";
+import { createSocket } from "dgram";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { networkInterfaces } from "os";
 import { isIP } from "net";
@@ -110,6 +111,50 @@ export function normalizeIngressOrigin(value: string): string {
 export function normalizeCustomIngressOrigin(value: string): string {
   const trimmed = value.trim();
   return normalizeIngressOrigin(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
+}
+
+/** Select the local interface that carries traffic to the public internet.
+ * On NATed hosts the operator enters the public address, while Caddy must bind
+ * the corresponding private interface address. Never fall back to wildcard:
+ * the private app already owns HTTPS on the Tailscale interface, and two HTTP/3
+ * UDP listeners on port 443 cannot overlap. */
+export function directHttpsBindAddress(
+  publicAddress: string,
+  routedAddress: string,
+  tailnetAddress: string | null,
+): string | null {
+  const family = isIP(publicAddress);
+  if (!family || isIP(routedAddress) !== family) return null;
+  if (
+    routedAddress === tailnetAddress ||
+    routedAddress === "0.0.0.0" ||
+    routedAddress === "::" ||
+    routedAddress === "127.0.0.1" ||
+    routedAddress === "::1"
+  ) return null;
+  return routedAddress;
+}
+
+async function routedInternetAddress(family: 4 | 6): Promise<string> {
+  const socket = createSocket(family === 4 ? "udp4" : "udp6");
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const address = error ? "" : socket.address().address;
+      socket.close();
+      if (error || !address) reject(error || new Error("No routed address"));
+      else resolve(address);
+    };
+    const timer = setTimeout(
+      () => finish(new Error("Timed out finding the public-facing interface")),
+      2_000,
+    );
+    socket.once("error", finish);
+    socket.connect(53, family === 4 ? "1.1.1.1" : "2606:4700:4700::1111", () => finish());
+  });
 }
 
 /** A private app custom domain is always HTTPS, but the form asks for the
@@ -505,6 +550,20 @@ export async function configureCloudflareTunnel(input: {
 
 export async function installManagedCaddy(originValue: string, publicIp?: string): Promise<void> {
   const origin = normalizeCustomIngressOrigin(originValue);
+  const publicAddress = (publicIp || "").trim();
+  const family = isIP(publicAddress);
+  if (family !== 4 && family !== 6) {
+    throw new Error("Enter this server’s public IPv4 or IPv6 address");
+  }
+  const routedAddress = await routedInternetAddress(family).catch(() => "");
+  const bindAddress = directHttpsBindAddress(
+    publicAddress,
+    routedAddress,
+    detectedTailnetIpv4(),
+  );
+  if (!bindAddress) {
+    throw new Error("Could not determine the public-facing network interface for Caddy");
+  }
   const caddy = Bun.which("caddy");
   const sudo = Bun.which("sudo");
   if (!caddy || !sudo) throw new Error("Caddy and sudo are required for managed custom domains");
@@ -520,7 +579,7 @@ export async function installManagedCaddy(originValue: string, publicIp?: string
     await runSudo(["systemctl", "reload", "caddy"]);
   };
   try {
-    await Bun.write(staged, upsertCaddyIngress(current, origin));
+    await Bun.write(staged, upsertCaddyIngress(current, origin, bindAddress));
     if ((await runSudo(["cp", "-p", CADDYFILE, backup])).code !== 0) {
       throw new Error("Could not back up the Caddyfile");
     }
