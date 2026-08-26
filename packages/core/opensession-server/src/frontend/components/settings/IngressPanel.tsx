@@ -384,9 +384,9 @@ export function IngressPanel({
 		}
 		if (selectConfigured) {
 			setMethod(next.exposure || (next.tailscale.installed ? "tailscale" : "custom"));
+			setTunnelId(next.cloudflare.tunnelId);
+			setTunnelToken("");
 		}
-		setTunnelId(next.cloudflare.tunnelId);
-		setTunnelToken("");
 	}
 
 	const applyFromEffect = useEffectEvent(apply);
@@ -671,31 +671,28 @@ export function IngressPanel({
 											<div className="mt-2"><CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --cloudflare --no-onboard"}</CodeBlock></div>
 										</InlineAlert>
 									)}
-									<p className="m-0 text-supporting text-dim">Run these commands in a terminal on the Open Session server.</p>
 									<SetupSteps>
-										<SetupStep number={1} title="Sign in to Cloudflare">
-											<CodeBlock>cloudflared tunnel login</CodeBlock>
-											<p className="m-0">Choose the Cloudflare account and zone that will own your ingress domain.</p>
+										<SetupStep number={1} title="Create a remotely managed tunnel">
+											<p className="m-0">In Cloudflare Zero Trust, open <strong className="font-medium text-fg">Networks → Connectors → Cloudflare Tunnels</strong> and create a Cloudflared tunnel.</p>
+											<a className="w-fit text-link hover:underline" href="https://one.dash.cloudflare.com/" target="_blank" rel="noreferrer">Open Cloudflare Zero Trust</a>
+											<p className="m-0">Use the dashboard rather than <code>cloudflared tunnel create</code>. Connector tokens require a remotely managed tunnel.</p>
 										</SetupStep>
-										<SetupStep number={2} title="Create a named tunnel">
-											<CodeBlock>cloudflared tunnel create opensession</CodeBlock>
-											<p className="m-0">Copy the UUID printed by this command.</p>
-											<SettingsField className="mb-0">
-												Tunnel ID
-												<Input value={tunnelId} placeholder="00000000-0000-0000-0000-000000000000" disabled={!!busy} className="font-mono" onChange={(event) => setTunnelId(event.target.value)} />
-											</SettingsField>
-										</SetupStep>
-										<SetupStep number={3} title="Add the DNS route">
+										<SetupStep number={2} title="Add the callback route">
 											<SettingsField className="mb-0">
 												Public URL
 												<Input key={method} type="url" value={url} placeholder="https://ingress.example.com" disabled={!!busy} readOnly={!!privateDomain} onChange={(event) => setDrafts((current) => ({ ...current, cloudflare: event.target.value }))} />
 											</SettingsField>
 											{privateDomain && <p className="m-0">Open Session uses a separate <strong className="font-medium text-fg">ingress</strong> hostname alongside the private app address.</p>}
-											<CodeBlock>{`cloudflared tunnel route dns opensession ${ingressHostname(url)}`}</CodeBlock>
+											<p className="m-0">Under <strong className="font-medium text-fg">Published application routes</strong>, add <strong className="font-medium text-fg">{ingressHostname(url)}</strong> and point its HTTP service to:</p>
+											<CodeBlock>{settings.cloudflare.connectorTarget}</CodeBlock>
+											<p className="m-0">Cloudflare creates the DNS route. Never point this public hostname at the private app port.</p>
 										</SetupStep>
-										<SetupStep number={4} title="Generate the connector token">
-											<CodeBlock>cloudflared tunnel token opensession</CodeBlock>
-											<p className="m-0">Paste the printed token. Open Session stores it on this server and starts the connector for you.</p>
+										<SetupStep number={3} title="Connect this server">
+											<p className="m-0">Copy the tunnel ID and connector token from that same tunnel. Open Session protects the token on this server and starts cloudflared for you.</p>
+											<SettingsField className="mb-0">
+												Tunnel ID
+												<Input value={tunnelId} placeholder="00000000-0000-0000-0000-000000000000" disabled={!!busy} className="font-mono" onChange={(event) => setTunnelId(event.target.value)} />
+											</SettingsField>
 											<SettingsField className="mb-0">
 												Tunnel token
 												<Input
@@ -709,12 +706,7 @@ export function IngressPanel({
 											</SettingsField>
 										</SetupStep>
 									</SetupSteps>
-									<div className="grid gap-2">
-										<div className="text-label font-medium text-dim">Tunnel destination</div>
-										<CodeBlock>{settings.cloudflare.connectorTarget}</CodeBlock>
-										<p className="m-0 text-supporting text-dim">Use this isolated listener only. Never route the private app port through the tunnel.</p>
-									</div>
-									{settings.cloudflare.connectorRunning && <StatusChip label="Connector running" dot="var(--green)" />}
+									{settings.cloudflare.connectorRunning && <StatusChip label="Connector process running" dot="var(--green)" />}
 								</>
 							)}
 
@@ -758,7 +750,11 @@ export function IngressPanel({
 							</div>
 
 							{settings.health === "unreachable" && settings.exposure === method && (
-								<InlineAlert>The public URL is configured but its health check is not reachable. Verify DNS, the connector, and any firewall rules, then check again.</InlineAlert>
+								<InlineAlert>
+									{method === "cloudflare" && settings.cloudflare.connectorRunning
+										? <>The connector process is running, but Cloudflare cannot reach Open Session. Verify that this hostname routes to <strong>{settings.cloudflare.connectorTarget}</strong> and that the tunnel ID and token come from the same remotely managed tunnel.</>
+										: "The public URL is configured but its health check is not reachable. Verify DNS, the connector, and any firewall rules, then check again."}
+								</InlineAlert>
 							)}
 
 							<SettingsFormActions className="phone:flex-col-reverse">
