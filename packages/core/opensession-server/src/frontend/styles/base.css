@@ -1121,12 +1121,14 @@ body {
 }
 
 
-/* Text the user may legitimately want to select and copy: message rows and
-   their prose, names, system text, code, diffs, inputs. The row wrapper is
-   included on purpose — a drag has to be able to start in a bubble's padding
-   or the gutter beside it (see the transcript rule below) — and the highlight
-   still hugs the words because .msg and .msg-body are flex columns, which is
-   what stopped WebKit painting full-width bands across the gaps. */
+/* Text the user may legitimately want to select and copy: supporting copy,
+   message rows and their prose, names, system text, code, diffs, inputs. The
+   row wrapper is included on purpose — a drag has to be able to start in a
+   bubble's padding or the gutter beside it (see the transcript rule below) —
+   and the highlight still hugs the words because .msg and .msg-body are flex
+   columns, which is what stopped WebKit painting full-width bands across the
+   gaps. */
+.text-supporting,
 input,
 textarea,
 select,
