@@ -1138,6 +1138,46 @@ summary:focus-visible {
 	font-weight: 650;
 }
 
+/* Focused product views use the landing demo's blue artwork as one shared
+   stage. Each image is a crop of the real fixture app, enlarged past the frame
+   so the feature named by the surrounding paragraph stays readable. */
+.announcement-feature-shot {
+	position: relative;
+	overflow: hidden;
+	aspect-ratio: 16 / 10;
+	border-radius: calc(28px * var(--rf));
+	corner-shape: var(--cs);
+	background: url("./demo-background.webp") center / cover;
+}
+
+.announcement-feature-shot img {
+	position: absolute;
+	display: block;
+	max-width: none;
+	border-radius: calc(15px * var(--rf));
+	corner-shape: var(--cs);
+	outline: 1px solid oklch(0 0 0 / 0.1);
+	box-shadow: 0 22px 54px rgba(28, 34, 40, 0.24);
+}
+
+.announcement-feature-collaboration img {
+	top: 7%;
+	left: 7%;
+	width: 82%;
+}
+
+.announcement-feature-automations img {
+	top: 16%;
+	left: 6%;
+	width: 108%;
+}
+
+.announcement-feature-walkthroughs img {
+	top: 7%;
+	left: 5%;
+	width: 96%;
+}
+
 .announcement-inline-link {
 	color: inherit;
 	text-decoration-line: underline;
@@ -1307,6 +1347,29 @@ summary:focus-visible {
 
 	.announcement-article h1 + * {
 		margin-top: 40px;
+	}
+
+	.announcement-feature-shot {
+		aspect-ratio: 5 / 4;
+		border-radius: calc(22px * var(--rf));
+	}
+
+	.announcement-feature-collaboration img {
+		top: 6%;
+		left: 5%;
+		width: 100%;
+	}
+
+	.announcement-feature-automations img {
+		top: 18%;
+		left: 5%;
+		width: 155%;
+	}
+
+	.announcement-feature-walkthroughs img {
+		top: 7%;
+		left: 5%;
+		width: 130%;
 	}
 
 	.website-modal-panel {

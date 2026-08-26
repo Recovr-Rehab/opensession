@@ -88,10 +88,10 @@ separate app listener on 3850 serves the private UI and API.
   `bun install`. Nothing installs a separate `pi` binary on the box.
 - The `claude` CLI (Claude Code) is required for Anthropic models
   (`OPENSESSION_CLAUDE_BIN`, default: `claude` found on `PATH`). The installer
-  adds it by default; `--no-engine` opts out.
+  adds it by default.
 - The `codex` CLI is required to add a ChatGPT subscription account through the
-  in-app device flow. It is not installed by default; pass `--codex` or follow
-  the install command shown by the sign-in flow.
+  in-app device flow. The installer adds it by default.
+- `--no-engine` skips both model CLIs; `--no-codex` skips only Codex.
 - **Tailscale** is the recommended way to share the private UI. On Linux the
   installer can add it with `--tailscale`; on macOS install the Tailscale app.
   The default install binds loopback, and joining a tailnet is a separate step

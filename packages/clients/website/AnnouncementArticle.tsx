@@ -1,4 +1,28 @@
+import collaborationAsset from "./announcement-collaboration.webp";
+import automationsAsset from "./announcement-automations.webp";
+import walkthroughsAsset from "./announcement-walkthroughs.webp";
+import { assetUrl } from "./asset-url";
 import { ProductDemo } from "./ProductDemo";
+
+const featureShots = {
+	collaboration: assetUrl(collaborationAsset),
+	automations: assetUrl(automationsAsset),
+	walkthroughs: assetUrl(walkthroughsAsset),
+};
+
+function AnnouncementFeatureShot({
+	feature,
+	alt,
+}: {
+	feature: keyof typeof featureShots;
+	alt: string;
+}) {
+	return (
+		<figure className={`announcement-feature-shot announcement-feature-${feature}`}>
+			<img src={featureShots[feature]} alt={alt} loading="lazy" decoding="async" />
+		</figure>
+	);
+}
 
 export function AnnouncementArticle({
 	showMark = false,
@@ -124,6 +148,11 @@ export function AnnouncementArticle({
 				review, prompt or steer in the same session with you.
 			</p>
 
+			<AnnouncementFeatureShot
+				feature="collaboration"
+				alt="Open Session’s sidebar showing several teammates viewing shared workspaces."
+			/>
+
 			<p>
 				A session lives inside a Workspace, which can support multiple related
 				sessions. This is great for longer-running collaboration, where you don’t
@@ -170,6 +199,11 @@ export function AnnouncementArticle({
 				identifying patterns in support and tracking stale PRs.
 			</p>
 
+			<AnnouncementFeatureShot
+				feature="automations"
+				alt="Open Session’s automations page showing recurring pull request, support, security, and documentation jobs."
+			/>
+
 			<p>
 				We also added a feature called <strong>Walkthroughs</strong>. These are
 				written summaries of what the agent completed along with screenshots and
@@ -180,6 +214,11 @@ export function AnnouncementArticle({
 				switching. In Open Session you can review the agent’s screenshots and
 				videos and move on.
 			</p>
+
+			<AnnouncementFeatureShot
+				feature="walkthroughs"
+				alt="A completed Open Session walkthrough with a written summary and a screenshot of the shipped change."
+			/>
 
 			<h2>Build your own tools</h2>
 

@@ -15,6 +15,9 @@ const minutesAgo = (minutes: number) =>
 	new Date(Date.now() - minutes * 60_000).toISOString();
 const now = minutesAgo(0);
 const activeSessionId = "bks-demo-presence";
+/** Optional capture-only state used by scripts/capture-announcement-features.ts.
+ *  The ordinary landing demo has no query string and keeps its current state. */
+const featureShot = new URLSearchParams(location.search).get("feature");
 
 const sessions: UnifiedSession[] = [
 	{
@@ -34,6 +37,23 @@ const sessions: UnifiedSession[] = [
 		workspaceId: "project-presence",
 		model: "anthropic/claude-fable-5",
 		effort: "medium",
+		...(featureShot === "walkthroughs"
+			? {
+					walkthrough: {
+						summary:
+							"## What changed\n\nWorkspace presence is now visible at a glance. The sidebar rolls everyone viewing a session into a compact facepile, while the session header shows who is collaborating with you.",
+						shots: [
+							{
+								after: "/demo/workspace-presence-after.webp",
+								caption: "Workspace presence in the sidebar and session header",
+							},
+						],
+						publishedAt: minutesAgo(3),
+						publishedBy: "Kent",
+						publishedEntryId: "entry-14",
+					},
+			}
+			: {}),
 		usage: {
 			costUsd: 0.6,
 			inputTokens: 18420,
@@ -231,6 +251,106 @@ const demoPresence = [
 	{ user: "Michiel", sessionId: activeSessionId },
 	{ user: "Jaap", sessionId: activeSessionId },
 	{ user: "Louise", sessionId: "bks-demo-checkout" },
+];
+
+const automations = [
+	{
+		id: "review-stale-prs",
+		name: "Review stale pull requests",
+		prompt:
+			"Review pull requests with no activity for three days. Summarize blockers, request the right reviewer, and publish a report with anything that needs attention.",
+		schedule: "0 9 * * 1-5",
+		mode: "ask",
+		enabled: true,
+		createdBy: "Kent",
+		createdAt: minutesAgo(18_400),
+		lastRunAt: minutesAgo(42),
+		lastRunSessionId: "bks-demo-release",
+		lastRunStatus: "ok",
+		lastTrigger: "cron",
+		nextRunAt: minutesAgo(-1_080),
+		model: "anthropic/claude-fable-5",
+		runs: [1, 2, 3, 4, 5, 7, 8].map((days) => ({
+			at: minutesAgo(days * 1_440),
+			sessionId: `demo-pr-review-${days}`,
+			trigger: "cron",
+			status: "ok",
+			durationMs: 184_000,
+		})),
+	},
+	{
+		id: "support-patterns",
+		name: "Find patterns in support",
+		prompt:
+			"Analyze this week's support conversations. Group recurring requests, note changes in sentiment, and publish the strongest product signals.",
+		schedule: "0 8 * * 1",
+		mode: "ask",
+		enabled: true,
+		createdBy: "Louise",
+		createdAt: minutesAgo(42_000),
+		lastRunAt: minutesAgo(1_520),
+		lastRunSessionId: "bks-demo-search",
+		lastRunStatus: "ok",
+		lastTrigger: "cron",
+		nextRunAt: minutesAgo(-8_640),
+		model: "anthropic/claude-opus-5",
+		runs: [2, 9, 16, 23].map((days) => ({
+			at: minutesAgo(days * 1_440),
+			sessionId: `demo-support-patterns-${days}`,
+			trigger: "cron",
+			status: "ok",
+			durationMs: 312_000,
+		})),
+	},
+	{
+		id: "security-monitor",
+		name: "Monitor security advisories",
+		prompt:
+			"Check our dependencies and infrastructure providers for new security advisories. Open a code session for actionable fixes.",
+		schedule: "0 */6 * * *",
+		mode: "code",
+		enabled: true,
+		createdBy: "Grant",
+		createdAt: minutesAgo(61_000),
+		lastRunAt: minutesAgo(96),
+		lastRunSessionId: "bks-demo-audit-log",
+		lastRunStatus: "running",
+		lastTrigger: "cron",
+		nextRunAt: minutesAgo(-264),
+		isRunning: true,
+		model: "anthropic/claude-fable-5",
+		runs: [1, 3, 4, 6, 7].map((days, index) => ({
+			at: minutesAgo(days * 1_440),
+			sessionId: `demo-security-${days}`,
+			trigger: "cron",
+			status: index === 0 ? "running" : "ok",
+			durationMs: 228_000,
+		})),
+	},
+	{
+		id: "product-docs",
+		name: "Keep product docs current",
+		prompt:
+			"Compare recently shipped changes with product documentation. Update anything stale and open a pull request with the edits.",
+		schedule: "0 16 * * 5",
+		mode: "code",
+		enabled: true,
+		createdBy: "Michiel",
+		createdAt: minutesAgo(72_000),
+		lastRunAt: minutesAgo(4_380),
+		lastRunSessionId: "bks-demo-webhook-docs",
+		lastRunStatus: "ok",
+		lastTrigger: "cron",
+		nextRunAt: minutesAgo(-4_260),
+		model: "anthropic/claude-opus-5",
+		runs: [3, 10, 17, 24].map((days) => ({
+			at: minutesAgo(days * 1_440),
+			sessionId: `demo-product-docs-${days}`,
+			trigger: "cron",
+			status: "ok",
+			durationMs: 402_000,
+		})),
+	},
 ];
 
 const transcripts: Record<string, TranscriptEntry[]> = {
@@ -506,6 +626,7 @@ const responseFor = (url: URL, method: string): Response => {
 	if (path === "/api/ui-prefs") return json({ prefs: {} });
 	if (path === "/api/lanes") return json({ lanes: {} });
 	if (path === "/api/reads") return json({ reads: {} });
+	if (path === "/api/automations") return json(automations);
 	if (path === "/api/claude-accounts" || path === "/api/codex-accounts")
 		return json({ accounts: [] });
 	if (/^\/api\/sessions\/[^/]+\/assets$/.test(path))
@@ -692,6 +813,11 @@ localStorage.setItem("opensession-workspace-summary-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
 localStorage.setItem("opensession-sidebar-w", "300");
+if (featureShot === "automations") {
+	// The capture route is state inside the fixture app. Keeping the query string
+	// lets a screenshot identify why it differs from the ordinary landing demo.
+	history.replaceState(null, "", "/automations?feature=automations");
+}
 // One repo, so the sidebar resolves its "auto" grouping to the plain inbox
 // straight away instead of painting repo bands until /api/repos answers.
 localStorage.setItem("opensession-repo-count", "1");

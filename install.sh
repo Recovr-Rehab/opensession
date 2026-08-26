@@ -23,9 +23,10 @@
 #                                              Bun install, no bun install
 #   --no-modify-path      NO_MODIFY_PATH=1     do not touch shell profiles
 #   --no-onboard          NO_ONBOARD=1         install only, skip the wizard
-#   --no-engine           NO_ENGINE=1          do not install the claude model CLI
-#   --codex               WITH_CODEX=1         also install the codex CLI (ChatGPT
-#                                              sign-in); off by default
+#   --no-engine           NO_ENGINE=1          do not install the model CLIs
+#   --no-codex            WITH_CODEX=0         do not install the codex CLI
+#   --codex               WITH_CODEX=1         install the codex CLI (the default;
+#                                              retained for compatibility)
 #   --tailscale           WITH_TAILSCALE=1     also install Tailscale (off by
 #                                              default; --no-tailscale still accepted)
 #   --caddy               WITH_CADDY=1         install Caddy and lego for managed
@@ -77,7 +78,7 @@ NO_MODIFY_PATH="${NO_MODIFY_PATH:-0}"
 NO_ONBOARD="${NO_ONBOARD:-0}"
 NO_ENGINE="${NO_ENGINE:-0}"
 IS_BINARY=0
-WITH_CODEX="${WITH_CODEX:-0}"
+WITH_CODEX="${WITH_CODEX:-1}"
 WITH_TAILSCALE="${WITH_TAILSCALE:-0}"
 WITH_CADDY="${WITH_CADDY:-0}"
 WITH_CLOUDFLARE="${WITH_CLOUDFLARE:-0}"
@@ -97,6 +98,7 @@ while [ $# -gt 0 ]; do
     --no-modify-path) NO_MODIFY_PATH=1; shift ;;
     --no-onboard) NO_ONBOARD=1; shift ;;
     --no-engine) NO_ENGINE=1; shift ;;
+    --no-codex) WITH_CODEX=0; shift ;;
     --codex) WITH_CODEX=1; shift ;;
     --tailscale) WITH_TAILSCALE=1; shift ;;
     --no-tailscale) WITH_TAILSCALE=0; shift ;;
@@ -615,19 +617,17 @@ fi
 
 # ── engine ──────────────────────────────────────────────────────────────────
 #
-# Two binaries are needed before a session can run a turn, and one is not:
+# Pi is bundled with Open Session, while the subscription-backed provider paths
+# also use two external CLIs:
 #
-#             starts, the UI loads, and every session fails.
 #   claude    the bundled Anthropic bridge execs it, and `claude setup-token`
-#             is how you mint the account token for the default model.
+#             is how you mint an account token.
 #   codex     `codex login --device-auth` backs the ChatGPT sign-in in the UI
-#             (codex-device-login.ts). Off the critical path: only installed
-#             with --codex, and the sign-in names the install command when
-#             the binary is missing.
+#             (codex-device-login.ts).
 #
-# The first two are installed by default because leaving them out produces
-# the failure this installer exists to prevent: a box that looks installed
-# and cannot work. Each is skipped when already present, so re-runs are free.
+# Both are installed by default so either subscription path works out of the
+# box. Each is skipped when already present, so re-runs are free. `--no-engine`
+# skips both, while `--no-codex` skips only Codex.
 
 # First line of `<bin> --version`, or $2 when it prints nothing usable. Kept
 # separate so the `||` fallback isn't swallowed by a pipeline's exit status.

@@ -8,11 +8,9 @@ for OpenAI. You can instead configure a supported provider API key under
 Workspace → Providers. Open Session does not bundle a model credential.
 
 The installer adds the `claude` CLI, which mints and uses a Claude subscription
-token (the Pi engine itself is bundled in the binary). It skips an existing
-CLI, and `--no-engine` skips the install. The `codex` CLI, which backs the
-in-app ChatGPT sign-in, is not on the default path: pass `--codex`, or install
-it later with `curl -fsSL https://chatgpt.com/codex/install.sh | sh` (the
-sign-in tells you when it is missing).
+token, and the `codex` CLI, which backs the in-app ChatGPT sign-in (the Pi
+engine itself is bundled in the binary). It skips existing CLIs. `--no-engine`
+skips both installs, while `--no-codex` skips only Codex.
 
 Then, end to end:
 
@@ -130,8 +128,8 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
 
 This downloads the compiled release for your OS and architecture and unpacks
 it under `~/.opensession/releases` (with `src` linked at it), installs the
-`claude` CLI, puts an `opensession` command on your `PATH`, writes a default
-configuration (127.0.0.1:3850, a scratch repo, no integrations), installs and
+`claude` and `codex` CLIs, puts an `opensession` command on your `PATH`, writes
+a default configuration (127.0.0.1:3850, a scratch repo, no integrations), installs and
 starts the service, and ends with the URL. No questions. If no release is
 published for your platform yet it falls back to a source clone; `--source`
 forces the git checkout, and `--artifact <path|url>` installs a specific
@@ -156,17 +154,16 @@ Useful flags: `--dir <path>` to install elsewhere, `--channel <ref>` to track
 a branch or tag, `--advanced` for the wizard, `--org <name>` to set up an org
 install, `--tailscale` to install Tailscale, `--cloudflare` to install
 `cloudflared`, `--caddy` to install Caddy and the lego certificate helper,
-`--codex` for the ChatGPT sign-in CLI, `--no-engine` to skip the model CLI,
-`--yes` to never prompt, and `--uninstall`
+`--no-codex` to skip the ChatGPT sign-in CLI, `--no-engine` to skip both model
+CLIs, `--yes` to never prompt, and `--uninstall`
 to remove it. `--help` lists them all.
 
 The Pi engine is compiled into the release binary and runs in-process, so
 there is no separate engine to seed or version. A release tarball carries the
 `opensession` executable, the embedded frontend, `sharp` and Worker sidecars,
 three systemd service templates, fixed-policy deploy helpers, and
-`release.json`. The default Anthropic path also needs the external `claude`
-CLI, which the installer adds (`--no-engine` skips it); ChatGPT device sign-in
-needs `codex`.
+`release.json`. The subscription paths also need the external `claude` and
+`codex` CLIs, which the installer adds by default.
 
 ### Install with Tailscale
 
