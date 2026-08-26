@@ -202,7 +202,11 @@ export function GithubAuthCard({
 					</div>
 				</div>
 			</SettingCard>
-			<div className="mx-auto mt-3 w-full max-w-[34rem]">
+			<div
+				className={
+					onboarding ? "mt-3 w-full" : "mx-auto mt-3 w-full max-w-[34rem]"
+				}
+			>
 				<SettingsSection className="flex flex-col gap-4">
 					<GithubManifestSetup github={github} returnTo="welcome" />
 				</SettingsSection>

@@ -258,7 +258,7 @@ setBusy(false);
 					>
 						{onboarding ? (
 							<div className="p-6 phone:p-5">
-								<div className="flex justify-center">{iconEditor}</div>
+								<div className="flex justify-center py-4">{iconEditor}</div>
 								<div className="mx-auto mt-5 grid w-full max-w-[400px] grid-cols-1 gap-4">
 									<Field label={<span className="text-fg">Organization name</span>}>
 										{organizationNameInput}
