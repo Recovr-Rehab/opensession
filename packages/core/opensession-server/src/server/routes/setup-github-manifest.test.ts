@@ -119,6 +119,7 @@ describe("GitHub App manifest", () => {
 			context("/api/setup/github/manifest", "POST", {
 				owner: "organization",
 				organization: "acme",
+				returnTo: "settings",
 			}),
 		);
 		expect(start?.status).toBe(200);
@@ -161,7 +162,7 @@ describe("GitHub App manifest", () => {
 		const completed = await handleSetupRoutes(callback);
 		expect(completed?.status).toBe(303);
 		expect(completed?.headers.get("location")).toBe(
-			"http://100.90.80.70:3850/backstage/welcome?step=github&github_manifest=created",
+			"http://100.90.80.70:3850/backstage/settings/integrations?github_manifest=created",
 		);
 
 		const config = JSON.parse(readFileSync(configPath, "utf8"));

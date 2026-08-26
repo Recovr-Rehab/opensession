@@ -261,6 +261,7 @@ export function IntegrationSetupDialog({
 	onSaved,
 	github,
 	onGithubSaved,
+	githubManifestSetup,
 }: {
 	integration: SetupIntegration;
 	open: boolean;
@@ -268,6 +269,7 @@ export function IntegrationSetupDialog({
 	onSaved: (updated: SetupIntegration, restartRequired: boolean) => void;
 	github?: SetupGithub;
 	onGithubSaved?: (updated: SetupGithub, restartRequired: boolean) => void;
+	githubManifestSetup?: ReactNode;
 }) {
 	const [enabled, setEnabled] = useState(integration.enabled);
 	const [typed, setTyped] = useState<Record<string, string>>({});
@@ -447,6 +449,30 @@ export function IntegrationSetupDialog({
 			);
 		});
 		setSaving(false);
+	}
+
+	if (integration.id === "github" && githubManifestSetup) {
+		return (
+			<Modal.Root open={open} onOpenChange={onOpenChange}>
+				<Modal.Content widthClassName="max-w-[34rem]">
+					<Modal.Header
+						title={
+							<span className="flex items-center gap-2.5">
+								<IconTile name="github" size={28} />
+								GitHub App
+							</span>
+						}
+						description="Create and install the App that connects GitHub to Open Session."
+					/>
+					<SettingsSection className="flex flex-col gap-4 border-0 bg-panel p-4">
+						{githubManifestSetup}
+					</SettingsSection>
+					<Modal.Footer>
+						<Modal.Close render={<Button variant="primary">Done</Button>} />
+					</Modal.Footer>
+				</Modal.Content>
+			</Modal.Root>
+		);
 	}
 
 	return (
