@@ -26,6 +26,12 @@ function validPathPolicy(policy: UnixPathPolicy): void {
     throw new Error("Malformed Unix socket path policy");
 }
 
+function requireCurrentProcessOwner(policy: UnixPathPolicy): void {
+  const currentUid = process.getuid?.();
+  if (!Number.isSafeInteger(currentUid) || policy.uid !== currentUid)
+    throw new Error("Unix socket mutation policy must name the current numeric UID");
+}
+
 function assertMetadata(stat: Awaited<ReturnType<typeof lstat>>, policy: UnixPathPolicy, kind: "directory" | "socket") {
   if (kind === "directory" ? !stat.isDirectory() : !stat.isSocket())
     throw new Error(`Unix ${kind} path has wrong file type`);
@@ -78,6 +84,9 @@ export async function removeProvenStaleUnixSocket(
   parentPolicy: UnixPathPolicy,
 ): Promise<void> {
   validPathPolicy(policy);
+  validPathPolicy(parentPolicy);
+  requireCurrentProcessOwner(policy);
+  requireCurrentProcessOwner(parentPolicy);
   await validateUnixSocketParent(dirname(path), parentPolicy);
   const original = await lstat(path);
   assertMetadata(original, policy, "socket");
@@ -225,6 +234,10 @@ export function createVerifiedUnixSocketServer(
     async listen(options: VerifiedUnixSocketListenOptions) {
       if (listening) throw new Error("Verified Unix socket server is already listening");
       if (terminalError) throw new Error("Verified Unix socket server has failed", { cause: terminalError });
+      validPathPolicy(options.parentPolicy);
+      validPathPolicy(options.socketPolicy);
+      requireCurrentProcessOwner(options.parentPolicy);
+      requireCurrentProcessOwner(options.socketPolicy);
       await validateUnixSocketParent(dirname(options.path), options.parentPolicy);
       await new Promise<void>((resolveListen, rejectListen) => {
         const onError = (error: Error) => rejectListen(error);
