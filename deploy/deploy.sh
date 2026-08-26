@@ -157,6 +157,7 @@ printf '%s\n' \
   '[Service]' \
   "Environment=OPENSESSION_DEPLOY_CHECKOUT=$SOURCE_DIR" \
   "Environment=OPENSESSION_DEPLOY_STATE=$DEPLOY_STATE" \
+  'Environment=OPENSESSION_PREBUILT_FRONTEND=0' \
   > "$RELEASE_ENV_DROPIN.tmp"
 install -o root -g root -m 0644 "$RELEASE_ENV_DROPIN.tmp" "$RELEASE_ENV_DROPIN"
 rm -f "$RELEASE_ENV_DROPIN.tmp"
