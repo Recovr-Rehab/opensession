@@ -681,6 +681,7 @@ function LetterTile({ id, color }: { id: string; color?: string }) {
 interface BrowseResult {
 	source: "user" | "bot" | null;
 	repos: BrowseRepo[];
+	appConfigured?: boolean;
 }
 
 /** GET /api/setup/codestorage/repos — `source: null` when the code.storage
@@ -1013,6 +1014,12 @@ function RemoteRepoPicker({
 					<div className="text-supporting leading-relaxed text-dim">
 						{browseFailed ? (
 							<>Couldn&rsquo;t load the GitHub repo list right now.</>
+						) : browse?.appConfigured ? (
+							<>
+								The GitHub App installation isn&rsquo;t available yet. Check that
+								Installation owner matches the account where the App is installed,
+								then reopen this window.
+							</>
 						) : (
 							<>
 								No GitHub credential yet, so the repo list can&rsquo;t be browsed.

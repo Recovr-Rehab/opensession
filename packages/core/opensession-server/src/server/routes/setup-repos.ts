@@ -38,7 +38,12 @@ import {
   repoSectionForMutation,
   withConfigMutationLock,
 } from "../config-mutation";
-import { githubCredentialForLogin, type GithubCredential } from "../github-auth";
+import {
+  githubCredentialForLogin,
+  resolveGithubCredential,
+  serviceGithubCredential,
+  type GithubCredential,
+} from "../github-auth";
 import { githubCredentialHelperCommand } from "../github-git-credential";
 import { homeDir } from "../paths";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout";
@@ -90,6 +95,23 @@ async function normalizeInspectedDefaultBranch(value: unknown): Promise<string> 
  */
 function actingGithubCredential(ctx: RouteContext): GithubCredential | null {
   return ctx.authUser?.login ? githubCredentialForLogin(ctx.authUser.login) : null;
+}
+
+/** Prefer the signed-in teammate, then use the configured App installation.
+ * Repository setup never inherits the server user's ambient gh login. */
+async function setupGithubCredential(ctx: RouteContext): Promise<GithubCredential | null> {
+  const acting = actingGithubCredential(ctx);
+  if (acting) return acting;
+  const { githubConfiguredCredential } = await import("../github-app");
+  if (!githubConfiguredCredential()) return null;
+  try {
+    return await resolveGithubCredential(serviceGithubCredential);
+  } catch {
+    // A just-installed App can take a moment to appear in GitHub's installation
+    // list. Retry once so the next onboarding step does not race that edge.
+    await Bun.sleep(750);
+    return resolveGithubCredential(serviceGithubCredential).catch(() => null);
+  }
 }
 
 // ── GitHub repo listing ──────────────────────────────────────────────────────
@@ -309,8 +331,9 @@ function scrubSecret(text: string, secret?: string): string {
  * carries the username `x-access-token` (GitHub's app-token username, not a
  * secret) so git skips the username prompt; origin is normalized to the
  * tokenless URL afterward, holding the "no credential in the persisted remote"
- * invariant. Without a token: `gh` (brings its own auth) if present, else an
- * anonymous https clone — still enough for public repos.
+ * invariant. Without a token, use an anonymous HTTPS clone. Never invoke the
+ * host's ambient gh login: repository setup is authorized only by the selected
+ * user or the configured GitHub App installation.
  */
 async function cloneGithubRepo(
   fullName: string,
@@ -352,12 +375,9 @@ async function cloneGithubRepo(
     }
     return;
   }
-  const argv = Bun.which("gh")
-    ? ["gh", "repo", "clone", cleanUrl, dest]
-    : ["git", "clone", "--", cleanUrl, dest];
-  const result = await runCommand(argv, 5 * 60_000);
+  const result = await runCommand(["git", "clone", "--", cleanUrl, dest], 5 * 60_000);
   if (result.exitCode !== 0) {
-    throw new Error(result.stderr || `${argv[0]} clone failed`);
+    throw new Error(result.stderr || "git clone failed");
   }
 }
 
@@ -795,19 +815,20 @@ export async function handleSetupRepoRoutes(
     // Prefer the authenticated teammate's App user token; otherwise use the
     // workspace installation token. Missing App authority yields an empty,
     // well-formed answer and never consults ambient credentials.
-    const userCredential = actingGithubCredential(ctx);
-    const { githubToken } = await import("../github-app");
-    const botToken = userCredential ? null : await githubToken();
-    const token = userCredential?.env.GH_TOKEN || botToken;
-    const source: "user" | "bot" | null = userCredential
-      ? "user"
-      : botToken
-        ? "bot"
-        : null;
+    const credential = await setupGithubCredential(ctx);
+    const token = credential?.env.GH_TOKEN;
+    const source: "user" | "bot" | null = credential
+      ? credential.kind === "user" ? "user" : "bot"
+      : null;
     if (!token || !source) {
-      return Response.json({ source: null, repos: [] });
+      const { githubConfiguredCredential } = await import("../github-app");
+      return Response.json({
+        source: null,
+        repos: [],
+        appConfigured: githubConfiguredCredential(),
+      });
     }
-    const cacheKey = userCredential ? userCredential.principal : "bot:app";
+    const cacheKey = credential.principal;
     const cached = repoListCache.get(cacheKey);
     if (cached && Date.now() - cached.at < REPO_CACHE_TTL_MS) {
       return Response.json(cached.payload);
@@ -927,7 +948,19 @@ export async function handleSetupRepoRoutes(
     }
     // The acting token lets a private clone succeed without ambient gh /
     // credential-helper auth; absent, the clone stays anonymous (public repos).
-    const credential = actingGithubCredential(ctx);
+    const credential = await setupGithubCredential(ctx);
+    if (!credential) {
+      const { githubConfiguredCredential } = await import("../github-app");
+      if (githubConfiguredCredential()) {
+        return Response.json(
+          {
+            error:
+              "The configured GitHub App installation is unavailable. Check the installation owner and make sure the App is installed for this repository.",
+          },
+          { status: 409 },
+        );
+      }
+    }
     return registrationResponse(() =>
       registerGithubRepo({
         fullName: body!.fullName as string,
