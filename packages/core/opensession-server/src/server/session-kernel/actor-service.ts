@@ -25,7 +25,10 @@ const DEFAULT_PORT = 3849;
 // quarantine/restart bookkeeping after an ambiguous lane turn.
 const ACTOR_RESPONSE_TIMEOUT_MS = 5_000;
 const DEFAULT_SESSION_WORKERS = 4;
-const MAX_NORMAL_SESSION_TURNS = 8;
+// Reads have small request bodies and bounded response budgets, so absorb a
+// viewer's hydration burst without also allowing mutation payloads to pile up.
+const MAX_MUTATION_SESSION_TURNS = 8;
+const MAX_READ_SESSION_TURNS = 32;
 const MAX_PRIORITY_SESSION_TURNS = 8;
 const MAX_PRIORITY_BURST = 4;
 const MAX_GLOBAL_TURNS = 64;
@@ -69,6 +72,7 @@ type WorkerSlot = {
 
 type QueuedSessionTurn = {
   request: KernelActorTransportEnvelope["request"];
+  readOnly: boolean;
   barrier: number;
   gate: Promise<void>;
   resolve: (response: KernelActorResponse) => void;
@@ -551,15 +555,25 @@ export async function startSessionKernelService(
       sessionMailboxes.set(sessionId, mailbox);
     }
     const priority = isPrioritySessionActorRequest(request);
-    const queuedForClass = priority ? mailbox.priority.length : mailbox.normal.length;
+    const readOnly = !mutation;
+    const queuedForClass = priority
+      ? mailbox.priority.length
+      : mailbox.normal.reduce(
+          (count, turn) => count + Number(turn.readOnly === readOnly),
+          0,
+        );
     const classLimit = priority
       ? MAX_PRIORITY_SESSION_TURNS
-      : MAX_NORMAL_SESSION_TURNS;
+      : readOnly
+        ? MAX_READ_SESSION_TURNS
+        : MAX_MUTATION_SESSION_TURNS;
     if (queuedForClass >= classLimit) {
       return Promise.reject(new RetryableActorHostError(
         priority
           ? "Session priority mailbox is full"
-          : "Session mailbox is full",
+          : readOnly
+            ? "Session read mailbox is full"
+            : "Session mailbox is full",
       ));
     }
 
@@ -570,6 +584,7 @@ export async function startSessionKernelService(
     const response = new Promise<KernelActorResponse>((resolve, reject) => {
       const turn: QueuedSessionTurn = {
         request,
+        readOnly,
         barrier: barrierGeneration,
         gate: globalGate,
         resolve,

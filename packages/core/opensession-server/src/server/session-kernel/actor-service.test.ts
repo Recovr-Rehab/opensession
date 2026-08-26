@@ -76,6 +76,59 @@ async function rpc(request: KernelActorTransportEnvelope["request"]) {
 }
 
 describe("session kernel actor service", () => {
+  test("absorbs read bursts beyond the bounded mutation mailbox", async () => {
+    const isolatedService = await startSessionKernelService({
+      port: 0,
+      token,
+      workerCount: 1,
+      responseTimeoutMs: 700,
+      workerUrl: new URL("./testing/mailbox-worker.ts", import.meta.url),
+    });
+    const call = async (
+      request: KernelActorTransportEnvelope["request"],
+      epoch?: string,
+    ) => fetch(`${isolatedService.url}/rpc`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        version: SESSION_KERNEL_TRANSPORT_VERSION,
+        actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+        ...(epoch ? { serviceEpoch: epoch } : {}),
+        request,
+      }),
+    });
+    try {
+      const helloResponse = await call({
+        t: "hello",
+        rpcId: "mailbox-handshake",
+        version: SESSION_KERNEL_ACTOR_VERSION,
+      });
+      const hello = await helloResponse.json() as { serviceEpoch: string };
+      expect(helloResponse.status).toBe(200);
+
+      const responses = await Promise.all(Array.from({ length: 12 }, (_, index) =>
+        call({
+          t: "call",
+          rpcId: `burst-read-${index}`,
+          outputBytes: 1024,
+          request: {
+            t: "store",
+            method: "turnSnapshot",
+            args: ["busy-session"],
+          },
+        }, hello.serviceEpoch)
+      ));
+      expect(responses.map((response) => response.status)).toEqual(
+        Array.from({ length: 12 }, () => 200),
+      );
+    } finally {
+      isolatedService.stop();
+    }
+  });
+
   test("global runtime work does not wait for an active read-only session turn", async () => {
     const isolatedService = await startSessionKernelService({
       port: 0,
