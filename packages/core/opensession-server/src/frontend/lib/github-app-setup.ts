@@ -5,6 +5,19 @@ export interface GithubAppCreateOwner {
 	login: string;
 }
 
+/** Accept only GitHub's HTTPS registration endpoint before a setup response is
+ * turned into a top-level form submission. */
+export function githubManifestAction(value: string): string | null {
+	try {
+		const url = new URL(value);
+		return url.protocol === "https:" && url.hostname === "github.com"
+			? url.toString()
+			: null;
+	} catch {
+		return null;
+	}
+}
+
 /** Enabling the sign-in gate changes the current page's auth contract. Settings
  * must reload so the root gate can immediately start the device-code flow;
  * onboarding stays on /welcome until its own finish transition. */

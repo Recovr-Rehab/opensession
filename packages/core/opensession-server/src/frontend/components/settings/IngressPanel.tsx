@@ -474,6 +474,11 @@ export function IngressPanel({
 			.then((next) => {
 				apply(next);
 				toast(typeof message === "function" ? message(next) : message, { variant: "success" });
+				if (next.githubWebhook?.updated) {
+					toast("GitHub callbacks connected", { variant: "success" });
+				} else if (next.githubWebhook?.error) {
+					toast("Public callbacks are ready, but the GitHub webhook needs attention.");
+				}
 				void onChanged?.();
 			})
 			.catch((cause: unknown) => {

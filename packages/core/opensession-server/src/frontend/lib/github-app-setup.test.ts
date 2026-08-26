@@ -3,8 +3,24 @@ import {
 	githubAppCreateOwner,
 	githubAppCreateUrlForOwner,
 	githubAppInstallUrlForSlug,
+	githubManifestAction,
 	shouldReloadAfterGithubAuthEnabled,
 } from "./github-app-setup";
+
+describe("GitHub App manifest action", () => {
+	test("allows only GitHub's HTTPS registration endpoint", () => {
+		expect(
+			githubManifestAction(
+				"https://github.com/organizations/acme/settings/apps/new?state=one",
+			),
+		).toBe(
+			"https://github.com/organizations/acme/settings/apps/new?state=one",
+		);
+		expect(githubManifestAction("http://github.com/settings/apps/new")).toBeNull();
+		expect(githubManifestAction("https://github.example/settings/apps/new")).toBeNull();
+		expect(githubManifestAction("not a url")).toBeNull();
+	});
+});
 
 describe("GitHub App installation URL", () => {
 	test("opens the repository installation picker for the configured App", () => {

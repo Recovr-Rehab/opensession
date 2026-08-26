@@ -28,6 +28,7 @@ import { setupAccessSnapshot } from "../setup-access";
 import { requireWorkspaceAdmin } from "../workspace-auth";
 import type { RouteContext } from "./context";
 import { handleSetupCodestorageRoutes } from "./setup-codestorage";
+import { handleSetupGithubManifestRoutes } from "./setup-github-manifest";
 import { handleSetupRepoRoutes } from "./setup-repos";
 import { handleSetupTeamRoutes } from "./setup-team";
 
@@ -236,6 +237,9 @@ export async function handleSetupRoutes(
 
   const forbidden = requireWorkspaceAdmin(ctx);
   if (forbidden) return forbidden;
+
+  const githubManifestResponse = await handleSetupGithubManifestRoutes(ctx);
+  if (githubManifestResponse) return githubManifestResponse;
 
   if (path === "/api/setup/onboarding" && req.method === "PUT") {
     const body = (await req.json().catch(() => null)) as { completed?: unknown } | null;

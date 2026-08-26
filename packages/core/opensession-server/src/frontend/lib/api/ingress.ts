@@ -34,6 +34,9 @@ export interface PublicIngressSettings {
 		connectorRunning: boolean;
 	};
 	custom: { caddyInstalled: boolean; generatedConfig: string };
+	/** Present only on a public-ingress mutation when a configured GitHub App
+	 * was updated, or when that follow-up needs attention. */
+	githubWebhook?: { updated: boolean; error?: string };
 }
 
 export function fetchPublicIngress(): Promise<PublicIngressSettings> {

@@ -16,24 +16,21 @@ import { TeamSection } from "./SetupTeam";
 import { UserAvatar } from "./UserAvatar";
 import { OrganizationProfileSection } from "./settings/GeneralPanel";
 import { ProviderAccountsSection } from "./settings/ModelAccounts";
-import { IngressPanel } from "./settings/IngressPanel";
 import { IconCheck, IconChevronLeft, IconGlobe, IconRepo } from "./icons";
 import { githubAuthState, type SetupStatus } from "./setup-shared";
 
 interface FirstMileStep {
-	id: "welcome" | "ingress" | "github" | "organization" | "team" | "ai" | "repos" | "ready";
+	id: "welcome" | "github" | "organization" | "team" | "ai" | "repos" | "ready";
 	label: string;
 	title: string;
 	description: string;
 }
 
-// Organization and model setup come first, before the connection steps.
-// Domains remains before GitHub so a configured endpoint can prefill the App
-// form, but the step stays optional for private-only installations. Members sit
-// after repositories, since an invite is worth more once there is something to
-// join. The members step is removed when GitHub sign-in is not connected,
-// because that step imports and invites people through the connected GitHub
-// organization.
+// Organization and model setup come first. GitHub App creation no longer
+// depends on a public callback origin: the manifest returns its credentials to
+// the private app, while Domains and public callbacks stay in Settings. Members
+// sit after repositories, since an invite is worth more once there is something
+// to join. The members step is removed when GitHub sign-in is not connected.
 const STEPS: FirstMileStep[] = [
 	{
 		id: "welcome",
@@ -54,16 +51,10 @@ const STEPS: FirstMileStep[] = [
 		description: "Connect the AI subscriptions your team will use to run sessions.",
 	},
 	{
-		id: "ingress",
-		label: "Domains",
-		title: "Domains",
-		description: "Keep the app private for your team. Optionally let external services reach a public callback endpoint.",
-	},
-	{
 		id: "github",
 		label: "GitHub",
 		title: "Connect GitHub",
-		description: "GitHub signs you in and lets sessions access repositories, push changes, and create and review pull requests. The App form includes your public webhook URL.",
+		description: "GitHub signs you in and lets sessions access repositories, push changes, and create and review pull requests.",
 	},
 	{
 		id: "repos",
@@ -87,6 +78,18 @@ const STEPS: FirstMileStep[] = [
 
 function githubTeamOnboardingEnabled(status: SetupStatus | null): boolean {
 	return Boolean(status?.github.userPrAuth && status.github.clientIdConfigured);
+}
+
+function initialFirstMileIndex(): number {
+	if (typeof window === "undefined") return 0;
+	const stored = window.sessionStorage.getItem("opensession:first-mile-step");
+	window.sessionStorage.removeItem("opensession:first-mile-step");
+	const requested =
+		new URLSearchParams(window.location.search).get("step") || stored;
+	if (!requested) return 0;
+	const initialSteps = STEPS.filter((item) => item.id !== "team");
+	const index = initialSteps.findIndex((item) => item.id === requested);
+	return index < 0 ? 0 : index;
 }
 
 /** The GitHub organization this instance is wired to, for the organization
@@ -319,11 +322,10 @@ function FirstMileSummary({
 export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const setup = useSetupStatus();
 	const { status, failed, refetch } = setup;
-	const [index, setIndex] = useState(0);
+	const [index, setIndex] = useState(initialFirstMileIndex);
 	const [direction, setDirection] = useState(1);
 	const [footerSeparated, setFooterSeparated] = useState(false);
 	const [finishing, setFinishing] = useState(false);
-	const [ingressReady, setIngressReady] = useState(false);
 	const [theme, setTheme] = useState(effectiveTheme);
 	const headingRef = useRef<HTMLHeadingElement>(null);
 	const mainRef = useRef<HTMLElement>(null);
@@ -369,12 +371,9 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	async function goTo(next: number) {
 		const nextIndex = Math.min(Math.max(next, 0), steps.length - 1);
 		if (nextIndex === index) return;
-		// The GitHub creation link carries the public callback URL. Refresh it
-		// after the preceding ingress step before rendering a clickable link.
-		if (steps[nextIndex]?.id === "github") await refetch();
 		setDirection(nextIndex > index ? 1 : -1);
 		setIndex(nextIndex);
-		if (steps[nextIndex]?.id !== "github") void refetch();
+		void refetch();
 	}
 
 	async function finish() {
@@ -464,8 +463,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								ease,
 							}}
 							className={cn(
-								"mx-auto flex min-h-full w-full flex-col items-center",
-								step.id === "ingress" ? "max-w-[1120px]" : "max-w-[960px]",
+								"mx-auto flex min-h-full w-full max-w-[960px] flex-col items-center",
 								step.id === "welcome"
 									? "justify-center py-8 pb-16 phone:py-5 phone:pb-10"
 									: "pb-8 pt-24 phone:pb-5 phone:pt-20",
@@ -518,13 +516,8 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 									<div
 										className={cn(
 											"w-full pb-8 [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body",
-											// The split ingress step needs room for setup commands. The final
-											// review uses the full canvas for larger tiles; forms stay focused.
-											step.id === "ingress"
-												? "max-w-[1120px]"
-												: step.id === "ready"
-													? "max-w-[960px]"
-													: "max-w-[780px]",
+											// The final review uses the full canvas for larger tiles; forms stay focused.
+											step.id === "ready" ? "max-w-[960px]" : "max-w-[780px]",
 											// Match opensession.com's card glass: translucent paper, a quiet
 											// hairline, and the same 14px blur with restrained saturation.
 											"[&_.bg-settings-plate]:rounded-3xl [&_.bg-settings-plate]:border-divider-soft [&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--popup-surface)_90%,transparent)] [&_.bg-settings-plate]:shadow-[0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:[backdrop-filter:blur(14px)_saturate(1.08)]",
@@ -533,20 +526,6 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9 [&_input[data-setup-field='identity']]:w-[320px] [&_input[data-setup-field='identity']]:phone:w-[120px] [&_input[data-setup-field='org-name']]:w-[320px] [&_input[data-setup-field='org-name']]:phone:w-[120px]",
 										)}
 									>
-										{step.id === "ingress" && (
-											<IngressPanel
-												onboarding
-												setup={setup}
-												onChanged={refetch}
-												onStatusChange={(ingress) => {
-													if (ingress.health !== "ready") {
-														setIngressReady(false);
-														return;
-													}
-													void refetch().then(() => setIngressReady(true));
-												}}
-											/>
-										)}
 										{step.id === "github" && (
 											<GithubAuthCard
 												github={status.github}
@@ -633,10 +612,8 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						disabled={!status || finishing}
 						className="justify-self-end phone:col-start-2 phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
 					>
-						{step.id === "ingress" && !ingressReady
-							? "Skip for now"
-							: index === 0
-								? "Continue"
+						{index === 0
+							? "Continue"
 							: index === steps.length - 1
 								? finishing
 									? "Finishing…"

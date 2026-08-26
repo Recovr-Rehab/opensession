@@ -11,8 +11,8 @@ import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
 import {
 	githubAppCreateOwner,
-	githubAppCreateUrlForOwner,
 	githubAppInstallUrlForSlug,
+	githubManifestAction,
 	shouldReloadAfterGithubAuthEnabled,
 	type GithubAppOwnerType,
 } from "../lib/github-app-setup";
@@ -260,27 +260,20 @@ function githubSetupSteps(): React.ReactNode[] {
 	];
 }
 
-/** The same job at a glance, for onboarding. A first-run screen is read, not
- *  worked through, so each step is the action alone and the reasons wait for
- *  the setup dialog. */
+/** The manifest gives GitHub the complete App shape and returns its
+ * credentials directly to the server. The person still owns the consequential
+ * choices: who owns the App, which repositories it reaches, and their account
+ * authorization. */
 function githubOnboardingSteps(owner: GithubAppOwnerType): React.ReactNode[] {
 	const account = owner === "organization" ? "organization" : "personal account";
 	return [
 		<>Create a GitHub App for your {account}.</>,
 		<>
-			Open the prefilled form. The Homepage and webhook URLs are already filled in;
-			change the app name if you want.
+			Review the prefilled name and permissions, confirm <strong>Device Flow</strong>
+			 is on, then create the App.
 		</>,
-		<>
-			Confirm <strong>Device Flow</strong> is on.
-		</>,
-		<>Grant the full permission set shown in the setup guide.</>,
-		<>
-			After GitHub creates the App, choose <strong>Install App</strong> in its sidebar
-			and install it on the {account} entered above.
-		</>,
-		<>Enter the client id, slug, and secret, then upload the private key. The installation owner is already filled in.</>,
-		<>Save, then restart.</>,
+		<>GitHub returns the App credentials directly to this server.</>,
+		<>Install the App on the repositories Open Session should reach.</>,
 	];
 }
 
@@ -322,8 +315,13 @@ export function GithubAuthCard({
 	const [clearId, setClearId] = useState(false);
 	const [clearSecret, setClearSecret] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const [manifestStarting, setManifestStarting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [setupOpen, setSetupOpen] = useState(false);
+	const manifestResult =
+		typeof window === "undefined"
+			? null
+			: new URLSearchParams(window.location.search).get("github_manifest");
 
 	useEffect(() => {
 		setUserPrAuth(github.userPrAuth);
@@ -336,15 +334,12 @@ export function GithubAuthCard({
 	]);
 
 	const normalizedMentionHandle = mentionHandle.trim().replace(/^@/, "");
-	const appCreateUrl = githubAppCreateUrlForOwner(
-		github.appCreateUrl,
-		appOwner,
-		installationOwner,
-	);
 	// The draft starts with the saved slug, so clearing it must disable install
 	// rather than silently falling back to the old App.
 	const appInstallUrl = githubAppInstallUrlForSlug(appSlug);
 	const installationOwnerReady = !!installationOwner.trim();
+	const manifestOwnerReady =
+		appOwner === "personal" || installationOwnerReady;
 	const idCleared = github.clientIdConfigured && clearId && !clientId.trim();
 	const secretCleared = secretConfigured && clearSecret && !clientSecret.trim();
 	const dirty =
@@ -358,6 +353,51 @@ export function GithubAuthCard({
 		privateKey.trim() !== "" ||
 		idCleared ||
 		secretCleared;
+
+	async function handleCreateManifest() {
+		if (manifestStarting || !manifestOwnerReady) return;
+		setManifestStarting(true);
+		setError(null);
+		try {
+			const body = await setupRequest<{ action: string; manifest: string }>(
+				"/api/setup/github/manifest",
+				{
+					method: "POST",
+					json: {
+						owner: appOwner,
+						...(appOwner === "organization"
+							? { organization: installationOwner.trim() }
+							: {}),
+					},
+				},
+			);
+			const action = githubManifestAction(body.action);
+			if (!action) {
+				setError("GitHub returned an invalid App registration address");
+				setManifestStarting(false);
+				return;
+			}
+			const form = document.createElement("form");
+			form.method = "post";
+			form.action = action;
+			form.hidden = true;
+			const manifest = document.createElement("input");
+			manifest.type = "hidden";
+			manifest.name = "manifest";
+			manifest.value = body.manifest;
+			form.append(manifest);
+			document.body.append(form);
+			window.sessionStorage.setItem("opensession:first-mile-step", "github");
+			form.submit();
+		} catch (cause) {
+			setError(
+				cause instanceof Error
+					? cause.message
+					: "Could not start GitHub App setup",
+			);
+			setManifestStarting(false);
+		}
+	}
 
 	async function handleSave() {
 		if (!dirty || saving) return;
@@ -618,41 +658,55 @@ setSaving(false);
 										<SegmentedOption value="organization" className="phone:min-h-11 phone:flex-1 phone:justify-center">Organization</SegmentedOption>
 									</Segmented>
 								</div>
-								<label className="flex flex-col gap-1">
-									<span className="text-label font-medium text-dim">
-										{appOwner === "organization" ? "Organization login" : "GitHub username"}
-									</span>
-									<Input
-										value={installationOwner}
-										onChange={(event) => setInstallationOwner(event.target.value)}
-										placeholder={appOwner === "organization" ? "my-organization" : "octocat"}
-										className="font-mono phone:min-h-11 phone:text-input-phone"
-										disabled={saving}
-										autoCapitalize="none"
-										autoComplete="off"
-										spellCheck={false}
-									/>
-									<span className="text-meta leading-snug text-faint">
-										Required. This is where you install the App. Open Session uses it to select the installation that mints repository tokens.
-									</span>
-								</label>
+								{appOwner === "organization" && (
+									<label className="flex flex-col gap-1">
+										<span className="text-label font-medium text-dim">
+											Organization login
+										</span>
+										<Input
+											value={installationOwner}
+											onChange={(event) => setInstallationOwner(event.target.value)}
+											placeholder="my-organization"
+											className="font-mono phone:min-h-11 phone:text-input-phone"
+											disabled={saving || manifestStarting}
+											autoCapitalize="none"
+											autoComplete="off"
+											spellCheck={false}
+										/>
+										<span className="text-meta leading-snug text-faint">
+											The organization that will own and install the App.
+										</span>
+									</label>
+								)}
 							</div>
 							<SetupSteps steps={githubOnboardingSteps(appOwner)} />
+							{manifestResult === "created" && (
+								<SettingsHint className="m-0">
+									GitHub App created. Install it on the repositories you want to use.
+								</SettingsHint>
+							)}
+							{manifestResult === "error" && (
+								<InlineAlert>GitHub App setup could not be completed. Try again.</InlineAlert>
+							)}
+							{error && <InlineAlert>{error}</InlineAlert>}
 							<div className="mt-auto flex flex-col gap-2">
-								{installationOwnerReady ? (
-									<Button
-										variant="primary"
-										size="lg"
-										className="min-h-11 w-full justify-center"
-										render={<a href={appCreateUrl} target="_blank" rel="noreferrer" />}
-									>
-										1. Create GitHub App
-									</Button>
-								) : (
-									<Button variant="primary" size="lg" className="min-h-11 w-full justify-center" disabled>
-										1. Create GitHub App
-									</Button>
-								)}
+								<Button
+									variant="primary"
+									size="lg"
+									className="min-h-11 w-full justify-center"
+									disabled={
+										github.clientIdConfigured ||
+										!manifestOwnerReady ||
+										manifestStarting
+									}
+									onClick={() => void handleCreateManifest()}
+								>
+									{github.clientIdConfigured
+										? "1. GitHub App created"
+										: manifestStarting
+											? "Opening GitHub…"
+											: "1. Create GitHub App"}
+								</Button>
 								{appInstallUrl ? (
 									<Button
 										size="lg"
@@ -669,18 +723,25 @@ setSaving(false);
 							</div>
 						</SettingsSection>
 						<SettingsSection className="p-4">
-							{configuration}
-							{error && <InlineAlert>{error}</InlineAlert>}
-							<div className="mt-4 flex justify-end">
-								<Button
-									variant="primary"
-									className="phone:min-h-11 phone:w-full phone:justify-center"
-									disabled={!dirty || saving || !installationOwnerReady}
-									onClick={() => void handleSave()}
-								>
-									{saving ? "Saving…" : "Save"}
-								</Button>
-							</div>
+							<details open={github.clientIdConfigured}>
+								<summary className="cursor-pointer text-dialog-title font-semibold text-fg">
+									Use an existing GitHub App
+								</summary>
+								<p className="mt-2 mb-4 text-supporting leading-relaxed text-dim">
+									Only use this when your App already exists. New Apps return these credentials automatically.
+								</p>
+								{configuration}
+								<div className="mt-4 flex justify-end">
+									<Button
+										variant="primary"
+										className="phone:min-h-11 phone:w-full phone:justify-center"
+										disabled={!dirty || saving || !installationOwnerReady}
+										onClick={() => void handleSave()}
+									>
+										{saving ? "Saving…" : "Save"}
+									</Button>
+								</div>
+							</details>
 						</SettingsSection>
 					</div>
 				)}
