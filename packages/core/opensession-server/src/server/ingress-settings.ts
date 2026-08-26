@@ -24,6 +24,7 @@ import { prepareEnvFileEdits } from "./env-file-edit";
 import { detectedTailnetIpv4, normalizeAppOrigin } from "./setup-access";
 import {
   configurePrivateAppDomain,
+  privateAppCaddyUpstream,
   privateAppDomainStatus,
   testPrivateAppDomain,
   type PrivateAppDomainStatus,
@@ -336,12 +337,14 @@ export async function setupPrivateAppDomain(input: {
   teamId?: string;
 }): Promise<string> {
   const publicBaseUrl = normalizePrivateAppOrigin(input.domain);
+  const server = configuredServer();
   await configurePrivateAppDomain({
     domain: new URL(publicBaseUrl).hostname,
     provider: input.provider,
     email: input.email,
     apiToken: input.apiToken,
     teamId: input.teamId,
+    upstream: privateAppCaddyUpstream(server.host, server.port),
     tailnetIpv4: detectedTailnetIpv4(),
   });
   return savePrivateAppOrigin(publicBaseUrl);

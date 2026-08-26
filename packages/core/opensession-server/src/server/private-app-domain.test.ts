@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   cloudflareZoneCandidates,
   privateAppCaddySnippet,
+  privateAppCaddyUpstream,
   upsertPrivateAppCaddy,
   vercelZoneForDomain,
 } from "./private-app-domain";
@@ -21,10 +22,21 @@ describe("managed private app domains", () => {
   });
 
   test("generates a tailnet-bound Caddy site with managed certificate paths", () => {
-    const snippet = privateAppCaddySnippet("os.example.com", "100.64.0.10");
+    const snippet = privateAppCaddySnippet(
+      "os.example.com",
+      "100.64.0.10",
+      undefined,
+      "100.64.0.10:3850",
+    );
     expect(snippet).toContain("bind 100.64.0.10");
     expect(snippet).toContain("tls /etc/opensession/tls/os.example.com.crt /etc/opensession/tls/os.example.com.key");
-    expect(snippet).toContain("reverse_proxy 127.0.0.1:3850");
+    expect(snippet).toContain("reverse_proxy 100.64.0.10:3850");
+  });
+
+  test("targets the configured server listener and normalizes wildcard binds", () => {
+    expect(privateAppCaddyUpstream("100.64.0.10", 3850)).toBe("100.64.0.10:3850");
+    expect(privateAppCaddyUpstream("0.0.0.0", 4000)).toBe("127.0.0.1:4000");
+    expect(privateAppCaddyUpstream("::", 4000)).toBe("[::1]:4000");
   });
 
   test("adds and then updates only the marked private app site", () => {

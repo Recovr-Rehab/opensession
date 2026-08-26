@@ -25,6 +25,7 @@ interface PrivateAppCredential {
   email: string;
   apiToken: string;
   teamId?: string;
+  upstream?: string;
 }
 
 export interface PrivateAppDomainStatus {
@@ -56,7 +57,8 @@ function safeCredential(): PrivateAppCredential | null {
       typeof parsed.domain !== "string" ||
       typeof parsed.email !== "string" ||
       typeof parsed.apiToken !== "string" ||
-      (parsed.teamId !== undefined && typeof parsed.teamId !== "string")
+      (parsed.teamId !== undefined && typeof parsed.teamId !== "string") ||
+      (parsed.upstream !== undefined && typeof parsed.upstream !== "string")
     ) return null;
     return parsed;
   } catch {
@@ -278,6 +280,7 @@ function validateCredentialInput(input: {
   email?: string;
   apiToken?: string;
   teamId?: string;
+  upstream?: string;
 }): PrivateAppCredential {
   const saved = safeCredential();
   const canReuse = saved?.domain === input.domain && saved.provider === input.provider;
@@ -300,20 +303,32 @@ function validateCredentialInput(input: {
     email,
     apiToken,
     ...(input.provider === "vercel" && teamId ? { teamId } : {}),
+    ...(input.upstream ? { upstream: input.upstream } : {}),
   };
+}
+
+export function privateAppCaddyUpstream(host: string, port: number): string {
+  const normalized = host.replace(/^\[|\]$/g, "").trim();
+  const upstreamHost = !normalized || normalized === "0.0.0.0"
+    ? "127.0.0.1"
+    : normalized === "::"
+      ? "::1"
+      : normalized;
+  return `${upstreamHost.includes(":") ? `[${upstreamHost}]` : upstreamHost}:${port}`;
 }
 
 export function privateAppCaddySnippet(
   domain: string,
   tailnetIpv4: string,
   paths = certificatePaths(domain),
+  upstream = "127.0.0.1:3850",
 ): string {
-  return `${domain} {\n    ${MANAGED_START}\n    bind ${tailnetIpv4}\n    tls ${paths.certificate} ${paths.key}\n    reverse_proxy 127.0.0.1:3850 {\n        lb_try_duration 15s\n        lb_try_interval 250ms\n    }\n    ${MANAGED_END}\n}`;
+  return `${domain} {\n    ${MANAGED_START}\n    bind ${tailnetIpv4}\n    tls ${paths.certificate} ${paths.key}\n    reverse_proxy ${upstream} {\n        lb_try_duration 15s\n        lb_try_interval 250ms\n    }\n    ${MANAGED_END}\n}`;
 }
 
-function managedBlock(domain: string, tailnetIpv4: string): string {
+function managedBlock(domain: string, tailnetIpv4: string, upstream: string): string {
   const paths = certificatePaths(domain);
-  return `${MANAGED_START}\nbind ${tailnetIpv4}\ntls ${paths.certificate} ${paths.key}\nreverse_proxy 127.0.0.1:3850 {\n    lb_try_duration 15s\n    lb_try_interval 250ms\n}\n${MANAGED_END}`;
+  return `${MANAGED_START}\nbind ${tailnetIpv4}\ntls ${paths.certificate} ${paths.key}\nreverse_proxy ${upstream} {\n    lb_try_duration 15s\n    lb_try_interval 250ms\n}\n${MANAGED_END}`;
 }
 
 function closingBrace(source: string, opening: number): number | undefined {
@@ -351,7 +366,12 @@ function caddySites(source: string): Array<{ header: number; opening: number; cl
 
 /** Update only Open Session's marked private-app site. Existing unmarked sites
  * are left alone because silently taking ownership could expose or break them. */
-export function upsertPrivateAppCaddy(caddyfile: string, domain: string, tailnetIpv4: string): string {
+export function upsertPrivateAppCaddy(
+  caddyfile: string,
+  domain: string,
+  tailnetIpv4: string,
+  upstream = "127.0.0.1:3850",
+): string {
   const managed = new RegExp(
     `^[ \\t]*${MANAGED_START}[\\s\\S]*?^[ \\t]*${MANAGED_END}[ \\t]*(?:\\r?\\n)?`,
     "gm",
@@ -361,7 +381,7 @@ export function upsertPrivateAppCaddy(caddyfile: string, domain: string, tailnet
   );
   if (owned) {
     const body = caddyfile.slice(owned.opening + 1, owned.closing);
-    const replacement = managedBlock(domain, tailnetIpv4).split("\n").map((line) => `    ${line}`).join("\n");
+    const replacement = managedBlock(domain, tailnetIpv4, upstream).split("\n").map((line) => `    ${line}`).join("\n");
     managed.lastIndex = 0;
     const nextBody = body.replace(managed, `${replacement}\n`);
     return `${caddyfile.slice(0, owned.header)}${domain} {${nextBody}${caddyfile.slice(owned.closing)}`;
@@ -370,7 +390,7 @@ export function upsertPrivateAppCaddy(caddyfile: string, domain: string, tailnet
   if (new RegExp(`^\\s*(?:https?://)?${escaped}(?::443)?\\s*\\{`, "m").test(caddyfile)) {
     throw new Error(`${domain} already has an unmanaged Caddy site. Use Advanced setup or remove that site first`);
   }
-  return `${caddyfile.trimEnd()}\n\n${privateAppCaddySnippet(domain, tailnetIpv4)}\n`;
+  return `${caddyfile.trimEnd()}\n\n${privateAppCaddySnippet(domain, tailnetIpv4, certificatePaths(domain), upstream)}\n`;
 }
 
 async function issueCertificate(credential: PrivateAppCredential, renew = false): Promise<boolean> {
@@ -413,7 +433,11 @@ async function caddyGroup(): Promise<string> {
   return /^[a-z_][a-z0-9_-]*$/i.test(current.stdout.trim()) ? current.stdout.trim() : "caddy";
 }
 
-async function installCertificateAndCaddy(domain: string, tailnetIpv4: string): Promise<void> {
+async function installCertificateAndCaddy(
+  domain: string,
+  tailnetIpv4: string,
+  upstream = "127.0.0.1:3850",
+): Promise<void> {
   const caddy = Bun.which("caddy");
   const sudo = Bun.which("sudo");
   if (!caddy || !sudo) throw new Error("Caddy and passwordless sudo are required for automatic setup");
@@ -425,7 +449,7 @@ async function installCertificateAndCaddy(domain: string, tailnetIpv4: string): 
   let current: string;
   try { current = readFileSync(caddyfile, "utf8"); }
   catch { throw new Error(`Could not read ${caddyfile}`); }
-  const next = upsertPrivateAppCaddy(current, domain, tailnetIpv4);
+  const next = upsertPrivateAppCaddy(current, domain, tailnetIpv4, upstream);
   const scratch = mkdtempSync(join(tmpdir(), `opensession-private-domain-${randomBytes(4).toString("hex")}-`));
   const staged = join(scratch, "Caddyfile");
   const backup = `${caddyfile}.backup-${new Date().toISOString().replace(/[:.]/g, "-")}`;
@@ -501,6 +525,7 @@ export async function configurePrivateAppDomain(input: {
   email?: string;
   apiToken?: string;
   teamId?: string;
+  upstream?: string;
   tailnetIpv4: string | null;
 }): Promise<void> {
   if (!input.tailnetIpv4) throw new Error("Connect this server to Tailscale before setting up a private domain");
@@ -518,7 +543,7 @@ export async function configurePrivateAppDomain(input: {
     );
   }
   await issueCertificate(credential, existsSync(legoCertificatePaths(credential.domain).certificate));
-  await installCertificateAndCaddy(credential.domain, input.tailnetIpv4);
+  await installCertificateAndCaddy(credential.domain, input.tailnetIpv4, credential.upstream);
   writeJsonAtomic(CREDENTIAL_PATH(), credential, true, 0o600);
 }
 
@@ -537,7 +562,7 @@ export async function renewPrivateAppCertificate(): Promise<boolean> {
       const records = await resolve4(credential.domain).catch((): string[] => []);
       const tailnetIpv4 = records.find(isTailnetIpv4);
       if (!tailnetIpv4) throw new Error("Private app DNS no longer points to a Tailscale address");
-      await installCertificateAndCaddy(credential.domain, tailnetIpv4);
+      await installCertificateAndCaddy(credential.domain, tailnetIpv4, credential.upstream);
       console.log(`[private-app] certificate renewed for ${credential.domain}`);
     }
     return true;
