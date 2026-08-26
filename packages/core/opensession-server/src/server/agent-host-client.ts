@@ -50,6 +50,13 @@ export interface AgentHostCoordinatorIntent {
   readonly descriptorDigest: AgentOperationDigest;
   readonly supervisionEnvelope: SignedAgentHostSupervisionEnvelopeV1;
 }
+export interface AgentHostOperationStreamAckIntent {
+  readonly operationId: string;
+  readonly fence: Readonly<AgentTurnFence>;
+  readonly kind: AgentOperationKind;
+  readonly descriptorDigest: AgentOperationDigest;
+  readonly throughStreamSeq: number;
+}
 export interface AgentHostDispatchIntent extends AgentHostCoordinatorIntent {
   readonly descriptor: AgentOperationDescriptorV1;
   readonly deadlineMs: number;
@@ -100,6 +107,11 @@ export interface AgentHostClientOptions {
     intent: Readonly<AgentHostCancelIntent>,
     signal: AbortSignal,
   ) => Promise<AgentHostCancelResult>;
+  /** Durably advances coordinator publication only after the Host Driver has
+   * consumed the cumulative operation stream prefix. */
+  readonly acknowledgeOperationStream: (
+    intent: Readonly<AgentHostOperationStreamAckIntent>,
+  ) => Promise<void>;
   readonly onError?: (error: Error) => void;
   readonly failpoint?: (
     point: AgentHostClientFailpoint,
@@ -458,7 +470,7 @@ export class AgentHostClient {
       return;
     }
     if (message.t === "operation_stream_ack") {
-      this.consumeStreamAck(message);
+      await this.consumeStreamAck(message);
       this.markConsumed(message.hostSeq);
       return;
     }
@@ -716,7 +728,9 @@ export class AgentHostClient {
     op.payloadDigest = decoded.payloadDigest;
   }
 
-  private consumeStreamAck(message: AgentHostOperationStreamAckV4): void {
+  private async consumeStreamAck(
+    message: AgentHostOperationStreamAckV4,
+  ): Promise<void> {
     const op = this.operations.get(message.operationId);
     if (
       !op ||
@@ -724,6 +738,20 @@ export class AgentHostClient {
       message.throughStreamSeq > op.sentStreamSeq
     )
       throw new Error("Invalid operation stream acknowledgement");
+
+    // Initial and replayed cumulative ACKs have already been reflected in the
+    // operation cursor/window, so accepting them again must have no effect.
+    if (message.throughStreamSeq === op.throughStreamSeq) return;
+    if (!this.fence) throw new Error("Agent Host supervision unavailable");
+    await this.options.acknowledgeOperationStream(
+      Object.freeze({
+        operationId: op.operationId,
+        fence: Object.freeze({ ...this.fence }),
+        kind: op.kind,
+        descriptorDigest: op.descriptorDigest,
+        throughStreamSeq: message.throughStreamSeq,
+      }),
+    );
     op.throughStreamSeq = message.throughStreamSeq;
     op.creditBytes += message.creditBytes;
     op.creditChunks += message.creditChunks;

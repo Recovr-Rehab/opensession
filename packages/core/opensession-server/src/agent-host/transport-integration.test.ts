@@ -263,8 +263,12 @@ afterEach(async () => {
 
 type SetupOptions = {
   chunks?: string[];
+  chunkSource?: AsyncIterable<Uint8Array>;
   settleQueries?: boolean;
   failpoint?: ConstructorParameters<typeof AgentHostClient>[0]["failpoint"];
+  acknowledgeOperationStream?: ConstructorParameters<
+    typeof AgentHostClient
+  >[0]["acknowledgeOperationStream"];
 };
 async function setup(options: SetupOptions = {}) {
   const root = await mkdtemp(join(tmpdir(), "agent-host-transport-"));
@@ -283,6 +287,7 @@ async function setup(options: SetupOptions = {}) {
   const dispatchIntents: unknown[] = [];
   const queryIntents: any[] = [];
   const cancelIntents: unknown[] = [];
+  const streamAckIntents: unknown[] = [];
   const errors: Error[] = [];
   let dispatches = 0;
   const clients: AgentHostClient[] = [];
@@ -294,9 +299,9 @@ async function setup(options: SetupOptions = {}) {
       dispatchIntents.push(intent);
       return {
         receipt: operationReceipt("executing"),
-        chunks: (options.chunks ?? ["one", "two"]).map((value) =>
-          Buffer.from(value),
-        ),
+        chunks:
+          options.chunkSource ??
+          (options.chunks ?? ["one", "two"]).map((value) => Buffer.from(value)),
       };
     },
     queryOperation: async (intent) => {
@@ -352,6 +357,10 @@ async function setup(options: SetupOptions = {}) {
         } as AgentOperationReceiptV1,
       };
     },
+    acknowledgeOperationStream: async (intent) => {
+      streamAckIntents.push(intent);
+      await options.acknowledgeOperationStream?.(intent);
+    },
     failpoint: options.failpoint,
     onError: (error) => errors.push(error),
   });
@@ -365,6 +374,7 @@ async function setup(options: SetupOptions = {}) {
     dispatchIntents,
     queryIntents,
     cancelIntents,
+    streamAckIntents,
     errors,
     clients,
     get dispatches() {
@@ -390,6 +400,96 @@ function assertNoForbiddenAuthority(value: unknown) {
 }
 
 describe("Agent Host v4 end-to-end transport", () => {
+  test("Driver consumption and durable coordinator ACK gate live publication", async () => {
+    const driverGate = deferred();
+    const coordinatorGate = deferred();
+    let coordinatorAckStarted = false;
+    let publicationResolved = false;
+    const harness = await setup({
+      chunks: ["published"],
+      acknowledgeOperationStream: async () => {
+        coordinatorAckStarted = true;
+        await coordinatorGate.promise;
+        publicationResolved = true;
+      },
+    });
+    harness.driver.deliveryGates.set(1, driverGate);
+
+    await harness.client.connect(fence, planHash);
+    await harness.client.startTurn(spec);
+    await eventually(
+      () => harness.driver.deliveryStarted.includes(1),
+      "stream chunk was not written through to the Host",
+    );
+    expect(harness.driver.delivered).toEqual([]);
+    expect(coordinatorAckStarted).toBe(false);
+    expect(publicationResolved).toBe(false);
+
+    driverGate.resolve();
+    await eventually(
+      () => coordinatorAckStarted,
+      "Host consumption did not produce a coordinator ACK",
+    );
+    expect(publicationResolved).toBe(false);
+    expect(harness.streamAckIntents).toEqual([
+      {
+        operationId: spec.initialOperation.operationId,
+        fence,
+        kind: descriptor.kind,
+        descriptorDigest,
+        throughStreamSeq: 1,
+      },
+    ]);
+    expect(Object.isFrozen(harness.streamAckIntents[0])).toBe(true);
+    expect(Object.isFrozen((harness.streamAckIntents[0] as any).fence)).toBe(
+      true,
+    );
+    assertNoForbiddenAuthority(harness.streamAckIntents);
+
+    coordinatorGate.resolve();
+    await eventually(
+      () => publicationResolved,
+      "durable coordinator ACK did not release publication",
+    );
+    expect(harness.errors).toEqual([]);
+  });
+
+  test("coordinator ACK rejection closes uncertain without pulling a fallback chunk", async () => {
+    const publication = deferred();
+    let chunksPulled = 0;
+    async function* chunks() {
+      chunksPulled++;
+      yield Buffer.from("first");
+      await publication.promise;
+      chunksPulled++;
+      yield Buffer.from("fallback");
+    }
+    const harness = await setup({
+      chunkSource: chunks(),
+      acknowledgeOperationStream: async () => {
+        publication.reject(new Error("coordinator stream ACK rejected"));
+        throw new Error("coordinator stream ACK rejected");
+      },
+    });
+
+    await harness.client.connect(fence, planHash);
+    await harness.client.startTurn(spec);
+    await eventually(
+      () =>
+        harness.errors.some((error) =>
+          error.message.includes("coordinator stream ACK rejected"),
+        ),
+      "coordinator ACK rejection did not close the client",
+    );
+    expect(chunksPulled).toBe(1);
+    expect(harness.driver.delivered).toEqual([{ seq: 1, bytes: "first" }]);
+    expect(harness.queryIntents).toEqual([]);
+    expect(
+      (harness.client as any).operations.get(spec.initialOperation.operationId)
+        .uncertain,
+    ).toBe(true);
+  });
+
   test("fresh attach dispatches once, streams in order under consumption credit, and terminal waits for drain", async () => {
     const harness = await setup({ chunks: ["first", "second"] });
     const secondGate = deferred();

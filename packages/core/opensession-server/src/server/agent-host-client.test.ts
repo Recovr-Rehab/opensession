@@ -185,6 +185,7 @@ describe("AgentHostClient v4", () => {
       cancelOperation: async () => {
         throw new Error("unexpected cancel");
       },
+      acknowledgeOperationStream: async () => {},
     });
     await client.connect(fence, digest("a"));
     await gotReceipt;
@@ -260,6 +261,7 @@ describe("AgentHostClient v4", () => {
       cancelOperation: async () => {
         throw new Error("unexpected cancel");
       },
+      acknowledgeOperationStream: async () => {},
       onError: sawError,
     });
     await client.connect(fence, digest("a"));
