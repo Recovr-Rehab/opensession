@@ -1,0 +1,52 @@
+/* The supplied artwork fills the viewport and stays pinned while the content
+   scrolls. Translucent sections let it read through without allowing its
+   colour to disturb the copy. */
+:root {
+	--page-art: url("./landing-background.webp");
+	--card-glass: oklch(1 0 0 / 0.8);
+	--glass-line: oklch(0 0 0 / 0.07);
+	--button-glass: oklch(1 0 0 / 0.52);
+	--button-glass-hover: oklch(1 0 0 / 0.68);
+}
+
+body {
+	min-height: 100vh;
+	background-color: var(--page);
+	background-image: var(--page-art);
+	background-attachment: fixed;
+	background-position: center;
+	background-size: cover;
+}
+
+.card {
+	border-color: var(--glass-line);
+	background: var(--card-glass);
+	-webkit-backdrop-filter: blur(14px) saturate(1.08);
+	backdrop-filter: blur(14px) saturate(1.08);
+}
+
+.stage {
+	background: transparent;
+}
+
+.button-secondary {
+	border-color: var(--glass-line);
+	background: var(--button-glass);
+	color: var(--ink);
+	-webkit-backdrop-filter: blur(10px) saturate(1.08);
+	backdrop-filter: blur(10px) saturate(1.08);
+}
+
+.button-secondary:hover {
+	background: var(--button-glass-hover);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--page-art: url("./landing-background-dark.webp");
+		--card-glass: oklch(0.22 0.025 190 / 0.7);
+		--glass-line: oklch(1 0 0 / 0.08);
+		--button-glass: oklch(1 0 0 / 0.12);
+		--button-glass-hover: oklch(1 0 0 / 0.18);
+	}
+}

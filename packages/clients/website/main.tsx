@@ -29,10 +29,10 @@ import {
 	IconX,
 } from "../../core/opensession-server/src/frontend/components/icons";
 import "./site.css";
+import "./landing-glass.css";
 import { AgentationFeedback } from "./AgentationFeedback";
 import { AnnouncementArticle } from "./AnnouncementArticle";
 import { ProductDemo } from "./ProductDemo";
-import { TellaBackground } from "./TellaBackground";
 import { assetUrl } from "./asset-url";
 
 const markUrl = assetUrl(markAsset);
@@ -526,8 +526,6 @@ function LandingPage() {
 
 			<main className="feed">
 				<section className="stage">
-					<div className="gradient-fallback" aria-hidden="true" />
-					<TellaBackground />
 					<ProductDemo />
 				</section>
 
