@@ -281,7 +281,7 @@ function FirstMileSummary({
 							<div
 								className={cn(
 									"flex size-8 shrink-0 items-center justify-center rounded-full",
-									tile.ready ? "bg-bg/60 text-green" : "bg-faint/10 text-faint",
+									tile.ready ? "bg-green text-white" : "bg-faint/10 text-faint",
 								)}
 							>
 								{tile.ready ? (
