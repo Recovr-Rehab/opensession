@@ -226,7 +226,7 @@ setBusy(false);
 		<input
 			className={cn(
 				NAME_INPUT_CLASS,
-				onboarding && "h-11! min-h-11! w-full! px-3.5!",
+				onboarding && "h-12! min-h-12! w-full! px-3.5! text-base!",
 			)}
 			// data-setup-field: FirstMile promotes this to the large field step.
 			data-setup-field="org-name"
@@ -257,9 +257,9 @@ setBusy(false);
 						}
 					>
 						{onboarding ? (
-							<div className="p-6 pb-7 phone:p-5 phone:pb-6">
+							<div className="p-6 phone:p-5">
 								<div className="flex justify-center">{iconEditor}</div>
-								<div className="mx-auto mt-5 grid w-full max-w-[360px] grid-cols-1 gap-4">
+								<div className="mx-auto mt-5 grid w-full max-w-[400px] grid-cols-1 gap-4">
 									<Field label={<span className="text-fg">Organization name</span>}>
 										{organizationNameInput}
 									</Field>
@@ -286,13 +286,12 @@ setBusy(false);
 							</>
 						)}
 					</SettingCard>
-					<SettingsHint
-						className={onboarding ? "mx-auto max-w-[560px] px-6" : undefined}
-					>
-						{onboarding
-							? "Shared by everyone in this organization."
-							: "Shared by everyone in this organization. Clearing the name restores the product name."}
-					</SettingsHint>
+					{!onboarding && (
+						<SettingsHint>
+							Shared by everyone in this organization. Clearing the name restores the
+							product name.
+						</SettingsHint>
+					)}
 				</>
 			) : (
 				<SettingCardSkeleton rows={2} label="Loading organization settings" />
