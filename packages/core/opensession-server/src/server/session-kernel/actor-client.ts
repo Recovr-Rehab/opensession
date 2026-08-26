@@ -419,12 +419,43 @@ export class SessionKernelActorClient {
    * Awaited store/reduce RPC over the posted-message transport. Unlike
    * callSync this never blocks the gateway event loop; callers await.
    */
-  callAsync<TResult>(
+  async callAsync<TResult>(
     request:
       | { t: "store"; method: string; args: unknown[] }
       | { t: "reduce"; command: SessionActorReducerCommand },
     label: string,
     large = false,
+  ): Promise<TResult> {
+    const deadline = Date.now() + 15_000;
+    let delayMs = 10;
+    while (true) {
+      try {
+        return await this.callAsyncOnce<TResult>(
+          request,
+          label,
+          large,
+          Math.max(1, deadline - Date.now()),
+        );
+      } catch (error) {
+        if (
+          !(error instanceof SessionKernelActorError) ||
+          !error.retryable ||
+          Date.now() + delayMs >= deadline
+        )
+          throw error;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        delayMs = Math.min(delayMs * 2, 250);
+      }
+    }
+  }
+
+  private callAsyncOnce<TResult>(
+    request:
+      | { t: "store"; method: string; args: unknown[] }
+      | { t: "reduce"; command: SessionActorReducerCommand },
+    label: string,
+    large: boolean,
+    timeoutMs: number,
   ): Promise<TResult> {
     if (this.deadError) return Promise.reject(this.deadError);
     const rpcId = crypto.randomUUID();
@@ -437,7 +468,7 @@ export class SessionKernelActorClient {
             true,
           ),
         );
-      }, 15_000);
+      }, timeoutMs);
       const parse = (value: unknown): TResult => {
         const response = value as {
           status: number;

@@ -1491,18 +1491,10 @@ export async function resumeInterruptedRuns(
   const snapshotSeeds = snapshotLocalHostRuns.filter(
     (run) => !!run.hostId && !run.sandboxId && !run.runnerId,
   );
-  const eligibleSnapshotSeeds = (
-    await Promise.all(
-      snapshotSeeds.map(async (run) =>
-        !run.osSessionId || !(await sessionQuarantineSnapshot(run.osSessionId))
-          ? run
-          : undefined,
-      ),
-    )
-  ).filter((run): run is ActiveRunRecord => !!run);
   const taken = (await takeInterruptedRuns(
-    eligibleSnapshotSeeds,
-    () => true,
+    snapshotSeeds,
+    async (run) =>
+      !run.osSessionId || !(await sessionQuarantineSnapshot(run.osSessionId)),
   )).filter((run) => !deferRecovery?.(run));
   // A graceful shutdown snapshot is intentionally broader than the shared
   // run journal: it also covers turns that finish during the drain. A local

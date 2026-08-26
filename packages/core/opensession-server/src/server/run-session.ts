@@ -153,6 +153,7 @@ import {
 	stoppedSessions,
 	takeSteerReceiptForText,
 	undeliveredSteers,
+	type PromptDispatch,
 	type QueueItem,
 } from "./queue-state";
 import {
@@ -757,7 +758,9 @@ export async function restorePromptQueues(resumedSessionIds: Set<string>): Promi
 			return session ? engineUserTexts(session) : [];
 		},
 	});
-	for (const [sessionId, dispatch] of promptDispatches) {
+	const dispatchEntries = await sessionDelivery({ op: "entries", slot: "dispatch" });
+	for (const [sessionId, value] of dispatchEntries) {
+		const dispatch = value as PromptDispatch;
 		if (dispatch.kind !== "create") continue;
 		void import("./session-create")
 			.then((module) => module.resumePlannedCreate(sessionId))

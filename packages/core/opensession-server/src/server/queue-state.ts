@@ -31,6 +31,7 @@ import {
 	sessionDeliveryMigrationComplete,
   sessionKernel,
 	sessionKernelStore,
+	sessionQuarantineSnapshot,
   sessionTurn,
 } from "./session-kernel";
 import type { DurableSteerTarget } from "./session-kernel/store";
@@ -481,7 +482,20 @@ export async function restorePersistedQueueState(options: {
     return { queuedSessionIds: [], queuedCount: 0, steeredCount: 0 };
 
 	if (actorOwned) {
-		const restorable = (sessionId: string) => !options.sessionQuarantined?.(sessionId);
+		const actorSessionIds = new Set([
+			...Object.keys(data.queued || {}),
+			...Object.keys(data.steered || {}),
+			...Object.keys(data.dispatching || {}),
+		]);
+		const quarantined = new Set(
+			(await Promise.all(
+				[...actorSessionIds].map(async (sessionId) =>
+					(await sessionQuarantineSnapshot(sessionId)) ? sessionId : undefined,
+				),
+			)).filter((sessionId): sessionId is string => !!sessionId),
+		);
+		const restorable = (sessionId: string) =>
+			!quarantined.has(sessionId) && !options.sessionQuarantined?.(sessionId);
 		for (const sessionId of Object.keys(data.queued || {})) {
 			if (!restorable(sessionId)) continue;
 			if (!options.sessionExists(sessionId)) await promptQueues.delete(sessionId);

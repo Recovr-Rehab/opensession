@@ -505,7 +505,7 @@ const takenRunKeys: Set<string> = ((globalThis as any).__runJournalTakenKeys ??=
  */
 export async function takeInterruptedRuns(
   seedRecords: ActiveRunRecord[] = [],
-  shouldTake: (record: ActiveRunRecord) => boolean = () => true,
+  shouldTake: (record: ActiveRunRecord) => boolean | Promise<boolean> = () => true,
   transition: JournalRunStateTransition = transitionRunState,
 ): Promise<ActiveRunRecord[]> {
   const journal = readRunJournal();
@@ -521,12 +521,15 @@ export async function takeInterruptedRuns(
       firstJournaledAt: record.firstJournaledAt || record.startedAt,
     };
   }
-  const entries = Object.values(journal).filter(
-    (r) =>
-      !isRunActiveInProcess(r.runKey) &&
-      !takenRunKeys.has(r.runKey) &&
-      shouldTake(r),
-  );
+  const entries: ActiveRunRecord[] = [];
+  for (const record of Object.values(journal)) {
+    if (
+      !isRunActiveInProcess(record.runKey) &&
+      !takenRunKeys.has(record.runKey) &&
+      await shouldTake(record)
+    )
+      entries.push(record);
+  }
   if (entries.length > 0) {
     const now = new Date().toISOString();
     for (const r of entries) {
