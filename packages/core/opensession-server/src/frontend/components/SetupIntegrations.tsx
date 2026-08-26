@@ -479,30 +479,11 @@ setSaving(false);
 });
 	}
 
-	// One form, two homes: the settings dialog opens it on demand, while
-	// onboarding puts it straight on the page. A first run has nothing to
-	// protect behind a button, and the steps above end in these two fields.
+	// Manual credentials remain available from Settings for existing Apps.
+	// Onboarding deliberately exposes only the manifest path below.
 	const configuration = (
 		<>
 			<div className="flex flex-col gap-4">
-				{onboarding && (
-					<div className="flex items-center justify-between gap-4 phone:items-start">
-						<div className="min-w-0 flex-1">
-							<div className="text-dialog-title font-medium text-fg">Sign-in method</div>
-							<div className="mt-0.5 text-supporting text-dim">
-								Choose whether teammates sign in with GitHub.
-							</div>
-						</div>
-						<Segmented
-							label="Sign-in method"
-							value={userPrAuth ? "github" : "none"}
-							onValueChange={(value) => setUserPrAuth(value === "github")}
-						>
-							<SegmentedOption value="none">None</SegmentedOption>
-							<SegmentedOption value="github">GitHub</SegmentedOption>
-						</Segmented>
-					</div>
-				)}
 				<GithubAppFields
 					github={github}
 					saving={saving}
@@ -639,7 +620,7 @@ setSaving(false);
 				    whole workspace, so the work is a one-time setup on GitHub that a
 				    person should be able to read before opening a credentials form. */}
 				{onboarding && (
-					<div className="mt-3 grid grid-cols-2 items-start gap-3 phone:grid-cols-1">
+					<div className="mx-auto mt-3 w-full max-w-[34rem]">
 						<SettingsSection className="flex flex-col gap-4">
 							<div className="text-dialog-title font-semibold text-fg">How to connect</div>
 							<div className="flex flex-col gap-2">
@@ -721,27 +702,6 @@ setSaving(false);
 									</Button>
 								)}
 							</div>
-						</SettingsSection>
-						<SettingsSection className="p-4">
-							<details open={github.clientIdConfigured}>
-								<summary className="cursor-pointer text-dialog-title font-semibold text-fg">
-									Use an existing GitHub App
-								</summary>
-								<p className="mt-2 mb-4 text-supporting leading-relaxed text-dim">
-									Only use this when your App already exists. New Apps return these credentials automatically.
-								</p>
-								{configuration}
-								<div className="mt-4 flex justify-end">
-									<Button
-										variant="primary"
-										className="phone:min-h-11 phone:w-full phone:justify-center"
-										disabled={!dirty || saving || !installationOwnerReady}
-										onClick={() => void handleSave()}
-									>
-										{saving ? "Saving…" : "Save"}
-									</Button>
-								</div>
-							</details>
 						</SettingsSection>
 					</div>
 				)}

@@ -71,11 +71,10 @@ describe("GitHub App onboarding actions", () => {
 		expect(markup).toContain("2. Install GitHub App");
 	});
 
-	test("uploads the private key from a PEM file", () => {
+	test("shows only manifest setup during onboarding", () => {
 		const markup = renderGithub(null);
-		expect(markup).toContain('type="file"');
-		expect(markup).toContain('accept=".pem,application/x-pem-file,text/plain"');
-		expect(markup).toContain("Choose PEM file");
-		expect(markup).not.toContain("BEGIN RSA PRIVATE KEY");
+		expect(markup).not.toContain("Use an existing GitHub App");
+		expect(markup).not.toContain('type="file"');
+		expect(markup).not.toContain("Client secret");
 	});
 });
