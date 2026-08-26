@@ -168,6 +168,52 @@ versioned domain and binds the exact turn fence and entries. Only the new
 `transcript_destination_append` gateway operation is replay-safe; broadening the
 legacy transcript operation would make ambiguous old callbacks unsafe.
 
+### Agent Host readiness and doctor contract
+
+The import-inert readiness checker in
+`src/server/agent-operation/readiness.ts` is a production-unwired policy over
+injected observations. It does not inspect the filesystem, open ledgers, bind a
+route, start a timer, or mutate recovery state. A future doctor collector may
+supply observations, but its machine response is deliberately bounded to a
+contract version, admission decision, normalized route mode, fixed-vocabulary
+failing check codes, and deletion, recovery, and stream-ACK capability flags.
+It must not expose paths, observed UIDs, digests, key material, secrets, policy
+handles, or registry contents.
+
+The contract fails closed unless all four gateway, Agent Host, Executor, and
+SessionKernel service UIDs are distinct and non-root, and both directions of
+the gateway-to-Host and Host-to-Executor Unix peer UID gates match exactly. The
+active generation must have valid manifest, protocol, release, and keyring
+digests that match its manifest. Activation cannot be in the future, its
+deadline can be at most 24 hours after activation, and the deadline must still
+be current. The retained prior observation time must be no later than the
+current observation. This means a backwards clock jump, stale generation, or
+stale or not-yet-valid signing public key blocks readiness. The signing public
+key must be verified by the active keyring, and Host ledger encryption key
+availability is mandatory.
+
+Before readiness can pass, the exact Host ledger schema must be open with Host
+recovery complete, the exact gateway operation-ledger schema must be open with
+`recoverActive` complete, and SessionKernel schema must be at least 32 with
+cancellation available. Deletion, recovery, and cumulative operation stream ACK
+capabilities must all be available. `routeMode` accepts exactly `legacy` or
+`agent_host_only`. In `agent_host_only`, the active Host generation must be
+healthy and accepting new work, never draining-only; every named grant,
+operation, turn, and stream registry must report a hard bound; and
+`infrastructureFallback` must be the literal boolean `false`.
+
+A future production boot sequence must establish keys and the verified active
+generation first, then open and recover SessionKernel and its cancellation
+surface, open and recover the Host ledger, run gateway operation-ledger
+`recoverActive`, and only then mark the Host active and healthy. The gateway may
+publish `agent_host_only` admission only after the checker passes. A failing
+readiness result blocks **new admission only**. It never reroutes, falls back,
+reattaches, drains, cancels, or otherwise steers an existing session. Existing
+sessions remain owned by the generation and route that admitted them.
+
+This contract does not wire that sequence, the doctor route, Agent Host boot,
+or production routing.
+
 ## Automation least-privilege
 
 Automation runs (especially event-triggered ones like support-ticket triage)
