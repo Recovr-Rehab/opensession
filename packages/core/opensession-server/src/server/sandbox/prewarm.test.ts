@@ -121,6 +121,7 @@ function writeConfig(overrides: Record<string, unknown>): void {
     JSON.stringify({
       provider: "daytona",
       runnerSha: "sha-A",
+      runnerRepoUrl: "https://github.com/tellahq/opensession.git",
       prewarm: { ttlMinutes: 10, maxLive: 2 },
       ...runtimeOverrides,
     }),
