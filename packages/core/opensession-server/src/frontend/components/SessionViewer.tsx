@@ -4548,6 +4548,8 @@ export function SessionViewer({
 		)
 			? session.lastRunError
 			: null;
+	const centeredRunFailure =
+		entries.length === 0 && !hasLiveConversation ? inlineRunFailure : null;
 	// Server-side filtering is authoritative; this guard keeps model-routing
 	// plumbing out of the message surface during a rolling deploy.
 	// A `started` delivery is temporarily present in the server queue while its
@@ -7304,6 +7306,18 @@ export function SessionViewer({
 							<AnimatePresence initial={false} mode="popLayout">
 							{settingUpWorkspace ? (
 								<WorkspaceSetup key="workspace-setup" />
+							) : centeredRunFailure ? (
+								<div
+									key="centered-run-failure"
+									className="flex min-h-full items-center justify-center px-4"
+								>
+									<InlineAlert
+										title="Run failed"
+										className="max-w-2xl rounded-xl border-0 px-5 py-4 text-center phone:px-4"
+									>
+										{centeredRunFailure.message}
+									</InlineAlert>
+								</div>
 							) : loading ? (
 								<ConversationLoading key="conversation-loading" />
 							) : entries.length === 0 &&
@@ -7473,10 +7487,10 @@ export function SessionViewer({
 							)}
 							</AnimatePresence>
 
-							{inlineRunFailure && (
+							{inlineRunFailure && !centeredRunFailure && (
 								<InlineAlert
 									title="Run failed"
-									className="mx-auto mt-3 max-w-[var(--session-col)]"
+									className="mx-auto mt-3 max-w-[var(--session-col)] rounded-xl border-0 text-center"
 								>
 									{inlineRunFailure.message}
 								</InlineAlert>
