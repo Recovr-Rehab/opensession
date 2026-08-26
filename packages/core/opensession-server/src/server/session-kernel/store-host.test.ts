@@ -172,7 +172,7 @@ describe("per-session session kernel storage", () => {
     recovered.close();
   });
 
-  test("releases the catalog quarantine while an isolated store still fails", () => {
+  test("refuses repair while isolated durable state still has a live run", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
     host.call("setRunState", [{
@@ -187,10 +187,30 @@ describe("per-session session kernel storage", () => {
       "runtime:scan",
     );
 
-    expect(host.call("releaseQuarantine", ["repair-session"])).toBe(true);
-    expect(host.central.quarantinedSession("repair-session")).toBeUndefined();
+    expect(host.quarantinedSession("repair-session")).toMatchObject({
+      repairable: false,
+    });
+    expect(host.call("releaseQuarantine", ["repair-session"])).toBe(false);
+    expect(host.central.quarantinedSession("repair-session")).toBeDefined();
     expect(host.storeForSession("repair-session").runState("repair-session").state)
       .toBe("running");
+    host.close();
+  });
+
+  test("repairs only a settled session with no unfinished durable effects", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    host.central.quarantineSession(
+      "settled-repair-session",
+      "verified storage interruption",
+      "runtime:scan",
+    );
+
+    expect(host.quarantinedSession("settled-repair-session")).toMatchObject({
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", ["settled-repair-session"])).toBe(true);
+    expect(host.quarantinedSession("settled-repair-session")).toBeUndefined();
     host.close();
   });
 

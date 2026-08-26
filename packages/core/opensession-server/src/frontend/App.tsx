@@ -4819,6 +4819,7 @@ if (siblingCreateRef.current === optimisticId)
 		<MarkdownRepoProvider key={viewerSession.id} repo={viewerSession.repo}>
 			<SessionViewer
 				key={viewerSession.id}
+				canRepairSafety={auth?.admin === true}
 				onOpenPr={(repo, branch) => navigate({ view: "pr", repo, branch })}
 				session={viewerSession}
 				focused={focused}

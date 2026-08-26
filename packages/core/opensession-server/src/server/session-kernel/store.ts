@@ -983,6 +983,9 @@ export type DurableSessionQuarantine = {
   reason: string;
   commandKind: string;
   quarantinedAt: number;
+  /** True only when durable state proves that releasing the safety fence cannot
+   * resume an ambiguous command, claimed timer, outbox effect, or live run. */
+  repairable: boolean;
 };
 
 export type CreationEventDecisionResult = {
@@ -1653,6 +1656,32 @@ export class SessionKernelStore {
 		return this.quarantinedSession(sessionId)!;
 	}
 
+	quarantineRepairEvidence(sessionId: string, commandKind = "unknown"): boolean {
+		if (["preparing", "starting", "running", "ask_blocked", "interrupted", "reattaching"]
+			.includes(this.runState(sessionId).state)) return false;
+		const ambiguousCommands = this.db.query(
+			`SELECT 1 FROM session_kernel_commands
+			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate') LIMIT 1`,
+		).get(sessionId);
+		if (ambiguousCommands) return false;
+		const claimedTimer = this.db.query(
+			"SELECT 1 FROM session_kernel_timers WHERE session_id = ? AND token IS NOT NULL LIMIT 1",
+		).get(sessionId);
+		if (claimedTimer) return false;
+		const pendingEffect = this.db.query(
+			"SELECT 1 FROM session_kernel_outbox WHERE session_id = ? LIMIT 1",
+		).get(sessionId);
+		if (pendingEffect) return false;
+		if (commandKind === "agent_operation") {
+			try {
+				assertAgentOperationRows28(this.db, sessionId);
+			} catch {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	quarantinedSession(sessionId: string): DurableSessionQuarantine | undefined {
 		const row = this.db
 			.query(
@@ -1660,14 +1689,15 @@ export class SessionKernelStore {
 				 FROM session_kernel_quarantine WHERE session_id = ?`,
 			)
 			.get(sessionId) as Record<string, unknown> | null;
-		return row
-			? {
-					sessionId: String(row.session_id),
-					reason: String(row.reason),
-					commandKind: String(row.command_kind),
-					quarantinedAt: Number(row.quarantined_at),
-				}
-			: undefined;
+		if (!row) return undefined;
+		const commandKind = String(row.command_kind);
+		return {
+			sessionId: String(row.session_id),
+			reason: String(row.reason),
+			commandKind,
+			quarantinedAt: Number(row.quarantined_at),
+			repairable: this.quarantineRepairEvidence(sessionId, commandKind),
+		};
 	}
 
 	quarantinedSessions(limit = 100, offset = 0): DurableSessionQuarantine[] {
@@ -1678,24 +1708,22 @@ export class SessionKernelStore {
 				 ORDER BY quarantined_at DESC LIMIT ? OFFSET ?`,
 			)
 			.all(limit, offset) as Record<string, unknown>[];
-		return rows.map((row) => ({
-			sessionId: String(row.session_id),
-			reason: String(row.reason),
-			commandKind: String(row.command_kind),
-			quarantinedAt: Number(row.quarantined_at),
-		}));
+		return rows.map((row) => {
+			const sessionId = String(row.session_id);
+			const commandKind = String(row.command_kind);
+			return {
+				sessionId,
+				reason: String(row.reason),
+				commandKind,
+				quarantinedAt: Number(row.quarantined_at),
+				repairable: this.quarantineRepairEvidence(sessionId, commandKind),
+			};
+		});
 	}
 
 	releaseQuarantine(sessionId: string): boolean {
 		const quarantine = this.quarantinedSession(sessionId);
-		if (!quarantine) return false;
-		if (quarantine.commandKind === "agent_operation") {
-			try {
-				assertAgentOperationRows28(this.db, sessionId);
-			} catch {
-				return false;
-			}
-		}
+		if (!quarantine?.repairable) return false;
 		return this.db.run(
 			"DELETE FROM session_kernel_quarantine WHERE session_id = ?",
 			[sessionId],

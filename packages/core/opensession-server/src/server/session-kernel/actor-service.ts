@@ -8,7 +8,7 @@ import {
   SESSION_KERNEL_TRANSPORT_VERSION,
   isCriticalSettlementCommand,
   type KernelActorServiceCall,
-  type KernelActorServiceResponse,
+  type KernelActorResponse,
   type KernelActorTransportEnvelope,
 } from "./actor-protocol";
 import {
@@ -37,7 +37,7 @@ class RetryableActorHostError extends Error {
 }
 
 type Pending = {
-  resolve: (response: KernelActorServiceResponse) => void;
+  resolve: (response: KernelActorResponse) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
   originalRpcId: string;
@@ -49,7 +49,7 @@ type SlotTurn = {
   request: KernelActorTransportEnvelope["request"];
   allowUnready: boolean;
   priority: boolean;
-  resolve: (response: KernelActorServiceResponse) => void;
+  resolve: (response: KernelActorResponse) => void;
   reject: (error: Error) => void;
 };
 
@@ -68,7 +68,7 @@ type QueuedSessionTurn = {
   request: KernelActorTransportEnvelope["request"];
   barrier: number;
   gate: Promise<void>;
-  resolve: (response: KernelActorServiceResponse) => void;
+  resolve: (response: KernelActorResponse) => void;
   reject: (error: Error) => void;
   settled: () => void;
 };
@@ -133,7 +133,7 @@ function json(value: unknown, init: ResponseInit = {}): Response {
   });
 }
 
-function actorFatal(response: KernelActorServiceResponse): boolean {
+function actorFatal(response: KernelActorResponse): boolean {
   if (response.t !== "call_result" || !response.body) return false;
   try {
     return (JSON.parse(response.body) as { code?: string }).code === "actor_fatal";
@@ -243,7 +243,7 @@ export async function startSessionKernelService(
     entry: Pending,
     sessionId: string,
     reason: string,
-  ): KernelActorServiceResponse {
+  ): KernelActorResponse {
     const body = JSON.stringify({
       ok: false,
       error: reason,
@@ -373,7 +373,7 @@ export async function startSessionKernelService(
     request: KernelActorTransportEnvelope["request"],
     allowUnready = false,
     urgent = false,
-  ): Promise<KernelActorServiceResponse> {
+  ): Promise<KernelActorResponse> {
     if (serviceError) return Promise.reject(serviceError);
     if (
       ((!slot.ready && !allowUnready) || !slot.worker) &&
@@ -405,7 +405,7 @@ export async function startSessionKernelService(
     slot.ready = false;
     worker.addEventListener(
       "message",
-      (event: MessageEvent<KernelActorServiceResponse>) => {
+      (event: MessageEvent<KernelActorResponse>) => {
         if (slot.worker !== worker || generation !== slot.generation) return;
         const response = event.data;
         const entry = slot.pending.get(response.rpcId);
@@ -510,7 +510,7 @@ export async function startSessionKernelService(
   function enqueueSession(
     sessionId: string,
     request: KernelActorTransportEnvelope["request"],
-  ): Promise<KernelActorServiceResponse> {
+  ): Promise<KernelActorResponse> {
     let mailbox = sessionMailboxes.get(sessionId);
     if (!mailbox) {
       mailbox = {
@@ -539,7 +539,7 @@ export async function startSessionKernelService(
     let settleTail!: () => void;
     const settled = new Promise<void>((resolve) => { settleTail = resolve; });
     mailbox.tail = mailbox.tail.then(() => settled);
-    const response = new Promise<KernelActorServiceResponse>((resolve, reject) => {
+    const response = new Promise<KernelActorResponse>((resolve, reject) => {
       const turn: QueuedSessionTurn = {
         request,
         barrier: barrierGeneration,
@@ -575,7 +575,7 @@ export async function startSessionKernelService(
 
   async function actorRequest(
     request: KernelActorTransportEnvelope["request"],
-  ): Promise<KernelActorServiceResponse> {
+  ): Promise<KernelActorResponse> {
     const route = sessionActorServiceRoute(request);
     if (route.scope === "session")
       return enqueueSession(route.sessionId, request);

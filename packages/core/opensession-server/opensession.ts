@@ -53,6 +53,8 @@ import {
 	findSessionAsync,
 	invalidateSessionsCache,
 	recordRunOutcome,
+	startSessionOwnershipWatchdog,
+	stopSessionOwnershipWatchdog,
 } from "./src/server/session-cache";
 import { getSessionControl } from "./src/server/session-control";
 import { buildReposNote } from "./src/server/session-repos";
@@ -923,6 +925,7 @@ if (!g.__opensessionBooted) {
 		// Only now may durable timers and effects wake actors: every recovery
 		// stage above completed and ownership is established.
 		startSessionKernelRuntime();
+		startSessionOwnershipWatchdog();
 		setServiceReadiness("ready");
 		})().catch((error) => {
 			setServiceReadiness("failed", error);
@@ -1004,6 +1007,7 @@ if (!g.__opensessionBooted) {
 		// race the drain deadline.
 		beginShutdown();
 		stopSessionKernelRuntime();
+		stopSessionOwnershipWatchdog();
 		// With poisoned timers (see run-ws.ts tripwire)
 		// every `await sleep` and Promise.race timeout below would wedge forever
 		// and systemd would SIGKILL us at TimeoutStopSec (observed: an 80s

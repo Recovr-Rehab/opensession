@@ -48,7 +48,11 @@ import { markPrReviewNotified } from "../pr-review-notifications";
 import { getPrsByRepo } from "../pr-cache";
 import { getReviewRequest, setReviewAccepted, setReviewRequest, } from "../review-requests";
 import { getSessionControl, type SandboxRequest } from "../session-control";
-import { requestTurnCancel } from "../run-session";
+import {
+	requestTurnCancel,
+	sessionQueueOwnerActive,
+	watchExternalRunAndDrain,
+} from "../run-session";
 import {
 	enrichSessionRuntime,
 	findSessionAsync,
@@ -68,6 +72,7 @@ import {
   sessionChangesSince,
   sessionGatewayCommand,
 	sessionKernel,
+	sessionQuarantines,
 	sessionRunStateProjection,
 	sessionTombstoneState,
 	sessionProjectionOr,
@@ -92,6 +97,8 @@ import {
 	removeTombstonedSessionArtifacts,
 } from "../sessions";
 import { githubLoginFor } from "../shared/user-mappings";
+import { publicSessionSafety } from "../session-safety";
+import type { DurableSessionQuarantine } from "../session-kernel/store";
 import { getStatusOverride, isManualStatus, setStatusOverride } from "../status-overrides";
 import { getSubagentTranscript, listSubagents } from "../subagents";
 import { getTitleOverride, setTitleOverride } from "../title-overrides";
@@ -358,17 +365,29 @@ async function sessionsListResponse(
 type SessionListRuntimeSignals = {
 	waitingForInput: Set<string>;
 	queuedCounts: Map<string, number>;
+	quarantines: Map<string, DurableSessionQuarantine>;
 	runtime: SessionRuntimeSnapshot;
 };
 
 async function sessionListRuntimeSignals(): Promise<SessionListRuntimeSignals> {
-	const [waitingForInput, queuedCounts] = await Promise.all([
+	const [waitingForInput, queuedCounts, quarantines] = await Promise.all([
 		pendingAskIdsAwaitingAnswer(),
 		clientVisibleQueuedCounts(),
+		sessionQuarantines(),
 	]);
+	const quarantineBySession = new Map(
+		quarantines.map((entry) => [entry.sessionId, entry]),
+	);
+	// Every visible queued prompt has a process owner. Boot restoration and
+	// enqueue normally arm it; list reconciliation closes the last crash window.
+	for (const [sessionId, count] of queuedCounts) {
+		if (count > 0 && !quarantineBySession.has(sessionId))
+			watchExternalRunAndDrain(sessionId);
+	}
 	return {
 		waitingForInput,
 		queuedCounts,
+		quarantines: quarantineBySession,
 		runtime: sessionRuntimeSnapshot(),
 	};
 }
@@ -395,8 +414,18 @@ function enrichSession(
 	const currentPr = s.branch
 		? getPrsByRepo().get(s.repo || defaultRepo().id)?.get(s.branch)
 		: undefined;
+	const quarantine = signals?.quarantines.get(s.id);
+	const safety = quarantine ? publicSessionSafety(quarantine) : undefined;
 	return {
 		...s,
+		...(safety
+			? {
+					isRunning: false,
+					runStartedAt: undefined,
+					runState: "paused_for_safety",
+					safety,
+				}
+			: {}),
 		...(generatedTitle ? { title: generatedTitle } : {}),
 		...(titleOverride ? { title: titleOverride, titleOverridden: true } : {}),
 		...(manualStatus ? { manualStatus } : {}),
@@ -438,6 +467,9 @@ function enrichSession(
 		queuedCount: signals
 			? signals.queuedCounts.get(s.id) || 0
 			: sessionProjectionOr(() => clientVisibleQueuedCount(s.id), 0),
+		...(signals && (signals.queuedCounts.get(s.id) || 0) > 0
+			? { queueOwnerActive: sessionQueueOwnerActive(s.id) }
+			: {}),
 		// Present on the list AND on the detail response, so one rule reads the
 		// same either side of a hydrate. `undefined` rather than `false`: it is
 		// dropped by JSON.stringify, and a session object a client builds

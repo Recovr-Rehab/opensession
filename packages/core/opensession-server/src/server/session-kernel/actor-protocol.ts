@@ -57,7 +57,7 @@ export type KernelActorServiceCall = {
   outputBytes: number;
 };
 
-export type KernelActorServiceResponse = (
+export type KernelActorResponse =
   | KernelActorAsyncResponse
   | {
       t: "call_result";
@@ -65,15 +65,17 @@ export type KernelActorServiceResponse = (
       status: -1 | 1 | 2;
       length: number;
       body?: string;
-    }
-) & { serviceEpoch: string };
+    };
+
+/** HTTP service responses are fenced after the actor worker replies. */
+export type KernelActorServiceResponse = KernelActorResponse & {
+  serviceEpoch: string;
+};
 
 export type KernelActorClientRequest =
   KernelActorAsyncRequest | KernelActorClientCallRequest;
 
-export type KernelActorClientResponse =
-  | KernelActorAsyncResponse
-  | Extract<KernelActorServiceResponse, { t: "call_result" }>;
+export type KernelActorClientResponse = KernelActorResponse;
 
 export type KernelActorTransportEnvelope = {
   version: number;

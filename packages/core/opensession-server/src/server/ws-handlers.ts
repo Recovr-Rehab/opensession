@@ -64,10 +64,12 @@ import {
   sessionGatewayCommand,
   sessionDelivery,
 	sessionKernel,
+	sessionQuarantineSnapshot,
   sessionTurn,
   targetForDeliveryInterrupt,
   targetForTurnCancel,
 } from "./session-kernel";
+import { publicSessionSafety } from "./session-safety";
 
 // Who likely triggered the restart that booted THIS process — read once from
 // the marker the previous process wrote in gracefulShutdown, and only trusted
@@ -128,17 +130,21 @@ async function sendWatchExtras(
 			}),
 		);
 	}
+	const quarantine = await sessionQuarantineSnapshot(sessionId);
+	const safety = quarantine ? publicSessionSafety(quarantine) : undefined;
 	ws.send(
 		JSON.stringify({
 			type: "session_status",
 			sessionId,
 			isRunning:
-				session.isRunning ||
-				isAgentSessionBusy(
-					session.claudeSessionId,
-					session.codexThreadId,
-					session.id,
-				),
+				!safety &&
+				(session.isRunning ||
+					isAgentSessionBusy(
+						session.claudeSessionId,
+						session.codexThreadId,
+						session.id,
+					)),
+			...(safety ? { safety } : {}),
 		}),
 	);
 

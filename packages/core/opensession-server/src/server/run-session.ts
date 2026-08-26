@@ -1335,6 +1335,10 @@ export async function runSessionPromptAndDrain(
 type DrainWatcher = { timer?: ReturnType<typeof setTimeout>; failures: number };
 const drainWatchers: Map<string, DrainWatcher> = (g.__asyncDrainWatchers ??= new Map());
 
+export function sessionQueueOwnerActive(sessionId: string): boolean {
+	return drainWatchers.has(sessionId) || queueDrains.has(sessionId);
+}
+
 function drainWatcherDelay(failures: number): number {
 	const base = Math.min(60_000, 3_000 * 2 ** Math.min(failures, 5));
 	return Math.round(base * (0.8 + Math.random() * 0.4));

@@ -407,8 +407,14 @@ export function markSessionDeliveryMigrationComplete(): Promise<void> {
 
 export function sessionQuarantineSnapshot(
 	sessionId: string,
-): Promise<unknown> {
+): Promise<import("./store").DurableSessionQuarantine | undefined> {
 	return sessionStoreAsync("quarantinedSession", [sessionId]);
+}
+
+export function sessionQuarantines(
+	limit = 10_000,
+): Promise<import("./store").DurableSessionQuarantine[]> {
+	return sessionStoreAsync("quarantinedSessions", [limit, 0], true);
 }
 
 export function sessionKernelActorActive(): boolean {
@@ -417,6 +423,14 @@ export function sessionKernelActorActive(): boolean {
 
 export async function sessionIsQuarantined(sessionId: string): Promise<boolean> {
   return !!await sessionStoreAsync<unknown>("quarantinedSession", [sessionId]);
+}
+
+export function quarantineSessionForSafety(
+  sessionId: string,
+  reason: string,
+  operation: string,
+): Promise<import("./store").DurableSessionQuarantine> {
+  return sessionStoreAsync("quarantineSession", [sessionId, reason, operation]);
 }
 
 export function __sessionKernelStoreForTest(): SessionKernelStore {

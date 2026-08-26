@@ -75,6 +75,7 @@ import {
 } from "./ToolCallBlock";
 import { parsePlanItems, type PlanItem } from "@tellahq/opensession-protocol/todo-plan";
 import { ReplySuggestions } from "./ReplySuggestions";
+import { SessionSafetyNotice } from "./SessionSafetyNotice";
 import {
 	getReplySuggestionsPref,
 	onReplySuggestionsChanged,
@@ -124,6 +125,8 @@ import { prPhoneChipClass } from "../lib/pr-tone-classes";
 import type { PrFocus } from "../lib/pr-focus";
 import { reviewLoopResult } from "../lib/review-loop";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
+import { repairPausedSession } from "../lib/api/session-safety";
+import { safetyContinuationPrompt } from "../lib/session-safety";
 import {
 	cancelSlackComposer,
 	fetchSlackChannels,
@@ -443,6 +446,8 @@ type QueueReceipt = {
 
 interface Props {
 	session: UnifiedSession;
+	/** Verified workspace role from the ordinary auth bootstrap. */
+	canRepairSafety?: boolean;
 	/** Only the focused pane in a desktop tab split owns global shortcuts/title. */
 	focused?: boolean;
 	/** The unfocused half of a split keeps its conversation chrome-free. */
@@ -737,6 +742,7 @@ const EMPTY_TRANSCRIPT_ENTRIES: TranscriptEntry[] = [];
 
 export function SessionViewer({
 	session,
+	canRepairSafety = false,
 	focused = true,
 	hideHeader = false,
 	hideRightPanel = false,
@@ -1290,6 +1296,11 @@ export function SessionViewer({
 	}, [session.id]);
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [isRunningLive, setIsRunningLive] = useState(session.isRunning);
+	const [safety, setSafety] = useState(session.safety);
+	useEffect(() => {
+		setSafety(session.safety);
+		if (session.safety) setIsRunningLive(false);
+	}, [session.id, session.safety]);
 	// Bumped on git pushes and matching GitHub webhook events so every mounted PR
 	// surface revalidates immediately.
 	const [gitRefreshTick, setGitRefreshTick] = useState(0);
@@ -2515,7 +2526,7 @@ export function SessionViewer({
 			workflowRuns.length > 0 ||
 			subagents.length > 0 ||
 			sessionReports.length > 0);
-	const isBusy = isRunningLive || isStreaming;
+	const isBusy = !safety && (isRunningLive || isStreaming);
 	// Sub-agent list: fetch on open, then re-poll while the session runs so
 	// live task-tool spawns appear/settle. Keyed on isBusy too: a run starting
 	// after mount restarts the poll loop, and the flip back to idle lands one
@@ -3267,9 +3278,11 @@ export function SessionViewer({
 						}
 					}
 					break;
-				case "session_status":
-					setIsRunningLive(msg.isRunning);
-					if (!msg.isRunning) {
+				case "session_status": {
+					const running = !!msg.isRunning && !msg.safety;
+					setSafety(msg.safety);
+					setIsRunningLive(running);
+					if (!running) {
 						// Every isRunning:false broadcast follows its run's stream_done,
 						// so a live turn never gets cut here. This clears the stale case:
 						// a socket that died mid-stream (server restart) reconnects, the
@@ -3278,8 +3291,9 @@ export function SessionViewer({
 						setIsStreaming(false);
 						liveTurnStore.finish();
 					}
-					onRunningChange?.(session.id, msg.isRunning);
+					onRunningChange?.(session.id, running);
 					break;
+				}
 				case "git_pushed":
 					if (msg.sessionId === session.id) setGitRefreshTick((t) => t + 1);
 					break;
@@ -4085,6 +4099,32 @@ export function SessionViewer({
 		});
 	}, [send, session.id]);
 
+	const continuePausedSession = useCallback(() => {
+		const lastMessageId = entries.findLast(
+			(entry) => entry.type === "assistant" || entry.type === "user",
+		)?.id;
+		const carriedImages = queued.flatMap((item) => item.images || []);
+		send({
+			type: "create_session",
+			branch: "",
+			prompt: safetyContinuationPrompt(session.title, queued),
+			user: getCurrentUser(),
+			forkFrom: {
+				sourceId: session.id,
+				...(lastMessageId ? { messageId: lastMessageId } : {}),
+			},
+			...(carriedImages.length ? { images: carriedImages } : {}),
+		});
+	}, [entries, queued, send, session.id, session.title]);
+
+	const repairSafetyPause = useCallback(async () => {
+		await repairPausedSession(session.id);
+		setSafety(undefined);
+		setIsRunningLive(false);
+		onRunningChange?.(session.id, false);
+		toast("Session repaired");
+	}, [onRunningChange, session.id]);
+
 	// Session and asset links navigate on a delegated click. markdown.ts renders
 	// them into dangerouslySetInnerHTML, where they cannot carry React handlers;
 	// data attributes identify which in-app surface should open.
@@ -4600,6 +4640,7 @@ export function SessionViewer({
 	// the same durable error, so use it as an inline fallback instead of leaving
 	// the conversation blank while only the sidebar hover card explains why.
 	const inlineRunFailure =
+		!safety &&
 		!isBusy &&
 		session.lastRunError &&
 		!entries.some(
@@ -7535,6 +7576,14 @@ export function SessionViewer({
 							)}
 							</AnimatePresence>
 
+							{safety && (
+								<SessionSafetyNotice
+									safety={safety}
+									onContinue={continuePausedSession}
+									onRepair={canRepairSafety ? repairSafetyPause : undefined}
+								/>
+							)}
+
 							{inlineRunFailure && (
 								<InlineAlert
 									title="Run failed"
@@ -7849,8 +7898,10 @@ export function SessionViewer({
 									quote={quote}
 									onQuoteClear={clearQuote}
 									placeholder={
-										settingUpWorkspace
-											? "Queue while workspace sets up…"
+										safety
+											? "Paused for safety"
+											: settingUpWorkspace
+												? "Queue while workspace sets up…"
 											: !connected
 												? "Send when reconnected…"
 											: forkFrom
@@ -7863,8 +7914,9 @@ export function SessionViewer({
 																? `Ask ${AGENT_NAME}, read-only…`
 																: `Ask ${AGENT_NAME}…`
 									}
-									disabled={!connected && !!forkFrom}
+									disabled={!!safety || (!connected && !!forkFrom)}
 									sendDisabled={(text) =>
+										!!safety ||
 										promoting ||
 										(!text.trim() &&
 											images.length === 0 &&

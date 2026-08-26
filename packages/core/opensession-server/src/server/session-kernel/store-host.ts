@@ -66,6 +66,7 @@ export class SessionKernelStoreHost {
   private maintenanceSessionCursor = "";
   private outboxRouteMaintenanceCursor = 0;
   private askEntriesCache?: Array<[string, unknown]>;
+  private quarantineCache?: DurableSessionQuarantine[];
   private readonly deliveryEntriesCache = new Map<
     DeliverySlot,
     Array<[string, unknown]>
@@ -108,7 +109,22 @@ export class SessionKernelStoreHost {
     const infrastructure = this.centralOperation(
       () => this.central.quarantinedSession(sessionId),
     );
-    if (infrastructure) return infrastructure;
+    if (infrastructure) {
+      if (!infrastructure.repairable || !this.isIsolated(sessionId))
+        return infrastructure;
+      const evidence = this.containIsolated(
+        sessionId,
+        "storage:quarantine-repair-evidence",
+        () => this.openIsolated(sessionId).quarantineRepairEvidence(
+          sessionId,
+          infrastructure.commandKind,
+        ),
+      );
+      return {
+        ...infrastructure,
+        repairable: evidence.ok && evidence.value,
+      };
+    }
     if (!this.isIsolated(sessionId)) return undefined;
     const isolated = this.containIsolated(
       sessionId,
@@ -135,6 +151,7 @@ export class SessionKernelStoreHost {
           reason,
           commandKind,
         );
+    this.quarantineCache = undefined;
     this.removeCachedAskEntry(sessionId);
     this.removeCachedDeliveryEntries(sessionId);
     return quarantine;
@@ -192,6 +209,7 @@ export class SessionKernelStoreHost {
       );
     if (method === "releaseQuarantine") {
       const sessionId = String(args[0] ?? "");
+      if (!this.quarantinedSession(sessionId)?.repairable) return false;
       let isolatedReleased = false;
       if (this.isIsolated(sessionId)) {
         const isolated = this.containIsolated(
@@ -205,6 +223,7 @@ export class SessionKernelStoreHost {
         () => this.central.releaseQuarantine(sessionId),
       );
       if (centralReleased || isolatedReleased) {
+        this.quarantineCache = undefined;
         this.refreshCachedAskEntry(sessionId);
         this.refreshCachedDeliveryEntries(sessionId);
       }
@@ -324,13 +343,21 @@ export class SessionKernelStoreHost {
   }
 
   allQuarantinedSessions(limit = 100, offset = 0): DurableSessionQuarantine[] {
-    const isolated = this.mapIsolatedReadStores(
-      "global:quarantined-sessions",
-      (store) => store.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0),
-    ).flat();
-    return [...this.central.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0), ...isolated]
-      .sort((a, b) => b.quarantinedAt - a.quarantinedAt)
-      .slice(offset, offset + limit);
+    if (!this.quarantineCache) {
+      const isolated = this.mapIsolatedReadStores(
+        "global:quarantined-sessions",
+        (store) => store.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0),
+      ).flat();
+      const unique = new Map<string, DurableSessionQuarantine>();
+      for (const entry of [
+        ...this.central.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0),
+        ...isolated,
+      ]) unique.set(entry.sessionId, this.quarantinedSession(entry.sessionId) ?? entry);
+      this.quarantineCache = [...unique.values()].sort(
+        (a, b) => b.quarantinedAt - a.quarantinedAt,
+      );
+    }
+    return structuredClone(this.quarantineCache.slice(offset, offset + limit));
   }
 
   runtimeWork(

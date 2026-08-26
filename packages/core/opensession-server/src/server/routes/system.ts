@@ -13,11 +13,11 @@ import { configuredServer } from "../config";
 import { IS_DEV, buildFrontend, frontend, isPrebuiltFrontend, sharedCheckoutEditors } from "../frontend-build";
 import { getPins } from "../pins";
 import { getReads, isUnread } from "../reads";
-import { runErrors } from "../session-cache";
+import { invalidateSessionsCache, runErrors } from "../session-cache";
 import { getSessionControl } from "../session-control";
 import { MAX_UPLOAD_BYTES, stageHttpUpload } from "../uploads";
 import { systemStats } from "../system-stats";
-import { BOOT_ID, broadcastToAll } from "../ws-hub";
+import { BOOT_ID, broadcastToAll, broadcastToSession } from "../ws-hub";
 import {
 	executorClientHealth,
 	executorClientReadinessSnapshot,
@@ -37,9 +37,8 @@ import { audit } from "../audit";
 import { serviceReadiness } from "../service-readiness";
 
 // Each dead-letter listing fans out across every isolated session database on
-// the actor's catalog lane, and the synchronous bridge blocks the gateway for
-// the duration. Polling this endpoint therefore amplifies actor load exactly
-// when the actor is already degraded. Serve a short-TTL snapshot with
+// the actor's catalog lane. Polling this endpoint therefore amplifies actor
+// load exactly when the actor is already degraded. Serve a short-TTL snapshot with
 // single-flight refresh instead; mutations invalidate it immediately.
 const DEAD_LETTERS_CACHE_TTL_MS = 5_000;
 type DeadLettersEntry = {
@@ -161,7 +160,17 @@ export async function handleSystemRoutes(
 				outbox_id: Number.isSafeInteger(body?.id) ? Number(body?.id) : undefined,
 				changed,
 			});
-			if (changed) deadLettersCaches.clear();
+			if (changed) {
+				deadLettersCaches.clear();
+				if (validQuarantine) {
+					invalidateSessionsCache();
+					broadcastToSession(body.sessionId as string, {
+						type: "session_status",
+						sessionId: body.sessionId,
+						isRunning: false,
+					});
+				}
+			}
 			return Response.json(
 				{ changed, action: validQuarantine ? "release" : discard ? "discard" : "retry" },
 				{ status: changed ? 200 : 404 },

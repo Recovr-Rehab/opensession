@@ -10,7 +10,7 @@ import {
   type KernelActorAsyncRequest,
   type KernelActorClientCallRequest,
   type KernelActorServiceCall,
-  type KernelActorServiceResponse,
+  type KernelActorResponse,
 } from "./actor-protocol";
 import { isDeliveryReadRequest } from "./delivery-protocol";
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
@@ -54,7 +54,7 @@ function routedStoreCall(
 
 export function startSessionKernelActorWorker(): void {
   const host = new SessionKernelStoreHost();
-  function post(message: KernelActorServiceResponse): void {
+  function post(message: KernelActorResponse): void {
     self.postMessage(message);
   }
 
