@@ -9,8 +9,8 @@ test("serves every stable shell asset family", async () => {
 	for (const [path, contentType] of [
 		["/mac-app-icon.png", "image/png"],
 		["/icon.png", "image/png"],
+		// Compatibility URL serves the new fixed artwork to older app bundles.
 		["/signin-bg.webp", "image/webp"],
-		["/signin-bg.mp4", "video/mp4"],
 		["/onboarding-bg.webp", "image/webp"],
 		["/onboarding-bg-dark.webp", "image/webp"],
 		["/download-background.webp", "image/webp"],

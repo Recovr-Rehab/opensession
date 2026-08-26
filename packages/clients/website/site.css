@@ -654,26 +654,6 @@ summary:focus-visible {
 	background: var(--stage-bg);
 }
 
-.gradient-fallback,
-.hero-video {
-	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-}
-
-.gradient-fallback {
-	background:
-		radial-gradient(circle at 26% 16%, #eceae4 0, transparent 40%),
-		radial-gradient(circle at 74% 34%, #dedcd6 0, transparent 44%),
-		linear-gradient(145deg, #d9d7d1 0%, #cdcbc6 52%, #b8b6b2 100%);
-}
-
-.hero-video {
-	object-fit: cover;
-	pointer-events: none;
-}
-
 .preview-wrap {
 	--demo-scale: 1;
 	position: absolute;
@@ -1515,10 +1495,6 @@ summary:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.hero-video {
-		display: none;
-	}
-
 	.product-demo-poster,
 	.product-demo-frame {
 		transition: none;
@@ -1528,9 +1504,9 @@ summary:focus-visible {
 /* Dark mode follows the system rather than offering a switch: the page has one
    screen of content and no settings, so a preference the visitor already set
    is the whole answer. The product preview reads the same signal inside its
-   frame, and the hero swaps Tella's Silver Silk loop for Midnight Dust.
-   The blue is deliberately unchanged: it is the product's accent, it already
-   clears its contrast on white, and it only gains presence on a dark page. */
+   frame. The blue is deliberately unchanged: it is the product's accent, it
+   already clears its contrast on white, and it only gains presence on a dark
+   page. */
 @media (prefers-color-scheme: dark) {
 	:root {
 		color-scheme: dark;
@@ -1554,23 +1530,6 @@ summary:focus-visible {
 		--field: #1a1a1d;
 		--ok: #3fb950;
 		--err: #f87171;
-	}
-
-	.gradient-fallback {
-		background:
-			radial-gradient(circle at 26% 16%, #262b38 0, transparent 40%),
-			radial-gradient(circle at 74% 34%, #1a1f2b 0, transparent 44%),
-			linear-gradient(145deg, #161a23 0%, #12151c 52%, #0a0b0f 100%);
-	}
-
-	/* Cobalt Veil is one of Tella's daylight silks, so it arrives far too
-	   bright for a dark page. Dimming the clip keeps its movement and its blue
-	   while letting the window on top stay the lightest thing in the frame.
-	   0.6 is measured rather than picked: the panel lands around 110 in
-	   luminance against the window's 30, so the blue is unmistakable and the
-	   product still sits in front of it. */
-	.hero-video {
-		filter: brightness(0.6) saturate(1.12);
 	}
 }
 
