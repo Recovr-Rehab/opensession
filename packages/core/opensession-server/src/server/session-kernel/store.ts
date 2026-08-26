@@ -1,4 +1,7 @@
-import { DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS } from "./gateway-command-protocol";
+import {
+  DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS,
+  GATEWAY_COMMAND_OPERATIONS,
+} from "./gateway-command-protocol";
 import { decodeExecutorId } from "@tellahq/opensession-protocol/executor";
 import {
   MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS,
@@ -265,7 +268,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 29;
+export const SESSION_KERNEL_SCHEMA_VERSION = 30;
 export const SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS = 64;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
@@ -610,6 +613,22 @@ function migrateSparseProjectionSchema29(
       CREATE INDEX IF NOT EXISTS idx_sksp_dirty
         ON session_kernel_sparse_projections(dirty, session_id);
       PRAGMA user_version = 29;
+    `);
+  });
+  tx.immediate();
+}
+
+function migrateQuarantineProjectionSchema30(
+  db: Database,
+  schemaVersion: number,
+): void {
+  if (schemaVersion >= 30) return;
+  const tx = db.transaction(() => {
+    db.exec(`
+      ALTER TABLE session_kernel_sparse_projections
+        ADD COLUMN quarantine_state TEXT;
+      UPDATE session_kernel_sparse_projections SET dirty = 1;
+      PRAGMA user_version = 30;
     `);
   });
   tx.immediate();
@@ -1563,6 +1582,7 @@ export class SessionKernelStore {
     migrateAgentHostSupervisionSchema27(this.db, schemaVersion);
     migrateAgentOperationSchema28(this.db, schemaVersion);
     migrateSparseProjectionSchema29(this.db, schemaVersion);
+    migrateQuarantineProjectionSchema30(this.db, schemaVersion);
     assertAgentOperationSchema28(this.db);
     assertAgentOperationRows28(this.db);
 		if (path !== ":memory:") {
@@ -1689,6 +1709,27 @@ export class SessionKernelStore {
 		return this.quarantinedSession(sessionId)!;
 	}
 
+	private recoverableGatewaySettlementCommands(
+		sessionId: string,
+		commandKind: string,
+	): Array<{ requestId: string }> | undefined {
+		if (commandKind !== "gateway:complete" && commandKind !== "gateway:fail")
+			return;
+		const rows = this.db.query(
+			`SELECT request_id, type, status, replay_safe
+			 FROM session_kernel_commands
+			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate')`,
+		).all(sessionId) as Array<Record<string, unknown>>;
+		if (!rows.every((row) =>
+			row.status === "indeterminate" &&
+			Number(row.replay_safe) === 0 &&
+			GATEWAY_COMMAND_OPERATIONS.includes(
+				String(row.type) as (typeof GATEWAY_COMMAND_OPERATIONS)[number],
+			)
+		)) return;
+		return rows.map((row) => ({ requestId: String(row.request_id) }));
+	}
+
 	quarantineRepairEvidence(sessionId: string, commandKind = "unknown"): boolean {
 		if (["preparing", "starting", "running", "ask_blocked", "interrupted", "reattaching"]
 			.includes(this.runState(sessionId).state)) return false;
@@ -1696,7 +1737,10 @@ export class SessionKernelStore {
 			`SELECT 1 FROM session_kernel_commands
 			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate') LIMIT 1`,
 		).get(sessionId);
-		if (ambiguousCommands) return false;
+		if (
+			ambiguousCommands &&
+			!this.recoverableGatewaySettlementCommands(sessionId, commandKind)
+		) return false;
 		const claimedTimer = this.db.query(
 			"SELECT 1 FROM session_kernel_timers WHERE session_id = ? AND token IS NOT NULL LIMIT 1",
 		).get(sessionId);
@@ -1755,12 +1799,29 @@ export class SessionKernelStore {
 	}
 
 	releaseQuarantine(sessionId: string): boolean {
-		const quarantine = this.quarantinedSession(sessionId);
-		if (!quarantine?.repairable) return false;
-		return this.db.run(
-			"DELETE FROM session_kernel_quarantine WHERE session_id = ?",
-			[sessionId],
-		).changes > 0;
+		let released = false;
+		const transaction = this.db.transaction(() => {
+			const quarantine = this.quarantinedSession(sessionId);
+			if (!quarantine?.repairable) return;
+			const recoverable = this.recoverableGatewaySettlementCommands(
+				sessionId,
+				quarantine.commandKind,
+			);
+			for (const command of recoverable ?? []) {
+				this.failCommand(
+					sessionId,
+					command.requestId,
+					"Ambiguous gateway settlement was abandoned during safe session recovery",
+					false,
+				);
+			}
+			released = this.db.run(
+				"DELETE FROM session_kernel_quarantine WHERE session_id = ?",
+				[sessionId],
+			).changes > 0;
+		});
+		transaction.immediate();
+		return released;
 	}
 
   command(
@@ -3426,6 +3487,21 @@ export class SessionKernelStore {
     };
   }
 
+  private gatewaySettlementMayRecover(record: DurableCommandRecord): boolean {
+    if (record.status === "processing") return true;
+    if (
+      record.status === "indeterminate" &&
+      record.error === "actor restarted after execution began"
+    ) return true;
+    return (
+      record.status === "failed" &&
+      record.replaySafe &&
+      record.retryable === true &&
+      (record.error === "actor restarted before acknowledgement" ||
+        record.error === "actor restarted before execution admission")
+    );
+  }
+
   requestGatewayCommand(input: {
     sessionId: string;
     requestId: string;
@@ -3482,7 +3558,7 @@ export class SessionKernelStore {
       throw new Error("Gateway command receipt is missing");
     }
     if (record.status === "completed") return record.result;
-    if (record.status !== "processing")
+    if (!this.gatewaySettlementMayRecover(record))
       throw new Error(record.error || "Gateway command is not executing");
     this.completeCommand(input.sessionId, input.requestId, input.result);
     return input.result;
@@ -3505,7 +3581,7 @@ export class SessionKernelStore {
       throw new Error("Gateway command receipt is missing");
     }
     if (record.status === "completed") return;
-    if (record.status !== "processing")
+    if (!this.gatewaySettlementMayRecover(record))
       throw new Error(record.error || "Gateway command is not executing");
     this.failCommand(
       input.sessionId,
@@ -5976,7 +6052,7 @@ export class SessionKernelStore {
 
 	sparseProjectionMigrationComplete(): boolean {
 		return !!this.db.query(
-			"SELECT 1 FROM session_kernel_migrations WHERE name = 'sparse_projection_v1'",
+			"SELECT 1 FROM session_kernel_migrations WHERE name = 'sparse_projection_v2'",
 		).get();
 	}
 
@@ -5984,7 +6060,7 @@ export class SessionKernelStore {
 		if (this.isolatedProjectionPendingSessionIds(1).length > 0)
 			throw new Error("Sparse session projection backfill is incomplete");
 		this.db.run(
-			"INSERT OR IGNORE INTO session_kernel_migrations (name, completed_at) VALUES ('sparse_projection_v1', ?)",
+			"INSERT OR IGNORE INTO session_kernel_migrations (name, completed_at) VALUES ('sparse_projection_v2', ?)",
 			[Date.now()],
 		);
 	}
@@ -6018,24 +6094,37 @@ export class SessionKernelStore {
 		sessionId: string,
 		askRecord: unknown | undefined,
 		deliveryState: DurableDeliveryState | undefined,
+		quarantineState: DurableSessionQuarantine | undefined = undefined,
 	): void {
 		if (!this.sessionPlacement(sessionId))
 			throw new Error(`Session ${sessionId} has no isolated placement`);
 		this.db.run(`
 			INSERT INTO session_kernel_sparse_projections
-			  (session_id, ask_record, delivery_state, dirty, updated_at)
-			VALUES (?, ?, ?, 0, ?)
+			  (session_id, ask_record, delivery_state, quarantine_state, dirty, updated_at)
+			VALUES (?, ?, ?, ?, 0, ?)
 			ON CONFLICT(session_id) DO UPDATE SET
 			  ask_record = excluded.ask_record,
 			  delivery_state = excluded.delivery_state,
+			  quarantine_state = excluded.quarantine_state,
 			  dirty = 0,
 			  updated_at = excluded.updated_at
 		`, [
 			sessionId,
 			askRecord === undefined ? null : json(askRecord),
 			deliveryState === undefined ? null : json(deliveryState),
+			quarantineState === undefined ? null : json(quarantineState),
 			Date.now(),
 		]);
+	}
+
+	isolatedQuarantineProjectionEntries(): DurableSessionQuarantine[] {
+		return (this.db.query(`
+			SELECT quarantine_state
+			FROM session_kernel_sparse_projections
+			WHERE dirty = 0 AND quarantine_state IS NOT NULL
+			ORDER BY session_id
+		`).all() as Array<{ quarantine_state: string }>)
+			.map((row) => parsed(row.quarantine_state) as DurableSessionQuarantine);
 	}
 
 	isolatedAskProjectionEntries(): Array<[string, unknown]> {

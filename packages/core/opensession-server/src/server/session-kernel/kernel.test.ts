@@ -187,7 +187,7 @@ test("schema 6 upgrades create autonomous creation, delivery and ask state", asy
 });
 
 describe("SessionKernel", () => {
-	test("fails closed non-idempotent projection work after actor restart", async () => {
+	test("fails closed replay but accepts exact settlement after actor restart", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "session-kernel-projection-crash-"));
 		const path = join(dir, "kernel.sqlite");
 		let durableStore = new SessionKernelStore(path);
@@ -208,6 +208,98 @@ describe("SessionKernel", () => {
 				requestId: "write-one",
 				operation: "session_file_updated",
 			})).toThrow("actor restarted after execution began");
+
+			expect(durableStore.completeGatewayCommand({
+				sessionId: "projection-crash",
+				requestId: "write-one",
+				operation: "session_file_updated",
+				result: "written",
+			})).toBe("written");
+			expect(durableStore.command("projection-crash", "write-one")).toMatchObject({
+				status: "completed",
+				result: "written",
+			});
+
+			expect(durableStore.requestGatewayCommand({
+				sessionId: "projection-crash",
+				requestId: "write-two",
+				operation: "session_file_updated",
+			})).toEqual({ status: "execute" });
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			durableStore.failGatewayCommand({
+				sessionId: "projection-crash",
+				requestId: "write-two",
+				operation: "session_file_updated",
+				error: "destination rejected the write",
+				retryable: false,
+			});
+			expect(durableStore.command("projection-crash", "write-two")).toMatchObject({
+				status: "failed",
+				error: "destination rejected the write",
+			});
+		} finally {
+			durableStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("abandons a stranded gateway settlement when safely releasing quarantine", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-gateway-repair-"));
+		const path = join(dir, "kernel.sqlite");
+		let durableStore = new SessionKernelStore(path);
+		try {
+			expect(durableStore.requestGatewayCommand({
+				sessionId: "projection-repair",
+				requestId: "write-one",
+				operation: "session_file_updated",
+			})).toEqual({ status: "execute" });
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			durableStore.quarantineSession(
+				"projection-repair",
+				"actor restarted after execution began",
+				"gateway:complete",
+			);
+
+			expect(durableStore.quarantinedSession("projection-repair")).toMatchObject({
+				repairable: true,
+			});
+			expect(durableStore.releaseQuarantine("projection-repair")).toBe(true);
+			expect(durableStore.quarantinedSession("projection-repair")).toBeUndefined();
+			expect(durableStore.command("projection-repair", "write-one")).toMatchObject({
+				status: "failed",
+				retryable: false,
+			});
+		} finally {
+			durableStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("accepts an exact replay-safe completion from a caller that survived actor restart", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-gateway-settlement-"));
+		const path = join(dir, "kernel.sqlite");
+		let durableStore = new SessionKernelStore(path);
+		const input = {
+			sessionId: "gateway-settlement",
+			requestId: "command-one",
+			operation: "websocket_command" as const,
+			identity: { command: "cancel", targetRunId: "run-one" },
+		};
+		try {
+			expect(durableStore.requestGatewayCommand(input)).toEqual({ status: "execute" });
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			expect(durableStore.command(input.sessionId, input.requestId)).toMatchObject({
+				status: "failed",
+				replaySafe: true,
+				retryable: true,
+			});
+			expect(durableStore.completeGatewayCommand({
+				...input,
+				result: { cancelled: true },
+			})).toEqual({ cancelled: true });
 		} finally {
 			durableStore.close();
 			rmSync(dir, { recursive: true, force: true });

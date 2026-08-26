@@ -50,28 +50,35 @@ export function SessionSafetyNotice({
             </p>
           )}
           <div className="mt-4 flex flex-wrap items-center gap-2 phone:flex-col phone:items-stretch">
-            <Button variant="primary" size="lg" onClick={onContinue}>
-              Continue in a new session
-            </Button>
-            {onRepair && safety.repairAvailable && (
-              <Button
-                size="lg"
-                disabled={repairing}
-                onClick={() => {
-                  setRepairing(true);
-                  setRepairError(null);
-                  void onRepair()
-                    .catch((error) =>
-                      setRepairError(
-                        error instanceof Error
-                          ? error.message
-                          : "This session could not be repaired safely.",
-                      ),
-                    )
-                    .finally(() => setRepairing(false));
-                }}
-              >
-                {repairing ? "Checking evidence…" : "Repair session"}
+            {onRepair && safety.repairAvailable ? (
+              <>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  disabled={repairing}
+                  onClick={() => {
+                    setRepairing(true);
+                    setRepairError(null);
+                    void onRepair()
+                      .catch((error) =>
+                        setRepairError(
+                          error instanceof Error
+                            ? error.message
+                            : "This session could not be recovered safely.",
+                        ),
+                      )
+                      .finally(() => setRepairing(false));
+                  }}
+                >
+                  {repairing ? "Recovering" : "Continue in this session"}
+                </Button>
+                <Button size="lg" disabled={repairing} onClick={onContinue}>
+                  Continue in a new session
+                </Button>
+              </>
+            ) : (
+              <Button variant="primary" size="lg" onClick={onContinue}>
+                Continue in a new session
               </Button>
             )}
           </div>
