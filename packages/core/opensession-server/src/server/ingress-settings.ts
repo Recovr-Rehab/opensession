@@ -35,12 +35,24 @@ import {
 export const PUBLIC_INGRESS_PORT = 3860;
 const CADDYFILE = process.env.OPENSESSION_CADDYFILE || "/etc/caddy/Caddyfile";
 const CLOUDFLARE_TOKEN_PATH = stateDir("cloudflared-tunnel-token");
-const FUNNEL_STARTING_GRACE_MS = 60_000;
+const INGRESS_STARTING_GRACE_MS: Record<IngressExposure, number> = {
+  tailscale: 10 * 60_000,
+  cloudflare: 60_000,
+  custom: 60_000,
+};
 const runtime = globalThis as typeof globalThis & {
   __opensessionCloudflared?: ReturnType<typeof Bun.spawn>;
   __opensessionCloudflaredRestart?: ReturnType<typeof setTimeout>;
-  __opensessionTailscaleFunnelStartedAt?: number;
+  __opensessionIngressStartedAt?: Partial<Record<IngressExposure, number>>;
 };
+
+function markIngressStarting(exposure: IngressExposure): void {
+  (runtime.__opensessionIngressStartedAt ??= {})[exposure] = Date.now();
+}
+
+function ingressStartedAt(exposure: IngressExposure | null): number {
+  return exposure ? runtime.__opensessionIngressStartedAt?.[exposure] || 0 : 0;
+}
 
 export interface IngressStatus {
   canManage: boolean;
@@ -57,7 +69,12 @@ export interface IngressStatus {
   };
   server: { ipv4: string[]; ipv6: string[] };
   dns: { a: string[]; aaaa: string[]; suggested: string[] };
-  tailscale: { installed: boolean; dnsName: string; suggestedUrl: string };
+  tailscale: {
+    installed: boolean;
+    dnsName: string;
+    suggestedUrl: string;
+    funnelConfigured: boolean;
+  };
   cloudflare: {
     installed: boolean;
     tunnelId: string;
@@ -198,6 +215,36 @@ async function tailscaleDnsName(): Promise<string> {
   }
 }
 
+async function tailscaleFunnelStatus(binary = Bun.which("tailscale")): Promise<unknown> {
+  if (!binary) return null;
+  const result = await command([binary, "funnel", "status", "--json"]);
+  if (result.code !== 0) return null;
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    return null;
+  }
+}
+
+/** A zero exit from `tailscale funnel --bg` only says the CLI request
+ * completed. Confirm that tailscaled retained both the public permission and
+ * the exact loopback proxy before Open Session reports the setup as started. */
+export function tailscaleFunnelConfigured(
+  status: unknown,
+  dnsName: string,
+  target = `http://127.0.0.1:${PUBLIC_INGRESS_PORT}`,
+): boolean {
+  if (!status || typeof status !== "object" || Array.isArray(status) || !dnsName) return false;
+  const config = status as Record<string, unknown>;
+  const hostPort = `${dnsName.replace(/\.$/, "")}:443`;
+  const tcp = config.TCP as Record<string, { HTTPS?: unknown }> | undefined;
+  const web = config.Web as Record<string, { Handlers?: Record<string, { Proxy?: unknown }> }> | undefined;
+  const allowFunnel = config.AllowFunnel as Record<string, unknown> | undefined;
+  return tcp?.["443"]?.HTTPS === true &&
+    web?.[hostPort]?.Handlers?.["/"]?.Proxy === target &&
+    allowFunnel?.[hostPort] === true;
+}
+
 function publicInterfaceAddresses(): { a: string[]; aaaa: string[] } {
   const a = new Set<string>();
   const aaaa = new Set<string>();
@@ -292,22 +339,24 @@ export function publicIngressHealth(
   probed: "ready" | "unreachable" | "not_configured",
   dns: { a: string[]; aaaa: string[] },
   server: { a: string[]; aaaa: string[] },
-  funnelStartedAt = 0,
+  startedAt = 0,
   now = Date.now(),
 ): IngressStatus["health"] {
   if (probed !== "unreachable") return probed;
+  if (exposure === "custom") {
+    const expectedAddresses = [...server.a, ...server.aaaa];
+    const resolvedAddresses = [...dns.a, ...dns.aaaa];
+    const dnsPointsHere = expectedAddresses.length
+      ? resolvedAddresses.some((address) => expectedAddresses.includes(address))
+      : resolvedAddresses.length > 0;
+    if (!dnsPointsHere) return "waiting_dns";
+  }
   if (
-    exposure === "tailscale" &&
-    funnelStartedAt > 0 &&
-    now - funnelStartedAt < FUNNEL_STARTING_GRACE_MS
+    exposure &&
+    startedAt > 0 &&
+    now - startedAt < INGRESS_STARTING_GRACE_MS[exposure]
   ) return "starting";
-  if (exposure !== "custom") return probed;
-  const expectedAddresses = [...server.a, ...server.aaaa];
-  const resolvedAddresses = [...dns.a, ...dns.aaaa];
-  const dnsPointsHere = expectedAddresses.length
-    ? resolvedAddresses.some((address) => expectedAddresses.includes(address))
-    : resolvedAddresses.length > 0;
-  return dnsPointsHere ? probed : "waiting_dns";
+  return probed;
 }
 
 export function displayedServerAddresses(
@@ -329,19 +378,25 @@ export async function publicIngressStatus(
   let hostname = "";
   try { hostname = new URL(configured.publicBaseUrl).hostname; } catch {}
   const tailnetIpv4 = detectedTailnetIpv4();
-  const [dns, tsName, probedHealth, serverAddresses, appDomain] = await Promise.all([
+  const [dns, tsName, funnelStatus, probedHealth, serverAddresses, appDomain] = await Promise.all([
     currentDns(hostname),
     tailscaleDnsName(),
+    tailscaleFunnelStatus(),
     ingressHealth(configured.publicBaseUrl),
     publicServerAddresses(),
     privateAppDomainStatus(appBaseUrl, tailnetIpv4),
   ]);
+  const funnelConfigured = tailscaleFunnelConfigured(funnelStatus, tsName);
+  const canStillBeStarting = configured.exposure !== "tailscale" || funnelConfigured;
+  const connectorRunning = cloudflareConnectorRunning();
   const health = publicIngressHealth(
     configured.exposure,
-    probedHealth,
+    configured.exposure === "tailscale" && !funnelConfigured ? "unreachable" : probedHealth,
     dns,
     serverAddresses,
-    runtime.__opensessionTailscaleFunnelStartedAt,
+    canStillBeStarting && (configured.exposure !== "cloudflare" || connectorRunning)
+      ? ingressStartedAt(configured.exposure)
+      : 0,
   );
   // A healthy direct Caddy origin proves its resolved addresses reach this
   // listener. Reuse that exact answer on NATed hosts whose cloud metadata is
@@ -374,6 +429,7 @@ export async function publicIngressStatus(
       installed: Bun.which("tailscale") !== null,
       dnsName: tsName,
       suggestedUrl: tsName ? `https://${tsName}` : "",
+      funnelConfigured,
     },
     cloudflare: {
       installed: Bun.which("cloudflared") !== null,
@@ -381,7 +437,7 @@ export async function publicIngressStatus(
       cnameTarget: tunnelId ? `${tunnelId}.cfargotunnel.com` : "<tunnel-id>.cfargotunnel.com",
       connectorTarget: `http://127.0.0.1:${PUBLIC_INGRESS_PORT}`,
       tokenConfigured: existsSync(CLOUDFLARE_TOKEN_PATH),
-      connectorRunning: cloudflareConnectorRunning(),
+      connectorRunning,
     },
     custom: {
       caddyInstalled: Bun.which("caddy") !== null,
@@ -504,12 +560,18 @@ export async function enableTailscaleFunnel(): Promise<string> {
     `http://127.0.0.1:${PUBLIC_INGRESS_PORT}`,
   ]);
   if (result.code !== 0) throw new Error(result.stderr.trim() || "Could not enable Tailscale Funnel");
+  const funnelStatus = await tailscaleFunnelStatus(binary);
+  if (!tailscaleFunnelConfigured(funnelStatus, dnsName)) {
+    throw new Error(
+      "Tailscale did not retain a public Funnel route on port 443. Allow Funnel and HTTPS certificates for this node, then try again.",
+    );
+  }
   const origin = normalizeIngressOrigin(`https://${dnsName}`);
   // Funnel starting and its public edge becoming reachable are separate facts.
   // Persist the successful command immediately so a slow edge does not leave a
   // running Funnel reported as an entirely failed setup. The UI probes health.
   await savePublicIngress({ publicBaseUrl: origin, exposure: "tailscale" });
-  runtime.__opensessionTailscaleFunnelStartedAt = Date.now();
+  markIngressStarting("tailscale");
   return origin;
 }
 
@@ -563,6 +625,7 @@ export async function configureCloudflareTunnel(input: {
     cloudflareTunnelId: input.tunnelId,
   });
   if (!ensureCloudflareTunnel()) throw new Error("Could not start the Cloudflare Tunnel connector");
+  markIngressStarting("cloudflare");
 }
 
 export async function installManagedCaddy(originValue: string, publicIp?: string): Promise<void> {
@@ -616,6 +679,7 @@ export async function installManagedCaddy(originValue: string, publicIp?: string
     }
     try {
       await savePublicIngress({ publicBaseUrl: origin, exposure: "custom", publicIp });
+      markIngressStarting("custom");
     } catch (error) {
       await rollback();
       throw error;

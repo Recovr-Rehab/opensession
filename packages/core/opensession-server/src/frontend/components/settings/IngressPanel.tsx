@@ -46,7 +46,7 @@ import {
 	SettingsPanel,
 	StatusChip,
 } from "../../ui/settings";
-import { InlineAlert } from "../../ui/state";
+import { InlineAlert, LoadingState } from "../../ui/state";
 import { toast } from "../../ui/toast";
 import { markTileClass, markTileGradient, markTileInk, markTileShadow, type MarkTone } from "../../lib/mark-tile";
 import { IconCopy, IconGlobe, IconServer, IconShieldCheck } from "../icons";
@@ -139,6 +139,24 @@ function SetupStep({ number, title, children }: { number: number; title: string;
 			</div>
 		</li>
 	);
+}
+
+function IngressWaitingState({
+	method,
+	health,
+}: {
+	method: IngressExposure;
+	health: PublicIngressSettings["health"];
+}) {
+	if (health !== "starting" && health !== "waiting_dns") return null;
+	const message = method === "tailscale"
+		? "Waiting for Tailscale’s public DNS. This can take up to 10 minutes."
+		: method === "cloudflare"
+			? "Waiting for Cloudflare to connect the public route."
+			: health === "waiting_dns"
+				? "Waiting for DNS to point to this server."
+				: "Waiting for Caddy to finish HTTPS setup.";
+	return <LoadingState placement="card">{message} This page checks automatically.</LoadingState>;
 }
 
 function DomainSetupSteps({
@@ -449,9 +467,9 @@ export function IngressPanel({
 		});
 	}, []);
 
-	// A custom-domain setup is complete before DNS necessarily reaches this
-	// server. Keep waiting and transiently unreachable states current without
-	// requiring a repeated manual probe while DNS or the listener converges.
+	// Ingress setup can complete before public DNS or an edge route converges.
+	// Keep pending and transiently unreachable states current without requiring
+	// a repeated manual probe.
 	useEffect(() => {
 		const publicPending = settings?.health === "starting" || settings?.health === "waiting_dns" || settings?.health === "unreachable";
 		const appPending = settings?.app.domain.health === "waiting_dns" || settings?.app.domain.health === "unreachable";
@@ -527,7 +545,7 @@ export function IngressPanel({
 
 	async function applyMethod() {
 		if (method === "tailscale") {
-			await run("apply", enablePublicIngressFunnel, "Tailscale Funnel started");
+			await run("apply", enablePublicIngressFunnel, "Tailscale Funnel configured");
 			return;
 		}
 		if (method === "custom") {
@@ -789,22 +807,21 @@ export function IngressPanel({
 										<div className="mt-2"><ConfigCodeBlock code={customCaddyConfig(url)} /></div>
 										<p className="mt-2 mb-0">Automatic setup also adds the detected local interface bind.</p>
 									</details>
-									{settings.health === "waiting_dns" && settings.exposure === "custom" && (
-										<InlineAlert>DNS does not point to this server yet. Keep this page open or click Check again after updating the records.</InlineAlert>
-									)}
 								</>
 							)}
 							</div>
 
-							{settings.health === "starting" && settings.exposure === "tailscale" && method === "tailscale" && (
-								<InlineAlert>Funnel started. Tailscale’s public edge can take up to a minute to become reachable.</InlineAlert>
+							{settings.exposure === method && (
+								<IngressWaitingState method={method} health={settings.health} />
 							)}
 							{settings.health === "unreachable" && settings.exposure === method && (
 								<InlineAlert>
 									{method === "cloudflare" && settings.cloudflare.connectorRunning
 										? <>The connector process is running, but Cloudflare cannot reach Open Session. Verify that this hostname routes to <strong>{settings.cloudflare.connectorTarget}</strong> and that the tunnel ID and token come from the same remotely managed tunnel.</>
 										: method === "tailscale"
-											? "Funnel did not become reachable. Allow Funnel and HTTPS certificate access for this node in Tailscale, then start Funnel again."
+											? settings.tailscale.funnelConfigured
+												? "Funnel is configured, but its public address did not become reachable. Check this node’s Funnel access in Tailscale, then try again."
+												: "Tailscale no longer has the Funnel route for Open Session. Start Funnel again."
 											: "The public URL is configured but its health check is not reachable. Verify DNS and firewall rules, then check again."}
 								</InlineAlert>
 							)}

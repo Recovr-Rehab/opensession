@@ -11,6 +11,7 @@ import {
   publicIngressHealth,
   savePrivateAppOrigin,
   savePublicIngress,
+  tailscaleFunnelConfigured,
 } from "./ingress-settings";
 
 const previous = process.env.OPENSESSION_CONFIG;
@@ -85,15 +86,47 @@ describe("public ingress settings", () => {
     expect(publicIngressHealth("cloudflare", "unreachable", { a: [], aaaa: [] }, server)).toBe("unreachable");
   });
 
-  test("gives a newly started Funnel time to become reachable", () => {
+  test("gives newly configured ingress methods time to become reachable", () => {
     const startedAt = 10_000;
     const addresses = { a: [], aaaa: [] };
     expect(publicIngressHealth("tailscale", "unreachable", addresses, addresses, startedAt, startedAt + 30_000))
       .toBe("starting");
+    expect(publicIngressHealth("cloudflare", "unreachable", addresses, addresses, startedAt, startedAt + 30_000))
+      .toBe("starting");
     expect(publicIngressHealth("tailscale", "ready", addresses, addresses, startedAt, startedAt + 30_000))
       .toBe("ready");
-    expect(publicIngressHealth("tailscale", "unreachable", addresses, addresses, startedAt, startedAt + 60_000))
+    expect(publicIngressHealth("custom", "unreachable", { a: [], aaaa: [] }, { a: ["203.0.113.10"], aaaa: [] }, startedAt, startedAt + 30_000))
+      .toBe("waiting_dns");
+    expect(publicIngressHealth("custom", "unreachable", { a: ["203.0.113.10"], aaaa: [] }, { a: ["203.0.113.10"], aaaa: [] }, startedAt, startedAt + 30_000))
+      .toBe("starting");
+    expect(publicIngressHealth("cloudflare", "unreachable", addresses, addresses, startedAt, startedAt + 60_000))
       .toBe("unreachable");
+    expect(publicIngressHealth("tailscale", "unreachable", addresses, addresses, startedAt, startedAt + 10 * 60_000))
+      .toBe("unreachable");
+  });
+
+  test("recognizes only the exact public Funnel route", () => {
+    const hostPort = "server.example.ts.net:443";
+    const status = {
+      TCP: { "443": { HTTPS: true } },
+      Web: {
+        [hostPort]: {
+          Handlers: { "/": { Proxy: "http://127.0.0.1:3860" } },
+        },
+      },
+      AllowFunnel: { [hostPort]: true },
+    };
+    expect(tailscaleFunnelConfigured(status, "server.example.ts.net")).toBe(true);
+    expect(tailscaleFunnelConfigured({ ...status, AllowFunnel: {} }, "server.example.ts.net"))
+      .toBe(false);
+    expect(tailscaleFunnelConfigured({
+      ...status,
+      Web: {
+        [hostPort]: {
+          Handlers: { "/": { Proxy: "http://127.0.0.1:3850" } },
+        },
+      },
+    }, "server.example.ts.net")).toBe(false);
   });
 
   test("uses proven healthy DNS when a NATed server cannot detect its public IP", () => {
