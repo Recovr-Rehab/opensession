@@ -61,12 +61,10 @@
 	--window: #f6f6f4;
 	--window-shadow: rgba(28, 34, 40, 0.24);
 	--surface: #fff;
-	/* Dialogs stay paper in light mode. Dark mode turns these into a brighter
-	   translucent material without changing the foreground surface token used
-	   by controls. */
+	/* Every website modal resolves to one stable surface. Keeping the panel
+	   opaque makes that material identical over every part of the landing page;
+	   the shared backdrop and glow carry the depth instead. */
 	--modal-surface: var(--surface);
-	--modal-glass: var(--modal-surface);
-	--modal-blur: none;
 	--modal-ring: transparent;
 	--modal-glow: transparent;
 	--surface-shadow: rgba(16, 18, 22, 0.22);
@@ -537,22 +535,6 @@ summary:focus-visible {
 		inset 0 0 0 1px var(--modal-ring),
 		0 0 72px -10px var(--modal-glow),
 		0 24px 70px var(--surface-shadow);
-}
-
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-	.website-modal-panel {
-		background: var(--modal-glass);
-		-webkit-backdrop-filter: var(--modal-blur);
-		backdrop-filter: var(--modal-blur);
-	}
-}
-
-@media (prefers-reduced-transparency: reduce) {
-	.website-modal-panel {
-		background: var(--modal-surface);
-		-webkit-backdrop-filter: none;
-		backdrop-filter: none;
-	}
 }
 
 .website-modal-close {
@@ -1400,12 +1382,10 @@ summary:focus-visible {
 		--window: #0d0d0f;
 		--window-shadow: rgba(0, 0, 0, 0.5);
 		--surface: #151517;
-		/* Lift dialogs well above the page, then let blurred page colour and shape
-		   show through. The old opaque #151517 panel over a 55% black scrim
-		   collapsed both layers into nearly the same black. */
+		/* Lift the shared modal surface well above the page. The edge and blue
+		   ambient glow separate it without making its fill depend on what happens
+		   to be behind each dialog. */
 		--modal-surface: color-mix(in oklch, var(--surface) 90%, var(--ink));
-		--modal-glass: color-mix(in srgb, var(--modal-surface) 78%, transparent);
-		--modal-blur: blur(20px) saturate(1.6);
 		--modal-ring: oklch(1 0 0 / 0.11);
 		--modal-glow: color-mix(in oklch, var(--accent-blue) 32%, transparent);
 		--surface-shadow: color-mix(in srgb, black 38%, transparent);
