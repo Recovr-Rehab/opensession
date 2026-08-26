@@ -18,7 +18,7 @@ import { toast } from "../ui/toast";
 // What this instance and its agent are called. These rows sit inside the
 // organization card, so Setup and Workspace > General both show one section.
 
-const IDENTITY_INPUT_CLASS = cn(settingsInputClass, "w-[140px]");
+const IDENTITY_INPUT_CLASS = cn(settingsInputClass, "w-[140px] max-w-full");
 
 /** One identity field: saves on blur or Enter, reverts on Escape or failure. */
 function IdentityInput({
@@ -73,7 +73,13 @@ setSaving(false);
 
 /** The instance's own names, as rows. They live inside the organization card
  *  so setup and settings show one section rather than two near-identical ones. */
-export function IdentityRows() {
+export function IdentityRows({
+	showProductName = true,
+	rowClassName,
+}: {
+	showProductName?: boolean;
+	rowClassName?: string;
+} = {}) {
 	const [identity, setIdentity] = useState<InstanceIdentityDto | null>(null);
 	useEffect(() => {
 		let cancelled = false;
@@ -100,7 +106,7 @@ toast(e?.message || "Failed to save", { variant: "error" });
 
 	return (
 		<>
-			<SettingRow>
+			<SettingRow className={rowClassName}>
 				<SettingRowText>
 					<SettingRowTitle>Agent name</SettingRowTitle>
 					<SettingRowDescription>
@@ -114,20 +120,22 @@ toast(e?.message || "Failed to save", { variant: "error" });
 					onSave={(next) => save({ personaName: next })}
 				/>
 			</SettingRow>
-			<SettingRow>
-				<SettingRowText>
-					<SettingRowTitle>Product name</SettingRowTitle>
-					<SettingRowDescription>
-						Shown in titles and headings.
-					</SettingRowDescription>
-				</SettingRowText>
-				<IdentityInput
-					label="Product name"
-					value={identity?.productName ?? PRODUCT_NAME}
-					placeholder="Open Session"
-					onSave={(next) => save({ productName: next })}
-				/>
-			</SettingRow>
+			{showProductName && (
+				<SettingRow className={rowClassName}>
+					<SettingRowText>
+						<SettingRowTitle>Product name</SettingRowTitle>
+						<SettingRowDescription>
+							Shown in titles and headings.
+						</SettingRowDescription>
+					</SettingRowText>
+					<IdentityInput
+						label="Product name"
+						value={identity?.productName ?? PRODUCT_NAME}
+						placeholder="Open Session"
+						onSave={(next) => save({ productName: next })}
+					/>
+				</SettingRow>
+			)}
 		</>
 	);
 }

@@ -44,8 +44,10 @@ const NAME_INPUT_CLASS = cn(settingsInputClass, "w-[220px] max-w-full");
  */
 export function OrganizationProfileSection({
 	githubOrganization,
+	onboarding = false,
 }: {
 	githubOrganization?: string;
+	onboarding?: boolean;
 } = {}) {
 	const [settings, setSettings] = useState<OrganizationSettingsDto | null>(null);
 	const [draft, setDraft] = useState("");
@@ -169,7 +171,12 @@ setBusy(false);
 			) : settings ? (
 				<>
 					<SettingCard>
-						<SettingRow className="items-center">
+						<SettingRow
+							className={cn(
+								"items-center",
+								onboarding && "px-6 py-5 last:pb-6",
+							)}
+						>
 							<SettingRowText>
 								<SettingRowTitle>Upload icon</SettingRowTitle>
 							</SettingRowText>
@@ -229,7 +236,7 @@ setBusy(false);
 								/>
 							</SettingRowControl>
 						</SettingRow>
-						<SettingRow>
+						<SettingRow className={onboarding ? "px-6 py-5 last:pb-6" : undefined}>
 							<SettingRowText>
 								<SettingRowTitle>Organization name</SettingRowTitle>
 							</SettingRowText>
@@ -250,11 +257,15 @@ setBusy(false);
 								aria-label="Organization name"
 							/>
 						</SettingRow>
-						<IdentityRows />
+						<IdentityRows
+							showProductName={!onboarding}
+							rowClassName={onboarding ? "px-6 py-5 last:pb-6" : undefined}
+						/>
 					</SettingCard>
-					<SettingsHint>
-						Shared by everyone in this organization. Clearing the name restores the
-						product name.
+					<SettingsHint className={onboarding ? "px-6" : undefined}>
+						{onboarding
+							? "Shared by everyone in this organization."
+							: "Shared by everyone in this organization. Clearing the name restores the product name."}
 					</SettingsHint>
 				</>
 			) : (
