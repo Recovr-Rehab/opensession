@@ -1040,8 +1040,8 @@ function ProviderSummaryRow({
  *
  * It opens collapsed — one row per provider with its account count — because
  * the full list is a page of usage meters and the question people arrive with
- * is "do we have capacity here". "All accounts" restores the flat list. The
- * same view switch and inline foldout are used during onboarding. */
+ * is "do we have capacity here". "All accounts" restores the flat list in
+ * Settings; onboarding keeps the simpler provider summary. */
 export function ProviderAccountsSection({
 	onboarding = false,
 	onChanged,
@@ -1088,6 +1088,7 @@ export function ProviderAccountsSection({
 							render={
 								<Button
 									size={onboarding ? "lg" : "sm"}
+									variant={onboarding ? "primary" : "default"}
 									className="phone:min-h-11"
 									icon={<IconPlus size={onboarding ? 18 : 16} />}
 									caret
@@ -1112,15 +1113,17 @@ export function ProviderAccountsSection({
 			>
 				<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1.5">
 					Subscriptions
-					<Segmented
-						label="Account view"
-						size="sm"
-						value={view}
-						onValueChange={(next) => setView(next as "providers" | "accounts")}
-					>
-						<SegmentedOption value="providers">Providers</SegmentedOption>
-						<SegmentedOption value="accounts">All accounts</SegmentedOption>
-					</Segmented>
+					{!onboarding && (
+						<Segmented
+							label="Account view"
+							size="sm"
+							value={view}
+							onValueChange={(next) => setView(next as "providers" | "accounts")}
+						>
+							<SegmentedOption value="providers">Providers</SegmentedOption>
+							<SegmentedOption value="accounts">All accounts</SegmentedOption>
+						</Segmented>
+					)}
 				</span>
 			</SettingsGroupLabel>
 
