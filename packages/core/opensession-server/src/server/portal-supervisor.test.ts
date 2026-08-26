@@ -149,7 +149,10 @@ describe("session Portal supervisor", () => {
 		const sandbox = sandboxFor(worktree, port);
 		const input = {
 			sessionId: "os-sandbox-portal-test", sandbox, name: "remote-app", port,
-			command: "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"sandbox\")}})'",
+			// Absolute interpreter path: the sandbox launch line pins PATH to the
+			// real sandbox layout (/home/ubuntu/.bun/bin), which this host-executed
+			// fake does not have on CI — a bare `bun` exits before listening there.
+			command: `${process.execPath} -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response("sandbox")}})'`,
 		};
 		const [portal, duplicate] = await Promise.all([
 			startSandboxPortalService(input),
