@@ -183,6 +183,14 @@ export function ReposSection({
 								{showLifecycleStatus && (
 									<StateChip tone={lifecycle.tone} label={lifecycle.label} />
 								)}
+								{/* Same ⋯ menu as the settings page: a compact row is still a
+								    repo someone may need to repoint or re-mode. */}
+								<RepoActionsMenu
+									repo={repo}
+									appearance={appearance.get(repo.id)}
+									onChanged={onChanged}
+									onRepoUpdated={onRepoUpdated}
+								/>
 							</SettingRow>
 						);
 					})
@@ -215,6 +223,57 @@ function RepositoryRow({
 	) => void;
 }) {
 	const lifecycle = repoLifecycleState(repo);
+
+	return (
+		<SettingRow className="items-start">
+			<RepoTileButton
+				repo={appearance}
+				id={repo.id}
+				onChanged={onAppearanceChanged}
+			/>
+			<SettingRowText>
+				<div className="flex items-center justify-between gap-2">
+					<SettingRowTitle className="min-w-0 truncate">{repo.label}</SettingRowTitle>
+					<span className="hidden shrink-0 phone:inline-flex">
+						<StateChip tone={lifecycle.tone} label={lifecycle.label} />
+					</span>
+				</div>
+				<SettingRowDescription className="truncate font-mono text-meta">
+					{repo.path}
+				</SettingRowDescription>
+			</SettingRowText>
+			<div className="flex shrink-0 items-center gap-2">
+				<span className="phone:hidden">
+					<StateChip tone={lifecycle.tone} label={lifecycle.label} />
+				</span>
+				<RepoActionsMenu
+					repo={repo}
+					appearance={appearance}
+					onChanged={onChanged}
+					onRepoUpdated={onRepoUpdated}
+				/>
+			</div>
+		</SettingRow>
+	);
+}
+
+/** A repo row's ⋯ menu and its consequences: the default-branch dialog and
+ *  the isolated-worktrees toggle. Shared by the settings page's full row and
+ *  the wizard's compact rows, so both surfaces manage a repo identically. */
+function RepoActionsMenu({
+	repo,
+	appearance,
+	onChanged,
+	onRepoUpdated,
+}: {
+	repo: SetupStatus["repos"][number];
+	appearance: RepoInfo | undefined;
+	onChanged: () => void | Promise<void>;
+	onRepoUpdated?: (
+		updated: Pick<SetupRepo, "id"> &
+			Partial<Pick<SetupRepo, "defaultBranch" | "isolatedWorktrees">>,
+	) => void;
+}) {
 	// A hot frontend rebuild can briefly run against the prior setup-status
 	// payload, which omitted defaultBranch. The repository payload already had
 	// it, so use that as the compatibility fallback instead of crashing while
@@ -227,9 +286,7 @@ function RepositoryRow({
 	const [branchDialogOpen, setBranchDialogOpen] = useState(false);
 	const [saving, setSaving] = useState<"branch" | "worktrees" | null>(null);
 	const [branchError, setBranchError] = useState<string | null>(null);
-	const [worktreeError, setWorktreeError] = useState<string | null>(null);
 	const branchErrorId = useId();
-	const worktreeErrorId = useId();
 	const branchInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -272,7 +329,6 @@ setSaving(null);
 		const previous = isolatedWorktrees;
 		setIsolatedWorktrees(next);
 		setSaving("worktrees");
-		setWorktreeError(null);
 		await (async () => {
 const updated = await setupRequest<{
 				id: string;
@@ -288,7 +344,10 @@ const updated = await setupRequest<{
 			toast(`${repo.label} worktree setting updated`);
 })().catch(async (e: any) => {
 setIsolatedWorktrees(previous);
-			setWorktreeError(e.message);
+			// No row of its own to paint an inline alert on anymore: this menu
+			// serves both the settings row and the wizard's compact rows, so
+			// failures surface app-wide instead.
+			toast(e.message, { variant: "error" });
 }).finally(async () => {
 setSaving(null);
 });
@@ -302,62 +361,33 @@ setSaving(null);
 
 	return (
 		<>
-			<SettingRow className="items-start">
-				<RepoTileButton
-					repo={appearance}
-					id={repo.id}
-					onChanged={onAppearanceChanged}
-				/>
-				<SettingRowText>
-					<div className="flex items-center justify-between gap-2">
-						<SettingRowTitle className="min-w-0 truncate">{repo.label}</SettingRowTitle>
-						<span className="hidden shrink-0 phone:inline-flex">
-							<StateChip tone={lifecycle.tone} label={lifecycle.label} />
-						</span>
-					</div>
-					<SettingRowDescription className="truncate font-mono text-meta">
-						{repo.path}
-					</SettingRowDescription>
-					{worktreeError && (
-						<InlineAlert id={worktreeErrorId} className="mt-1.5">
-							{worktreeError}
-						</InlineAlert>
-					)}
-				</SettingRowText>
-				<div className="flex shrink-0 items-center gap-2">
-					<span className="phone:hidden">
-						<StateChip tone={lifecycle.tone} label={lifecycle.label} />
-					</span>
-					<Menu.Root>
-						<Menu.Trigger
-							className={rowMenuTriggerClasses}
-							aria-label={`Manage ${repo.label}`}
-						>
-							<IconDotsHorizontal size={18} />
-						</Menu.Trigger>
-						<Menu.Popup align="end" sideOffset={4}>
-							<Menu.Item onClick={openBranchDialog}>
-								<IconBranches size={17} className="text-dim" />
-								<span className="min-w-0 flex-1 truncate">Default branch</span>
-								<Menu.Shortcut className="max-w-28 truncate font-mono">
-									{defaultBranch}
-								</Menu.Shortcut>
-							</Menu.Item>
-							<Menu.Separator />
-							<Menu.CheckboxItem
-								checked={isolatedWorktrees}
-								disabled={!!saving}
-								aria-describedby={worktreeError ? worktreeErrorId : undefined}
-								onCheckedChange={(next) => void saveWorktreeMode(next)}
-								closeOnClick
-							>
-								<span className="min-w-0 flex-1 truncate">Use isolated worktrees</span>
-								<Menu.Check on={isolatedWorktrees} />
-							</Menu.CheckboxItem>
-						</Menu.Popup>
-					</Menu.Root>
-				</div>
-			</SettingRow>
+			<Menu.Root>
+				<Menu.Trigger
+					className={rowMenuTriggerClasses}
+					aria-label={`Manage ${repo.label}`}
+				>
+					<IconDotsHorizontal size={18} />
+				</Menu.Trigger>
+				<Menu.Popup align="end" sideOffset={4}>
+					<Menu.Item onClick={openBranchDialog}>
+						<IconBranches size={17} className="text-dim" />
+						<span className="min-w-0 flex-1 truncate">Default branch</span>
+						<Menu.Shortcut className="max-w-28 truncate font-mono">
+							{defaultBranch}
+						</Menu.Shortcut>
+					</Menu.Item>
+					<Menu.Separator />
+					<Menu.CheckboxItem
+						checked={isolatedWorktrees}
+						disabled={!!saving}
+						onCheckedChange={(next) => void saveWorktreeMode(next)}
+						closeOnClick
+					>
+						<span className="min-w-0 flex-1 truncate">Use isolated worktrees</span>
+						<Menu.Check on={isolatedWorktrees} />
+					</Menu.CheckboxItem>
+				</Menu.Popup>
+			</Menu.Root>
 			<Modal.Root
 				open={branchDialogOpen}
 				onOpenChange={(open) => {
