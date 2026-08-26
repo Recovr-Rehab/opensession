@@ -1164,6 +1164,7 @@ summary:focus-visible {
 	top: 7%;
 	left: 7%;
 	width: 93%;
+	border-radius: 0;
 }
 
 .announcement-feature-automations {
