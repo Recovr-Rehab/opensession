@@ -13,6 +13,7 @@
  * one path to keep honest, rather than a fallback nobody exercises.
  */
 
+import { organizationName } from "../config";
 import type { RouteContext } from "./context";
 import {
   createWebSession,
@@ -55,6 +56,10 @@ export async function handleAuthRoutes(
 		return Response.json({
 			required: webAuthRequired(),
 			authenticated: signedIn,
+			// The sign-in gate is the one screen a signed-out browser can see, so
+			// it names the server it belongs to from here — every other source of
+			// the organization name sits behind the gate this response unlocks.
+			organizationName: organizationName(),
 			// When web auth isn't required (a single-user install), there is no
 			// identity to sign in as, but that user administers the workspace —
 			// workspaceAdminAuthorized() says as much. Report it so the admin-only

@@ -69,6 +69,9 @@ export interface AuthStatus {
   required: boolean;
   authenticated: boolean;
   admin?: boolean;
+  /** The server's own name, answered pre-auth so the sign-in card can say
+   *  whose server this is (every other source sits behind the gate). */
+  organizationName?: string;
   /** Signed out because GitHub permanently rejected this person's grant, not
    *  because they never signed in: `login` is still theirs, and the way back
    *  in is the same authorize. */
@@ -404,6 +407,7 @@ function GithubSignIn({
   } | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const serverName = useAuthStatus()?.organizationName || PRODUCT_NAME;
 
   // Poll GitHub (via the server) until the device code is authorized.
   useEffect(() => {
@@ -464,7 +468,7 @@ setError(e.message);
           ? "Enter this code"
           : reconnect
             ? "Reconnect GitHub"
-            : `Sign in to ${PRODUCT_NAME}`
+            : `Sign in to ${serverName}`
       }
     >
       {!flow ? (
@@ -478,8 +482,9 @@ setError(e.message);
               </>
             ) : (
               <>
-                Sessions act as your own GitHub account, so pull requests are
-                authored by you.
+                An Open Session server runs AI coding sessions in your team's
+                repositories. Sign in with GitHub so pull requests are authored
+                by you.
               </>
             )}
           </AuthCopy>
