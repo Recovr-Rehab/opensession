@@ -305,6 +305,27 @@ export function sessionDelivery<T extends DeliveryActorRequest>(
   return result as DeliveryActorResult<T>;
 }
 
+export async function sessionDeliveryAsync<T extends DeliveryActorRequest>(
+  request: T,
+): Promise<DeliveryActorResult<T>> {
+  if (state.actor) {
+    const result = await state.actor.decideDeliveryAsync(request);
+    if (
+      request.op !== "snapshot" &&
+      request.op !== "entries" &&
+      "sessionId" in request
+    )
+      state.deliveryProjection?.delete(request.sessionId);
+    else if (
+      request.op === "clear_slot" ||
+      request.op === "settle_pending_steers"
+    )
+      state.deliveryProjection?.clear();
+    return result;
+  }
+  return sessionDelivery(request);
+}
+
 export function sessionDeliveryProjection(sessionId: string): DurableDeliveryState {
   const projection = (state.deliveryProjection ??= new Map());
   const cached = projection.get(sessionId);

@@ -55,7 +55,7 @@ import {
 	requestCreationCredential,
 	requestCreationWorkspace,
 	sessionAsk,
-	sessionDelivery,
+	sessionDeliveryAsync,
 	sessionKernel,
   sessionTurn,
 } from "./session-kernel";
@@ -363,7 +363,7 @@ registerSessionControl({
 				deliveryId,
 			};
 		};
-		const plan = sessionDelivery({
+		const plan = await sessionDeliveryAsync({
 			op: "request_submit_command",
 			sessionId: id,
 			requestId: deliveryId,
@@ -381,7 +381,7 @@ registerSessionControl({
 		try {
 			const result = await deliverOwned();
       submitPhysicalFinished = true;
-			return sessionDelivery({
+			return await sessionDeliveryAsync({
 				op: "complete_submit_command",
 				sessionId: id,
 				requestId: deliveryId,
@@ -390,7 +390,7 @@ registerSessionControl({
 		} catch (error) {
 			if (error instanceof SessionDeliveryError) {
         submitPhysicalFinished = true;
-				sessionDelivery({
+				await sessionDeliveryAsync({
 					op: "complete_submit_command",
 					sessionId: id,
 					requestId: deliveryId,
@@ -398,12 +398,13 @@ registerSessionControl({
 				});
 				return error.result;
 			}
-      if (!submitPhysicalFinished) sessionDelivery({
-				op: "fail_submit_command",
-				sessionId: id,
-				requestId: deliveryId,
-				error: error instanceof Error ? error.message : String(error),
-			});
+      if (!submitPhysicalFinished)
+				await sessionDeliveryAsync({
+					op: "fail_submit_command",
+					sessionId: id,
+					requestId: deliveryId,
+					error: error instanceof Error ? error.message : String(error),
+				});
 			throw error;
 		}
 	},

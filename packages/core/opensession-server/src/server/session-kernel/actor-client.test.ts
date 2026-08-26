@@ -594,7 +594,7 @@ describe("session kernel actor boundary", () => {
     expect(() => host.decideGateway(input)).toThrow("not allowed");
   });
 
-  test("admits gateway commands without blocking the gateway thread", async () => {
+  test("admits gateway and delivery commands without blocking the gateway thread", async () => {
     const messageListeners: Array<(event: MessageEvent) => void> = [];
     const worker = {
       addEventListener(type: string, listener: (event: MessageEvent) => void) {
@@ -603,13 +603,19 @@ describe("session kernel actor boundary", () => {
       postMessage(request: {
         t: string;
         rpcId?: string;
-        command?: { request?: { op?: string } };
+        command?: { kind?: string; request?: { op?: string } };
       }) {
-        const result = request.command?.request?.op === "request"
+        const result = request.command?.request?.op === "request" ||
+          request.command?.request?.op === "request_submit_command"
           ? { status: "execute" }
           : { status: "completed" };
         setTimeout(() => {
-          const body = JSON.stringify({ ok: true, result });
+          const body = JSON.stringify({
+            ok: true,
+            result: request.command?.kind === "delivery"
+              ? { result, revision: 1 }
+              : result,
+          });
           for (const listener of messageListeners)
             listener({
               data: {
@@ -648,6 +654,12 @@ describe("session kernel actor boundary", () => {
       operation: input.operation,
       result: null,
     })).toEqual({ status: "completed" });
+    expect(await host.decideDeliveryAsync({
+      op: "request_submit_command",
+      sessionId: "async-delivery",
+      requestId: "one",
+      identity: { prompt: "hello" },
+    })).toEqual({ status: "execute" });
   });
 
   test("acknowledges replay results through async IPC", async () => {
