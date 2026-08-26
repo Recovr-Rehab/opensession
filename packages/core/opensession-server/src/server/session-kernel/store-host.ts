@@ -475,12 +475,22 @@ export class SessionKernelStoreHost {
       1,
       Math.min(RUNTIME_WAKE_CANDIDATE_BATCH, limit),
     );
-    // Reserve a small part of every batch for the most recently dirtied
-    // actors. This keeps live creates/deliveries responsive while the cursor
-    // continues a large conservative migration or crash-recovery sweep.
-    const recentLimit = Math.min(4, candidateLimit);
+    // Reserve a small part of every batch for the most recently dirtied actors
+    // and the oldest already-indexed due work. This keeps both new creates and
+    // retrying effects responsive while the cursor continues a large
+    // conservative migration or crash-recovery sweep.
+    const priorityLimit = Math.min(4, candidateLimit);
+    const recentLimit = Math.ceil(priorityLimit / 2);
+    const dueLimit = priorityLimit - recentLimit;
     const candidates = this.central.isolatedRecentDirtyWakeCandidates(recentLimit);
     const seen = new Set(candidates);
+    if (dueLimit > 0) {
+      for (const sessionId of this.central.isolatedDueWakeCandidates(now, dueLimit)) {
+        if (seen.has(sessionId)) continue;
+        seen.add(sessionId);
+        candidates.push(sessionId);
+      }
+    }
     const appendFairCandidates = (afterSessionId = "") => {
       const remaining = candidateLimit - candidates.length;
       if (remaining <= 0) return;

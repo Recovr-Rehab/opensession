@@ -885,4 +885,32 @@ describe("per-session session kernel storage", () => {
       .toContain("zzz-live-create");
     host.close();
   }, 30_000);
+
+  test("discovers already-indexed due work ahead of a historical scan backlog", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const dueAt = Date.now() - 1;
+    host.call("scheduleTimer", [{
+      sessionId: "zzz-overdue-effect",
+      timerId: "wake",
+      kind: "known_timer",
+      dueAt,
+      payload: null,
+    }]);
+    host.central.settleIsolatedSessionWake("zzz-overdue-effect", dueAt);
+    for (let index = 0; index < 24; index += 1) {
+      host.call("scheduleTimer", [{
+        sessionId: `aaa-recovery-${index.toString().padStart(2, "0")}`,
+        timerId: "wake",
+        kind: "known_timer",
+        dueAt,
+        payload: null,
+      }]);
+    }
+
+    const first = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
+    expect(first.timers.map((timer) => timer.sessionId))
+      .toContain("zzz-overdue-effect");
+    host.close();
+  }, 30_000);
 });

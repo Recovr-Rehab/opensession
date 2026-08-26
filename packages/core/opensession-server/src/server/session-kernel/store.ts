@@ -6971,6 +6971,30 @@ export class SessionKernelStore {
 			.map((row) => row.session_id);
 	}
 
+	/** Due work must not wait for a session-id cursor to cross a recovery
+	 * backlog. In particular, a creation effect can already have been indexed
+	 * before a restart and therefore no longer be dirty, while still requiring
+	 * immediate execution. */
+	isolatedDueWakeCandidates(now = Date.now(), limit = 2): string[] {
+		return (this.db.query(`
+			SELECT session_id FROM session_kernel_placements
+			WHERE placement = 'isolated'
+			  AND needs_scan = 0
+			  AND (next_timer_at <= ? OR next_outbox_at <= ?)
+			  AND NOT EXISTS (
+				SELECT 1 FROM session_kernel_quarantine q
+				WHERE q.session_id = session_kernel_placements.session_id
+			  )
+			ORDER BY COALESCE(
+				MIN(next_timer_at, next_outbox_at),
+				next_timer_at,
+				next_outbox_at
+			), session_id
+			LIMIT ?
+		`).all(now, now, Math.max(1, limit)) as Array<{ session_id: string }>)
+			.map((row) => row.session_id);
+	}
+
 	nextTimerWakeAt(): number | undefined {
 		const row = this.db.query(`
 			SELECT MIN(CASE WHEN next_attempt_at > due_at THEN next_attempt_at ELSE due_at END) AS next_at
