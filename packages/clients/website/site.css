@@ -1170,7 +1170,13 @@ summary:focus-visible {
 	top: 7%;
 	left: 7%;
 	width: calc(93% + 2px);
-	border-radius: 0;
+	border-radius: calc(15px * var(--rf)) 0 0 0;
+}
+
+.announcement-feature-desk img {
+	top: 3%;
+	left: 3%;
+	width: 94%;
 }
 
 .announcement-feature-automations {
@@ -1387,6 +1393,12 @@ summary:focus-visible {
 		top: 6%;
 		left: 5%;
 		width: 95%;
+	}
+
+	.announcement-feature-desk img {
+		top: 2%;
+		left: -12%;
+		width: 124%;
 	}
 
 	.announcement-feature-automations {
