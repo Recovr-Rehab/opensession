@@ -28,12 +28,16 @@ export function safetyOperationLabel(commandKind: string): string {
 export function automaticallyRecoverableSessionSafety(
   quarantine: DurableSessionQuarantine,
 ): boolean {
-  if (!quarantine.repairable) return false;
-  if (
+  const committedOutboxSettlement =
     (quarantine.commandKind === "core:ack_outbox" ||
       quarantine.commandKind === "core:fail_outbox") &&
-    /^Outbox \d+ crossed session ownership$/.test(quarantine.reason)
-  ) return true;
+    /^Outbox \d+ crossed session ownership$/.test(quarantine.reason);
+  // Catalog quarantine projections intentionally do not open per-session
+  // databases, so their repairable bit cannot include the matching durable
+  // outbox-route proof. Admit the narrowly shaped candidate here; the release
+  // reducer performs the authoritative route + absence verification.
+  if (committedOutboxSettlement) return true;
+  if (!quarantine.repairable) return false;
   const actorRestart =
     quarantine.reason === "actor restarted before execution admission" ||
     quarantine.reason === "actor restarted before acknowledgement" ||
@@ -84,6 +88,7 @@ export function publicSessionSafety(
     ),
     pausedAt: new Date(quarantine.quarantinedAt).toISOString(),
     operation: safetyOperationLabel(quarantine.commandKind),
-    repairAvailable: quarantine.repairable,
+    repairAvailable:
+      quarantine.repairable || automaticallyRecoverableSessionSafety(quarantine),
   };
 }

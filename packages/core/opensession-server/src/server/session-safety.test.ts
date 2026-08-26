@@ -61,10 +61,12 @@ describe("public session safety state", () => {
       sessionId: "committed-outbox-session",
       reason: "Outbox 4000000000001815 crossed session ownership",
       commandKind: "core:ack_outbox",
+      repairable: false,
     };
     expect(automaticallyRecoverableSessionSafety(recoverable)).toBe(true);
     expect(automaticallyRecoverableSessionSafety(delivery)).toBe(true);
     expect(automaticallyRecoverableSessionSafety(committedOutbox)).toBe(true);
+    expect(publicSessionSafety(committedOutbox).repairAvailable).toBe(true);
     expect(automaticallyRecoverableSessionSafety(contradiction)).toBe(false);
     expect(automaticallyRecoverableSessionSafety(unreconciled)).toBe(false);
 
