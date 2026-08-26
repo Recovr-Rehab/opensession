@@ -68,6 +68,7 @@
 	--modal-glass: var(--modal-surface);
 	--modal-blur: none;
 	--modal-ring: transparent;
+	--modal-glow: transparent;
 	--surface-shadow: rgba(16, 18, 22, 0.22);
 	--scrim: rgba(16, 18, 22, 0.32);
 	--field: #fbfbfa;
@@ -504,11 +505,10 @@ summary:focus-visible {
 	transform: scale(0.96);
 }
 
-/* The browser supplies focus trapping, Escape handling and top-layer
-   placement. The panel is separate so clicking the backdrop can dismiss it. */
-.pwa-guide {
-	width: min(520px, calc(100% - 32px));
-	max-height: calc(100dvh - 32px);
+/* One native-dialog shell serves every website modal. The browser owns focus
+   trapping, Escape and top-layer placement; the shared panel owns material,
+   edge, glow and close chrome. Variant classes only set size and content flow. */
+.website-modal {
 	padding: 0;
 	border: 0;
 	background: transparent;
@@ -516,17 +516,18 @@ summary:focus-visible {
 	overflow: visible;
 }
 
-/* Every modal dims the page with the same dark scrim, regardless of the
-   visitor's color scheme. Individual dialogs may choose their own blur. */
-dialog::backdrop {
-	background: var(--scrim);
+.pwa-guide {
+	width: min(520px, calc(100% - 32px));
+	max-height: calc(100dvh - 32px);
 }
 
-.pwa-guide::backdrop {
+.website-modal::backdrop {
+	background: var(--scrim);
+	-webkit-backdrop-filter: blur(8px);
 	backdrop-filter: blur(8px);
 }
 
-.pwa-guide-panel {
+.website-modal-panel {
 	position: relative;
 	padding: 30px;
 	border-radius: calc(32px * var(--rf));
@@ -534,11 +535,12 @@ dialog::backdrop {
 	background: var(--modal-surface);
 	box-shadow:
 		inset 0 0 0 1px var(--modal-ring),
+		0 0 72px -10px var(--modal-glow),
 		0 24px 70px var(--surface-shadow);
 }
 
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-	.pwa-guide-panel {
+	.website-modal-panel {
 		background: var(--modal-glass);
 		-webkit-backdrop-filter: var(--modal-blur);
 		backdrop-filter: var(--modal-blur);
@@ -546,32 +548,33 @@ dialog::backdrop {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-	.pwa-guide-panel {
+	.website-modal-panel {
 		background: var(--modal-surface);
 		-webkit-backdrop-filter: none;
 		backdrop-filter: none;
 	}
 }
 
-.pwa-guide-close {
+.website-modal-close {
 	display: grid;
 	position: absolute;
 	top: 14px;
 	right: 14px;
+	z-index: 1;
 	width: 44px;
 	height: 44px;
 	padding: 0;
 	border: 0;
-	border-radius: calc(12px * var(--rf));
-	corner-shape: var(--cs);
-	background: transparent;
+	border-radius: 50%;
+	corner-shape: round;
+	background: rgba(var(--ink-rgb), 0.055);
 	color: var(--muted);
 	cursor: pointer;
 	place-items: center;
 }
 
-.pwa-guide-close:hover {
-	background: rgba(var(--ink-rgb), 0.06);
+.website-modal-close:hover {
+	background: rgba(var(--ink-rgb), 0.1);
 	color: var(--ink);
 }
 
@@ -953,50 +956,22 @@ dialog::backdrop {
 
 /* ── Announcement ───────────────────────────────────────────────────── */
 
-/* Landing-page visitors get a native dialog, so the browser owns focus
-   trapping and Escape. A compact reading column rather than a near-fullscreen
-   sheet: the page stays visible around it. Its material is the same glass as
-   Open Session's sidebar hover cards: dense paper over a 20px saturated blur,
-   with their large popup shadow and hairline. Direct visitors get the article
-   as a normal, server-rendered page below. */
+/* The announcement uses the shared website modal material and chrome; this
+   variant only supplies the larger reading viewport. Direct visitors still
+   get the article as a normal, server-rendered page below. */
 .announcement-dialog {
 	position: relative;
 	width: min(720px, calc(100% - 32px));
 	height: min(760px, calc(100dvh - 48px));
 	max-height: none;
 	margin: auto;
+}
+
+.announcement-dialog .website-modal-panel {
+	width: 100%;
+	height: 100%;
 	padding: 0;
-	border: 0;
-	border-radius: calc(32px * var(--rf));
-	corner-shape: var(--cs);
-	background: #fff;
-	box-shadow:
-		0 4px 12px -4px rgba(0, 0, 0, 0.05),
-		0 18px 48px -14px rgba(0, 0, 0, 0.11),
-		0 0 0 1px rgba(220, 220, 220, 0.5);
-	color: #0a0a0a;
 	overflow: hidden;
-}
-
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-	.announcement-dialog {
-		background: rgba(255, 255, 255, 0.88);
-		-webkit-backdrop-filter: blur(20px) saturate(1.8);
-		backdrop-filter: blur(20px) saturate(1.8);
-	}
-}
-
-@media (prefers-reduced-transparency: reduce) {
-	.announcement-dialog {
-		background: #fff;
-		-webkit-backdrop-filter: none;
-		backdrop-filter: none;
-	}
-}
-
-.announcement-dialog::backdrop {
-	-webkit-backdrop-filter: blur(12px);
-	backdrop-filter: blur(12px);
 }
 
 .announcement-page {
@@ -1015,26 +990,6 @@ dialog::backdrop {
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-gutter: stable;
-}
-
-/* The same close button the download and setup modals use, with its colors
-   pinned because this panel stays light in dark mode. */
-.announcement-dialog .pwa-guide-close {
-	z-index: 1;
-	border-radius: 50%;
-	corner-shape: round;
-	background: rgba(255, 255, 255, 0.62);
-	-webkit-backdrop-filter: blur(12px);
-	backdrop-filter: blur(12px);
-	box-shadow:
-		0 2px 8px rgba(0, 0, 0, 0.08),
-		0 0 0 1px rgba(10, 10, 10, 0.06);
-	color: #666;
-}
-
-.announcement-dialog .pwa-guide-close:hover {
-	background: rgba(255, 255, 255, 0.86);
-	color: #0a0a0a;
 }
 
 .announcement-home {
@@ -1073,10 +1028,12 @@ dialog::backdrop {
 /* Inside the compact dialog the article steps down from page scale. */
 .announcement-dialog .announcement-article {
 	padding-block: 56px 72px;
+	color: var(--muted);
 	font-size: 17px;
 }
 
 .announcement-dialog .announcement-article h1 {
+	color: var(--ink);
 	font-size: 27px;
 }
 
@@ -1086,6 +1043,7 @@ dialog::backdrop {
 
 .announcement-dialog .announcement-article h2 {
 	margin-top: 52px;
+	color: var(--ink);
 	font-size: 21px;
 }
 
@@ -1319,12 +1277,12 @@ dialog::backdrop {
 		margin-top: 40px;
 	}
 
-	.pwa-guide-panel {
+	.website-modal-panel {
 		padding: 24px;
 		border-radius: calc(28px * var(--rf));
 	}
 
-	.pwa-guide-close {
+	.website-modal-close {
 		top: 10px;
 		right: 10px;
 	}
@@ -1383,7 +1341,7 @@ dialog::backdrop {
 		animation: enter 700ms cubic-bezier(0.23, 1, 0.32, 1) both;
 	}
 
-	.pwa-guide[open] .pwa-guide-panel {
+	.pwa-guide[open] .website-modal-panel {
 		animation: dialog-enter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
 	}
 
@@ -1448,7 +1406,8 @@ dialog::backdrop {
 		--modal-surface: color-mix(in oklch, var(--surface) 90%, var(--ink));
 		--modal-glass: color-mix(in srgb, var(--modal-surface) 78%, transparent);
 		--modal-blur: blur(20px) saturate(1.6);
-		--modal-ring: oklch(1 0 0 / 0.09);
+		--modal-ring: oklch(1 0 0 / 0.11);
+		--modal-glow: color-mix(in oklch, var(--accent-blue) 32%, transparent);
 		--surface-shadow: color-mix(in srgb, black 38%, transparent);
 		--scrim: color-mix(in srgb, black 24%, transparent);
 		--field: #1a1a1d;
@@ -1486,23 +1445,15 @@ dialog::backdrop {
 	width: min(760px, calc(100% - 32px));
 }
 
-.setup-guide:has(.download-cards) .pwa-guide-panel,
-.setup-guide:has(.download-steps) .pwa-guide-panel {
+.setup-guide:has(.download-cards) .website-modal-panel,
+.setup-guide:has(.download-steps) .website-modal-panel {
 	padding: 36px;
 }
 
-.setup-guide:has(.download-cards) .pwa-guide-close,
-.setup-guide:has(.download-steps) .pwa-guide-close {
+.setup-guide:has(.download-cards) .website-modal-close,
+.setup-guide:has(.download-steps) .website-modal-close {
 	top: 18px;
 	right: 18px;
-	border-radius: 50%;
-	corner-shape: round;
-	background: rgba(var(--ink-rgb), 0.055);
-}
-
-.setup-guide:has(.download-cards) .pwa-guide-close:hover,
-.setup-guide:has(.download-steps) .pwa-guide-close:hover {
-	background: rgba(var(--ink-rgb), 0.1);
 }
 
 .setup-guide:has(.download-cards) h2,

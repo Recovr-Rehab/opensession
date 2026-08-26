@@ -191,6 +191,64 @@ function DownloadAppsCards({
 	);
 }
 
+function WebsiteModal({
+	dialogRef,
+	className,
+	labelledBy,
+	closeLabel = "Close",
+	onClose,
+	onRequestClose,
+	autoFocusClose = false,
+	children,
+}: {
+	dialogRef: RefObject<HTMLDialogElement | null>;
+	className: string;
+	labelledBy: string;
+	closeLabel?: string;
+	onClose?: () => void;
+	onRequestClose?: () => void;
+	autoFocusClose?: boolean;
+	children: ReactNode;
+}) {
+	const requestClose = () => {
+		if (onRequestClose) onRequestClose();
+		else dialogRef.current?.close();
+	};
+
+	return (
+		<dialog
+			ref={dialogRef}
+			className={`website-modal ${className}`}
+			aria-labelledby={labelledBy}
+			onClose={onClose}
+			onCancel={
+				onRequestClose
+					? (event) => {
+							event.preventDefault();
+							requestClose();
+						}
+					: undefined
+			}
+			onClick={(event) => {
+				if (event.target === event.currentTarget) requestClose();
+			}}
+		>
+			<div className="website-modal-panel">
+				<button
+					type="button"
+					className="website-modal-close"
+					aria-label={closeLabel}
+					autoFocus={autoFocusClose}
+					onClick={requestClose}
+				>
+					<IconX size={22} />
+				</button>
+				{children}
+			</div>
+		</dialog>
+	);
+}
+
 function InstallHelpDialog({
 	dialogRef,
 	onClose,
@@ -199,43 +257,30 @@ function InstallHelpDialog({
 	onClose: () => void;
 }) {
 	return (
-		<dialog
-			ref={dialogRef}
+		<WebsiteModal
+			dialogRef={dialogRef}
 			className="pwa-guide setup-guide"
-			aria-labelledby="install-help-title"
+			labelledBy="install-help-title"
 			onClose={onClose}
-			onClick={(event) => {
-				if (event.target === event.currentTarget) event.currentTarget.close();
-			}}
 		>
-			<div className="pwa-guide-panel">
-				<button
-					type="button"
-					className="pwa-guide-close"
-					aria-label="Close"
-					onClick={() => dialogRef.current?.close()}
-				>
-					<IconX size={22} />
-				</button>
-				<h2 id="install-help-title">Install the web app</h2>
-				<div className="download-steps">
-					<ol>
-						<li>
-							<strong>Open in your browser</strong>
-							<span>Use Safari on iPhone or iPad, or Chrome on Android and desktop.</span>
-						</li>
-						<li>
-							<strong>Open the browser menu</strong>
-							<span>On iPhone or iPad, tap Share. Elsewhere, open the browser menu.</span>
-						</li>
-						<li>
-							<strong>Add Open Session</strong>
-							<span>Choose Add to Home Screen, Install app, or Add to Dock.</span>
-						</li>
-					</ol>
-				</div>
+			<h2 id="install-help-title">Install the web app</h2>
+			<div className="download-steps">
+				<ol>
+					<li>
+						<strong>Open in your browser</strong>
+						<span>Use Safari on iPhone or iPad, or Chrome on Android and desktop.</span>
+					</li>
+					<li>
+						<strong>Open the browser menu</strong>
+						<span>On iPhone or iPad, tap Share. Elsewhere, open the browser menu.</span>
+					</li>
+					<li>
+						<strong>Add Open Session</strong>
+						<span>Choose Add to Home Screen, Install app, or Add to Dock.</span>
+					</li>
+				</ol>
 			</div>
-		</dialog>
+		</WebsiteModal>
 	);
 }
 
@@ -273,28 +318,15 @@ function SetupGuide({
 				{triggerIcon}
 				{triggerLabel}
 			</button>
-			<dialog
-				ref={dialogRef}
+			<WebsiteModal
+				dialogRef={dialogRef}
 				className="pwa-guide setup-guide"
-				aria-labelledby={titleId}
-				onClick={(event) => {
-					if (event.target === event.currentTarget) event.currentTarget.close();
-				}}
+				labelledBy={titleId}
 			>
-				<div className="pwa-guide-panel">
-					<button
-						type="button"
-						className="pwa-guide-close"
-						aria-label="Close"
-						onClick={() => dialogRef.current?.close()}
-					>
-						<IconX size={22} />
-					</button>
-					<h2 id={titleId}>{title}</h2>
-					{description && <p>{description}</p>}
-					{children}
-				</div>
-			</dialog>
+				<h2 id={titleId}>{title}</h2>
+				{description && <p>{description}</p>}
+				{children}
+			</WebsiteModal>
 		</>
 	);
 }
@@ -472,31 +504,18 @@ function AnnouncementDialog({
 	}, [open]);
 
 	return (
-		<dialog
-			ref={dialogRef}
+		<WebsiteModal
+			dialogRef={dialogRef}
 			className="announcement-dialog"
-			aria-labelledby="announcement-title"
-			onCancel={(event) => {
-				event.preventDefault();
-				onRequestClose();
-			}}
-			onClick={(event) => {
-				if (event.target === event.currentTarget) onRequestClose();
-			}}
+			labelledBy="announcement-title"
+			closeLabel="Close announcement"
+			onRequestClose={onRequestClose}
+			autoFocusClose
 		>
-			<button
-				type="button"
-				className="pwa-guide-close"
-				aria-label="Close announcement"
-				autoFocus
-				onClick={onRequestClose}
-			>
-				<IconX size={22} />
-			</button>
 			<div className="announcement-scroll">
 				<AnnouncementArticle />
 			</div>
-		</dialog>
+		</WebsiteModal>
 	);
 }
 
