@@ -263,6 +263,7 @@ import {
 	WorkspaceSummaryBody,
 } from "./WorkspaceSummary";
 import { SpinOffMenu } from "./SpinOffMenu";
+import { DeleteSessionDialog } from "./DeleteSessionDialog";
 import {
 	IconSidebarRight,
 	IconTrash,
@@ -394,7 +395,6 @@ import {
 	VIEWER_BRANCH_EDITABLE,
 	VIEWER_BRANCH_RENAME,
 	VIEWER_CRUMB_UP,
-	VIEWER_DELETE_CONFIRM,
 	VIEWER_HEADER,
 	VIEWER_HEADER_ACTIONS,
 	VIEWER_INPUT,
@@ -1895,6 +1895,12 @@ export function SessionViewer({
 		suspendEndMaintenance,
 		onScroll,
 	} = useSessionScroll(true);
+	// An explicit send first resumes live-edge following immediately, then needs
+	// one more positioning pass after React has committed the optimistic row.
+	// Scrolling only in the event handler targets the old scrollHeight; the row
+	// does not exist in the DOM yet, so selection/disclosure guards or delayed
+	// virtualizer measurement can otherwise leave part of it below the composer.
+	const sentPromptNeedsLayoutScrollRef = useRef(false);
 
 	// A fold toggle (turn work blocks, tool-call details, review loops) changes
 	// block heights above the reader. Hold the live-edge glue off for the two
@@ -3667,7 +3673,17 @@ export function SessionViewer({
 	// Layout effect so the adjustment happens before the browser paints — no flicker.
 	useLayoutEffect(() => {
 		relayout();
-	}, [entries, queued, visibleSteered, pending, relayout]);
+		if (!sentPromptNeedsLayoutScrollRef.current) return;
+		sentPromptNeedsLayoutScrollRef.current = false;
+		scrollToLatest("auto");
+	}, [
+		entries,
+		queued,
+		visibleSteered,
+		pending,
+		relayout,
+		scrollToLatest,
+	]);
 
 	// Shared preamble: stop tracking the live edge, and pin the reader to the
 	// content they're on while the page prepends above it.
@@ -4318,6 +4334,9 @@ export function SessionViewer({
 		if (!isBusy) {
 			setIsRunningLive(true);
 			onRunningChange?.(session.id, true);
+			// The event-handler scroll below can only target the pre-send DOM. Arm a
+			// second, pre-paint pass for the commit that contains this optimistic row.
+			sentPromptNeedsLayoutScrollRef.current = true;
 			// Show it immediately; it reconciles away when the real transcript entry
 			// arrives (or the queue echo, if the server turns out to be busy).
 			setPending((p) => [
@@ -5386,11 +5405,6 @@ export function SessionViewer({
 		return () =>
 			window.removeEventListener("opensession:toggle-session-settings", toggle);
 	}, [session.id]);
-	// Closing the menu disarms a half-finished delete confirm — reopening it
-	// later shouldn't present the destructive choices without a fresh click.
-	useEffect(() => {
-		if (!overflowOpen && !infoPageOpen) setShowDeleteConfirm(false);
-	}, [overflowOpen, infoPageOpen]);
 	// The menu's contents change across the breakpoint — don't leave it stuck open.
 	useEffect(() => {
 		setOverflowOpen(false);
@@ -5788,6 +5802,13 @@ export function SessionViewer({
 					</div>
 				</div>
 			)}
+			<DeleteSessionDialog
+				open={showDeleteConfirm}
+				onOpenChange={setShowDeleteConfirm}
+				hasWorktree={Boolean(session.worktreeDir && !isAsk)}
+				deleting={deleting}
+				onDelete={(cleanWorktree) => void handleDelete(cleanWorktree)}
+			/>
 			<Modal.Root
 				open={branchConfirmOpen}
 				onOpenChange={(open) => {
@@ -6122,9 +6143,8 @@ export function SessionViewer({
 				);
 				// Delete is destructive, so it never rides in the visible action bar —
 				// it always lives inside the ⋯ menu, one deliberate hop away.
-				const deleteAction = !showDeleteConfirm ? (
+				const deleteAction = (
 					<Menu.Item
-						closeOnClick={false}
 						// Red at rest, not only under the cursor. This is the one row in
 						// the menu that cannot be undone, and a row that looks ordinary
 						// until you are already on it announces that too late.
@@ -6135,38 +6155,6 @@ export function SessionViewer({
 						<IconTrash size={20} />
 						<span className="grow">Delete session</span>
 					</Menu.Item>
-				) : (
-					<div className={VIEWER_DELETE_CONFIRM}>
-						{session.worktreeDir && !isAsk && (
-							<Button
-								variant="danger"
-								size="sm"
-								className="min-h-0 px-3 py-[5px] text-label"
-								onClick={() => handleDelete(true)}
-								disabled={deleting}
-							>
-								{deleting ? "…" : "+ Worktree"}
-							</Button>
-						)}
-						<Button
-							variant="warning"
-							size="sm"
-							className="min-h-0 px-3 py-[5px] text-label"
-							onClick={() => handleDelete(false)}
-							disabled={deleting}
-						>
-							{deleting ? "…" : "Session"}
-						</Button>
-						<Button
-							variant="soft"
-							size="sm"
-							className="min-h-0 px-3 py-[5px] text-label"
-							onClick={() => setShowDeleteConfirm(false)}
-							disabled={deleting}
-						>
-							Cancel
-						</Button>
-					</div>
 				);
 				// Secondary header controls (Linear/Plain links). Inline on desktop;
 				// on phones they fold into the ⋯ menu so the single top bar holds only
