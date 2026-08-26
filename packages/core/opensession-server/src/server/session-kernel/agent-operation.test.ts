@@ -9,6 +9,7 @@ import {
   decodeAgentOperationRequest,
   type AgentOperationIdentity,
   type AgentOperationRequest,
+  type AgentOperationTerminal,
 } from "./agent-operation-protocol";
 import { SessionKernelStore } from "./store";
 
@@ -97,7 +98,7 @@ function terminal(
   identity: AgentOperationIdentity,
   op: "settle" | "indeterminate" = "settle",
   pendingToolUseEntryIds: readonly string[] = [],
-): AgentOperationRequest {
+): AgentOperationTerminal {
   const entryIds = [`${identity.operationId}-output`];
   if (identity.kind === "model") entryIds.push(...pendingToolUseEntryIds);
   return {
@@ -145,7 +146,10 @@ describe("schema 28 actor-owned Agent operations", () => {
       }),
     ).toBeUndefined();
     const accessor = { ...valid } as Record<string, unknown>;
-    Object.defineProperty(accessor, "op", { enumerable: true, get: () => "admit" });
+    Object.defineProperty(accessor, "op", {
+      enumerable: true,
+      get: () => "admit",
+    });
     expect(decodeAgentOperationRequest(accessor)).toBeUndefined();
     expect(
       decodeAgentOperationRequest(
@@ -153,8 +157,6 @@ describe("schema 28 actor-owned Agent operations", () => {
       ),
     ).toBeUndefined();
     const contradictory = terminal(identity);
-    if (contradictory.op === "query" || contradictory.op === "admit")
-      throw new Error("expected terminal fixture");
     expect(
       decodeAgentOperationRequest({
         ...contradictory,
@@ -185,8 +187,6 @@ describe("schema 28 actor-owned Agent operations", () => {
       reason: "operation_barrier",
     });
     const reversed = terminal(identity, "settle", ["tool-a", "tool-b"]);
-    if (reversed.op === "query" || reversed.op === "admit")
-      throw new Error("expected terminal fixture");
     expect(
       store.decideAgentOperation({
         ...reversed,
@@ -331,7 +331,9 @@ describe("schema 28 actor-owned Agent operations", () => {
         entryIds: ["operation-1-output", "tool-a", "tool-b"],
       },
     };
-    expect(reopened.decideAgentOperation({ op: "admit", identity: mcp }).accepted).toBe(true);
+    expect(
+      reopened.decideAgentOperation({ op: "admit", identity: mcp }).accepted,
+    ).toBe(true);
     reopened.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -347,7 +349,10 @@ describe("schema 28 actor-owned Agent operations", () => {
     );
     db.close();
     expect(
-      setup.store.decideAgentOperation({ op: "query", identity: setup.identity }),
+      setup.store.decideAgentOperation({
+        op: "query",
+        identity: setup.identity,
+      }),
     ).toEqual({ accepted: false, reason: "operation_barrier" });
     expect(setup.store.quarantinedSession("session-1")?.reason).toContain(
       "Corrupt or contradictory",
@@ -473,6 +478,179 @@ describe("schema 28 actor-owned Agent operations", () => {
       reopened.decideAgentOperation({ op: "query", identity: setup.identity }),
     ).toThrow();
     reopened.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("strictly decodes cancellation requests and rejects accessors and extra keys", () => {
+    const { store, identity } = fixture();
+    const valid = {
+      op: "cancel",
+      identity,
+      cancelId: "cancel-1",
+      reason: "user",
+    } as const;
+    expect(decodeAgentOperationRequest(valid)).toEqual(valid);
+    expect(
+      decodeAgentOperationRequest({ ...valid, extra: true }),
+    ).toBeUndefined();
+    expect(
+      decodeAgentOperationRequest({ ...valid, reason: "timeout" }),
+    ).toBeUndefined();
+    const accessor = { ...valid } as Record<string, unknown>;
+    Object.defineProperty(accessor, "cancelId", {
+      enumerable: true,
+      get: () => "cancel-1",
+    });
+    expect(decodeAgentOperationRequest(accessor)).toBeUndefined();
+    store.close();
+  });
+
+  test("persists exact requested intent before terminal settlement and fails conflicts closed", () => {
+    const { store, identity } = fixture();
+    expect(store.decideAgentOperation({ op: "admit", identity }).accepted).toBe(
+      true,
+    );
+    const before = Date.now();
+    const request = {
+      op: "cancel",
+      identity,
+      cancelId: "cancel-1",
+      reason: "user",
+    } as const;
+    const first = store.decideAgentOperation(request);
+    expect(first).toMatchObject({
+      accepted: true,
+      replayed: false,
+      intent: {
+        cancelId: "cancel-1",
+        reason: "user",
+        disposition: "requested",
+      },
+    });
+    if (first.accepted)
+      expect(first.intent.requestedAtMs).toBeGreaterThanOrEqual(before);
+    expect(store.decideAgentOperation(request)).toEqual(
+      first.accepted ? { ...first, replayed: true } : first,
+    );
+    expect(store.agentOperationCancellationIntent(identity)).toEqual(
+      first.accepted ? first.intent : undefined,
+    );
+    expect(store.decideAgentOperation(terminal(identity)).accepted).toBe(true);
+    const terminalReceipt = store.decideAgentOperation({
+      op: "query",
+      identity,
+    });
+    expect(terminalReceipt.accepted && terminalReceipt.receipt.state).toBe(
+      "settled",
+    );
+    expect(
+      store.decideAgentOperation({
+        ...request,
+        cancelId: "cancel-2",
+      }),
+    ).toEqual({ accepted: false, reason: "operation_barrier" });
+    expect(store.quarantinedSession(identity.sessionId)?.reason).toContain(
+      "crossover",
+    );
+    store.close();
+  });
+
+  test("durably records too_late without changing an existing terminal receipt", () => {
+    const { store, identity } = fixture();
+    store.decideAgentOperation({ op: "admit", identity });
+    const settled = store.decideAgentOperation(terminal(identity));
+    const cancelled = store.decideAgentOperation({
+      op: "cancel",
+      identity,
+      cancelId: "cancel-late",
+      reason: "turn_deadline",
+    });
+    expect(cancelled).toMatchObject({
+      accepted: true,
+      replayed: false,
+      intent: { disposition: "too_late" },
+    });
+    expect(store.decideAgentOperation({ op: "query", identity })).toEqual(
+      settled.accepted ? { ...settled, replayed: true } : settled,
+    );
+    store.close();
+  });
+
+  test("migrates schema 31 and recovers exact cancellation intent after restart", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-op-cancel-restart-"));
+    const path = join(dir, "kernel.sqlite");
+    const setup = fixture(path);
+    setup.store.decideAgentOperation({ op: "admit", identity: setup.identity });
+    const cancellation = setup.store.decideAgentOperation({
+      op: "cancel",
+      identity: setup.identity,
+      cancelId: "cancel-restart",
+      reason: "shutdown",
+    });
+    setup.store.close();
+    const reopened = new SessionKernelStore(path);
+    expect(reopened.agentOperationCancellationIntent(setup.identity)).toEqual(
+      cancellation.accepted ? cancellation.intent : undefined,
+    );
+    reopened.close();
+
+    const legacy = new Database(path);
+    legacy.exec(
+      `DROP TABLE session_kernel_agent_operation_cancellations; PRAGMA user_version = 31`,
+    );
+    legacy.close();
+    const migrated = new SessionKernelStore(path);
+    expect(migrated.stats().schemaVersion).toBe(32);
+    migrated.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("quarantines tampered cancellation evidence and isolates unrelated operations", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-op-cancel-tamper-"));
+    const path = join(dir, "kernel.sqlite");
+    const setup = fixture(path);
+    setup.store.decideAgentOperation({ op: "admit", identity: setup.identity });
+    setup.store.decideAgentOperation({
+      op: "cancel",
+      identity: setup.identity,
+      cancelId: "cancel-tamper",
+      reason: "reconnect_deadline",
+    });
+    const unrelated = { ...setup.identity, operationId: "operation-unrelated" };
+    const unrelatedSession = { ...setup.identity, sessionId: "session-unrelated" };
+    expect(
+      setup.store.agentOperationCancellationIntent(unrelated),
+    ).toBeUndefined();
+    expect(
+      setup.store.agentOperationCancellationIntent(unrelatedSession),
+    ).toBeUndefined();
+    expect(setup.store.quarantinedSession("session-unrelated")).toBeUndefined();
+    const tamper = new Database(path);
+    tamper.run(
+      `UPDATE session_kernel_agent_operation_cancellations SET reason='user'
+       WHERE session_id=? AND operation_id=?`,
+      [setup.identity.sessionId, setup.identity.operationId],
+    );
+    tamper.close();
+    expect(
+      setup.store.agentOperationCancellationIntent(setup.identity),
+    ).toBeUndefined();
+    expect(
+      setup.store.quarantinedSession(setup.identity.sessionId)?.reason,
+    ).toContain("cancellation");
+    setup.store.clearSession(setup.identity.sessionId);
+    const inspect = new Database(path, { readonly: true });
+    expect(
+      (
+        inspect
+          .query(
+            "SELECT COUNT(*) AS count FROM session_kernel_agent_operation_cancellations",
+          )
+          .get() as { count: number }
+      ).count,
+    ).toBe(0);
+    inspect.close();
+    setup.store.close();
     rmSync(dir, { recursive: true, force: true });
   });
 });

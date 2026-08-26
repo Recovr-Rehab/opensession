@@ -27,7 +27,14 @@ import type {
   DeliveryMutationReply,
 } from "./delivery-protocol";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
-import type { AgentOperationRequest, AgentOperationResult } from "./agent-operation-protocol";
+import type {
+  AgentOperationCancel,
+  AgentOperationCancellationIntent,
+  AgentOperationCancellationResult,
+  AgentOperationIdentity,
+  AgentOperationRequest,
+  AgentOperationResult,
+} from "./agent-operation-protocol";
 import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
 import type { TimerActorRequest, TimerActorResult } from "./timer-protocol";
 import type { GatewayCommandRequest, GatewayCommandResult } from "./gateway-command-protocol";
@@ -330,10 +337,18 @@ export class SessionKernelActorClient {
     );
   }
 
-  decideAgentOperationAsync(
-    request: AgentOperationRequest,
-  ): Promise<AgentOperationResult> {
-    return this.callAsync<AgentOperationResult>(
+  decideAgentOperationAsync<T extends AgentOperationRequest>(
+    request: T,
+  ): Promise<
+    T extends AgentOperationCancel
+      ? AgentOperationCancellationResult
+      : AgentOperationResult
+  > {
+    return this.callAsync<
+      T extends AgentOperationCancel
+        ? AgentOperationCancellationResult
+        : AgentOperationResult
+    >(
       {
         t: "reduce",
         command: {
@@ -343,6 +358,19 @@ export class SessionKernelActorClient {
         },
       },
       `Agent operation ${request.op}`,
+    );
+  }
+
+  agentOperationCancellationIntentAsync(
+    identity: AgentOperationIdentity,
+  ): Promise<AgentOperationCancellationIntent | undefined> {
+    return this.callAsync<AgentOperationCancellationIntent | undefined>(
+      {
+        t: "store",
+        method: "agentOperationCancellationIntent",
+        args: [identity],
+      },
+      "Agent operation cancellation intent query",
     );
   }
 

@@ -26,8 +26,13 @@ import {
   SESSION_KERNEL_MAX_AGENT_OPERATIONS_PER_TURN,
   canonicalAgentOperationIdentity,
   canonicalAgentOperationTerminal,
+  decodeAgentOperationCancellationIntent,
   decodeAgentOperationReceipt,
   decodeAgentOperationRequest,
+  type AgentOperationCancel,
+  type AgentOperationCancellationIntent,
+  type AgentOperationCancellationResult,
+  type AgentOperationIdentity,
   type AgentOperationReceipt,
   type AgentOperationRequest,
   type AgentOperationResult,
@@ -268,7 +273,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 31;
+export const SESSION_KERNEL_SCHEMA_VERSION = 32;
 export const SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS = 64;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
@@ -594,6 +599,170 @@ function assertAgentOperationSchema28(db: Database): void {
   if(JSON.stringify(indexes.map(({name,sql})=>[name,normalize(sql)]))!==JSON.stringify(wantedIndexes)) throw new Error("Agent operation schema indexes do not match exact schema 28");
   const integrity=db.query("PRAGMA quick_check").get() as Record<string,unknown>;
   if(!Object.values(integrity).includes("ok")) throw new Error("Agent operation schema integrity check failed");
+}
+
+type DurableAgentOperationCancellationRow = {
+  session_id: string;
+  operation_id: string;
+  identity_hash: string;
+  identity: string;
+  cancel_id: string;
+  reason: string;
+  disposition: "requested" | "too_late";
+  requested_at: number;
+  intent: string;
+};
+
+function decodeDurableAgentOperationCancellationRow(
+  row: DurableAgentOperationCancellationRow,
+  operation?: AgentOperationReceipt,
+): AgentOperationCancellationIntent {
+  const intent = decodeAgentOperationCancellationIntent(
+    parseStrictJson(row.intent),
+  );
+  if (!intent)
+    throw new Error("Agent operation cancellation row has invalid intent");
+  const identityText = canonicalAgentOperationIdentity(intent.identity);
+  const identityHash = `sha256:${digest(identityText)}`;
+  if (
+    row.session_id !== intent.identity.sessionId ||
+    row.operation_id !== intent.identity.operationId ||
+    row.identity_hash !== identityHash ||
+    row.identity !== identityText ||
+    row.cancel_id !== intent.cancelId ||
+    row.reason !== intent.reason ||
+    row.disposition !== intent.disposition ||
+    Number(row.requested_at) !== intent.requestedAtMs ||
+    row.intent !== json(intent) ||
+    (operation &&
+      canonicalAgentOperationIdentity(operation.identity) !== identityText)
+  )
+    throw new Error("Agent operation cancellation row contradicts its intent");
+  return intent;
+}
+
+function assertAgentOperationCancellationSchema32(db: Database): void {
+  const row = db
+    .query(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='session_kernel_agent_operation_cancellations'",
+    )
+    .get() as { sql: string } | null;
+  const normalize = (value: string) =>
+    value.toLowerCase().replace(/\s+/g, " ").trim();
+  const columns = db
+    .query("PRAGMA table_xinfo(session_kernel_agent_operation_cancellations)")
+    .all() as Array<{
+    name: string;
+    type: string;
+    notnull: number;
+    pk: number;
+    hidden: number;
+  }>;
+  const expected = [
+    ["session_id", "TEXT", 1, 1, 0],
+    ["operation_id", "TEXT", 1, 2, 0],
+    ["identity_hash", "TEXT", 1, 0, 0],
+    ["identity", "TEXT", 1, 0, 0],
+    ["cancel_id", "TEXT", 1, 0, 0],
+    ["reason", "TEXT", 1, 0, 0],
+    ["disposition", "TEXT", 1, 0, 0],
+    ["requested_at", "INTEGER", 1, 0, 0],
+    ["intent", "TEXT", 1, 0, 0],
+  ];
+  const actual = columns.map(({ name, type, notnull, pk, hidden }) => [
+    name,
+    type,
+    notnull,
+    pk,
+    hidden,
+  ]);
+  const sql = row?.sql ? normalize(row.sql) : "";
+  if (
+    !sql.endsWith(") strict") ||
+    JSON.stringify(actual) !== JSON.stringify(expected) ||
+    !sql.includes("primary key(session_id, operation_id)") ||
+    !sql.includes(
+      "check(identity_hash glob 'sha256:*' and length(identity_hash)=71)",
+    ) ||
+    !sql.includes(
+      "check(reason in ('user','turn_deadline','shutdown','reconnect_deadline'))",
+    ) ||
+    !sql.includes("check(disposition in ('requested','too_late'))") ||
+    !sql.includes("check(requested_at >= 0)")
+  )
+    throw new Error(
+      "Agent operation cancellation schema does not match exact schema 32",
+    );
+  const integrity = db.query("PRAGMA quick_check").get() as Record<
+    string,
+    unknown
+  >;
+  if (!Object.values(integrity).includes("ok"))
+    throw new Error(
+      "Agent operation cancellation schema integrity check failed",
+    );
+}
+
+function assertAgentOperationCancellationRows32(
+  db: Database,
+  sessionId?: string,
+): void {
+  const rows = db
+    .query(
+      `SELECT cancel.* FROM session_kernel_agent_operation_cancellations AS cancel
+     WHERE ? IS NULL OR cancel.session_id=?`,
+    )
+    .all(
+      sessionId ?? null,
+      sessionId ?? null,
+    ) as DurableAgentOperationCancellationRow[];
+  for (const row of rows) {
+    const operationRow = db
+      .query(
+        "SELECT * FROM session_kernel_agent_operations WHERE session_id=? AND operation_id=?",
+      )
+      .get(row.session_id, row.operation_id) as DurableAgentOperationRow | null;
+    if (!operationRow)
+      throw new Error("Agent operation cancellation has no durable operation");
+    decodeDurableAgentOperationCancellationRow(
+      row,
+      decodeDurableAgentOperationRow(operationRow),
+    );
+  }
+}
+
+function migrateAgentOperationCancellationSchema32(
+  db: Database,
+  schemaVersion: number,
+): void {
+  if (schemaVersion >= 32) return;
+  const tx = db.transaction(() => {
+    const prior = db
+      .query(
+        "SELECT name FROM sqlite_master WHERE name='session_kernel_agent_operation_cancellations'",
+      )
+      .get();
+    if (prior)
+      throw new Error(
+        "Partial Agent operation cancellation schema is unsupported",
+      );
+    db.exec(`
+      CREATE TABLE session_kernel_agent_operation_cancellations (
+        session_id TEXT NOT NULL,
+        operation_id TEXT NOT NULL,
+        identity_hash TEXT NOT NULL CHECK(identity_hash GLOB 'sha256:*' AND length(identity_hash)=71),
+        identity TEXT NOT NULL,
+        cancel_id TEXT NOT NULL,
+        reason TEXT NOT NULL CHECK(reason IN ('user','turn_deadline','shutdown','reconnect_deadline')),
+        disposition TEXT NOT NULL CHECK(disposition IN ('requested','too_late')),
+        requested_at INTEGER NOT NULL CHECK(requested_at >= 0),
+        intent TEXT NOT NULL,
+        PRIMARY KEY(session_id, operation_id)
+      ) STRICT;
+      PRAGMA user_version = 32;
+    `);
+  });
+  tx.immediate();
 }
 
 function migrateSparseProjectionSchema29(
@@ -1189,6 +1358,7 @@ const SESSION_KERNEL_SESSION_TABLES = [
   "session_kernel_agent_host_plan",
   "session_kernel_agent_host_supervision",
   "session_kernel_agent_operations",
+  "session_kernel_agent_operation_cancellations",
   "session_kernel_agent_operation_high_water",
   "session_kernel_commands",
   "session_kernel_changes",
@@ -1701,8 +1871,11 @@ export class SessionKernelStore {
     migrateSparseProjectionSchema29(this.db, schemaVersion);
     migrateQuarantineProjectionSchema30(this.db, schemaVersion);
     migrateTranscriptAuthoritySchema31(this.db, schemaVersion);
+    migrateAgentOperationCancellationSchema32(this.db, schemaVersion);
     assertAgentOperationSchema28(this.db);
     assertAgentOperationRows28(this.db);
+    assertAgentOperationCancellationSchema32(this.db);
+    assertAgentOperationCancellationRows32(this.db);
 		if (path !== ":memory:") {
 			try {
 				chmodSync(path, 0o600);
@@ -1932,6 +2105,7 @@ export class SessionKernelStore {
 		if (commandKind === "agent_operation") {
 			try {
 				assertAgentOperationRows28(this.db, sessionId);
+        assertAgentOperationCancellationRows32(this.db, sessionId);
 			} catch {
 				return false;
 			}
@@ -2774,7 +2948,14 @@ export class SessionKernelStore {
     return result;
   }
 
-  decideAgentOperation(raw: AgentOperationRequest): AgentOperationResult {
+  decideAgentOperation<T extends AgentOperationRequest>(
+    raw: T,
+  ): T extends AgentOperationCancel
+    ? AgentOperationCancellationResult
+    : AgentOperationResult;
+  decideAgentOperation(
+    raw: AgentOperationRequest,
+  ): AgentOperationResult | AgentOperationCancellationResult {
     const request = decodeAgentOperationRequest(raw);
     if (!request) return { accepted: false, reason: "invalid_request" };
     const identity = request.identity;
@@ -2785,7 +2966,7 @@ export class SessionKernelStore {
     const { operationId: _operationId, ...semanticIdentity } = identity;
     const semanticHash = `sha256:${digest(JSON.stringify(semanticIdentity))}`;
     const now = Date.now();
-    let result!: AgentOperationResult;
+    let result!: AgentOperationResult | AgentOperationCancellationResult;
     const tx = this.db.transaction(() => {
       const existingQuarantine = this.db
         .query(
@@ -2849,6 +3030,72 @@ export class SessionKernelStore {
       ) {
         quarantine("Agent operation identity crossover");
         result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      if (request.op === "cancel") {
+        if (!rawRow || !rowReceipt) {
+          result = { accepted: false, reason: "not_found" };
+          return;
+        }
+        const durableCancellation = this.db
+          .query(
+            `SELECT * FROM session_kernel_agent_operation_cancellations
+           WHERE session_id=? AND operation_id=?`,
+          )
+          .get(
+            identity.sessionId,
+            identity.operationId,
+          ) as DurableAgentOperationCancellationRow | null;
+        if (durableCancellation) {
+          let intent: AgentOperationCancellationIntent;
+          try {
+            intent = decodeDurableAgentOperationCancellationRow(
+              durableCancellation,
+              rowReceipt,
+            );
+          } catch {
+            quarantine(
+              "Corrupt or contradictory Agent operation cancellation intent",
+            );
+            result = { accepted: false, reason: "operation_barrier" };
+            return;
+          }
+          if (
+            intent.cancelId !== request.cancelId ||
+            intent.reason !== request.reason
+          ) {
+            quarantine("Agent operation cancellation intent crossover");
+            result = { accepted: false, reason: "operation_barrier" };
+            return;
+          }
+          result = { accepted: true, replayed: true, intent };
+          return;
+        }
+        const intent: AgentOperationCancellationIntent = {
+          identity,
+          cancelId: request.cancelId,
+          reason: request.reason,
+          disposition:
+            rowReceipt.state === "admitted" ? "requested" : "too_late",
+          requestedAtMs: now,
+        };
+        this.db.run(
+          `INSERT INTO session_kernel_agent_operation_cancellations
+           (session_id,operation_id,identity_hash,identity,cancel_id,reason,
+            disposition,requested_at,intent) VALUES (?,?,?,?,?,?,?,?,?)`,
+          [
+            identity.sessionId,
+            identity.operationId,
+            identityHash,
+            identityText,
+            request.cancelId,
+            request.reason,
+            intent.disposition,
+            now,
+            json(intent),
+          ],
+        );
+        result = { accepted: true, replayed: false, intent };
         return;
       }
       if (request.op === "query") {
@@ -3004,7 +3251,9 @@ export class SessionKernelStore {
         authorityRow.key_id !== authority.keyId ||
         authorityRow.signature !== envelope.signature ||
         Number(authorityRow.expires_at) !== authority.expiresAtMs ||
-        !Buffer.from(envelope.authorityBytes, "base64url").equals(authorityBytes)
+        !Buffer.from(envelope.authorityBytes, "base64url").equals(
+          authorityBytes,
+        )
       )
         throw new Error("Contradictory active signed Agent Host authority");
       if (
@@ -3013,8 +3262,8 @@ export class SessionKernelStore {
         now
       ) {
         result = { accepted: false, reason: "authority_inactive" };
-          return;
-        }
+        return;
+      }
       if (
         authorityRow.authority_hash !== identity.authorityHash ||
         Number(authorityRow.supervisor_epoch) !== identity.supervisorEpoch ||
@@ -3050,8 +3299,8 @@ export class SessionKernelStore {
         const priorReceipt = decodeRow(priorRow);
         if (!priorReceipt) {
           result = { accepted: false, reason: "operation_barrier" };
-        return;
-      }
+          return;
+        }
         priorReceipts.push(priorReceipt);
       }
       const prior = priorReceipts.at(-1);
@@ -3067,20 +3316,20 @@ export class SessionKernelStore {
         if (identity.kind !== "model") {
           result = { accepted: false, reason: "operation_order" };
           return;
-      }
+        }
       } else {
         let lastModelIndex = -1;
         for (let index = priorReceipts.length - 1; index >= 0; index--) {
           if (priorReceipts[index]!.identity.kind === "model") {
             lastModelIndex = index;
             break;
-      }
-      }
+          }
+        }
         if (lastModelIndex < 0) {
           quarantine("Agent operation turn has no model root");
           result = { accepted: false, reason: "operation_barrier" };
           return;
-      }
+        }
         const modelReceipt = priorReceipts[lastModelIndex]!;
         const pending = modelReceipt.pendingToolUseEntryIds ?? [];
         const mcpReceipts = priorReceipts.slice(lastModelIndex + 1);
@@ -3148,7 +3397,22 @@ export class SessionKernelStore {
                AND live.run_generation=old.run_generation AND live.turn_id=old.turn_id
                AND live.state='admitted'
            )`,
-        [identity.sessionId, cutoff, identity.runId, identity.generation, identity.turnId],
+        [
+          identity.sessionId,
+          cutoff,
+          identity.runId,
+          identity.generation,
+          identity.turnId,
+        ],
+      );
+      this.db.run(
+        `DELETE FROM session_kernel_agent_operation_cancellations AS cancel
+         WHERE cancel.session_id=? AND NOT EXISTS (
+           SELECT 1 FROM session_kernel_agent_operations AS operation
+           WHERE operation.session_id=cancel.session_id
+             AND operation.operation_id=cancel.operation_id
+         )`,
+        [identity.sessionId],
       );
       const counts = this.db
         .query(
@@ -3216,6 +3480,73 @@ export class SessionKernelStore {
     tx.immediate();
     return result;
   }
+  agentOperationCancellationIntent(
+    raw: AgentOperationIdentity,
+  ): AgentOperationCancellationIntent | undefined {
+    const query = decodeAgentOperationRequest({ op: "query", identity: raw });
+    if (!query || query.op !== "query")
+      throw new Error("Invalid Agent operation cancellation query identity");
+    const identity = query.identity;
+    const identityText = canonicalAgentOperationIdentity(identity);
+    let result: AgentOperationCancellationIntent | undefined;
+    const tx = this.db.transaction(() => {
+      const quarantine = (reason: string): void => {
+        this.db.run(
+          `INSERT INTO session_kernel_quarantine(session_id,reason,command_kind,quarantined_at)
+           VALUES (?,?,'agent_operation',?) ON CONFLICT(session_id) DO UPDATE SET
+           reason=excluded.reason,command_kind=excluded.command_kind,quarantined_at=excluded.quarantined_at`,
+          [identity.sessionId, reason, Date.now()],
+        );
+      };
+      const operationRow = this.db
+        .query(
+          "SELECT * FROM session_kernel_agent_operations WHERE session_id=? AND operation_id=?",
+        )
+        .get(
+          identity.sessionId,
+          identity.operationId,
+        ) as DurableAgentOperationRow | null;
+      const cancellationRow = this.db
+        .query(
+          `SELECT * FROM session_kernel_agent_operation_cancellations
+         WHERE session_id=? AND operation_id=?`,
+        )
+        .get(
+          identity.sessionId,
+          identity.operationId,
+        ) as DurableAgentOperationCancellationRow | null;
+      if (!operationRow) {
+        if (cancellationRow)
+          quarantine("Agent operation cancellation has no durable operation");
+        return;
+      }
+      let receipt: AgentOperationReceipt;
+      try {
+        receipt = decodeDurableAgentOperationRow(operationRow);
+      } catch {
+        quarantine("Corrupt or contradictory Agent operation receipt");
+        return;
+      }
+      if (canonicalAgentOperationIdentity(receipt.identity) !== identityText) {
+        quarantine("Agent operation cancellation query identity crossover");
+        return;
+      }
+      if (!cancellationRow) return;
+      try {
+        result = decodeDurableAgentOperationCancellationRow(
+          cancellationRow,
+          receipt,
+        );
+      } catch {
+        quarantine(
+          "Corrupt or contradictory Agent operation cancellation intent",
+        );
+      }
+    });
+    tx.immediate();
+    return result;
+  }
+
 	applyRunEvent(input: RunEventDecision): RunEventDecisionResult {
 		const now = Date.now();
 		const since = new Date(now).toISOString();
@@ -3466,6 +3797,7 @@ export class SessionKernelStore {
         "session_kernel_agent_host_plan",
         "session_kernel_agent_host_supervision",
         "session_kernel_agent_operations",
+        "session_kernel_agent_operation_cancellations",
         "session_kernel_agent_operation_high_water",
 				"session_kernel_quarantine",
 				"session_kernel_commands",
@@ -3497,6 +3829,7 @@ export class SessionKernelStore {
         "session_kernel_agent_host_plan",
         "session_kernel_agent_host_supervision",
         "session_kernel_agent_operations",
+        "session_kernel_agent_operation_cancellations",
         "session_kernel_agent_operation_high_water",
 				"session_kernel_quarantine",
 				"session_kernel_commands",

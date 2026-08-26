@@ -133,8 +133,25 @@ export type AgentOperationQuery = {
   op: "query";
   identity: AgentOperationIdentity;
 };
+export const AGENT_OPERATION_CANCELLATION_REASONS = [
+  "user",
+  "turn_deadline",
+  "shutdown",
+  "reconnect_deadline",
+] as const;
+export type AgentOperationCancellationReason =
+  (typeof AGENT_OPERATION_CANCELLATION_REASONS)[number];
+export type AgentOperationCancel = {
+  op: "cancel";
+  identity: AgentOperationIdentity;
+  cancelId: string;
+  reason: AgentOperationCancellationReason;
+};
 export type AgentOperationRequest =
-  AgentOperationAdmit | AgentOperationTerminal | AgentOperationQuery;
+  | AgentOperationAdmit
+  | AgentOperationTerminal
+  | AgentOperationQuery
+  | AgentOperationCancel;
 export type AgentOperationReceipt = {
   identity: AgentOperationIdentity;
   sequence: number;
@@ -147,6 +164,23 @@ export type AgentOperationReceipt = {
   transcriptReceipts?: readonly AgentTranscriptReceiptRefV1[];
   pendingToolUseEntryIds?: readonly string[];
 };
+export type AgentOperationCancellationIntent = {
+  identity: AgentOperationIdentity;
+  cancelId: string;
+  reason: AgentOperationCancellationReason;
+  disposition: "requested" | "too_late";
+  requestedAtMs: number;
+};
+export type AgentOperationCancellationResult =
+  | {
+      accepted: true;
+      replayed: boolean;
+      intent: AgentOperationCancellationIntent;
+    }
+  | {
+      accepted: false;
+      reason: "invalid_request" | "not_found" | "operation_barrier";
+    };
 export type AgentOperationResult =
   | { accepted: true; replayed: boolean; receipt: AgentOperationReceipt }
   | {
@@ -256,7 +290,9 @@ export function decodeAgentOperationIdentity(
     hostGeneration: value.hostGeneration,
     hostIncarnation: value.hostIncarnation,
     transcriptAnchor: Object.freeze(anchor),
-    ...(value.kind === "mcp" ? { toolUseEntryId: value.toolUseEntryId as string } : {}),
+    ...(value.kind === "mcp"
+      ? { toolUseEntryId: value.toolUseEntryId as string }
+      : {}),
   });
 }
 function decodeTranscriptReceipt(
@@ -295,7 +331,13 @@ function decodePendingToolUseEntryIds(
   refs: readonly AgentTranscriptReceiptRefV1[],
   value: unknown,
 ): readonly string[] | undefined {
-  if (!Array.isArray(value) || value.length > 64 || !value.every(id) || new Set(value).size !== value.length) return;
+  if (
+    !Array.isArray(value) ||
+    value.length > 64 ||
+    !value.every(id) ||
+    new Set(value).size !== value.length
+  )
+    return;
   const flattened = refs.flatMap((ref) => [...ref.entryIds]);
   if (new Set(flattened).size !== flattened.length) return;
   let priorIndex = -1;
@@ -313,10 +355,13 @@ export function decodeAgentOperationRequest(
   if (
     !safe(value) ||
     !record(value) ||
-    !["admit", "settle", "indeterminate", "query"].includes(String(value.op))
+    !["admit", "settle", "indeterminate", "query", "cancel"].includes(
+      String(value.op),
+    )
   )
     return;
   const terminal = value.op === "settle" || value.op === "indeterminate";
+  const cancellation = value.op === "cancel";
   if (
     !exact(
       value,
@@ -332,12 +377,29 @@ export function decodeAgentOperationRequest(
               ? ["pendingToolUseEntryIds"]
               : []),
           ]
-        : ["op", "identity"],
+        : cancellation
+          ? ["op", "identity", "cancelId", "reason"]
+          : ["op", "identity"],
     )
   )
     return;
   const identity = decodeAgentOperationIdentity(value.identity);
   if (!identity) return;
+  if (cancellation) {
+    if (
+      !id(value.cancelId) ||
+      !AGENT_OPERATION_CANCELLATION_REASONS.includes(
+        value.reason as AgentOperationCancellationReason,
+      )
+    )
+      return;
+    return Object.freeze({
+      op: "cancel",
+      identity,
+      cancelId: value.cancelId,
+      reason: value.reason,
+    }) as AgentOperationCancel;
+  }
   if (!terminal)
     return Object.freeze({ op: value.op, identity }) as
       AgentOperationAdmit | AgentOperationQuery;
@@ -360,12 +422,20 @@ export function decodeAgentOperationRequest(
         (entry!.firstSeq <= refs[index - 1]!.lastSeq ||
           entry!.throughChangeSeq <= refs[index - 1]!.throughChangeSeq),
     )
-  ) return;
-  const pending = identity.kind === "model"
-    ? decodePendingToolUseEntryIds(refs as AgentTranscriptReceiptRefV1[], value.pendingToolUseEntryIds)
-    : undefined;
-  if ((identity.kind === "model" && !pending) ||
-      (identity.kind === "mcp" && value.pendingToolUseEntryIds !== undefined)) return;
+  )
+    return;
+  const pending =
+    identity.kind === "model"
+      ? decodePendingToolUseEntryIds(
+          refs as AgentTranscriptReceiptRefV1[],
+          value.pendingToolUseEntryIds,
+        )
+      : undefined;
+  if (
+    (identity.kind === "model" && !pending) ||
+    (identity.kind === "mcp" && value.pendingToolUseEntryIds !== undefined)
+  )
+    return;
   return Object.freeze({
     op: value.op,
     identity,
@@ -434,12 +504,20 @@ export function decodeAgentOperationReceipt(
         (entry!.firstSeq <= refs[index - 1]!.lastSeq ||
           entry!.throughChangeSeq <= refs[index - 1]!.throughChangeSeq),
     )
-  ) return;
-  const pending = identity.kind === "model"
-    ? decodePendingToolUseEntryIds(refs as AgentTranscriptReceiptRefV1[], value.pendingToolUseEntryIds)
-    : undefined;
-  if ((identity.kind === "model" && !pending) ||
-      (identity.kind === "mcp" && value.pendingToolUseEntryIds !== undefined)) return;
+  )
+    return;
+  const pending =
+    identity.kind === "model"
+      ? decodePendingToolUseEntryIds(
+          refs as AgentTranscriptReceiptRefV1[],
+          value.pendingToolUseEntryIds,
+        )
+      : undefined;
+  if (
+    (identity.kind === "model" && !pending) ||
+    (identity.kind === "mcp" && value.pendingToolUseEntryIds !== undefined)
+  )
+    return;
   return Object.freeze({
     identity,
     sequence: value.sequence,
@@ -454,6 +532,41 @@ export function decodeAgentOperationReceipt(
   }) as AgentOperationReceipt;
 }
 
+export function decodeAgentOperationCancellationIntent(
+  value: unknown,
+): AgentOperationCancellationIntent | undefined {
+  if (
+    !safe(value) ||
+    !record(value) ||
+    !exact(value, [
+      "identity",
+      "cancelId",
+      "reason",
+      "disposition",
+      "requestedAtMs",
+    ])
+  )
+    return;
+  const identity = decodeAgentOperationIdentity(value.identity);
+  if (
+    !identity ||
+    !id(value.cancelId) ||
+    !AGENT_OPERATION_CANCELLATION_REASONS.includes(
+      value.reason as AgentOperationCancellationReason,
+    ) ||
+    (value.disposition !== "requested" && value.disposition !== "too_late") ||
+    !integer(value.requestedAtMs)
+  )
+    return;
+  return Object.freeze({
+    identity,
+    cancelId: value.cancelId,
+    reason: value.reason,
+    disposition: value.disposition,
+    requestedAtMs: value.requestedAtMs,
+  }) as AgentOperationCancellationIntent;
+}
+
 export function canonicalAgentOperationIdentity(
   value: AgentOperationIdentity,
 ): string {
@@ -461,6 +574,11 @@ export function canonicalAgentOperationIdentity(
 }
 export function canonicalAgentOperationTerminal(
   value: AgentOperationTerminal,
+): string {
+  return JSON.stringify(decodeAgentOperationRequest(value));
+}
+export function canonicalAgentOperationCancellation(
+  value: AgentOperationCancel,
 ): string {
   return JSON.stringify(decodeAgentOperationRequest(value));
 }
