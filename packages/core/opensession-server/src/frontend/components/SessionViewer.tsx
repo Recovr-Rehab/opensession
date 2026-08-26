@@ -739,6 +739,10 @@ const OPEN_SETTLE_MAX_MS = 350;
 const JUMP_PAGE_ENTRIES = HISTORY_PAGE_ENTRIES;
 const JUMP_MAX_ENTRIES = 4_000;
 const EMPTY_TRANSCRIPT_ENTRIES: TranscriptEntry[] = [];
+// One visible range can span several actor pages. Keep the client comfortably
+// below the per-session mailbox bound so a reconnect cannot enqueue a whole
+// outline at once and crowd out live transcript reads for the same session.
+const TRANSCRIPT_RANGE_CONCURRENCY = 4;
 
 export function SessionViewer({
 	session,
@@ -2789,7 +2793,13 @@ export function SessionViewer({
 		(ranges: TranscriptIndexedRange[]) => {
 			const epoch = transcriptIndexEpochRef.current;
 			if (epoch === null || !transcriptRangeDemandReadyRef.current) return;
+			let capacity = Math.max(
+				0,
+				TRANSCRIPT_RANGE_CONCURRENCY -
+					transcriptRangeRequestsRef.current.size,
+			);
 			for (const range of ranges) {
+				if (capacity <= 0) break;
 				const key = `${range.firstSeq}:${range.lastSeq}`;
 				if (
 					completedTranscriptRangeKeysRef.current.has(key) ||
@@ -2806,6 +2816,7 @@ export function SessionViewer({
 					requestId,
 					timer,
 				});
+				capacity -= 1;
 				send({
 					type: "load_transcript_range",
 					sessionId: session.id,
@@ -3029,6 +3040,9 @@ export function SessionViewer({
 					if (msg.complete) {
 						completedTranscriptRangeKeysRef.current.add(key);
 						transcriptRangeRequestsRef.current.delete(key);
+						setTranscriptRangeRetryGeneration(
+							(generation) => generation + 1,
+						);
 					} else {
 						request.timer = setTimeout(() => {
 							transcriptRangeRequestsRef.current.delete(key);
