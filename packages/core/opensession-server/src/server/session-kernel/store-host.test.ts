@@ -499,6 +499,9 @@ describe("per-session session kernel storage", () => {
     recovered.close();
   });
 
+  // Explicit budget: this test creates 24 per-session isolated databases,
+  // which is real synchronous disk work (~4s warm locally, ~9s on GitHub's
+  // 2-core runner) — the default 5s timeout flags slow hardware, not a hang.
   test("rotates through due isolated work in bounded runtime batches", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
@@ -523,5 +526,5 @@ describe("per-session session kernel storage", () => {
       ...second.timers.map((timer) => timer.sessionId),
     ]).size).toBe(24);
     host.close();
-  });
+  }, 30_000);
 });
