@@ -8,6 +8,7 @@ import {
 	ingressHostname,
 	privateAppCaddyConfig,
 	privateAppDnsRecord,
+	suggestedPublicIngressDomain,
 } from "./ingress-ui";
 import type { PublicIngressSettings } from "./api/ingress";
 
@@ -27,6 +28,11 @@ describe("public ingress form", () => {
 	test("presents three distinct ways to publish the same callback endpoint", () => {
 		expect(INGRESS_METHODS).toEqual([
 			{
+				value: "custom",
+				label: "Direct HTTPS with Caddy",
+				description: "Your domain with any DNS provider. Requires ports 80 and 443.",
+			},
+			{
 				value: "tailscale",
 				label: "Tailscale Funnel",
 				description: "Generated .ts.net URL. No DNS records or inbound ports.",
@@ -35,11 +41,6 @@ describe("public ingress form", () => {
 				value: "cloudflare",
 				label: "Cloudflare Tunnel",
 				description: "Your domain through Cloudflare. No inbound ports.",
-			},
-			{
-				value: "custom",
-				label: "Direct HTTPS with Caddy",
-				description: "Your domain with any DNS provider. Requires ports 80 and 443.",
 			},
 		]);
 	});
@@ -57,6 +58,8 @@ describe("public ingress form", () => {
 		expect(privateAppDnsRecord(settings, "team.example.test")).toBe(
 			"A team.example.test 100.64.0.10",
 		);
+		expect(suggestedPublicIngressDomain("os.example.test")).toBe("ingress.example.test");
+		expect(suggestedPublicIngressDomain("private.example.test")).toBe("ingress.private.example.test");
 		const caddy = privateAppCaddyConfig(settings, "team.example.test");
 		expect(caddy).toContain("team.example.test {");
 		expect(caddy).toContain("bind 100.64.0.10");
@@ -67,6 +70,10 @@ describe("public ingress form", () => {
 		expect(ingressHostname("new.example.test")).toBe("new.example.test");
 		expect(customDnsRecords(settings, "new.example.test")).toEqual([
 			"A new.example.test 203.0.113.10",
+			"AAAA new.example.test 2001:db8::10",
+		]);
+		expect(customDnsRecords(settings, "new.example.test", "198.51.100.20")).toEqual([
+			"A new.example.test 198.51.100.20",
 			"AAAA new.example.test 2001:db8::10",
 		]);
 		expect(customCaddyConfig("new.example.test")).toContain("new.example.test {");

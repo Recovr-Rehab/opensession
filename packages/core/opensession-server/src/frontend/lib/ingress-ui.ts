@@ -6,6 +6,11 @@ export const INGRESS_METHODS: Array<{
 	description: string;
 }> = [
 	{
+		value: "custom",
+		label: "Direct HTTPS with Caddy",
+		description: "Your domain with any DNS provider. Requires ports 80 and 443.",
+	},
+	{
 		value: "tailscale",
 		label: "Tailscale Funnel",
 		description: "Generated .ts.net URL. No DNS records or inbound ports.",
@@ -14,11 +19,6 @@ export const INGRESS_METHODS: Array<{
 		value: "cloudflare",
 		label: "Cloudflare Tunnel",
 		description: "Your domain through Cloudflare. No inbound ports.",
-	},
-	{
-		value: "custom",
-		label: "Direct HTTPS with Caddy",
-		description: "Your domain with any DNS provider. Requires ports 80 and 443.",
 	},
 ];
 
@@ -47,12 +47,29 @@ export function ingressHostname(value: string, fallback = "ingress.example.com")
 	}
 }
 
-export function customDnsRecords(settings: PublicIngressSettings, value: string): string[] {
+export function customDnsRecords(
+	settings: PublicIngressSettings,
+	value: string,
+	publicAddress = "",
+): string[] {
 	const hostname = ingressHostname(value);
+	const override = publicAddress.trim();
+	const ipv4 = override.includes(":") ? settings.server.ipv4 : override ? [override] : settings.server.ipv4;
+	const ipv6 = override.includes(":") ? [override] : settings.server.ipv6;
 	return [
-		...settings.server.ipv4.map((address) => `A ${hostname} ${address}`),
-		...settings.server.ipv6.map((address) => `AAAA ${hostname} ${address}`),
+		...ipv4.map((address) => `A ${hostname} ${address}`),
+		...ipv6.map((address) => `AAAA ${hostname} ${address}`),
 	];
+}
+
+export function suggestedPublicIngressDomain(privateDomain: string): string {
+	const hostname = ingressHostname(privateDomain, "");
+	if (!hostname) return "";
+	const labels = hostname.split(".");
+	if (labels.length >= 3 && ["app", "opensession", "os"].includes(labels[0])) {
+		return `ingress.${labels.slice(1).join(".")}`;
+	}
+	return `ingress.${hostname}`;
 }
 
 export function customCaddyConfig(value: string): string {
@@ -87,6 +104,6 @@ export function configuredIngressDrafts(settings: PublicIngressSettings): Record
 		custom:
 			settings.exposure === "custom" && settings.publicBaseUrl
 				? ingressHostname(settings.publicBaseUrl, "")
-				: "",
+				: suggestedPublicIngressDomain(configuredAppDomain(settings)),
 	};
 }

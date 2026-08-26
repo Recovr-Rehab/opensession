@@ -379,6 +379,7 @@ export async function savePublicIngress(input: {
   publicBaseUrl: string;
   exposure: IngressExposure;
   cloudflareTunnelId?: string;
+  publicIp?: string;
 }): Promise<void> {
   const publicBaseUrl = normalizeIngressOrigin(input.publicBaseUrl);
   if (!(["tailscale", "cloudflare", "custom"] as string[]).includes(input.exposure)) {
@@ -387,6 +388,11 @@ export async function savePublicIngress(input: {
   const cloudflareTunnelId = (input.cloudflareTunnelId || "").trim();
   if (input.exposure === "cloudflare" && !/^[0-9a-f-]{36}$/i.test(cloudflareTunnelId)) {
     throw new Error("Cloudflare tunnel ID must be a UUID");
+  }
+  const publicIp = (input.publicIp || "").trim();
+  const publicIpFamily = isIP(publicIp);
+  if (publicIp && (!publicIpFamily || isBlockedAddress(publicIp))) {
+    throw new Error("Enter a publicly routable IPv4 or IPv6 address");
   }
   await withConfigMutationLock(async () => {
     const raw = rawConfig();
@@ -401,8 +407,18 @@ export async function savePublicIngress(input: {
       delete (raw.server as Record<string, unknown>).webhookBaseUrl;
       delete (raw.server as Record<string, unknown>).webhookPort;
     }
-    persistRawConfig(raw);
+    const envKey = publicIpFamily === 4 ? "OPENSESSION_PUBLIC_IPV4" : "OPENSESSION_PUBLIC_IPV6";
+    const envEdit = publicIp ? prepareEnvFileEdits({ [envKey]: publicIp }) : null;
+    envEdit?.commit();
+    try {
+      persistRawConfig(raw);
+    } catch (error) {
+      envEdit?.rollback();
+      throw error;
+    }
   });
+  if (publicIpFamily === 4) process.env.OPENSESSION_PUBLIC_IPV4 = publicIp;
+  if (publicIpFamily === 6) process.env.OPENSESSION_PUBLIC_IPV6 = publicIp;
   if (input.exposure !== "cloudflare") {
     if (runtime.__opensessionCloudflaredRestart) {
       clearTimeout(runtime.__opensessionCloudflaredRestart);
@@ -487,7 +503,7 @@ export async function configureCloudflareTunnel(input: {
   if (!ensureCloudflareTunnel()) throw new Error("Could not start the Cloudflare Tunnel connector");
 }
 
-export async function installManagedCaddy(originValue: string): Promise<void> {
+export async function installManagedCaddy(originValue: string, publicIp?: string): Promise<void> {
   const origin = normalizeCustomIngressOrigin(originValue);
   const caddy = Bun.which("caddy");
   const sudo = Bun.which("sudo");
@@ -523,7 +539,7 @@ export async function installManagedCaddy(originValue: string): Promise<void> {
       throw new Error(reload.stderr.trim() || "Caddy reload failed");
     }
     try {
-      await savePublicIngress({ publicBaseUrl: origin, exposure: "custom" });
+      await savePublicIngress({ publicBaseUrl: origin, exposure: "custom", publicIp });
     } catch (error) {
       await rollback();
       throw error;

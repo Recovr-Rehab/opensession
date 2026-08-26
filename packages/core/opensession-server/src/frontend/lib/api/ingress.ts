@@ -100,10 +100,10 @@ export function configurePublicIngressCloudflare(input: {
 	});
 }
 
-export function installPublicIngressCaddy(publicBaseUrl: string): Promise<PublicIngressSettings> {
+export function installPublicIngressCaddy(publicBaseUrl: string, publicIp?: string): Promise<PublicIngressSettings> {
 	return request("/ingress/custom", {
 		method: "POST",
-		body: { publicBaseUrl },
+		body: { publicBaseUrl, ...(publicIp ? { publicIp } : {}) },
 		label: "Failed to configure Caddy",
 	});
 }

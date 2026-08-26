@@ -14,6 +14,8 @@ import {
 
 const previous = process.env.OPENSESSION_CONFIG;
 const previousEnvFile = process.env.OPENSESSION_ENV_FILE;
+const previousPublicIpv4 = process.env.OPENSESSION_PUBLIC_IPV4;
+const previousPublicIpv6 = process.env.OPENSESSION_PUBLIC_IPV6;
 const dirs: string[] = [];
 
 function fixture() {
@@ -32,6 +34,8 @@ function fixture() {
   process.env.OPENSESSION_CONFIG = path;
   process.env.OPENSESSION_ENV_FILE = envPath;
   delete process.env.OPENSESSION_INGRESS_BASE;
+  delete process.env.OPENSESSION_PUBLIC_IPV4;
+  delete process.env.OPENSESSION_PUBLIC_IPV6;
   return { path, envPath };
 }
 
@@ -40,6 +44,10 @@ afterEach(() => {
   else process.env.OPENSESSION_CONFIG = previous;
   if (previousEnvFile === undefined) delete process.env.OPENSESSION_ENV_FILE;
   else process.env.OPENSESSION_ENV_FILE = previousEnvFile;
+  if (previousPublicIpv4 === undefined) delete process.env.OPENSESSION_PUBLIC_IPV4;
+  else process.env.OPENSESSION_PUBLIC_IPV4 = previousPublicIpv4;
+  if (previousPublicIpv6 === undefined) delete process.env.OPENSESSION_PUBLIC_IPV6;
+  else process.env.OPENSESSION_PUBLIC_IPV6 = previousPublicIpv6;
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -79,6 +87,22 @@ describe("public ingress settings", () => {
     await savePrivateAppOrigin("team.example.test");
     expect(JSON.parse(readFileSync(path, "utf8")).server.publicBaseUrl).toBe("https://team.example.test");
     expect(readFileSync(envPath, "utf8")).toContain("OPENSESSION_UI_BASE=https://team.example.test");
+  });
+
+  test("saves a public address override for direct HTTPS", async () => {
+    const { envPath } = fixture();
+    await savePublicIngress({
+      publicBaseUrl: "https://ingress.example.test",
+      exposure: "custom",
+      publicIp: "8.8.8.8",
+    });
+    expect(process.env.OPENSESSION_PUBLIC_IPV4).toBe("8.8.8.8");
+    expect(readFileSync(envPath, "utf8")).toContain("OPENSESSION_PUBLIC_IPV4=8.8.8.8");
+    await expect(savePublicIngress({
+      publicBaseUrl: "https://ingress.example.test",
+      exposure: "custom",
+      publicIp: "100.64.0.10",
+    })).rejects.toThrow("publicly routable");
   });
 
   test("writes one canonical owner and removes retired server fields", async () => {

@@ -345,8 +345,8 @@ export function IngressPanel({
 	const localSetup = useSetupStatus();
 	const setup = parentSetup || localSetup;
 	const [settings, setSettings] = useState<PublicIngressSettings | null>(null);
-	const [surface, setSurface] = useState<"app" | "ingress">(onboarding ? "ingress" : "app");
-	const [method, setMethod] = useState<IngressExposure>("tailscale");
+	const [surface, setSurface] = useState<"app" | "ingress">("app");
+	const [method, setMethod] = useState<IngressExposure>("custom");
 	const [appDomain, setAppDomain] = useState("");
 	const [certificateEmail, setCertificateEmail] = useState("");
 	const [privateApiToken, setPrivateApiToken] = useState("");
@@ -356,9 +356,11 @@ export function IngressPanel({
 	const [drafts, setDrafts] = useState<Record<IngressExposure, string>>(EMPTY_DRAFTS);
 	const [tunnelId, setTunnelId] = useState("");
 	const [tunnelToken, setTunnelToken] = useState("");
+	const [publicAddress, setPublicAddress] = useState("");
 	const [busy, setBusy] = useState<"app" | "apply" | "test" | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const loaded = useRef(false);
+	const customDraftTouched = useRef(false);
 	const url = drafts[method];
 
 	function apply(next: PublicIngressSettings, selectConfigured = true) {
@@ -368,10 +370,15 @@ export function IngressPanel({
 			setAppDomain(configuredAppDomain(next));
 			setPrivateProvider(next.app.domain.dnsProvider || "cloudflare");
 			setDrafts(configuredIngressDrafts(next));
+			setPublicAddress(next.server.ipv4[0] || next.server.ipv6[0] || "");
 			loaded.current = true;
-		} else if (next.exposure) {
-			const saved = configuredIngressDrafts(next)[next.exposure];
-			setDrafts((current) => ({ ...current, [next.exposure!]: saved }));
+		} else {
+			const saved = configuredIngressDrafts(next);
+			setDrafts((current) => ({
+				...current,
+				...(next.exposure ? { [next.exposure]: saved[next.exposure] } : {}),
+				...(!customDraftTouched.current ? { custom: saved.custom } : {}),
+			}));
 		}
 		if (selectConfigured) {
 			setMethod(next.exposure || (next.tailscale.installed ? "tailscale" : "custom"));
@@ -467,7 +474,7 @@ export function IngressPanel({
 		if (method === "custom") {
 			await run(
 				"apply",
-				() => installPublicIngressCaddy(url),
+				() => installPublicIngressCaddy(url, publicAddress.trim() || undefined),
 				(next) => next.health === "ready" ? "Public callbacks are ready" : "Caddy configured. Waiting for DNS",
 			);
 			return;
@@ -483,7 +490,7 @@ export function IngressPanel({
 		);
 	}
 
-	const records = settings ? customDnsRecords(settings, drafts.custom) : [];
+	const records = settings ? customDnsRecords(settings, drafts.custom, publicAddress) : [];
 	const missingTool = settings && (
 		(method === "tailscale" && !settings.tailscale.installed) ||
 		(method === "cloudflare" && !settings.cloudflare.installed) ||
@@ -491,6 +498,7 @@ export function IngressPanel({
 	);
 	const invalidInput =
 		method !== "tailscale" && !url.trim() ||
+		method === "custom" && records.length === 0 ||
 		method === "cloudflare" && (!tunnelId.trim() || (!tunnelToken.trim() && !settings?.cloudflare.tokenConfigured));
 	const selectedMethod = INGRESS_METHODS.find((option) => option.value === method)!;
 
@@ -710,7 +718,7 @@ export function IngressPanel({
 										<SetupStep number={1} title="Choose a separate public domain">
 											<SettingsField className="mb-0">
 												Domain
-												<Input key={method} value={url} placeholder="ingress.example.com" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => setDrafts((current) => ({ ...current, custom: event.target.value }))} />
+												<Input key={method} value={url} placeholder="ingress.example.com" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => { customDraftTouched.current = true; setDrafts((current) => ({ ...current, custom: event.target.value })); }} />
 											</SettingsField>
 											<p className="m-0">Do not use the private app hostname. HTTPS is added automatically.</p>
 										</SetupStep>
@@ -719,8 +727,12 @@ export function IngressPanel({
 										</SetupStep>
 										<SetupStep number={3} title="Add DNS records at your provider">
 											<p className="m-0">Point the domain to this server’s public IP address, not its private or Tailscale address.</p>
+											<SettingsField className="mb-0">
+												Public IPv4 or IPv6 address
+												<Input value={publicAddress} placeholder="203.0.113.10" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => { setPublicAddress(event.target.value); setError(null); }} />
+											</SettingsField>
 											{records.length ? records.map((record) => <CodeBlock key={record}>{record}</CodeBlock>) : (
-												<InlineAlert>Open Session could not detect this server’s public IP. Set OPENSESSION_PUBLIC_IPV4 or OPENSESSION_PUBLIC_IPV6 for the service, restart it, and reload this page.</InlineAlert>
+												<InlineAlert>Enter this server’s public address to generate the DNS record.</InlineAlert>
 											)}
 										</SetupStep>
 										<SetupStep number={4} title="Configure Caddy">

@@ -127,7 +127,10 @@ export async function handleIngressRoutes(ctx: RouteContext): Promise<Response |
     if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     try {
-      await installManagedCaddy(String(body?.publicBaseUrl || ""));
+      await installManagedCaddy(
+        String(body?.publicBaseUrl || ""),
+        typeof body?.publicIp === "string" ? body.publicIp : undefined,
+      );
       refreshIndexHtml("public ingress changed");
       return Response.json(await publicIngressStatus(true));
     } catch (error) {
