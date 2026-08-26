@@ -71,6 +71,18 @@ opensession update     # upgrade in place, health-gated
 opensession --help     # everything else
 ```
 
+The installer and updater verify each Open Session release archive against its
+published SHA-256 sidecar before extracting it. GitHub also signs keyless build
+provenance for every release archive, DMG, and ZIP. To verify a manually
+downloaded artifact:
+
+```sh
+gh attestation verify ./opensession-linux-x64.tar.gz --repo tellahq/opensession
+sha256sum --check ./opensession-linux-x64.tar.gz.sha256
+```
+
+Use `shasum -a 256 -c` instead of `sha256sum --check` on macOS.
+
 Or install from a source checkout instead. This is the path for
 self-development (sessions that modify Open Session itself) and for
 contributing:

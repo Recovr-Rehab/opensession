@@ -47,9 +47,11 @@ import {
 
 let scratch: string;
 let prevSessionsDir: string;
+let prevInstanceConfig: string | undefined;
 let prevEnvConfig: string | undefined;
 let prevSecretsStore: string | undefined;
 let prevEnvironmentsStore: string | undefined;
+const instanceConfigPath = () => join(scratch, "config.json");
 const cfgPath = () => join(scratch, "sandbox.json");
 const prewarmDir = () => join(scratch, "sessions", "sandbox-prewarm");
 const environmentsPath = () => join(scratch, "environments.json");
@@ -63,18 +65,30 @@ beforeAll(() => {
   scratch = mkdtempSync(join(tmpdir(), "bks-prewarm-"));
   mkdirSync(join(scratch, "sessions"), { recursive: true });
   prevSessionsDir = __setSessionsDirForTest(join(scratch, "sessions"));
+  prevInstanceConfig = process.env.OPENSESSION_CONFIG;
   prevEnvConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
   prevSecretsStore = process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   prevEnvironmentsStore = process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE;
+  process.env.OPENSESSION_CONFIG = instanceConfigPath();
   process.env.OPENSESSION_SANDBOX_CONFIG = cfgPath();
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
   process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE = environmentsPath();
+  writeFileSync(
+    instanceConfigPath(),
+    JSON.stringify({
+      repos: Object.fromEntries(
+        ["tella-fusion", "gitops", "infra"].map((id) => [id, { repo: join(scratch, id) }]),
+      ),
+    }),
+  );
 });
 
 afterAll(() => {
   _stopPrewarmSweepForTest();
   _resetPrewarmForTest();
   __setSessionsDirForTest(prevSessionsDir);
+  if (prevInstanceConfig === undefined) delete process.env.OPENSESSION_CONFIG;
+  else process.env.OPENSESSION_CONFIG = prevInstanceConfig;
   if (prevEnvConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = prevEnvConfig;
   if (prevSecretsStore === undefined) delete process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
