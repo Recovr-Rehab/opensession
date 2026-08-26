@@ -97,21 +97,24 @@ function actingGithubCredential(ctx: RouteContext): GithubCredential | null {
   return ctx.authUser?.login ? githubCredentialForLogin(ctx.authUser.login) : null;
 }
 
-/** Prefer the signed-in teammate, then use the configured App installation.
+/** Prefer the configured App installation, whose selected repositories are the
+ * source of truth for workspace setup. A configured but unavailable App fails
+ * closed instead of being masked by a user's narrower token. Without a service
+ * configuration, a signed-in teammate remains the compatibility path.
  * Repository setup never inherits the server user's ambient gh login. */
 async function setupGithubCredential(ctx: RouteContext): Promise<GithubCredential | null> {
-  const acting = actingGithubCredential(ctx);
-  if (acting) return acting;
   const { githubConfiguredCredential } = await import("../github-app");
-  if (!githubConfiguredCredential()) return null;
-  try {
-    return await resolveGithubCredential(serviceGithubCredential);
-  } catch {
-    // A just-installed App can take a moment to appear in GitHub's installation
-    // list. Retry once so the next onboarding step does not race that edge.
-    await Bun.sleep(750);
-    return resolveGithubCredential(serviceGithubCredential).catch(() => null);
+  if (githubConfiguredCredential()) {
+    try {
+      return await resolveGithubCredential(serviceGithubCredential);
+    } catch {
+      // A just-installed App can take a moment to appear in GitHub's installation
+      // list. Retry once so the next onboarding step does not race that edge.
+      await Bun.sleep(750);
+      return resolveGithubCredential(serviceGithubCredential).catch(() => null);
+    }
   }
+  return actingGithubCredential(ctx);
 }
 
 // ── GitHub repo listing ──────────────────────────────────────────────────────
@@ -133,7 +136,7 @@ const REPO_CACHE_TTL_MS = 60_000;
  *  snappy across the setup page's refetches. */
 const repoListCache = new Map<
   string,
-  { at: number; payload: { source: "user" | "bot"; repos: PickerRepo[] } }
+  { at: number; payload: { source: "user" | "app"; repos: PickerRepo[] } }
 >();
 
 async function githubJson(
@@ -812,13 +815,13 @@ export async function handleSetupRepoRoutes(
   const { req, path } = ctx;
 
   if (path === "/api/setup/github/repos" && req.method === "GET") {
-    // Prefer the authenticated teammate's App user token; otherwise use the
-    // workspace installation token. Missing App authority yields an empty,
-    // well-formed answer and never consults ambient credentials.
+    // Browse the repositories selected for the workspace App installation.
+    // A connected teammate is only a compatibility path when no App service
+    // credential is configured; ambient credentials are never consulted.
     const credential = await setupGithubCredential(ctx);
     const token = credential?.env.GH_TOKEN;
-    const source: "user" | "bot" | null = credential
-      ? credential.kind === "user" ? "user" : "bot"
+    const source: "user" | "app" | null = credential
+      ? credential.kind === "user" ? "user" : "app"
       : null;
     if (!token || !source) {
       const { githubConfiguredCredential } = await import("../github-app");
@@ -838,7 +841,7 @@ export async function handleSetupRepoRoutes(
       // through their installations, with /user/repos as a compatibility path
       // for older non-expiring OAuth grants already stored before migration.
       const repos =
-        source === "bot"
+        source === "app"
           ? await listReposViaAppInstallation(token)
           : (await listReposViaInstallations(token)) ??
             (await listReposViaUserRepos(token));

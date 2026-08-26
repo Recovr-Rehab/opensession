@@ -679,7 +679,7 @@ function LetterTile({ id, color }: { id: string; color?: string }) {
 }
 
 interface BrowseResult {
-	source: "user" | "bot" | null;
+	source: "user" | "app" | null;
 	repos: BrowseRepo[];
 	appConfigured?: boolean;
 }
@@ -1005,8 +1005,9 @@ function RemoteRepoPicker({
 						)}
 					</div>
 					<div className="mt-2 text-meta text-faint">
-						Browsing as the {browse.source === "user" ? "connected account" : "bot"}.
-						Only repos that credential can reach are listed.
+						Browsing the{
+							browse.source === "user" ? " connected account" : " GitHub App installation"
+						}. Only repos that credential can reach are listed.
 					</div>
 				</>
 			) : (
