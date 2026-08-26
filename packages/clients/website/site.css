@@ -518,7 +518,7 @@ dialog::backdrop {
 .pwa-guide-panel {
 	position: relative;
 	padding: 30px;
-	border-radius: calc(28px * var(--rf));
+	border-radius: calc(32px * var(--rf));
 	corner-shape: var(--cs);
 	background: var(--surface);
 	box-shadow: 0 24px 70px var(--surface-shadow);
@@ -939,7 +939,7 @@ dialog::backdrop {
 	margin: auto;
 	padding: 0;
 	border: 0;
-	border-radius: calc(28px * var(--rf));
+	border-radius: calc(32px * var(--rf));
 	corner-shape: var(--cs);
 	background: #fff;
 	box-shadow:
@@ -1262,7 +1262,7 @@ dialog::backdrop {
 	.announcement-dialog {
 		width: calc(100% - 16px);
 		height: calc(100dvh - 16px);
-		border-radius: calc(22px * var(--rf));
+		border-radius: calc(24px * var(--rf));
 	}
 
 	.announcement-home {
@@ -1285,7 +1285,7 @@ dialog::backdrop {
 
 	.pwa-guide-panel {
 		padding: 24px;
-		border-radius: calc(26px * var(--rf));
+		border-radius: calc(28px * var(--rf));
 	}
 
 	.pwa-guide-close {
