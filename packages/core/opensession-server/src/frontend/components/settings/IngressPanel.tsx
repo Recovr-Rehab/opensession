@@ -504,7 +504,7 @@ export function IngressPanel({
 			) : (
 				<>
 					<div className="mb-5 px-5">
-						<Segmented label="Domain setup" value={surface} onValueChange={(value) => setSurface(value as "app" | "ingress")} className="w-full">
+						<Segmented label="Domain setup" value={surface} onValueChange={(value) => setSurface(value as "app" | "ingress")} className="w-full max-w-[480px]">
 							<SegmentedOption value="app" className="flex min-h-10 flex-1 items-center justify-center phone:min-h-11">Private app</SegmentedOption>
 							<SegmentedOption value="ingress" className="flex min-h-10 flex-1 items-center justify-center phone:min-h-11">Public callbacks</SegmentedOption>
 						</Segmented>
