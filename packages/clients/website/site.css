@@ -250,7 +250,7 @@ summary:focus-visible {
 	min-width: 0;
 	flex-direction: column;
 	align-items: stretch;
-	padding: 22px;
+	padding: 20px;
 	border-radius: calc(18px * var(--rf));
 	corner-shape: var(--cs);
 	background: rgba(var(--ink-rgb), 0.04);
@@ -266,6 +266,11 @@ summary:focus-visible {
 	background: rgba(var(--ink-rgb), 0.055);
 	color: rgba(var(--ink-rgb), 0.62);
 	place-items: center;
+}
+
+.landing-setup-step-icon {
+	border-radius: 50%;
+	corner-shape: round;
 }
 
 .landing-setup-step-copy {
@@ -295,6 +300,7 @@ summary:focus-visible {
 	align-items: center;
 	align-self: flex-start;
 	justify-content: center;
+	gap: 7px;
 	margin-top: 18px;
 	padding: 0 14px;
 	border: 0;
@@ -311,6 +317,10 @@ summary:focus-visible {
 
 .landing-setup-step-action:hover {
 	background: rgba(var(--ink-rgb), 0.82);
+}
+
+.landing-setup-step-action svg {
+	flex: none;
 }
 
 .landing-setup-step-action-secondary {
@@ -1206,7 +1216,7 @@ summary:focus-visible {
 	}
 
 	.landing-setup-steps > li {
-		padding: 18px;
+		padding: 16px;
 	}
 
 	.landing-setup-step-action {
