@@ -90,7 +90,6 @@ export class SessionKernelStoreHost {
   private runtimeCursor = "";
   private maintenanceSessionCursor = "";
   private outboxRouteMaintenanceCursor = 0;
-  private quarantineCache?: DurableSessionQuarantine[];
   constructor(
     private readonly centralPath = sessionKernelDbPath(),
     private readonly isolatedRoot = `${dirname(centralPath)}/session-kernel-sessions`,
@@ -161,12 +160,12 @@ export class SessionKernelStoreHost {
     commandKind: string,
     infrastructure = false,
   ): DurableSessionQuarantine {
-    const isolated = this.isIsolated(sessionId);
-    if (isolated)
+    const isolatedBefore = this.isIsolated(sessionId);
+    if (isolatedBefore)
       this.centralOperation(
         () => this.central.markIsolatedSessionProjectionDirty(sessionId),
       );
-    const quarantine = infrastructure && this.isIsolated(sessionId)
+    const quarantine = infrastructure && isolatedBefore
       ? this.centralOperation(
           () => this.central.quarantineSession(sessionId, reason, commandKind),
         )
@@ -175,13 +174,14 @@ export class SessionKernelStoreHost {
           reason,
           commandKind,
         );
-    this.quarantineCache = undefined;
+    const isolated = isolatedBefore || this.isIsolated(sessionId);
     if (isolated) {
       if (infrastructure)
         this.centralOperation(() => this.central.settleIsolatedSessionProjection(
           sessionId,
           undefined,
           undefined,
+          quarantine,
         ));
       else this.refreshSessionProjections(sessionId);
     }
@@ -268,10 +268,8 @@ export class SessionKernelStoreHost {
       const centralReleased = this.centralOperation(
         () => this.central.releaseQuarantine(sessionId),
       );
-      if (centralReleased || isolatedReleased) {
-        this.quarantineCache = undefined;
+      if (centralReleased || isolatedReleased)
         this.refreshSessionProjections(sessionId);
-      }
       return centralReleased || isolatedReleased;
     }
     const route = sessionKernelStoreRoute(method, args);
@@ -320,6 +318,7 @@ export class SessionKernelStoreHost {
       sessionId,
       ask,
       sparseDelivery,
+      quarantined,
     ));
   }
 
@@ -334,11 +333,13 @@ export class SessionKernelStoreHost {
         sessionId,
         "maintenance:sparse-projection",
         () => {
-          if (this.central.quarantinedSession(sessionId)) {
+          const centralQuarantine = this.central.quarantinedSession(sessionId);
+          if (centralQuarantine) {
             this.central.settleIsolatedSessionProjection(
               sessionId,
               undefined,
               undefined,
+              centralQuarantine,
             );
             return;
           }
@@ -349,7 +350,7 @@ export class SessionKernelStoreHost {
                 {
                   readonly: true,
                   hydrateRunStateCache: false,
-                  // Schema 29 only adds this central projection table. Session
+                  // Schemas 29–30 only add central projection fields. Session
                   // ask/delivery/quarantine tables are unchanged from 28.
                   compatibleReadSchemaFloor: 28,
                 },
@@ -369,6 +370,7 @@ export class SessionKernelStoreHost {
               sessionId,
               ask,
               sparseDelivery,
+              quarantined,
             );
           } finally {
             if (store !== this.isolated.get(sessionId)) store.close();
@@ -423,21 +425,20 @@ export class SessionKernelStoreHost {
   }
 
   allQuarantinedSessions(limit = 100, offset = 0): DurableSessionQuarantine[] {
-    if (!this.quarantineCache) {
-      const isolated = this.mapIsolatedReadStores(
-        "global:quarantined-sessions",
-        (store) => store.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0),
-      ).flat();
-      const unique = new Map<string, DurableSessionQuarantine>();
-      for (const entry of [
-        ...this.central.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0),
-        ...isolated,
-      ]) unique.set(entry.sessionId, this.quarantinedSession(entry.sessionId) ?? entry);
-      this.quarantineCache = [...unique.values()].sort(
-        (a, b) => b.quarantinedAt - a.quarantinedAt,
-      );
-    }
-    return structuredClone(this.quarantineCache.slice(offset, offset + limit));
+    // Advance old-store backfill without making this latency-sensitive read scan
+    // every isolated database in one actor turn. The projection remains durable
+    // across actor restarts and every quarantine mutation refreshes it eagerly.
+    this.repairSparseProjections(SESSION_STORE_MAINTENANCE_BATCH);
+    const unique = new Map<string, DurableSessionQuarantine>();
+    for (const entry of [
+      ...this.central.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0),
+      ...this.central.isolatedQuarantineProjectionEntries(),
+    ]) unique.set(entry.sessionId, this.quarantinedSession(entry.sessionId) ?? entry);
+    return structuredClone(
+      [...unique.values()]
+        .sort((a, b) => b.quarantinedAt - a.quarantinedAt)
+        .slice(offset, offset + limit),
+    );
   }
 
   runtimeWork(

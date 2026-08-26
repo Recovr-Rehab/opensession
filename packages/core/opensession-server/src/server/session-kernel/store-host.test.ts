@@ -451,6 +451,39 @@ describe("per-session session kernel storage", () => {
     recovered.close();
   });
 
+  test("lists quarantines from durable projections without scanning isolated stores", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    for (const sessionId of ["quarantine-projection", "unrelated-session"])
+      host.call("setRunState", [{ sessionId, state: "idle", event: "seed" }]);
+    host.quarantineSession(
+      "quarantine-projection",
+      "execution ownership became ambiguous",
+      "run",
+    );
+    expect(host.allQuarantinedSessions()).toHaveLength(1);
+    host.close();
+
+    const recovered = new SessionKernelStoreHost(path.central, path.isolated);
+    Object.defineProperty(
+      recovered.storeForSession("unrelated-session"),
+      "quarantinedSessions",
+      {
+        configurable: true,
+        value: () => {
+          throw new Error("quarantine listing must not scan unrelated stores");
+        },
+      },
+    );
+    expect(recovered.allQuarantinedSessions()).toMatchObject([
+      {
+        sessionId: "quarantine-projection",
+        commandKind: "run",
+      },
+    ]);
+    recovered.close();
+  });
+
   test("backfills old sparse projections in bounded retryable batches", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
