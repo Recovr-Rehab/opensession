@@ -156,6 +156,45 @@ run_systemctl() {
   if [ "$(id -u)" = "0" ]; then systemctl "$@"; else sudo -n systemctl "$@"; fi
 }
 
+# Once this script stops the gateway, every exit path owns bringing it back.
+# A failed actor migration/readiness check must degrade the deploy, not leave
+# an explicitly stopped unit that Restart=always will never recover.
+GATEWAY_STOPPED_BY_DEPLOY=0
+restore_gateway_on_exit() {
+  local rc=$?
+  if [ "$GATEWAY_STOPPED_BY_DEPLOY" = "1" ]; then
+    log "deploy exiting with gateway stopped — starting ${SERVICE_NAME}"
+    run_systemctl start "$SERVICE_NAME" || true
+  fi
+  return "$rc"
+}
+trap restore_gateway_on_exit EXIT
+
+stop_gateway() {
+  # Set the guard before invoking systemctl: a partial/ambiguous stop still
+  # requires a best-effort start when the script exits.
+  GATEWAY_STOPPED_BY_DEPLOY=1
+  run_systemctl stop "$SERVICE_NAME"
+}
+
+preflight_session_kernel() {
+  local load_state
+  load_state="$(run_systemctl show --property=LoadState --value \
+    "$SESSION_KERNEL_SERVICE_NAME" 2>/dev/null || true)"
+  if [ "$load_state" != "loaded" ]; then
+    log "ERROR: installed session kernel unit is unavailable; run the root deploy before this revision"
+    return 1
+  fi
+  if ! run_systemctl is-active --quiet "$SESSION_KERNEL_SERVICE_NAME" \
+    || ! curl -fs --max-time 2 "$SESSION_KERNEL_READY_URL" >/dev/null 2>&1; then
+    log "ERROR: installed session kernel is not healthy; refusing to stop the gateway"
+    return 1
+  fi
+  # Do not stat /etc/opensession/session-kernel-token here. It is deliberately
+  # root-only and self-deploy runs as the service user. systemd LoadCredential
+  # validates and exposes it only to the kernel service when that unit starts.
+}
+
 refresh_executor() {
   # Privileged artifacts are installed only by `opensession service install`
   # or the root-run deploy script. Self-deploy may restart those fixed units,
@@ -192,11 +231,7 @@ refresh_session_kernel() {
   # Like the executor, this privileged unit is installed only through the root
   # deploy path. Self-deploy restarts the fixed unit but never copies a unit or
   # credential out of the user-writable checkout.
-  if [ ! -f "/etc/systemd/system/$SESSION_KERNEL_SERVICE_NAME" ] \
-    || [ ! -s /etc/opensession/session-kernel-token ]; then
-    log "ERROR: session kernel service artifacts are missing; run the root deploy before this revision"
-    return 1
-  fi
+  preflight_session_kernel || return 1
   run_systemctl stop "$SESSION_KERNEL_SERVICE_NAME"
   log "migrating legacy session-kernel rows offline"
   local -a migration_env
@@ -300,6 +335,7 @@ poll_health() {
 restart_service() {
   log "restarting ${SERVICE_NAME}"
   run_systemctl restart "$SERVICE_NAME"
+  GATEWAY_STOPPED_BY_DEPLOY=0
 }
 
 # Opening the window also zeroes the consecutive-failure counter: a stale
@@ -379,7 +415,11 @@ rollback_to_pin() {
     log "ERROR: executor failed readiness after rollback"
     return 1
   fi
-  run_systemctl stop "$SERVICE_NAME"
+  if ! preflight_session_kernel; then
+    log "ERROR: session kernel preflight failed after rollback"
+    return 1
+  fi
+  stop_gateway
   if ! refresh_session_kernel; then
     log "ERROR: session kernel failed readiness after rollback"
     return 1
@@ -452,11 +492,30 @@ do_deploy() {
     exit 1
   fi
 
+  # Validate privileged service installation while the current gateway is
+  # still serving. The credential itself is intentionally unreadable here;
+  # systemd validates it when refresh_session_kernel starts the unit.
+  if ! preflight_session_kernel; then
+    log "ERROR: target session kernel preflight failed; attempting rollback to pin"
+    if rollback_to_pin; then
+      write_result false deploy "$(git_repo rev-parse HEAD)" "$current" \
+        "deploy of $target_sha failed session kernel preflight; rolled back and healthy again"
+    elif [ ! -f "$RESULT_FILE" ] || ! grep -q '"action":"rollback-needed"' "$RESULT_FILE" 2>/dev/null; then
+      write_result false deploy "$(git_repo rev-parse HEAD)" "$current" \
+        "deploy of $target_sha failed session kernel preflight; rollback failed"
+    fi
+    exit 1
+  fi
+
   # The actor service opens and migrates the durable database, so establish the
   # rollback floor before replacing it. A failed target must never boot an older
   # protocol against a database the target may already have advanced.
   record_kernel_schema_floor
-  run_systemctl stop "$SERVICE_NAME"
+  # Open the watchdog recovery window before the first destructive lifecycle
+  # action. If this transient deploy unit is killed outright, the external
+  # watchdog can still recover instead of observing an unmarked stopped unit.
+  write_marker
+  stop_gateway
   if ! refresh_session_kernel; then
     log "ERROR: target session kernel failed readiness; attempting rollback to pin"
     if rollback_to_pin; then
@@ -469,9 +528,6 @@ do_deploy() {
     exit 1
   fi
 
-  # Open the watchdog window just before the restart, so the watchdog only
-  # ever acts on failures caused by THIS deploy.
-  write_marker
   restart_service
 
   if poll_health; then
