@@ -129,9 +129,6 @@ export function buildOnboardingGithubAppCreateUrl(
     // permissions the installation token mints request, so a created App is
     // never born missing a scope the server needs.
     ...GITHUB_APP_GRANT_PERMISSIONS,
-    // Undocumented by GitHub, but supported by the new-App form. The onboarding
-    // still tells the person to check it in case GitHub ever drops the parameter.
-    device_flow_enabled: "true",
   });
   const owner = org?.trim();
   const base = owner

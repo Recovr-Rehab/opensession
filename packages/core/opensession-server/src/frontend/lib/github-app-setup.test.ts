@@ -3,6 +3,7 @@ import {
 	githubAppCreateOwner,
 	githubAppCreateUrlForOwner,
 	githubAppInstallUrlForSlug,
+	githubAppSettingsUrlForSlug,
 	githubManifestAction,
 	shouldReloadAfterGithubAuthEnabled,
 } from "./github-app-setup";
@@ -28,6 +29,18 @@ describe("GitHub App installation URL", () => {
 			"https://github.com/apps/open-session-9lld/installations/new",
 		);
 		expect(githubAppInstallUrlForSlug(null)).toBeNull();
+	});
+});
+
+describe("GitHub App settings URL", () => {
+	test("opens the owner-specific settings page for Device Flow", () => {
+		expect(githubAppSettingsUrlForSlug(" open-session-9lld ", " acme inc ")).toBe(
+			"https://github.com/organizations/acme%20inc/settings/apps/open-session-9lld",
+		);
+		expect(githubAppSettingsUrlForSlug("open-session-personal")).toBe(
+			"https://github.com/settings/apps/open-session-personal",
+		);
+		expect(githubAppSettingsUrlForSlug(null, "acme")).toBeNull();
 	});
 });
 

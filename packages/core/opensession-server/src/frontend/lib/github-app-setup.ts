@@ -37,6 +37,19 @@ export function githubAppInstallUrlForSlug(slug?: string | null): string | null 
 		: null;
 }
 
+/** Settings page where the owner can manually enable Device Flow. */
+export function githubAppSettingsUrlForSlug(
+	slug?: string | null,
+	organization?: string | null,
+): string | null {
+	const normalizedSlug = slug?.trim();
+	if (!normalizedSlug) return null;
+	const normalizedOrganization = organization?.trim();
+	return normalizedOrganization
+		? `https://github.com/organizations/${encodeURIComponent(normalizedOrganization)}/settings/apps/${encodeURIComponent(normalizedSlug)}`
+		: `https://github.com/settings/apps/${encodeURIComponent(normalizedSlug)}`;
+}
+
 /** Read the account choice already encoded in GitHub's new-App URL. */
 export function githubAppCreateOwner(value: string): GithubAppCreateOwner {
 	try {

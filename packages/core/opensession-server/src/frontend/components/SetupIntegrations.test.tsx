@@ -59,20 +59,27 @@ function renderGithub(appSlug: string | null): string {
 }
 
 describe("GitHub App onboarding actions", () => {
-	test("shows both numbered steps and disables install until there is an App slug", () => {
+	test("shows all numbered steps and disables post-create actions without an App slug", () => {
 		const markup = renderGithub(null);
 		expect(markup).toContain("1. Create GitHub App");
 		expect(markup).toMatch(
-			/<button[^>]*disabled=""[^>]*><span[^>]*>2\. Install GitHub App<\/span><\/button>/,
+			/<button[^>]*disabled=""[^>]*><span[^>]*>2\. Enable Device Flow<\/span><\/button>/,
+		);
+		expect(markup).toMatch(
+			/<button[^>]*disabled=""[^>]*><span[^>]*>3\. Install GitHub App<\/span><\/button>/,
 		);
 	});
 
-	test("links the install step when the App slug is known", () => {
+	test("links Device Flow settings and installation when the App slug is known", () => {
 		const markup = renderGithub("open-session-acme");
+		expect(markup).toContain(
+			'href="https://github.com/organizations/acme/settings/apps/open-session-acme"',
+		);
+		expect(markup).toContain("2. Enable Device Flow");
 		expect(markup).toContain(
 			'href="https://github.com/apps/open-session-acme/installations/new"',
 		);
-		expect(markup).toContain("2. Install GitHub App");
+		expect(markup).toContain("3. Install GitHub App");
 	});
 
 	test("shows only manifest setup during onboarding", () => {
@@ -87,7 +94,8 @@ describe("GitHub App onboarding actions", () => {
 			<GithubManifestSetup github={github} returnTo="settings" />,
 		);
 		expect(markup).toContain("1. Create GitHub App");
-		expect(markup).toContain("2. Install GitHub App");
+		expect(markup).toContain("2. Enable Device Flow");
+		expect(markup).toContain("3. Install GitHub App");
 		expect(markup).not.toContain('type="file"');
 		expect(markup).not.toContain("Client secret");
 	});

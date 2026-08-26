@@ -132,7 +132,7 @@ describe("GitHub App manifest", () => {
 		};
 		const action = new URL(started.action);
 		expect(action.pathname).toBe("/organizations/acme/settings/apps/new");
-		expect(action.searchParams.get("device_flow_enabled")).toBe("true");
+		expect(action.searchParams.has("device_flow_enabled")).toBe(false);
 		const state = action.searchParams.get("state");
 		expect(state).toBeTruthy();
 		expect(started.manifest).not.toContain("secret");

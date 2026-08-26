@@ -491,11 +491,8 @@ interface DeviceFlow {
  */
 // The create-app form on GitHub can be pre-filled with URL query parameters
 // (docs.github.com/apps/sharing-github-apps/registering-a-github-app-using-url-parameters).
-// `device_flow_enabled` is undocumented but pre-ticks the Enable Device Flow
-// box — so the only thing left to do by hand is generate a client secret. It
-// is treated as best-effort: the wizard still asks the user to confirm Device
-// Flow is on, in case GitHub ever drops the param. GitHub ignores unknown
-// params, so this can only under-fill, never error.
+// Device Flow is not one of the supported parameters, so the wizard asks the
+// user to enable it manually after creating the App.
 // Blank org creates the app under the signed-in personal account; an org login
 // creates it under that organization (so the org owns it and it can reach org
 // repos). Same query params either way.
@@ -514,7 +511,6 @@ function buildGithubAppCreateUrl(name: string, org: string, webhookBaseUrl: stri
     // request, so the App is not born missing `issues` or `checks` (the drift
     // this builder used to have: no issues, no checks).
     ...GITHUB_APP_GRANT_PERMISSIONS,
-    device_flow_enabled: "true",
   }).toString();
   const base = org.trim()
     ? `https://github.com/organizations/${encodeURIComponent(org.trim())}/settings/apps/new`

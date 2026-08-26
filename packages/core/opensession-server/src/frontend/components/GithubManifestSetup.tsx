@@ -7,6 +7,7 @@ import { InlineAlert } from "../ui/state";
 import {
 	githubAppCreateOwner,
 	githubAppInstallUrlForSlug,
+	githubAppSettingsUrlForSlug,
 	githubManifestAction,
 	type GithubAppOwnerType,
 } from "../lib/github-app-setup";
@@ -15,12 +16,14 @@ import { SetupSteps, setupRequest, type SetupGithub } from "./setup-shared";
 function githubManifestSteps(owner: GithubAppOwnerType) {
 	const account = owner === "organization" ? "organization" : "personal account";
 	return [
-		<>Create a GitHub App for your {account}.</>,
 		<>
-			Review the prefilled name and permissions, confirm <strong>Device Flow</strong>{" "}
-			is on, then create the App.
+			Review the prefilled name and permissions, then create a GitHub App for your{" "}
+			{account}.
 		</>,
-		<>GitHub returns the App credentials directly to this server.</>,
+		<>
+			Open the created App, enable <strong>Device Flow</strong>, then save the
+			 changes.
+		</>,
 		<>Install the App on the repositories Open Session should reach.</>,
 	];
 }
@@ -48,6 +51,10 @@ export function GithubManifestSetup({
 	const [error, setError] = useState<string | null>(null);
 	const installationOwner = ownerDrafts[owner];
 	const ownerReady = owner === "personal" || Boolean(installationOwner.trim());
+	const settingsUrl = githubAppSettingsUrlForSlug(
+		github.appSlug,
+		github.appOrg ?? (initialOwner.type === "organization" ? initialOwner.login : null),
+	);
 	const installUrl = githubAppInstallUrlForSlug(github.appSlug ?? "");
 	const result =
 		typeof window === "undefined"
@@ -158,7 +165,7 @@ export function GithubManifestSetup({
 			<SetupSteps steps={githubManifestSteps(owner)} />
 			{result === "created" && (
 				<SettingsHint className="m-0">
-					GitHub App created. Install it on the repositories you want to use.
+					GitHub App created. Enable Device Flow before you install it.
 				</SettingsHint>
 			)}
 			{result === "error" && (
@@ -179,17 +186,30 @@ export function GithubManifestSetup({
 							? "Opening GitHub…"
 							: "1. Create GitHub App"}
 				</Button>
+				{settingsUrl ? (
+					<Button
+						size="lg"
+						className="min-h-11 w-full justify-center"
+						render={<a href={settingsUrl} target="_blank" rel="noreferrer" />}
+					>
+						2. Enable Device Flow
+					</Button>
+				) : (
+					<Button size="lg" className="min-h-11 w-full justify-center" disabled>
+						2. Enable Device Flow
+					</Button>
+				)}
 				{installUrl ? (
 					<Button
 						size="lg"
 						className="min-h-11 w-full justify-center"
 						render={<a href={installUrl} target="_blank" rel="noreferrer" />}
 					>
-						2. Install GitHub App
+						3. Install GitHub App
 					</Button>
 				) : (
 					<Button size="lg" className="min-h-11 w-full justify-center" disabled>
-						2. Install GitHub App
+						3. Install GitHub App
 					</Button>
 				)}
 			</div>

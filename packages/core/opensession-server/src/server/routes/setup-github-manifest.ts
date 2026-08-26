@@ -296,10 +296,6 @@ export async function handleSetupGithubManifestRoutes(
 				: "https://github.com/settings/apps/new";
 		const action = new URL(base);
 		action.searchParams.set("state", state);
-		// GitHub accepts this on the ordinary create form. It is intentionally
-		// best-effort because the manifest schema itself does not document a
-		// Device Flow field; onboarding still asks the person to confirm it.
-		action.searchParams.set("device_flow_enabled", "true");
 		return Response.json({
 			action: action.toString(),
 			manifest: JSON.stringify(
