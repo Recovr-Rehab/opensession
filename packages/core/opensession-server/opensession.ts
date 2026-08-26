@@ -176,8 +176,8 @@ let agents: AgentModule[] = (g.__agents as AgentModule[] | undefined) ?? [];
 // live maps and skip this branch.
 if (!g.__opensessionBooted && !isDevInstance()) {
 	initHumanAsks();
-	restorePendingAsks();
-	hydratePersistedQueueState();
+	await restorePendingAsks();
+	await hydratePersistedQueueState();
 }
 
 console.log(`Starting Open Session server on ${HOST}:${PORT}...`);
@@ -771,25 +771,13 @@ if (!g.__opensessionBooted) {
 		void (async () => {
 		try {
 		const shutdownRecords = readActiveShutdownSnapshot();
-		const resumedIds = resumeInterruptedRuns(
-			(bksSessionId, terminalEvent, recoveredRun) => {
+		const resumedIds = await resumeInterruptedRuns(
+			async (bksSessionId, terminalEvent, recoveredRun) => {
 				if (bksSessionId && terminalEvent) {
 					const failed =
 						terminalEvent.type === "error" ||
 						!!terminalEvent.usageLimitExhausted;
-					if (recoveredRun?.promptEntryId) {
-						settleRecoveredCreationOpening(
-							bksSessionId,
-							recoveredRun.promptEntryId,
-							failed
-								? terminalEvent.content ||
-									terminalEvent.result ||
-									"Recovered opening run failed"
-								: undefined,
-							recoveredRun.runKey,
-						);
-					}
-					recordRunOutcome(
+					await recordRunOutcome(
 						bksSessionId,
 						failed
 							? terminalEvent.content ||
@@ -814,6 +802,18 @@ if (!g.__opensessionBooted) {
 								: undefined,
 						},
 					);
+					if (recoveredRun?.promptEntryId) {
+						await settleRecoveredCreationOpening(
+							bksSessionId,
+							recoveredRun.promptEntryId,
+							failed
+								? terminalEvent.content ||
+									terminalEvent.result ||
+									"Recovered opening run failed"
+								: undefined,
+							recoveredRun.runKey,
+						);
+					}
 					// The in-process settleRun died with the restart — close the
 					// automation ledger entry here or it stays "running" forever.
 					settleResumedAutomationRun(
@@ -888,14 +888,14 @@ if (!g.__opensessionBooted) {
 		}
 		resumeDrainedSessions(new Set(resumedIds), shutdownRecords);
 		// Re-deliver messages that were queued/steered when the process went down.
-		restorePromptQueues(new Set(resumedIds));
+		await restorePromptQueues(new Set(resumedIds));
 		const ownedSessionIds = new Set(
 			activeRunRecords()
 				.map((run) => run.osSessionId)
 				.filter((id): id is string => !!id),
 		);
 		for (const id of resumedIds) ownedSessionIds.add(id);
-		const staleKernelOwners = reconcileSessionKernelOwnership(ownedSessionIds);
+		const staleKernelOwners = await reconcileSessionKernelOwnership(ownedSessionIds);
 		if (staleKernelOwners.length)
 			console.warn(
 				`[session-kernel] Settled ${staleKernelOwners.length} session(s) without a recoverable run owner`,

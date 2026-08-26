@@ -401,6 +401,53 @@ describe("session kernel actor boundary", () => {
     });
   });
 
+  test("does not replay a mutation whose committed response exceeds the buffer", async () => {
+    const host = await actor();
+    const sessionId = "large-async-dispatch";
+    const content = "x".repeat(300 * 1024);
+    await host.decideDeliveryAsync({
+      op: "set",
+      sessionId,
+      slot: "queued",
+      value: [{ id: "large", content }],
+    });
+    const claimed = await host.decideDeliveryAsync({
+      op: "claim_next_dispatch",
+      sessionId,
+      promptEntryId: "large-entry",
+    });
+    expect(claimed).toMatchObject({
+      kind: "deliver",
+      promptEntryId: "large-entry",
+      items: [{ id: "large", content }],
+    });
+    expect(host.store.deliverySnapshot(sessionId)).toMatchObject({
+      queued: [],
+      dispatch: {
+        promptEntryId: "large-entry",
+        items: [{ id: "large", content }],
+      },
+    });
+  });
+
+  test("atomically preserves concurrent queue enqueues", async () => {
+    const host = await actor();
+    const sessionId = "concurrent-enqueues";
+    await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        host.decideDeliveryAsync({
+          op: "enqueue",
+          sessionId,
+          item: { id: `item-${index}`, content: `prompt-${index}` },
+        })
+      ),
+    );
+    const snapshot = await host.decideDeliveryAsync({ op: "snapshot", sessionId });
+    expect(snapshot.queued).toHaveLength(20);
+    expect(new Set((snapshot.queued as Array<{ id: string }>).map((item) => item.id)).size)
+      .toBe(20);
+  });
+
   test("hydrates persisted run state into the gateway projection", async () => {
     const host = await actor();
     host.callStore("setRunState", [
@@ -516,6 +563,92 @@ describe("session kernel actor boundary", () => {
       requestId: "after-stop",
       operation: "websocket_command",
     })).toThrow("actor stopped");
+  });
+
+  test("classifies structured quarantine failures on the async path", async () => {
+    class StructuredErrorWorker {
+      listeners = new Map<string, (event: MessageEvent) => void>();
+      addEventListener(type: string, listener: (event: MessageEvent) => void) {
+        this.listeners.set(type, listener);
+      }
+      removeEventListener() {}
+      postMessage(message: { rpcId: string }) {
+        const body = JSON.stringify({
+          ok: false,
+          code: "session_quarantined",
+          sessionId: "async-quarantine",
+          error: "settlement is quarantined",
+        });
+        queueMicrotask(() => this.listeners.get("message")?.({
+          data: {
+            t: "call_result",
+            rpcId: message.rpcId,
+            status: -1,
+            length: body.length,
+            body,
+          },
+        } as MessageEvent));
+      }
+      terminate() {}
+    }
+    const host = new SessionKernelActorClient(
+      new StructuredErrorWorker() as unknown as Worker,
+    );
+    client = host;
+
+    await expect(host.decideGatewayAsync({
+      op: "request",
+      sessionId: "async-quarantine",
+      requestId: "request",
+      operation: "websocket_command",
+    })).rejects.toBeInstanceOf(SessionKernelQuarantinedError);
+  });
+
+  test("marks structured actor-fatal failures dead on the async path", async () => {
+    class StructuredErrorWorker {
+      listeners = new Map<string, (event: MessageEvent) => void>();
+      addEventListener(type: string, listener: (event: MessageEvent) => void) {
+        this.listeners.set(type, listener);
+      }
+      removeEventListener() {}
+      postMessage(message: { rpcId: string }) {
+        const body = JSON.stringify({
+          ok: false,
+          code: "actor_fatal",
+          error: "actor authority failed",
+        });
+        queueMicrotask(() => this.listeners.get("message")?.({
+          data: {
+            t: "call_result",
+            rpcId: message.rpcId,
+            status: -1,
+            length: body.length,
+            body,
+          },
+        } as MessageEvent));
+      }
+      terminate() {}
+    }
+    const fatal: Error[] = [];
+    const host = new SessionKernelActorClient(
+      new StructuredErrorWorker() as unknown as Worker,
+      (error) => fatal.push(error),
+    );
+    client = host;
+
+    await expect(host.decideGatewayAsync({
+      op: "request",
+      sessionId: "async-fatal",
+      requestId: "request",
+      operation: "websocket_command",
+    })).rejects.toThrow("actor authority failed");
+    expect(fatal).toHaveLength(1);
+    await expect(host.decideGatewayAsync({
+      op: "request",
+      sessionId: "async-fatal",
+      requestId: "later",
+      operation: "websocket_command",
+    })).rejects.toThrow("actor authority failed");
   });
 
   test("quarantines one session after ambiguous typed settlement", async () => {
@@ -780,15 +913,15 @@ describe("session kernel actor boundary", () => {
 
   test("delivery mutations invalidate projections without fetching a snapshot", async () => {
     const host = await actor();
-    const original = host.decideDelivery.bind(host);
+    const original = host.decideDeliveryAsync.bind(host);
     let snapshotCalls = 0;
-    host.decideDelivery = ((request) => {
+    host.decideDeliveryAsync = (async (request) => {
       if (request.op === "snapshot") snapshotCalls += 1;
       return original(request);
-    }) as typeof host.decideDelivery;
+    }) as typeof host.decideDeliveryAsync;
     installSessionKernelActor(host);
 
-    sessionDelivery({
+    await sessionDelivery({
       op: "set",
       sessionId: "small-mutation-reply",
       slot: "queued",
@@ -796,7 +929,7 @@ describe("session kernel actor boundary", () => {
     });
     expect(snapshotCalls).toBe(0);
     expect(
-      sessionDelivery({ op: "snapshot", sessionId: "small-mutation-reply" })
+      (await sessionDelivery({ op: "snapshot", sessionId: "small-mutation-reply" }))
         .revision,
     ).toBe(1);
     expect(snapshotCalls).toBe(1);

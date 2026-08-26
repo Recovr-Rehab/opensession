@@ -52,7 +52,7 @@ import {
   type ImageInput,
 } from "./run-events";
 import type { TranscriptEntry } from "./types";
-import { applyForwardedTranscript } from "./transcript-persistence";
+import { applyForwardedTranscriptStrict } from "./transcript-persistence";
 import { sameProcess } from "./process-identity";
 import type { GitIdentity } from "./shared/user-mappings";
 import { modelSupportsSteer, providerFor } from "./models";
@@ -478,7 +478,7 @@ async function spawnHostRun(
   try {
     // Persist before launch. If opensession restarts between systemd-run and
     // socket attachment, the boot sweep can still find the surviving host.
-    journalSet(hostedRunRecord(spec));
+    await journalSet(hostedRunRecord(spec));
     try {
       await launchHostUnit(hostId, dir);
     } catch (error) {
@@ -802,6 +802,8 @@ export class HostHandle {
   >();
   private respawns = 0;
   private stopRequested = false;
+  private projectionTail: Promise<void> | undefined;
+  private projectionFailure: unknown;
   private readonly ctl: HostRunControl;
   private onHostChanged?: (hostId: string) => void | Promise<void>;
   engineSessionId?: string;
@@ -1052,7 +1054,53 @@ export class HostHandle {
     return false;
   }
 
+  private enqueueProjectionFrame(
+    operation: () => void | Promise<void>,
+    runAfterFailure = false,
+  ): void {
+    const prior = this.projectionTail ?? Promise.resolve();
+    const current = prior.then(async () => {
+      if (this.projectionFailure && !runAfterFailure)
+        throw this.projectionFailure;
+      await operation();
+    });
+    const observed = current.catch((error) => {
+      if (!this.projectionFailure) {
+        this.projectionFailure = error;
+        this.queue.push({
+          type: "error",
+          content: `Run host projection failed: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    });
+    this.projectionTail = observed;
+    void observed.finally(() => {
+      if (this.projectionTail === observed) this.projectionTail = undefined;
+    });
+  }
+
+  /** Completion fence for transcript frames and every later host frame. */
+  async waitForPendingProjections(): Promise<void> {
+    await this.projectionTail;
+    if (this.projectionFailure) throw this.projectionFailure;
+  }
+
   private handleMsg(msg: HostToClientMsg): void {
+    if (
+      msg.t !== "transcript" &&
+      (this.projectionTail || this.projectionFailure)
+    ) {
+      // End is cleanup, not another projection. It must close the stream even
+      // when the transcript projection ahead of it failed. Every other frame
+      // remains fenced after the failed tail settles: projectionFailure is a
+      // permanent authority failure for this handle, not just queue state.
+      this.enqueueProjectionFrame(() => this.handleMsgNow(msg), msg.t === "end");
+      return;
+    }
+    this.handleMsgNow(msg);
+  }
+
+  private handleMsgNow(msg: HostToClientMsg): void {
     switch (msg.t) {
       case "hello": {
         if (!this.acceptsSideEffectFrame("hello")) break;
@@ -1120,7 +1168,13 @@ export class HostHandle {
         // Transcript frames bypass the StreamEvent queue, so fence them here
         // against the same run generation as ordinary host events.
         if (!this.acceptsSideEffectFrame("transcript")) break;
-        applyForwardedTranscript(this.spec.osSessionId, msg.engineSessionId, msg.lines);
+        this.enqueueProjectionFrame(() =>
+          applyForwardedTranscriptStrict(
+            this.spec.osSessionId,
+            msg.engineSessionId,
+            msg.lines,
+          )
+        );
         break;
       case "steer_failed":
         if (this.acceptsSideEffectFrame("steer_failed"))
@@ -1458,7 +1512,7 @@ export async function resumeLocalHostRun(
     if (recovery.kind === "uncertain") return "uncertain";
     if (recovery.kind === "resume") {
       run.claudeSessionId = recovery.engineSessionId;
-      journalSet({ ...run, claimedAt: undefined });
+      await journalSet({ ...run, claimedAt: undefined });
     }
     return null;
   }
@@ -1492,7 +1546,7 @@ export async function resumeLocalHostRun(
     if (recovery.kind === "uncertain") return "uncertain";
     if (recovery.kind === "resume") {
       run.claudeSessionId = recovery.engineSessionId;
-      journalSet({ ...run, claimedAt: undefined });
+      await journalSet({ ...run, claimedAt: undefined });
     }
     return null;
   }
@@ -1530,7 +1584,7 @@ export async function resumeLocalHostRun(
     if (recovery.kind === "uncertain") return "uncertain";
     if (recovery.kind === "resume") {
       run.claudeSessionId = recovery.engineSessionId;
-      journalSet({ ...run, claimedAt: undefined });
+      await journalSet({ ...run, claimedAt: undefined });
     }
     return null;
   }
@@ -1552,7 +1606,7 @@ export async function resumeLocalHostRun(
           if (shouldPersistModelSwitch(event)) run.selectedModel = event.toModel;
           changed = true;
         }
-        if (changed) journalSet({ ...run, claimedAt: undefined });
+        if (changed) await journalSet({ ...run, claimedAt: undefined });
         yield event;
       }
     } finally {

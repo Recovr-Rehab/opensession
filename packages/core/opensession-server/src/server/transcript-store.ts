@@ -256,7 +256,7 @@ export interface TailWindowOpts {
 export type TranscriptAppendHook = (
   sessionId: string,
   entries: SeqEntry[]
-) => void;
+) => void | Promise<void>;
 
 const g = globalThis as unknown as {
   __osTranscriptStore?: TranscriptStore;
@@ -295,7 +295,7 @@ export function transcriptStore(): TranscriptStore {
     isTestRunner() && !sessionsDirRedirected()
       ? scratchTranscriptDbPath()
       : transcriptDbPath();
-  return (g.__osTranscriptStore = new TranscriptStore(path));
+  return (g.__osTranscriptStore = new TranscriptStore(path, { actorOwned: true }));
 }
 
 function isTestRunner(): boolean {
@@ -406,7 +406,10 @@ export class TranscriptStore {
     immediate: (request: ValidatedDestinationAppend) => DestinationWriteOutcome;
   };
 
-  constructor(public readonly dbPath: string) {
+  constructor(
+    public readonly dbPath: string,
+    private readonly options: { actorOwned?: boolean } = {},
+  ) {
     if (dbPath !== ":memory:") {
       const dir = dirname(dbPath);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -613,7 +616,14 @@ export class TranscriptStore {
     sessionId: string,
     entries: TranscriptEntry[],
     opts?: AppendOpts
-  ): AppendResult | null {
+  ): Promise<AppendResult | null> {
+    if (!this.options.actorOwned) {
+      try {
+        return Promise.resolve(this.appendTranscriptEventsOwned(sessionId, entries, opts));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
     return executeSessionProjection(sessionId, "transcript_append", () =>
       this.appendTranscriptEventsOwned(sessionId, entries, opts)
     );
@@ -666,9 +676,11 @@ export class TranscriptStore {
     const hook = g.__osTranscriptAppendHook;
     if (hook) {
       try {
-        hook(sessionId, outcome.affected);
-      } catch (e) {
-        console.warn("[transcript-store] append hook threw:", e);
+        void Promise.resolve(hook(sessionId, outcome.affected)).catch((error) => {
+          console.warn("[transcript-store] append hook threw:", error);
+        });
+      } catch (error) {
+        console.warn("[transcript-store] append hook threw:", error);
       }
     }
     return result;
@@ -680,12 +692,12 @@ export class TranscriptStore {
    * after a gateway crash the actor re-admits the operation and this store
    * returns the already-committed destination result without another write.
    */
-  appendTranscriptDestination(
+  async appendTranscriptDestination(
     input: DestinationTranscriptAppendRequest,
-  ): DestinationTranscriptAppendResult {
+  ): Promise<DestinationTranscriptAppendResult> {
     const request = validateDestinationAppend(input, false);
     try {
-      return executeDestinationIdempotentSessionProjection(
+      return await executeDestinationIdempotentSessionProjection(
         request.sessionId,
         `transcript-destination:${request.appendId}`,
         "transcript_destination_append",
@@ -920,7 +932,14 @@ export class TranscriptStore {
     const hook = g.__osTranscriptAppendHook;
     if (hook) {
       try {
-        hook(request.sessionId, outcome.affected);
+        void Promise.resolve(hook(request.sessionId, outcome.affected)).catch(
+          (error) => {
+            console.warn(
+              "[transcript-store] destination append hook threw:",
+              error,
+            );
+          },
+        );
       } catch (error) {
         console.warn(
           "[transcript-store] destination append hook threw:",
@@ -945,7 +964,16 @@ export class TranscriptStore {
     entries: TranscriptEntry[],
     src: TranscriptImportSrc | string,
     watermark: number | null
-  ): { inserted: number; updated: number } {
+  ): Promise<{ inserted: number; updated: number }> {
+    if (!this.options.actorOwned) {
+      try {
+        return Promise.resolve(
+          this.importLegacyTranscriptOwned(sessionId, entries, src, watermark),
+        );
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
     return executeSessionProjection(sessionId, "transcript_import", () =>
       this.importLegacyTranscriptOwned(sessionId, entries, src, watermark)
     );
@@ -984,7 +1012,14 @@ export class TranscriptStore {
   replaceTranscriptEvents(
     sessionId: string,
     entries: TranscriptEntry[]
-  ): { inserted: number; updated: number } {
+  ): Promise<{ inserted: number; updated: number }> {
+    if (!this.options.actorOwned) {
+      try {
+        return Promise.resolve(this.replaceTranscriptEventsOwned(sessionId, entries));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
     return executeSessionProjection(sessionId, "transcript_replace", () =>
       this.replaceTranscriptEventsOwned(sessionId, entries)
     );
@@ -1304,11 +1339,20 @@ export class TranscriptStore {
   // ── Delete / maintenance ──────────────────────────────────────────────────
 
   /** Remove every trace of a session (events + blobs + session row). */
-  deleteSessionTranscript(sessionId: string): void {
-    executeSessionProjection(sessionId, "transcript_delete", () => {
+  deleteSessionTranscript(sessionId: string): Promise<void> {
+    const remove = () => {
       this.txDelete.immediate(sessionId);
       this.importedCache.delete(sessionId);
-    });
+    };
+    if (!this.options.actorOwned) {
+      try {
+        remove();
+        return Promise.resolve();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+    return executeSessionProjection(sessionId, "transcript_delete", remove);
   }
 
   /**

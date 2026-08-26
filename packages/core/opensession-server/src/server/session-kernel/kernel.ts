@@ -68,7 +68,6 @@ type GlobalKernelState = {
 	store?: SessionKernelStoreApi;
 	actor?: SessionKernelActorClient;
 	kernels?: Map<string, SessionKernel>;
-	deliveryProjection?: Map<string, DurableDeliveryState>;
 };
 
 const globalState = globalThis as typeof globalThis & {
@@ -92,24 +91,24 @@ export function sessionAgentOperation(request: AgentOperationRequest): AgentOper
   return compatibilityStoreForTest("core").decideAgentOperation(decoded);
 }
 
-export function registerAgentHostPlan(
+export async function registerAgentHostPlan(
   request: AgentHostPlanRegistration,
-): AgentHostPlanRegistrationResult {
-  if (state.actor) return state.actor.decideAgentHostSupervision(request);
+): Promise<AgentHostPlanRegistrationResult> {
+  if (state.actor) return state.actor.decideAgentHostSupervisionAsync(request);
   return compatibilityStoreForTest("core").registerAgentHostPlan(request);
 }
 
-export function claimAgentHostSupervision(
+export async function claimAgentHostSupervision(
   request: AgentHostSupervisionClaim,
-): AgentHostSupervisionResult {
-  if (state.actor) return state.actor.decideAgentHostSupervision(request);
+): Promise<AgentHostSupervisionResult> {
+  if (state.actor) return state.actor.decideAgentHostSupervisionAsync(request);
   return compatibilityStoreForTest("core").claimAgentHostSupervision(request);
 }
 
-export function sessionAsk<T extends AskActorRequest>(
+export async function sessionAsk<T extends AskActorRequest>(
   request: T,
-): AskActorResult<T> {
-  if (state.actor) return state.actor.decideAsk(request);
+): Promise<AskActorResult<T>> {
+  if (state.actor) return state.actor.decideAskAsync(request);
   const store = compatibilityStoreForTest("ask");
   let result: unknown;
   if (request.op === "snapshot") result = store.askSnapshot(request.sessionId);
@@ -129,11 +128,11 @@ export function sessionAsk<T extends AskActorRequest>(
   return result as AskActorResult<T>;
 }
 
-export function sessionTurn<T extends TurnActorRequest>(
+export async function sessionTurn<T extends TurnActorRequest>(
   request: T,
-): TurnActorResult<T> {
+): Promise<TurnActorResult<T>> {
   const actor = state.actor;
-  if (actor) return actor.decideTurn(request);
+  if (actor) return actor.decideTurnAsync(request);
   const store = compatibilityStoreForTest("turn");
   if (request.op === "snapshot")
     return store.turnSnapshot(request.sessionId) as TurnActorResult<T>;
@@ -156,10 +155,10 @@ export function sessionTurn<T extends TurnActorRequest>(
   return store.settleTurnOutcomeProjection(request) as TurnActorResult<T>;
 }
 
-export function sessionTimer<T extends TimerActorRequest>(
+export async function sessionTimer<T extends TimerActorRequest>(
   request: T,
-): TimerActorResult<T> {
-  if (state.actor) return state.actor.decideTimer(request);
+): Promise<TimerActorResult<T>> {
+  if (state.actor) return state.actor.decideTimerAsync(request);
   const store = compatibilityStoreForTest("turn");
   if (request.op === "schedule")
     return store.scheduleTimer(request) as TimerActorResult<T>;
@@ -174,10 +173,10 @@ export function sessionTimer<T extends TimerActorRequest>(
   return store.recordTimerRuntimeFailure(request) as TimerActorResult<T>;
 }
 
-export function sessionCore<T extends CoreActorRequest>(
+export async function sessionCore<T extends CoreActorRequest>(
   request: T,
-): CoreActorResult<T> {
-  if (state.actor) return state.actor.decideCore(request);
+): Promise<CoreActorResult<T>> {
+  if (state.actor) return state.actor.decideCoreAsync(request);
   const store = compatibilityStoreForTest("core");
   if (request.op === "enqueue_effect")
     return store.enqueueOutbox(
@@ -208,10 +207,10 @@ export async function sessionCoreAsync<T extends CoreActorRequest>(
   return sessionCore(request);
 }
 
-export function sessionGatewayCommand<T extends GatewayCommandRequest>(
+export async function sessionGatewayCommand<T extends GatewayCommandRequest>(
   request: T,
-): GatewayCommandResult<T> {
-  if (state.actor) return state.actor.decideGateway(request);
+): Promise<GatewayCommandResult<T>> {
+  if (state.actor) return state.actor.decideGatewayAsync(request);
   const store = compatibilityStoreForTest("gateway command");
   if (request.op === "request")
     return store.requestGatewayCommand(request) as GatewayCommandResult<T>;
@@ -227,17 +226,12 @@ export async function sessionGatewayCommandAsync<T extends GatewayCommandRequest
   return sessionGatewayCommand(request);
 }
 
-export function sessionDelivery<T extends DeliveryActorRequest>(
+export async function sessionDelivery<T extends DeliveryActorRequest>(
   request: T,
-): DeliveryActorResult<T> {
-  const projection = (state.deliveryProjection ??= new Map());
-  if (request.op === "snapshot") {
-    const cached = projection.get(request.sessionId);
-    if (cached) return cached as DeliveryActorResult<T>;
-  }
+): Promise<DeliveryActorResult<T>> {
   const actor = state.actor;
   let result: unknown;
-  if (actor) result = actor.decideDelivery(request);
+  if (actor) result = await actor.decideDeliveryAsync(request);
   else {
     const store = compatibilityStoreForTest("delivery");
     if (request.op === "snapshot")
@@ -256,6 +250,8 @@ export function sessionDelivery<T extends DeliveryActorRequest>(
       request.slot,
       request.value,
     );
+  else if (request.op === "enqueue")
+    result = store.enqueueDelivery(request.sessionId, request.item, request.front);
   else if (request.op === "delete")
     result = store.deleteDeliverySlot(request.sessionId, request.slot);
   else if (request.op === "clear_slot")
@@ -264,12 +260,21 @@ export function sessionDelivery<T extends DeliveryActorRequest>(
     result = store.prepareSteerDelivery(
       request.sessionId,
       request.itemId,
+      request.target,
       request.item,
     );
   else if (request.op === "accept_steer")
-    result = store.acceptSteerDelivery(request.sessionId, request.itemId);
+    result = store.acceptSteerDelivery(
+      request.sessionId,
+      request.itemId,
+      request.target,
+    );
   else if (request.op === "reject_steer")
-    result = store.rejectSteerDelivery(request.sessionId, request.itemId);
+    result = store.rejectSteerDelivery(
+      request.sessionId,
+      request.itemId,
+      request.target,
+    );
   else if (request.op === "settle_pending_steers")
     result = store.settlePendingSteers();
   else if (request.op === "requeue_steers")
@@ -295,41 +300,12 @@ export function sessionDelivery<T extends DeliveryActorRequest>(
         request.promptEntryId,
       );
   }
-  if (request.op === "snapshot") {
-    projection.set(request.sessionId, result as DurableDeliveryState);
-  } else if ("sessionId" in request) {
-    projection.delete(request.sessionId);
-  } else if (request.op === "clear_slot" || request.op === "settle_pending_steers") {
-    projection.clear();
-  }
   return result as DeliveryActorResult<T>;
 }
 
-export async function sessionDeliveryAsync<T extends DeliveryActorRequest>(
-  request: T,
-): Promise<DeliveryActorResult<T>> {
-  if (state.actor) {
-    const result = await state.actor.decideDeliveryAsync(request);
-    if (
-      request.op !== "snapshot" &&
-      request.op !== "entries" &&
-      "sessionId" in request
-    )
-      state.deliveryProjection?.delete(request.sessionId);
-    else if (
-      request.op === "clear_slot" ||
-      request.op === "settle_pending_steers"
-    )
-      state.deliveryProjection?.clear();
-    return result;
-  }
-  return sessionDelivery(request);
-}
-
-export function sessionDeliveryProjection(sessionId: string): DurableDeliveryState {
-  const projection = (state.deliveryProjection ??= new Map());
-  const cached = projection.get(sessionId);
-  if (cached) return cached;
+export async function sessionDeliveryProjection(
+  sessionId: string,
+): Promise<DurableDeliveryState> {
   return sessionDelivery({ op: "snapshot", sessionId });
 }
 
@@ -360,7 +336,6 @@ export function __setSessionKernelStoreForTest(
 	state.store = store;
 	state.actor = undefined;
 	state.kernels?.clear();
-	state.deliveryProjection?.clear();
 	return previous instanceof SessionKernelStore ? previous : undefined;
 }
 
@@ -371,7 +346,6 @@ export function installSessionKernelActor(
 	state.actor = actor;
   state.store = actor?.store;
 	state.kernels?.clear();
-	state.deliveryProjection?.clear();
 	return previous;
 }
 
@@ -388,22 +362,28 @@ export class SessionKernel {
 		return this.lastUsedAt;
 	}
 
-	private assertWritable(operation?: string): void {
+	private async assertWritable(operation?: string): Promise<void> {
+    const tombstoned = state.actor
+      ? await state.actor.callAsync<boolean>(
+          { t: "store", method: "isTombstoned", args: [this.sessionId] },
+          "isTombstoned",
+        )
+      : sessionKernelStore().isTombstoned(this.sessionId);
 		if (
-			sessionKernelStore().isTombstoned(this.sessionId) &&
+			tombstoned &&
 			operation !== "session_delete" &&
 			operation !== "transcript_delete"
 		)
 			throw new Error(`Session ${this.sessionId} was deleted`);
 	}
 
-  applyCreationEvent(
+  async applyCreationEvent(
     input: Omit<CreationEventDecision, "sessionId">,
-  ): CreationEventDecisionResult {
-    this.assertWritable(`creation_state:${input.event}`);
+  ): Promise<CreationEventDecisionResult> {
+    await this.assertWritable(`creation_state:${input.event}`);
     this.touch();
     const result = state.actor
-      ? state.actor.decideCreationEvent({
+      ? await state.actor.decideCreationEventAsync({
           sessionId: this.sessionId,
           ...input,
         })
@@ -429,15 +409,17 @@ export class SessionKernel {
     return sessionKernelStore().creationState(this.sessionId);
   }
 
-  applyRunEvent(
+  async applyRunEvent(
     input: Omit<RunEventDecision, "sessionId">,
-  ): RunEventDecisionResult {
-		this.assertWritable(`run_state:${input.event}`);
+  ): Promise<RunEventDecisionResult> {
+		await this.assertWritable(`run_state:${input.event}`);
 		this.touch();
-    return sessionKernelStore().applyRunEvent({
-      sessionId: this.sessionId,
-      ...input,
-    });
+    return state.actor
+      ? state.actor.decideRunEventAsync({ sessionId: this.sessionId, ...input })
+      : compatibilityStoreForTest("core").applyRunEvent({
+          sessionId: this.sessionId,
+          ...input,
+        });
 	}
 
 	runState(): DurableRunState {
@@ -472,19 +454,19 @@ export class SessionKernel {
 			| "deadLetteredAt"
 			| "createdAt"
 		>,
-	): void {
-    sessionTimer({ op: "schedule", sessionId: this.sessionId, ...timer });
+	): Promise<void> {
+    return sessionTimer({ op: "schedule", sessionId: this.sessionId, ...timer });
 	}
 
-	cancelTimer(timerId: string): void {
-    sessionTimer({ op: "cancel", sessionId: this.sessionId, timerId });
+	cancelTimer(timerId: string): Promise<void> {
+    return sessionTimer({ op: "cancel", sessionId: this.sessionId, timerId }).then(() => {});
 	}
 
 	enqueueEffect<K extends SessionActorEffectKind>(
 		kind: K,
 		payload: SessionActorEffectFor<K>["payload"],
 		effectKey: string = crypto.randomUUID(),
-	): number {
+	): Promise<number> {
 		this.touch();
     return sessionCore({
       op: "enqueue_effect",
@@ -495,12 +477,12 @@ export class SessionKernel {
     });
 	}
 
-	clear(): void {
-    sessionCore({ op: "clear", sessionId: this.sessionId });
+	clear(): Promise<void> {
+    return sessionCore({ op: "clear", sessionId: this.sessionId }).then(() => {});
 	}
 
-	tombstone(): void {
-    sessionCore({ op: "tombstone", sessionId: this.sessionId });
+	tombstone(): Promise<void> {
+    return sessionCore({ op: "tombstone", sessionId: this.sessionId }).then(() => {});
 	}
 
 	private touch(): void {
@@ -545,9 +527,9 @@ export function passivateIdleSessionKernels(
 	return count;
 }
 
-export function clearSessionKernel(sessionId: string): void {
+export async function clearSessionKernel(sessionId: string): Promise<void> {
 	const kernel = kernels().get(sessionId) ?? sessionKernel(sessionId);
-	kernel.clear();
+	await kernel.clear();
 	kernels().delete(sessionId);
 }
 
@@ -631,8 +613,8 @@ export async function maintainSessionKernel(): Promise<boolean> {
 	return sessionKernelStore().maintain();
 }
 
-export function tombstoneSessionKernel(sessionId: string): void {
+export async function tombstoneSessionKernel(sessionId: string): Promise<void> {
 	const kernel = state.kernels?.get(sessionId) ?? new SessionKernel(sessionId);
-	kernel.tombstone();
+	await kernel.tombstone();
 	state.kernels?.delete(sessionId);
 }
