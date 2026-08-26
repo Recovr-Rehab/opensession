@@ -107,32 +107,33 @@ function connectedGithubOrganization(status: SetupStatus): string {
 }
 
 /**
- * The first-run backdrop: the landing page's own artwork, at the strength the
- * marketing page runs it.
- *
- * It is deliberately not veiled down. A whitened copy reads as a page that
- * failed to load its background rather than as the product's own scene, and
- * the arrangement the site already proves is this one: full artwork, with
- * every panel above it opaque paper. The panels carry the contrast, so the
- * backdrop does not have to give any up.
- *
- * Served from our own origin (routes/static-assets.ts), never the site's CDN:
- * first run happens on a private server before anything is configured.
- *
- * Each theme gets its own cut for the reason the sign-in loop does (see
- * UserPicker): a dimmed light image is still the brightest thing on a dark
- * display, so dark takes the separately graded frame instead of a scrim.
+ * The exact "Silver Silk" loop used on the marketing page and sign-in gate.
+ * The optimized local copy keeps first run independent of the marketing CDN;
+ * its first frame covers loading and reduced-motion visitors.
  */
 function OnboardingBackdrop() {
 	const [theme, setTheme] = useState(effectiveTheme);
 	useEffect(() => onThemeChanged(() => setTheme(effectiveTheme())), []);
-	const art = theme === "dark" ? "onboarding-bg-dark" : "onboarding-bg";
+	const name = theme === "dark" ? "signin-bg-dark" : "signin-bg";
+	const poster = `${BASE_PATH}/${name}.webp`;
 	return (
 		<div
 			aria-hidden="true"
 			className="pointer-events-none absolute inset-0 select-none bg-surface bg-cover bg-center"
-			style={{ backgroundImage: `url(${BASE_PATH}/${art}.webp)` }}
-		/>
+			style={{ backgroundImage: `url(${poster})` }}
+		>
+			<video
+				key={name}
+				className="size-full object-cover motion-reduce:hidden"
+				autoPlay
+				loop
+				muted
+				playsInline
+				poster={poster}
+			>
+				<source src={`${BASE_PATH}/${name}.mp4`} type="video/mp4" />
+			</video>
+		</div>
 	);
 }
 

@@ -179,13 +179,6 @@ export async function handleStaticAssetsRoutes(
 		"/signin-bg.webp": "signin-bg.webp",
 		"/signin-bg-dark.mp4": "signin-bg-dark.mp4",
 		"/signin-bg-dark.webp": "signin-bg-dark.webp",
-		// The first-run flow's backdrop: the landing page's own artwork, vendored
-		// from packages/clients/website rather than fetched from the site, for the
-		// same reason the sign-in loop is — onboarding runs on a private server
-		// before anything is configured. FirstMile lays a white veil over it so it
-		// reads as a tint rather than the marketing page's full colour.
-		"/onboarding-bg.webp": "onboarding-bg.webp",
-		"/onboarding-bg-dark.webp": "onboarding-bg-dark.webp",
 		// DownloadAppsDialog's app-card previews. Referenced by URL (not bundler
 		// imports) so both the Bun SPA build and the Next.js website build see a
 		// plain string instead of diverging asset module types.
