@@ -4,7 +4,7 @@
 # state; process boundaries keep those fixtures from changing later files.
 set -euo pipefail
 
-readonly jobs="${OPENSESSION_TEST_JOBS:-4}"
+readonly jobs="${OPENSESSION_TEST_JOBS:-1}"
 if ! [[ "$jobs" =~ ^[1-9][0-9]*$ ]]; then
   echo "OPENSESSION_TEST_JOBS must be a positive integer (got: $jobs)" >&2
   exit 2

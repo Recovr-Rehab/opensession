@@ -121,6 +121,16 @@ afterAll(() => {
 const sessionJson = (id: string) =>
 	JSON.parse(readFileSync(`${tmp}/${id}.json`, "utf-8"));
 
+async function waitForLastRunError(id: string): Promise<{ message: string }> {
+	const deadline = Date.now() + 2_000;
+	while (Date.now() < deadline) {
+		const error = sessionJson(id).lastRunError;
+		if (error?.message) return error;
+		await Bun.sleep(10);
+	}
+	throw new Error(`lastRunError was not persisted for ${id}`);
+}
+
 describe("fake-engine session runs (consumer loop end-to-end)", () => {
 	test("clean run: engine id + usage persisted, FSM idle, settled", async () => {
 		if (!redirected) return;
@@ -168,7 +178,9 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 
 		await runSession.runSessionPromptAndDrain(sid, "explode please", "Test");
 		expect(fake.calls).toHaveLength(1);
-		expect(sessionJson(sid).lastRunError?.message).toContain("boom");
+		// Session-file fencing is asynchronous, so wait for its durable projection
+		// instead of assuming run completion also flushes the JSON write.
+		expect((await waitForLastRunError(sid)).message).toContain("boom");
 		expect(runState.getRunState(sid)).toBe("failed");
 		expect(sessionCache.isRunSettled(sid)).toBe(true);
 		// The enriched list surfaces the FSM state.

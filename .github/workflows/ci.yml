@@ -52,8 +52,9 @@ jobs:
 
       # Test files replace process.env, fetch, module-level path caches, and
       # globalThis state. Run each file in a fresh process so those intentional
-      # fixtures cannot make later files depend on discovery order. Four files
-      # at a time keeps the required gate fast without sharing runtime state.
+      # fixtures cannot make later files depend on discovery order. Keep the
+      # required gate sequential by default: several process-heavy integration
+      # fixtures have tight readiness budgets under shared-runner contention.
       - name: Unit tests
         run: scripts/test-unit-isolated.sh
 
