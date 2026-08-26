@@ -968,7 +968,10 @@ setFixBusy(false);
 					className={cn(
 						WS_SUMMARY_SECTION,
 						"justify-between",
-						embedded ? "h-11" : "h-7",
+						// The popup's `contents` group wrappers remain DOM siblings, so a
+						// selector between the nested PR band and this heading cannot match.
+						// Collapse the heading gap explicitly where the band already supplies it.
+						embedded ? "h-11" : "h-7 mt-0",
 					)}
 				>
 					<span>Review</span>

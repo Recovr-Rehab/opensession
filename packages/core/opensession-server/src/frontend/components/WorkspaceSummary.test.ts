@@ -21,3 +21,7 @@ test("workspace surfaces keep committed and uncommitted work separate", () => {
 	expect(infoSource).toContain("commits.map((commit)");
 	expect(infoSource).toContain("<CommitRow key={commit.sha} commit={commit} />");
 });
+
+test("popup review heading does not stack its gap after the PR band", () => {
+	expect(summarySource).toContain('embedded ? "h-11" : "h-7 mt-0"');
+});
