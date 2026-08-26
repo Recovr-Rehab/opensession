@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SetupGithub, SetupIntegration } from "./setup-shared";
-import { GithubAuthCard, IntegrationsList } from "./SetupIntegrations";
+import {
+	GithubAuthCard,
+	GithubManifestSetup,
+	IntegrationsList,
+} from "./SetupIntegrations";
 
 const integration: SetupIntegration = {
 	id: "linear",
@@ -74,6 +78,16 @@ describe("GitHub App onboarding actions", () => {
 	test("shows only manifest setup during onboarding", () => {
 		const markup = renderGithub(null);
 		expect(markup).not.toContain("Use an existing GitHub App");
+		expect(markup).not.toContain('type="file"');
+		expect(markup).not.toContain("Client secret");
+	});
+
+	test("uses the same manifest-only setup in Settings", () => {
+		const markup = renderToStaticMarkup(
+			<GithubManifestSetup github={github} returnTo="settings" />,
+		);
+		expect(markup).toContain("1. Create GitHub App");
+		expect(markup).toContain("2. Install GitHub App");
 		expect(markup).not.toContain('type="file"');
 		expect(markup).not.toContain("Client secret");
 	});

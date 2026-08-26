@@ -33,6 +33,7 @@ interface PendingManifest {
 	origin: string;
 	publicPrefix: string;
 	owner: ManifestOwner;
+	returnTo: "welcome" | "settings";
 	authLogin: string | null;
 	used: boolean;
 }
@@ -221,8 +222,12 @@ function callbackRedirect(
 	pending: PendingManifest,
 	result: "created" | "error",
 ): Response {
-	const target = new URL(`${pending.publicPrefix}/welcome`, pending.origin);
-	target.searchParams.set("step", "github");
+	const path =
+		pending.returnTo === "settings"
+			? `${pending.publicPrefix}/settings/integrations`
+			: `${pending.publicPrefix}/welcome`;
+	const target = new URL(path, pending.origin);
+	if (pending.returnTo === "welcome") target.searchParams.set("step", "github");
 	target.searchParams.set("github_manifest", result);
 	return Response.redirect(target, 303);
 }
@@ -251,6 +256,7 @@ export async function handleSetupGithubManifestRoutes(
 		const body = (await req.json().catch(() => null)) as {
 			owner?: unknown;
 			organization?: unknown;
+			returnTo?: unknown;
 		} | null;
 		let owner: ManifestOwner;
 		try {
@@ -279,6 +285,7 @@ export async function handleSetupGithubManifestRoutes(
 			origin: url.origin,
 			publicPrefix,
 			owner,
+			returnTo: body?.returnTo === "settings" ? "settings" : "welcome",
 			authLogin: ctx.authUser?.login ?? null,
 			used: false,
 		};
