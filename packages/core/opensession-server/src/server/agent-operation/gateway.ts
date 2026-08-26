@@ -20,9 +20,11 @@ import {
 import {
   AgentOperationConflictError,
   type AgentOperationIdentity,
+  type AgentOperationIndeterminateReason,
   type AgentOperationLedger,
   type AgentOperationRecord,
   type AgentOperationSettlement,
+  type AgentOperationTerminalReservation,
   type ExecutingOperationReconciler,
   reconcileExecutingOperation,
 } from "./ledger";
@@ -59,6 +61,12 @@ export interface AgentGatewayAdapterResult {
   readonly providerRequestRef?: string;
   readonly providerResponseRef?: string;
 }
+export interface AgentGatewayLiveEventSink {
+  publish(event: Readonly<unknown>): Promise<void>;
+  /** Flushes the bounded stream and returns opaque transport evidence. */
+  close(): Promise<unknown>;
+  fail(reason: unknown): Promise<void>;
+}
 export interface AgentGatewayAdapter {
   readonly id: string;
   readonly version: string;
@@ -68,6 +76,7 @@ export interface AgentGatewayAdapter {
       payload: unknown;
     }>,
     signal: AbortSignal,
+    sink?: AgentGatewayLiveEventSink,
   ): Promise<AgentGatewayAdapterResult>;
 }
 export type AgentGatewayDecodedPayload =
@@ -118,6 +127,10 @@ export interface AgentOperationGatewayOptions {
     record: AgentOperationRecord,
     appendId: string,
   ) => Promise<AgentOperationKernelTerminalV1>;
+  /** Optional and production-unwired. Resolves only after Host transport acknowledgement. */
+  readonly beginLiveExecution?: (
+    record: AgentOperationRecord,
+  ) => Promise<AgentGatewayLiveEventSink>;
   readonly reconcilerFor?: (
     record: AgentOperationRecord,
   ) => ExecutingOperationReconciler | undefined;
@@ -302,28 +315,90 @@ export class AgentOperationGateway {
       this.#now(),
     );
     await this.#hit("after_executing", executing);
-    const result = await adapter.execute(
-      Object.freeze({ identity, payload: adapterPayload }),
-      signal,
+    let sink: AgentGatewayLiveEventSink | undefined;
+    try {
+      if (this.#options.beginLiveExecution) {
+        let liveSink: AgentGatewayLiveEventSink;
+        try {
+          liveSink = await this.#options.beginLiveExecution(executing);
+        } catch {
+          throw new AgentGatewayAmbiguousExecutionError("disconnect_ambiguous");
+        }
+        sink = guardedLiveEventSink(liveSink);
+      }
+      const result = await adapter.execute(
+        Object.freeze({ identity, payload: adapterPayload }),
+        signal,
+        sink,
+      );
+      await sink?.close();
+      const appended = await this.#options.appendTerminal(identity, result);
+      await this.#hit("after_transcript_append", executing);
+      const settlement: AgentOperationSettlement = {
+        completedAtMs: this.#now(),
+        outcome: result.outcome,
+        transcriptRefs: appended.refs,
+        kernelTerminal: appended.kernelTerminal,
+        ...(result.providerRequestRef === undefined
+          ? {}
+          : { providerRequestRef: result.providerRequestRef }),
+        ...(result.providerResponseRef === undefined
+          ? {}
+          : { providerResponseRef: result.providerResponseRef }),
+      };
+      const settled = await this.#options.ledger.settle(identity, settlement);
+      await this.#hit("after_ledger_settlement", settled);
+      await this.#settleActor(settled);
+      await this.#hit("after_schema_settlement", settled);
+      return settled;
+    } catch (error) {
+      const ambiguity =
+        error instanceof AgentGatewayAmbiguousExecutionError
+          ? error
+          : undefined;
+      if (!ambiguity) throw error;
+      try {
+        await sink?.fail(ambiguity);
+      } catch {
+        // The durable terminal reservation, not best-effort stream cleanup, owns settlement.
+      }
+      return this.#settleAmbiguous(executing, ambiguity.reason);
+    }
+  }
+
+  async #settleAmbiguous(
+    executing: AgentOperationRecord,
+    reason: AgentOperationIndeterminateReason,
+  ) {
+    const reservation = await this.#options.ledger.reserveIndeterminate(
+      executing,
+      reason,
+      this.#now(),
     );
-    const appended = await this.#options.appendTerminal(identity, result);
-    await this.#hit("after_transcript_append", executing);
-    const settlement: AgentOperationSettlement = {
-      completedAtMs: this.#now(),
-      outcome: result.outcome,
-      transcriptRefs: appended.refs,
-      kernelTerminal: appended.kernelTerminal,
-      ...(result.providerRequestRef === undefined
-        ? {}
-        : { providerRequestRef: result.providerRequestRef }),
-      ...(result.providerResponseRef === undefined
-        ? {}
-        : { providerResponseRef: result.providerResponseRef }),
-    };
-    const settled = await this.#options.ledger.settle(identity, settlement);
-    await this.#hit("after_ledger_settlement", settled);
+    const authenticated = await this.#options.ledger.getExact(executing);
+    if (
+      !authenticated ||
+      authenticated.receipt.state !== "executing" ||
+      !authenticated.terminalReservation ||
+      !sameReservation(authenticated.terminalReservation, reservation)
+    )
+      throw new AgentOperationConflictError(
+        "agent operation terminal reservation mismatch",
+      );
+    const terminal = await this.#options.appendIndeterminateNotice(
+      authenticated,
+      indeterminateAppendId(
+        authenticated.operationId,
+        authenticated.terminalReservation.reservationId,
+      ),
+    );
+    const settled = await this.#options.ledger.markIndeterminate(
+      authenticated,
+      authenticated.terminalReservation,
+      this.#now(),
+      terminal,
+    );
     await this.#settleActor(settled);
-    await this.#hit("after_schema_settlement", settled);
     return settled;
   }
 
@@ -488,6 +563,50 @@ function keyForRequest(request: AgentOperationRequestV1) {
 function keyFor(record: AgentOperationRecord) {
   return `${record.fence.sessionId}\0${record.operationId}`;
 }
+function sameReservation(
+  a: Readonly<AgentOperationTerminalReservation>,
+  b: Readonly<AgentOperationTerminalReservation>,
+) {
+  return (
+    a.reservationId === b.reservationId &&
+    a.reason === b.reason &&
+    a.reservedAtMs === b.reservedAtMs
+  );
+}
+function guardedLiveEventSink(
+  sink: AgentGatewayLiveEventSink,
+): AgentGatewayLiveEventSink {
+  let closed = false;
+  let failed = false;
+  return Object.freeze({
+    async publish(event: Readonly<unknown>) {
+      if (closed)
+        throw new AgentGatewayAmbiguousExecutionError("disconnect_ambiguous");
+      try {
+        await sink.publish(event);
+      } catch {
+        closed = true;
+        throw new AgentGatewayAmbiguousExecutionError("disconnect_ambiguous");
+      }
+    },
+    async close() {
+      if (closed)
+        throw new AgentGatewayAmbiguousExecutionError("disconnect_ambiguous");
+      closed = true;
+      try {
+        return await sink.close();
+      } catch {
+        throw new AgentGatewayAmbiguousExecutionError("disconnect_ambiguous");
+      }
+    },
+    async fail(reason: unknown) {
+      if (failed) return;
+      failed = true;
+      closed = true;
+      await sink.fail(reason);
+    },
+  });
+}
 function indeterminateAppendId(operationId: string, reservationId: string) {
   return `agent-indeterminate:${operationId}:${reservationId}`;
 }
@@ -521,6 +640,14 @@ function synthetic(identity: AgentOperationIdentity): AgentOperationRecord {
       },
     },
   };
+}
+export class AgentGatewayAmbiguousExecutionError extends Error {
+  readonly reason: AgentOperationIndeterminateReason;
+  constructor(reason: AgentOperationIndeterminateReason) {
+    super(`agent operation completion is ambiguous: ${reason}`);
+    this.name = "AgentGatewayAmbiguousExecutionError";
+    this.reason = reason;
+  }
 }
 export class AgentGatewayRequestError extends Error {
   constructor(message: string) {

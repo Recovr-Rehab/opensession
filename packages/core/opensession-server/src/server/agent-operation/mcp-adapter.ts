@@ -5,9 +5,10 @@ import type {
   McpRuntimeCallResult,
   McpRuntimeContent,
 } from "../mcp-runtime";
-import type {
-  AgentGatewayAdapter,
-  AgentGatewayAdapterResult,
+import {
+  AgentGatewayAmbiguousExecutionError,
+  type AgentGatewayAdapter,
+  type AgentGatewayAdapterResult,
 } from "./gateway";
 import type {
   AgentOperationIdentity,
@@ -20,7 +21,8 @@ export const MCP_AGENT_OPERATION_REQUEST_VERSION = "v1";
 export const MAX_MCP_AGENT_TRANSCRIPT_BYTES = 64 * 1024;
 const MAX_MCP_AGENT_CONTENT_BLOCKS = 64;
 const TRUNCATED = "…[truncated]";
-const OMITTED_IMAGE = "[image omitted: MCP result exceeded the transcript limit]";
+const OMITTED_IMAGE =
+  "[image omitted: MCP result exceeded the transcript limit]";
 
 function fenceKey(fence: Readonly<AgentTurnFence>): string {
   return JSON.stringify([
@@ -99,16 +101,13 @@ export class McpTurnRuntimeRegistry {
 }
 
 export type McpAgentOperationAmbiguityReason =
-  | "cancellation_ambiguous"
-  | "timeout_ambiguous"
-  | "disconnect_ambiguous";
+  "cancellation_ambiguous" | "timeout_ambiguous" | "disconnect_ambiguous";
 
-export class McpAgentOperationAmbiguityError extends Error {
-  readonly reason: McpAgentOperationAmbiguityReason;
+export class McpAgentOperationAmbiguityError extends AgentGatewayAmbiguousExecutionError {
+  declare readonly reason: McpAgentOperationAmbiguityReason;
   constructor(reason: McpAgentOperationAmbiguityReason) {
-    super(`MCP operation completion is ambiguous: ${reason}`);
+    super(reason);
     this.name = "McpAgentOperationAmbiguityError";
-    this.reason = reason;
   }
 }
 
@@ -122,7 +121,8 @@ function immutableJson(value: unknown): value is Record<string, unknown> {
       typeof item === "string" ||
       typeof item === "boolean" ||
       (typeof item === "number" && Number.isFinite(item))
-    ) return true;
+    )
+      return true;
     if (!item || typeof item !== "object" || seen.has(item)) return false;
     if (!Object.isFrozen(item)) return false;
     seen.add(item);
@@ -132,7 +132,8 @@ function immutableJson(value: unknown): value is Record<string, unknown> {
       if (
         Object.getPrototypeOf(item) !== Array.prototype ||
         keys.length !== item.length + 1
-      ) return false;
+      )
+        return false;
       for (let index = 0; index < item.length; index++) {
         const descriptor = descriptors[String(index)];
         if (
@@ -141,7 +142,8 @@ function immutableJson(value: unknown): value is Record<string, unknown> {
           !descriptor.enumerable ||
           descriptor.value === undefined ||
           !visit(descriptor.value, depth + 1)
-        ) return false;
+        )
+          return false;
       }
     } else {
       const prototype = Object.getPrototypeOf(item);
@@ -156,7 +158,8 @@ function immutableJson(value: unknown): value is Record<string, unknown> {
           descriptor.value === undefined ||
           /^(?:__proto__|prototype|constructor)$/.test(key) ||
           !visit(descriptor.value, depth + 1)
-        ) return false;
+        )
+          return false;
       }
     }
     seen.delete(item);
@@ -165,7 +168,9 @@ function immutableJson(value: unknown): value is Record<string, unknown> {
   return visit(value, 0) && !Array.isArray(value);
 }
 
-function decodeArgumentsPayload(value: unknown): Record<string, unknown> | undefined {
+function decodeArgumentsPayload(
+  value: unknown,
+): Record<string, unknown> | undefined {
   if (!immutableJson(value)) return;
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const keys = Reflect.ownKeys(descriptors);
@@ -174,7 +179,8 @@ function decodeArgumentsPayload(value: unknown): Record<string, unknown> | undef
     keys[0] !== "arguments" ||
     !("value" in descriptors.arguments!) ||
     !immutableJson(descriptors.arguments!.value)
-  ) return;
+  )
+    return;
   return descriptors.arguments!.value;
 }
 
@@ -224,7 +230,9 @@ function boundedTranscript(result: McpRuntimeCallResult): Readonly<{
       data: block.data,
       mimeType: block.mimeType,
     };
-    if (transcriptBytes([...content, image]) <= MAX_MCP_AGENT_TRANSCRIPT_BYTES) {
+    if (
+      transcriptBytes([...content, image]) <= MAX_MCP_AGENT_TRANSCRIPT_BYTES
+    ) {
       content.push(Object.freeze(image));
       continue;
     }
@@ -241,12 +249,20 @@ function boundedTranscript(result: McpRuntimeCallResult): Readonly<{
   return Object.freeze({ kind: "mcp", content: Object.freeze(content) });
 }
 
-function ambiguityReason(error: unknown, signal: AbortSignal): McpAgentOperationAmbiguityReason | undefined {
+function ambiguityReason(
+  error: unknown,
+  signal: AbortSignal,
+): McpAgentOperationAmbiguityReason | undefined {
   if (signal.aborted || (error instanceof Error && error.name === "AbortError"))
     return "cancellation_ambiguous";
-  const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
+  const text =
+    error instanceof Error ? `${error.name} ${error.message}` : String(error);
   if (/time(?:d?\s*out|out)|deadline/i.test(text)) return "timeout_ambiguous";
-  if (/disconnect|connection (?:closed|lost|reset)|socket|broken pipe|econnreset|eof/i.test(text))
+  if (
+    /disconnect|connection (?:closed|lost|reset)|socket|broken pipe|econnreset|eof/i.test(
+      text,
+    )
+  )
     return "disconnect_ambiguous";
 }
 
@@ -264,15 +280,19 @@ function terminalResult(
   });
 }
 
-const failedResult = () => terminalResult("failed", "tool_error", "MCP tool call failed");
-const cancelledResult = () => terminalResult("cancelled", "cancelled", "MCP tool call cancelled");
+const failedResult = () =>
+  terminalResult("failed", "tool_error", "MCP tool call failed");
+const cancelledResult = () =>
+  terminalResult("cancelled", "cancelled", "MCP tool call cancelled");
 
-function mcpDescriptor(identity: Readonly<AgentOperationIdentity>): AgentMcpOperationDescriptorV1 | undefined {
+function mcpDescriptor(
+  identity: Readonly<AgentOperationIdentity>,
+): AgentMcpOperationDescriptorV1 | undefined {
   return identity.kind === "mcp" &&
-      identity.descriptor.kind === "mcp" &&
-      identity.toolUseEntryId === identity.descriptor.toolUseEntryId &&
-      identity.adapterId === MCP_AGENT_OPERATION_ADAPTER_ID &&
-      identity.adapterVersion === MCP_AGENT_OPERATION_ADAPTER_VERSION
+    identity.descriptor.kind === "mcp" &&
+    identity.toolUseEntryId === identity.descriptor.toolUseEntryId &&
+    identity.adapterId === MCP_AGENT_OPERATION_ADAPTER_ID &&
+    identity.adapterVersion === MCP_AGENT_OPERATION_ADAPTER_VERSION
     ? identity.descriptor
     : undefined;
 }
@@ -300,7 +320,10 @@ export function createMcpAgentOperationAdapter(
       signal: AbortSignal,
     ) {
       const descriptor = mcpDescriptor(request.identity);
-      if (!descriptor || descriptor.adapterRequestVersion !== MCP_AGENT_OPERATION_REQUEST_VERSION)
+      if (
+        !descriptor ||
+        descriptor.adapterRequestVersion !== MCP_AGENT_OPERATION_REQUEST_VERSION
+      )
         return failedResult();
       const args = decodeArgumentsPayload(request.payload);
       if (!args) return failedResult();

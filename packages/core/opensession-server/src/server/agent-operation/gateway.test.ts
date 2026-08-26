@@ -14,7 +14,12 @@ import {
   AgentGatewayGrantRegistry,
   encodeAgentGatewayPolicyHandle,
 } from "./grants";
-import { AgentOperationGateway, type AgentGatewayFailpoint } from "./gateway";
+import {
+  AgentGatewayAmbiguousExecutionError,
+  AgentOperationGateway,
+  type AgentGatewayFailpoint,
+  type AgentGatewayLiveEventSink,
+} from "./gateway";
 import { SQLiteAgentOperationLedger } from "./sqlite-ledger";
 
 const roots: string[] = [];
@@ -57,6 +62,12 @@ const envelope = {
 async function fixture(
   failAt?: AgentGatewayFailpoint,
   beforeAdapterCompletes?: () => Promise<void>,
+  lifecycle?: {
+    begin?: (recordState: string) => Promise<AgentGatewayLiveEventSink>;
+    execute?: (sink?: AgentGatewayLiveEventSink) => Promise<void>;
+    onAppend?: () => void;
+    onSettle?: () => void;
+  },
 ) {
   const root = mkdtempSync(join(tmpdir(), "agent-gateway-"));
   roots.push(root);
@@ -115,6 +126,7 @@ async function fixture(
       return { accepted: true };
     },
     async settle() {
+      lifecycle?.onSettle?.();
       this.terminals++;
     },
     async indeterminate() {
@@ -134,8 +146,9 @@ async function fixture(
     adapterFor: () => ({
       id: "adapter-1",
       version: "1.0",
-      async execute() {
+      async execute(_request, _signal, sink) {
         executions++;
+        await lifecycle?.execute?.(sink);
         await beforeAdapterCompletes?.();
         return {
           outcome: { status: "succeeded", outputDigest: d("e") },
@@ -148,13 +161,20 @@ async function fixture(
       return Object.freeze({ kind, value: payload, canonicalBytes: bytes });
     },
     appendTerminal: async () => {
+      lifecycle?.onAppend?.();
       terminalAppends++;
       return terminal("append-terminal", d("e"), "ok");
     },
-    appendIndeterminateNotice: async (_record, appendId) => {
+    beginLiveExecution: lifecycle?.begin
+      ? (record) => lifecycle.begin!(record.receipt.state)
+      : undefined,
+    appendIndeterminateNotice: async (record, appendId) => {
       notices++;
-      return terminal(appendId, d("f"), "reconciliation_unsupported")
-        .kernelTerminal;
+      return terminal(
+        appendId,
+        d("f"),
+        record.terminalReservation?.reason ?? "reconciliation_unsupported",
+      ).kernelTerminal;
     },
     failpoint: async (point) => {
       if (point === failAt && !tripped) {
@@ -374,6 +394,64 @@ describe("Agent operation gateway durable choreography", () => {
       }
       await f.ledger.close();
     });
+
+  test("orders acknowledged live events before transcript and terminal settlement", async () => {
+    const order: string[] = [];
+    const f = await fixture(undefined, undefined, {
+      begin: async (state) => {
+        order.push(`begin:${state}`);
+        return {
+          async publish() {
+            order.push("publish");
+          },
+          async close() {
+            order.push("close");
+            return Object.freeze({ frames: 1 });
+          },
+          async fail() {
+            order.push("fail");
+          },
+        };
+      },
+      execute: async (sink) => {
+        await sink!.publish(Object.freeze({ token: "x" }));
+        order.push("execute");
+      },
+      onAppend: () => order.push("append"),
+      onSettle: () => order.push("settle"),
+    });
+    await f.gateway.dispatch(f.request, "payload");
+    expect(order).toEqual([
+      "begin:executing",
+      "publish",
+      "execute",
+      "close",
+      "append",
+      "settle",
+    ]);
+    expect(f.counts()).toMatchObject({ terminalAppends: 1, executions: 1 });
+    await f.ledger.close();
+  });
+
+  test("typed ambiguity is immediately reserved, appended, and settled without retry", async () => {
+    const f = await fixture(undefined, undefined, {
+      execute: async () => {
+        throw new AgentGatewayAmbiguousExecutionError("timeout_ambiguous");
+      },
+    });
+    const terminal = await f.gateway.dispatch(f.request, "payload");
+    expect(terminal.receipt.state).toBe("indeterminate");
+    expect(terminal.receipt.kernelTerminal?.outcomeCode).toBe(
+      "timeout_ambiguous",
+    );
+    expect(f.counts()).toEqual({
+      executions: 1,
+      terminalAppends: 0,
+      notices: 1,
+    });
+    expect(f.actor.terminals).toBe(1);
+    await f.ledger.close();
+  });
 
   test("concurrent duplicate replay invokes the adapter exactly once", async () => {
     const f = await fixture();
