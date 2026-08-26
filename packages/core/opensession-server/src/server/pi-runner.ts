@@ -105,6 +105,11 @@ import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
 import { buildPiAnthropicProvider } from "./pi-anthropic-provider";
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
 import {
+  createMcpRuntime,
+  splitMcpMigrationBoundary,
+  type McpRuntime,
+} from "./mcp-runtime";
+import {
   DIAL_ORACLE_AGENTS,
   DIAL_ORACLE_FALLBACKS,
   ORCHESTRATOR_WORKER_AGENTS,
@@ -1569,6 +1574,7 @@ async function* runPiAttempt(
   };
   let reachedTerminal = false;
   let session: AgentSession | undefined;
+  let mcpRuntime: McpRuntime | undefined;
   let mcpBridge: PiMcpBridge | undefined;
   let sawSettled = false;
   // pi/openai only: the picked codex account — visible to the catch/terminal
@@ -2067,15 +2073,18 @@ async function* runPiAttempt(
       ...cliEnv,
     };
 
-    // MCP tools via the hand-rolled bridge; denied ids (policy.disables keys,
-    // <server>_<tool> + the broad money-mover forms) are dropped before the
-    // model ever sees them. Always closed in the finally.
-    mcpBridge = await createPiMcpBridge({
+    // One engine-neutral MCP runtime owns all connections for this logical
+    // turn. Pi only adapts its exact catalog into mcp_search/mcp_call. The
+    // detached runner-host proxy shape remains solely at this named migration
+    // boundary until Agent operation routing replaces it.
+    const mcpMounts = splitMcpMigrationBoundary(opts.inProcessMcp);
+    mcpRuntime = await createMcpRuntime({
       mcpServers,
       user,
       mcpGrantUser: opts.mcpGrantUser,
       deniedToolIds: new Set(Object.keys(policy.disables)),
-      inProcessMcp: opts.inProcessMcp,
+      inProcessMcp: mcpMounts.sdk,
+      legacyProxyMcp: mcpMounts.legacyProxy,
       onAudit: (e) =>
         audit({
           msg: "pi_mcp_call",
@@ -2087,6 +2096,7 @@ async function* runPiAttempt(
           ms: e.ms,
         }),
     });
+    mcpBridge = await createPiMcpBridge(mcpRuntime);
     // Tool policy: ask mode is read-only — no edit/write, and bash screened
     // through ASK_BASH_PERMISSIONS (askBashDenyReason), the same allowlist
     // previous runner's ask agent enforces engine-side. Shipping ask without bash at
@@ -3062,9 +3072,9 @@ async function* runPiAttempt(
         void session.abort();
       } catch {}
     }
-    if (mcpBridge) {
+    if (mcpRuntime) {
       try {
-        await mcpBridge.close();
+        await mcpRuntime.close();
       } catch {}
     }
     if (session) {
