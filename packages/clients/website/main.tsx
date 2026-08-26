@@ -579,11 +579,11 @@ function LandingPage() {
 					<div className="faq">
 						<Question q="Is it really self-hosted?">
 							Yes. You run the server and the agents run against your checkouts
-							on your hardware. There is no Open Session cloud in the path.
+							on your hardware.
 						</Question>
 						<Question q="Which agents can it run?">
-							Whatever the engine supports. A session names a model rather than a
-							vendor, and you can change that model between turns.
+							Any agent you want. A session names a model rather than a vendor, and
+							you can change that model between turns.
 						</Question>
 						<Question q="What does multiplayer actually mean?">
 							One session, many people. The transcript updates live for everyone
