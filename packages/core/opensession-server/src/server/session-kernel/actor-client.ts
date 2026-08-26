@@ -16,6 +16,7 @@ import {
   type DurableOutboxItem,
   type DeliverySlot,
   type DurableRunState,
+  type DurableSteerTarget,
   type DurableTimer,
   type RunEventDecision,
   type RunEventDecisionResult,
@@ -298,18 +299,6 @@ export class SessionKernelActorClient {
     );
   }
 
-  async decideCoreAsync<T extends CoreActorRequest>(
-    request: T,
-  ): Promise<CoreActorResult<T>> {
-    return this.callAsync<CoreActorResult<T>>(
-      {
-        t: "reduce",
-        command: { kind: "core", commandId: crypto.randomUUID(), request },
-      },
-      `core ${request.op}`,
-    );
-  }
-
   decideGateway<T extends GatewayCommandRequest>(
     request: T,
   ): GatewayCommandResult<T> {
@@ -342,27 +331,6 @@ export class SessionKernelActorClient {
     if (request.op === "entries")
       return (this.store as RemoteStore).deliveryEntries(request.slot) as DeliveryActorResult<T>;
     const response = this.callSync<
-      DeliveryActorResult<T> | DeliveryMutationReply<DeliveryActorResult<T>>
-    >(
-      {
-        t: "reduce",
-        command: {
-          kind: "delivery",
-          commandId: crypto.randomUUID(),
-          request,
-        },
-      },
-      `delivery ${request.op}`,
-    );
-    return (response as DeliveryMutationReply<DeliveryActorResult<T>>).result;
-  }
-
-  async decideDeliveryAsync<T extends DeliveryActorRequest>(
-    request: T,
-  ): Promise<DeliveryActorResult<T>> {
-    if (request.op === "snapshot") return this.decideDelivery(request);
-    if (request.op === "entries") return this.decideDelivery(request);
-    const response = await this.callAsync<
       DeliveryActorResult<T> | DeliveryMutationReply<DeliveryActorResult<T>>
     >(
       {
@@ -444,6 +412,228 @@ export class SessionKernelActorClient {
         decision.sessionId,
         result.state,
       );
+    return result;
+  }
+
+  /**
+   * Awaited store/reduce RPC over the posted-message transport. Unlike
+   * callSync this never blocks the gateway event loop; callers await.
+   */
+  callAsync<TResult>(
+    request:
+      | { t: "store"; method: string; args: unknown[] }
+      | { t: "reduce"; command: SessionActorReducerCommand },
+    label: string,
+    large = false,
+  ): Promise<TResult> {
+    if (this.deadError) return Promise.reject(this.deadError);
+    const rpcId = crypto.randomUUID();
+    return new Promise<TResult>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pending.delete(rpcId);
+        reject(
+          new SessionKernelActorError(
+            `Session kernel actor timed out handling ${label}`,
+            true,
+          ),
+        );
+      }, 15_000);
+      const parse = (value: unknown): TResult => {
+        const response = value as {
+          status: number;
+          body?: string;
+          length?: number;
+        };
+        if (!response.body)
+          throw new SessionKernelActorError(
+            `Session kernel ${label} returned no result`,
+            true,
+          );
+        const body = JSON.parse(response.body) as {
+          ok: boolean;
+          result?: TResult;
+          error?: string;
+          code?: string;
+          sessionId?: string;
+        };
+        if (!body.ok) {
+          const message = body.error || `Session kernel ${label} failed`;
+          if (body.code === "session_quarantined" && body.sessionId)
+            throw new SessionKernelQuarantinedError(body.sessionId, message);
+          const error = new SessionKernelActorError(message, false);
+          if (body.code === "actor_fatal") this.markDead(error);
+          throw error;
+        }
+        return body.result as TResult;
+      };
+      this.pending.set(rpcId, {
+        resolve: (value) => {
+          clearTimeout(timeout);
+          try {
+            resolve(parse(value));
+          } catch (error) {
+            reject(error instanceof Error ? error : new Error(String(error)));
+          }
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        },
+      });
+      try {
+        this.worker.postMessage({ ...request, rpcId });
+      } catch (error) {
+        clearTimeout(timeout);
+        this.pending.delete(rpcId);
+        const failure = error instanceof Error ? error : new Error(String(error));
+        this.markDead(failure);
+        reject(failure);
+      }
+    });
+  }
+
+  async decideAskAsync<T extends AskActorRequest>(
+    request: T,
+  ): Promise<AskActorResult<T>> {
+    return this.callAsync<AskActorResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "ask", commandId: crypto.randomUUID(), request },
+      },
+      `ask ${request.op}`,
+    );
+  }
+
+  async decideTurnAsync<T extends TurnActorRequest>(
+    request: T,
+  ): Promise<TurnActorResult<T>> {
+    const result = await this.callAsync<TurnActorResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "turn", commandId: crypto.randomUUID(), request },
+      },
+      `turn ${request.op}`,
+    );
+    if (request.op === "prepare_cancel")
+      (this.store as RemoteStore).noteRunState(
+        request.sessionId,
+        (
+          result as TurnActorResult<
+            Extract<TurnActorRequest, { op: "prepare_cancel" }>
+          >
+        ).runState,
+      );
+    else if (
+      request.op === "prepare_outcome_projection" ||
+      request.op === "settle_outcome_projection"
+    )
+      (this.store as RemoteStore).noteChange(request.sessionId);
+    return result;
+  }
+
+  decideTimerAsync<T extends TimerActorRequest>(
+    request: T,
+  ): Promise<TimerActorResult<T>> {
+    return this.callAsync<TimerActorResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "timer", commandId: crypto.randomUUID(), request },
+      },
+      `timer ${request.op}`,
+    );
+  }
+
+  decideCoreAsync<T extends CoreActorRequest>(
+    request: T,
+  ): Promise<CoreActorResult<T>> {
+    return this.callAsync<CoreActorResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "core", commandId: crypto.randomUUID(), request },
+      },
+      `core ${request.op}`,
+    );
+  }
+
+  async decideDeliveryAsync<T extends DeliveryActorRequest>(
+    request: T,
+  ): Promise<DeliveryActorResult<T>> {
+    const response = await this.callAsync<
+      DeliveryActorResult<T> | DeliveryMutationReply<DeliveryActorResult<T>>
+    >(
+      {
+        t: "reduce",
+        command: {
+          kind: "delivery",
+          commandId: crypto.randomUUID(),
+          request,
+        },
+      },
+      `delivery ${request.op}`,
+    );
+    if (request.op === "snapshot" || request.op === "entries")
+      return response as DeliveryActorResult<T>;
+    return (response as DeliveryMutationReply<DeliveryActorResult<T>>).result;
+  }
+
+  async decideAgentHostSupervisionAsync<T extends AgentHostSupervisionRequest>(
+    request: T,
+  ): Promise<T extends AgentHostPlanRegistration
+    ? AgentHostPlanRegistrationResult
+    : AgentHostSupervisionResult> {
+    return this.callAsync<
+      AgentHostPlanRegistrationResult | AgentHostSupervisionResult
+    >(
+      {
+        t: "reduce",
+        command: {
+          kind: "agent_host_supervision",
+          commandId:
+            request.op === "register_plan"
+              ? request.registrationId
+              : request.claimId,
+          request,
+        },
+      },
+      "Agent Host supervision claim",
+    ) as Promise<T extends AgentHostPlanRegistration
+      ? AgentHostPlanRegistrationResult
+      : AgentHostSupervisionResult>;
+  }
+
+  async decideCreationEventAsync(
+    decision: CreationEventDecision,
+  ): Promise<CreationEventDecisionResult> {
+    return this.callAsync<CreationEventDecisionResult>(
+      {
+        t: "reduce",
+        command: {
+          kind: "creation_event",
+          commandId: crypto.randomUUID(),
+          decision,
+        },
+      },
+      "creation event decision",
+      true,
+    );
+  }
+
+  async decideRunEventAsync(
+    decision: RunEventDecision,
+  ): Promise<RunEventDecisionResult> {
+    const result = await this.callAsync<RunEventDecisionResult>(
+      {
+        t: "reduce",
+        command: {
+          kind: "run_event",
+          commandId: crypto.randomUUID(),
+          decision,
+        },
+      },
+      "run event decision",
+    );
+    if (result.accepted)
+      (this.store as RemoteStore).noteRunState(decision.sessionId, result.state);
     return result;
   }
 
@@ -547,37 +737,6 @@ export class SessionKernelActorClient {
       throw error;
     }
     return response.result as TResult;
-  }
-
-  private async callAsync<TResult>(
-    request: SyncRequest,
-    label: string,
-  ): Promise<TResult> {
-    const response = await this.request({
-      ...request,
-      rpcId: crypto.randomUUID(),
-    });
-    if (response.t !== "call_result" || !response.body)
-      throw new SessionKernelActorError(
-        `Invalid async ${label} response`,
-        true,
-      );
-    const body = JSON.parse(response.body) as {
-      ok: boolean;
-      result?: TResult;
-      error?: string;
-      code?: string;
-      sessionId?: string;
-    };
-    if (!body.ok) {
-      const message = body.error || `Session kernel ${label} failed`;
-      if (body.code === "session_quarantined" && body.sessionId)
-        throw new SessionKernelQuarantinedError(body.sessionId, message);
-      const error = new SessionKernelActorError(message, false);
-      if (body.code === "actor_fatal") this.markDead(error);
-      throw error;
-    }
-    return body.result as TResult;
   }
 
   terminate(): void {
@@ -970,25 +1129,52 @@ class RemoteStore implements SessionKernelStoreApi {
   setDeliverySlot(sessionId: string, slot: DeliverySlot, value: unknown) {
     this.actor.decideDelivery({ op: "set", sessionId, slot, value });
   }
+  enqueueDelivery(sessionId: string, item: unknown, front?: boolean) {
+    return this.actor.decideDelivery({ op: "enqueue", sessionId, item, front });
+  }
   deleteDeliverySlot(sessionId: string, slot: DeliverySlot) {
     return this.actor.decideDelivery({ op: "delete", sessionId, slot });
   }
   clearDeliverySlot(slot: DeliverySlot) {
     this.actor.decideDelivery({ op: "clear_slot", slot });
   }
-  prepareSteerDelivery(sessionId: string, itemId: string, item?: unknown) {
+  prepareSteerDelivery(
+    sessionId: string,
+    itemId: string,
+    target: DurableSteerTarget,
+    item?: unknown,
+  ) {
     return this.actor.decideDelivery({
       op: "prepare_steer",
       sessionId,
       itemId,
+      target,
       item,
     });
   }
-  acceptSteerDelivery(sessionId: string, itemId: string) {
-    return this.actor.decideDelivery({ op: "accept_steer", sessionId, itemId });
+  acceptSteerDelivery(
+    sessionId: string,
+    itemId: string,
+    target: DurableSteerTarget,
+  ) {
+    return this.actor.decideDelivery({
+      op: "accept_steer",
+      sessionId,
+      itemId,
+      target,
+    });
   }
-  rejectSteerDelivery(sessionId: string, itemId: string) {
-    return this.actor.decideDelivery({ op: "reject_steer", sessionId, itemId });
+  rejectSteerDelivery(
+    sessionId: string,
+    itemId: string,
+    target: DurableSteerTarget,
+  ) {
+    return this.actor.decideDelivery({
+      op: "reject_steer",
+      sessionId,
+      itemId,
+      target,
+    });
   }
   settlePendingSteers() {
     return this.actor.decideDelivery({ op: "settle_pending_steers" });

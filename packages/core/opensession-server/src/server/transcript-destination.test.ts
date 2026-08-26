@@ -85,7 +85,9 @@ describe("destination-idempotent transcript append receipts", () => {
     const { dir, path, store } = fixture();
     let hooks = 0;
     let bus = 0;
-    setAppendHook(() => hooks++);
+    setAppendHook(() => {
+      hooks++;
+    });
     const unsubscribe = subscribeTranscript("os-destination", () => bus++);
     try {
       const first = store.commitTranscriptDestinationAppend(request());
@@ -313,27 +315,27 @@ describe("destination-idempotent transcript append receipts", () => {
     }
   });
 
-  test("destination continuation does not hold the session actor mailbox", () => {
+  test("destination continuation does not hold the session actor mailbox", async () => {
     const { dir, store } = fixture();
     const kernel = new SessionKernelStore(
       join(dir, "responsive-kernel.sqlite"),
     );
     const previous = __setSessionKernelStoreForTest(kernel);
     try {
-      const result = executeDestinationIdempotentSessionProjection(
+      const result = await executeDestinationIdempotentSessionProjection(
         "os-responsive",
         "transcript-destination:responsive",
         "transcript_destination_append",
         { digest: "one" },
-        () => {
-          const admission = sessionGatewayCommand({
+        async () => {
+          const admission = await sessionGatewayCommand({
             op: "request",
             sessionId: "os-responsive",
             requestId: "transcript_append:responsive-sibling",
             operation: "transcript_append",
           });
           expect(admission).toEqual({ status: "execute" });
-          sessionGatewayCommand({
+          await sessionGatewayCommand({
             op: "complete",
             sessionId: "os-responsive",
             requestId: "transcript_append:responsive-sibling",
@@ -357,7 +359,9 @@ describe("destination-idempotent transcript append receipts", () => {
     const transcriptAnchor = emptyAnchor();
     let hooks = 0;
     let bus = 0;
-    setAppendHook(() => hooks++);
+    setAppendHook(() => {
+      hooks++;
+    });
     const unsubscribe = subscribeTranscript("os-destination", () => bus++);
     const input = request({
       transcriptAnchor,

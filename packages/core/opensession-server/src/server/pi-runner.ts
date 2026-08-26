@@ -722,7 +722,9 @@ function piAppend(engineSessionId: string, lines: Record<string, unknown>[]): vo
     forward(engineSessionId, lines);
     return;
   }
-  appendTranscriptEntries(engineSessionId, lines);
+  void appendTranscriptEntries(engineSessionId, lines).catch((error) => {
+    console.error(`[pi] Transcript append failed for ${engineSessionId}:`, error);
+  });
 }
 
 /** Store one batch of normalized entries under the pi session id. Requires
@@ -1656,7 +1658,7 @@ async function* runPiAttempt(
     );
     walk.promptEntryId ??= String(userLine.uuid);
     if (journal?.osSessionId) {
-      journalSet(
+      await journalSet(
         buildRunJournalRecord(opts, {
           runKey,
           osSessionId: journal.osSessionId,
@@ -2432,7 +2434,7 @@ async function* runPiAttempt(
     // Journal upgrade: the record now carries the engine id (still no
     // serverKey — boot must take the continuation re-prompt path).
     if (journal?.osSessionId) {
-      journalSet(
+      await journalSet(
         buildRunJournalRecord(opts, {
           runKey,
           osSessionId: journal.osSessionId,

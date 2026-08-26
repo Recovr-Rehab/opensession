@@ -34,13 +34,13 @@ class SessionTimerExecutionError extends Error {
 	}
 }
 
-function timerRuntimeFailure(
+async function timerRuntimeFailure(
 	timer: DurableTimer,
 	error: unknown,
-): SessionTimerExecutionError {
+): Promise<SessionTimerExecutionError> {
 	let deadLetteredNow = false;
 	try {
-		deadLetteredNow = sessionTimer({
+		deadLetteredNow = (await sessionTimer({
 			op: "record_runtime_failure",
 			sessionId: timer.sessionId,
 			timerId: timer.timerId,
@@ -48,7 +48,7 @@ function timerRuntimeFailure(
 			error: error instanceof Error ? error.message : String(error),
 			maxAttempts: 20,
 			observedAttempts: timer.attempts,
-		}).deadLetteredNow;
+		})).deadLetteredNow;
 	} catch {
 		// The actor is the only timer writer. If it is unavailable, preserve the
 		// original failure and let the next actor-owned runtime pass retry.
@@ -56,10 +56,10 @@ function timerRuntimeFailure(
 	return new SessionTimerExecutionError(error, deadLetteredNow);
 }
 
-function failDeadCreationEffect(
+async function failDeadCreationEffect(
 	item: DurableOutboxItem,
 	error: string,
-): void {
+): Promise<void> {
 	if (!item.kind.startsWith("creation_")) return;
 	const payload = item.payload as
 		| { creationIdentity?: unknown; creationGeneration?: unknown }
@@ -70,7 +70,7 @@ function failDeadCreationEffect(
 		!Number.isSafeInteger(payload.creationGeneration)
 	)
 		return;
-	const result = sessionKernel(item.sessionId).applyCreationEvent({
+	const result = await sessionKernel(item.sessionId).applyCreationEvent({
 		identity: payload.creationIdentity,
 		event: "failed",
 		effectId: item.effectKey,
@@ -127,14 +127,14 @@ export async function fireSessionTimer(timer: DurableTimer): Promise<boolean> {
 	if (!handler) return false;
 	let decision: "execute" | "completed" | "missing";
 	try {
-		decision = sessionTimer({
+		decision = await sessionTimer({
 			op: "begin",
 			sessionId: timer.sessionId,
 			timerId: timer.timerId,
 			token: timer.token,
 		});
 	} catch (error) {
-		throw timerRuntimeFailure(timer, error);
+		throw await timerRuntimeFailure(timer, error);
 	}
 	if (decision === "missing") return false;
 	if (decision === "completed") return true;
@@ -142,7 +142,7 @@ export async function fireSessionTimer(timer: DurableTimer): Promise<boolean> {
 		await handler(timer);
 	} catch (error) {
 		try {
-			const settled = sessionTimer({
+			const settled = await sessionTimer({
 				op: "fail",
 				sessionId: timer.sessionId,
 				timerId: timer.timerId,
@@ -154,18 +154,18 @@ export async function fireSessionTimer(timer: DurableTimer): Promise<boolean> {
 		} catch (settlementError) {
 			if (settlementError instanceof SessionTimerExecutionError)
 				throw settlementError;
-			throw timerRuntimeFailure(timer, settlementError);
+			throw await timerRuntimeFailure(timer, settlementError);
 		}
 	}
 	try {
-		sessionTimer({
+		await sessionTimer({
 			op: "complete",
 			sessionId: timer.sessionId,
 			timerId: timer.timerId,
 			token: timer.token,
 		});
 	} catch (error) {
-		throw timerRuntimeFailure(timer, error);
+		throw await timerRuntimeFailure(timer, error);
 	}
 	return true;
 }
@@ -271,7 +271,7 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 								error instanceof CreationEffectIndeterminateError ? 1 : 20,
 						});
 						if (settled.deadLetteredNow) {
-							failDeadCreationEffect(item, message);
+							await failDeadCreationEffect(item, message);
 							audit({
 								msg: "session_kernel_dead_lettered",
 								kind: "outbox",
@@ -357,9 +357,9 @@ export function stopSessionKernelRuntime(): void {
 }
 
 /** Settle durable ownership left behind without a recoverable journal. */
-export function reconcileSessionKernelOwnership(
+export async function reconcileSessionKernelOwnership(
 	ownedSessionIds: ReadonlySet<string>,
-): string[] {
+): Promise<string[]> {
 	const unsettled = new Set([
 		"preparing",
 		"starting",
@@ -376,7 +376,7 @@ export function reconcileSessionKernelOwnership(
 			sessionKernelStore().quarantinedSession(state.sessionId)
 		)
 			continue;
-		sessionKernel(state.sessionId).applyRunEvent({
+		await sessionKernel(state.sessionId).applyRunEvent({
 			event: "boot_owner_missing",
 			detail: { previousState: state.state },
 		});
