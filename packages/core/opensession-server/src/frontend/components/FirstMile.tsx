@@ -538,7 +538,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 											"w-full max-w-[820px] pb-8 [&_[data-setting-title]]:text-dialog-title",
 											// First-run fields use the large field step, with extra room
 											// for the fixed-width organization and product names.
-											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9 [&_input[data-setup-field]]:w-[240px] [&_input[data-setup-field='org-name']]:w-[320px]",
+											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9 [&_input[data-setup-field='identity']]:w-[240px] [&_input[data-setup-field='org-name']]:w-[320px]",
 										)}
 									>
 										{step.id === "ingress" && (
