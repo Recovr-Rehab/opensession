@@ -561,12 +561,12 @@ describe("SQLite Agent operation ledger", () => {
     ); PRAGMA user_version=1;`);
     weak.close();
     expect(() => new SQLiteAgentOperationLedger({ dbPath: lookalike })).toThrow(
-      "not exact STRICT schema",
+      "unsupported Agent operation ledger schema: 1",
     );
 
     const unknown = path();
     const db = new Database(unknown);
-    db.exec("PRAGMA user_version=2");
+    db.exec("PRAGMA user_version=3");
     db.close();
     expect(() => new SQLiteAgentOperationLedger({ dbPath: unknown })).toThrow(
       "unsupported Agent operation ledger schema",

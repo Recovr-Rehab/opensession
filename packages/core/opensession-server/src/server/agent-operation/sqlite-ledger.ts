@@ -34,7 +34,7 @@ import {
   type AgentOperationTerminalReservation,
 } from "./ledger";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const MAX_ID_BYTES = 512;
 const DEFAULT_MAX_ROW_BYTES = 256 * 1024;
 const TABLE_SQL = `CREATE TABLE agent_operation_receipts (
