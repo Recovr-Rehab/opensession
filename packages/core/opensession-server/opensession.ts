@@ -54,6 +54,7 @@ import {
 	findSession,
 	findSessionAsync,
 	invalidateSessionsCache,
+	reconcileRecoverableSafetyFences,
 	recordRunOutcome,
 	startSessionOwnershipWatchdog,
 	stopSessionOwnershipWatchdog,
@@ -773,6 +774,11 @@ if (!g.__opensessionBooted) {
 		setTimeout(() => {
 		void (async () => {
 		try {
+		// Release only actor-proven repairable safety fences before claiming the
+		// run journal. If this happens later in the watchdog, the boot recovery
+		// sweep has already skipped the quarantined lineage and its terminal host
+		// receipt can remain stranded behind a ghost owner until another restart.
+		await reconcileRecoverableSafetyFences();
 		const shutdownRecords = readActiveShutdownSnapshot();
 		const resumedIds = await resumeInterruptedRuns(
 			async (bksSessionId, terminalEvent, recoveredRun) => {

@@ -427,18 +427,19 @@ function checkRunStateWedge(
 
 type OwnershipWatchdogState = {
 	timer?: ReturnType<typeof setTimeout>;
-	safetyReconciliation?: Promise<void>;
+	safetyReconciliation?: Promise<string[]>;
 };
 const ownershipWatchdog: OwnershipWatchdogState = (g.__sessionOwnershipWatchdog ??= {});
 
-function reconcileRecoverableSafetyFences(): void {
-	if (ownershipWatchdog.safetyReconciliation) return;
-	ownershipWatchdog.safetyReconciliation = (async () => {
+export async function reconcileRecoverableSafetyFences(): Promise<string[]> {
+	if (ownershipWatchdog.safetyReconciliation)
+		return ownershipWatchdog.safetyReconciliation;
+	const reconciliation = (async () => {
 		const released = await reconcileAutomaticallyRecoverableSessionSafety(
 			await sessionQuarantines(),
 			releaseSessionQuarantine,
 		);
-		if (!released.length) return;
+		if (!released.length) return released;
 		invalidateSessionsCache();
 		for (const sessionId of released) {
 			audit({
@@ -451,11 +452,16 @@ function reconcileRecoverableSafetyFences(): void {
 				isRunning: isAgentSessionBusy(sessionId),
 			});
 		}
+		return released;
 	})().catch((error) => {
 		console.error("[session-safety] automatic reconciliation failed:", error);
+		return [];
 	}).finally(() => {
-		ownershipWatchdog.safetyReconciliation = undefined;
+		if (ownershipWatchdog.safetyReconciliation === reconciliation)
+			ownershipWatchdog.safetyReconciliation = undefined;
 	});
+	ownershipWatchdog.safetyReconciliation = reconciliation;
+	return reconciliation;
 }
 
 /** Independently enforce the visible-ownership invariant even when nobody has
@@ -464,7 +470,7 @@ function reconcileRecoverableSafetyFences(): void {
 export function startSessionOwnershipWatchdog(): void {
 	if (ownershipWatchdog.timer) return;
 	const tick = () => {
-		reconcileRecoverableSafetyFences();
+		void reconcileRecoverableSafetyFences();
 		try {
 			const recovery = sessionRuntimeSnapshot();
 			for (const run of sessionRunStateProjections()) {

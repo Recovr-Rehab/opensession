@@ -1276,8 +1276,7 @@ export async function reissueDurableRecoveryCancel(run: ActiveRunRecord): Promis
 async function settleDurableCancelForAbsentOwner(run: ActiveRunRecord): Promise<boolean> {
   if (!run.osSessionId) return false;
   const cancel = (await sessionTurnSnapshot(run.osSessionId)).cancel;
-  if (cancel?.runId !== run.runKey) return false;
-  if (cancel.phase !== "settled") {
+  if (cancel?.runId === run.runKey && cancel.phase !== "settled") {
     await sessionTurn({
       op: "settle_cancel",
       sessionId: run.osSessionId,
@@ -1285,6 +1284,12 @@ async function settleDurableCancelForAbsentOwner(run: ActiveRunRecord): Promise<
       outcome: "confirmed",
     });
   }
+  // A queue interrupt records its cancellation fence in delivery state rather
+  // than session_kernel_turn.cancel. Once the host probe has positively proved
+  // this exact journal lineage absent, a stopped actor is sufficient authority
+  // to retire it; without the host proof this would be unsafe.
+  if (cancel?.runId !== run.runKey && getRunState(run.osSessionId) !== "stopped")
+    return false;
   journalClearIfLineage(run);
   return true;
 }
@@ -1378,6 +1383,7 @@ export async function resumeInterruptedRuns(
   ): Promise<boolean> => {
     const stopped =
       !!run.osSessionId && getRunState(run.osSessionId) === "stopped";
+    const detached = !!(run.hostId || run.runnerId || run.sandboxId);
     // The durable effect owns this exact physical dispatch. Keep recovery
     // attached and its journal intact until cancellation and natural source
     // completion retire it.
@@ -1392,12 +1398,16 @@ export async function resumeInterruptedRuns(
       // including after a crash that followed actor settlement but preceded
       // source completion. A pre-engine in-process journal has no surviving
       // process after this boot and must never be re-run.
-      const detached = !!(run.hostId || run.runnerId || run.sandboxId);
       if (detached) await reissueDurableRecoveryCancel(run);
       return !detached;
     }
     const cancelled = cancelledRecoveries.delete(run);
     if (!cancelled && !stopped) return false;
+    // Actor state can prove that the logical turn stopped, but it cannot prove
+    // a detached physical owner exited. Reattach/probe the exact host lineage
+    // before clearing its journal; otherwise a queue successor can overlap a
+    // still-running predecessor.
+    if (detached) return false;
     journalClearIfLineage(run);
     return true;
   };
@@ -1419,7 +1429,19 @@ export async function resumeInterruptedRuns(
       console.error(`[runner] Parking recovery ${run.runKey}: kernel ownership remained unavailable`);
       return true;
     }
-    return await abandonStoppedRecovery(run, ownership);
+    const abandoned = await abandonStoppedRecovery(run, ownership);
+    if (
+      !abandoned &&
+      run.osSessionId &&
+      getRunState(run.osSessionId) === "stopped" &&
+      (run.hostId || run.runnerId || run.sandboxId)
+    ) {
+      // Before attach this is a harmless no-op; after attach it reaches the
+      // physical owner by immutable run/host aliases. Keep consuming recovery
+      // until terminal evidence arrives instead of dropping journal ownership.
+      cancelRecoveredEngine(run);
+    }
+    return abandoned;
   };
   const recoveryTask = (
     run: ActiveRunRecord,

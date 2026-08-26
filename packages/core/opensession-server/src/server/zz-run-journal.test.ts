@@ -1597,6 +1597,62 @@ describe("restart recovery reattach", () => {
     }
   });
 
+  it("consumes terminal host evidence before retiring a stopped delivery-cancel lineage", async () => {
+    const sessionId = `local-host-stopped-terminal-${crypto.randomUUID()}`;
+    const hostId = `rh-${crypto.randomUUID()}`;
+    const fake = makeFakeEngine([{ kind: "clean" }]);
+    agent.__setEngineForTest(fake.engine);
+    let resumeCalls = 0;
+    agent.__setLocalHostResumeForTest(async (run) => {
+      resumeCalls++;
+      return (async function* () {
+        yield {
+          type: "done" as const,
+          sessionId: run.claudeSessionId,
+          provider: "pi",
+          model: run.model,
+          result: "HOST_COMPLETED_BEFORE_RECOVERY",
+        };
+      })();
+    });
+    const snapshotRun: mod.ActiveRunRecord = {
+      runKey: hostId,
+      hostId,
+      osSessionId: sessionId,
+      claudeSessionId: `pi-${crypto.randomUUID()}`,
+      prompt: "must not run twice",
+      cwd: "/tmp",
+      model: "pi/anthropic/claude-sonnet-5",
+      kind: "prompt",
+      startedAt: new Date().toISOString(),
+    };
+    const terminal = Promise.withResolvers<StreamEvent>();
+    const store = __sessionKernelStoreForTest();
+    try {
+      store.applyRunEvent({ sessionId, event: "prompt" });
+      store.applyRunEvent({ sessionId, event: "run_registered", runKey: hostId });
+      store.applyRunEvent({ sessionId, event: "cancel" });
+      await agent.resumeInterruptedRuns(
+        (_id, event) => event && terminal.resolve(event),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        [snapshotRun],
+      );
+      await expect(terminal.promise).resolves.toMatchObject({
+        type: "done",
+        result: "HOST_COMPLETED_BEFORE_RECOVERY",
+      });
+      expect(resumeCalls).toBe(1);
+      expect(fake.calls).toHaveLength(0);
+      expect(mod.activeRunRecords().some((run) => run.runKey === hostId)).toBe(false);
+    } finally {
+      mod.journalClear(hostId);
+      store.clearSession(sessionId);
+    }
+  });
+
 	it("claims a snapshot-only local host before the generic wake can re-prompt", async () => {
 		const sessionId = `local-host-snapshot-${crypto.randomUUID()}`;
 		const hostId = `rh-${crypto.randomUUID()}`;
