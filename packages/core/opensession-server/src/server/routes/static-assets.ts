@@ -179,6 +179,10 @@ export async function handleStaticAssetsRoutes(
 		"/signin-bg.webp": "signin-bg.webp",
 		"/signin-bg-dark.mp4": "signin-bg-dark.mp4",
 		"/signin-bg-dark.webp": "signin-bg-dark.webp",
+		// The exact fixed artwork used behind opensession.com. Keep onboarding
+		// independent of the marketing deployment and public network.
+		"/onboarding-bg.webp": "onboarding-bg.webp",
+		"/onboarding-bg-dark.webp": "onboarding-bg-dark.webp",
 		// DownloadAppsDialog's app-card previews. Referenced by URL (not bundler
 		// imports) so both the Bun SPA build and the Next.js website build see a
 		// plain string instead of diverging asset module types.

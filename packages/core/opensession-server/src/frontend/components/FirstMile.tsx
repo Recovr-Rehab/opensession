@@ -107,33 +107,19 @@ function connectedGithubOrganization(status: SetupStatus): string {
 }
 
 /**
- * The exact "Silver Silk" loop used on the marketing page and sign-in gate.
- * The optimized local copy keeps first run independent of the marketing CDN;
- * its first frame covers loading and reduced-motion visitors.
+ * The exact fixed artwork behind opensession.com. It is vendored beside the
+ * app so first run never depends on the marketing site or a public CDN.
  */
 function OnboardingBackdrop() {
 	const [theme, setTheme] = useState(effectiveTheme);
 	useEffect(() => onThemeChanged(() => setTheme(effectiveTheme())), []);
-	const name = theme === "dark" ? "signin-bg-dark" : "signin-bg";
-	const poster = `${BASE_PATH}/${name}.webp`;
+	const name = theme === "dark" ? "onboarding-bg-dark" : "onboarding-bg";
 	return (
 		<div
 			aria-hidden="true"
 			className="pointer-events-none absolute inset-0 select-none bg-surface bg-cover bg-center"
-			style={{ backgroundImage: `url(${poster})` }}
-		>
-			<video
-				key={name}
-				className="size-full object-cover motion-reduce:hidden"
-				autoPlay
-				loop
-				muted
-				playsInline
-				poster={poster}
-			>
-				<source src={`${BASE_PATH}/${name}.mp4`} type="video/mp4" />
-			</video>
-		</div>
+			style={{ backgroundImage: `url(${BASE_PATH}/${name}.webp)` }}
+		/>
 	);
 }
 
@@ -559,18 +545,17 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										</p>
 									</div>
 
-									{/* Match the server chooser's blue glass surfaces throughout onboarding.
-									    The app's settings primitives still own the layout and interaction states. */}
+									{/* The marketing site places translucent white sections over this same
+									    artwork. Keep the app's settings layout, but use that material here. */}
 									<div
 										className={cn(
 											"w-full pb-8 [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body",
 											// The split ingress step takes the server chooser's wider canvas;
 											// single-panel steps stay focused at the settings-page measure.
 											step.id === "ingress" ? "max-w-[960px]" : "max-w-[760px]",
-											// Panels sit on the wash as paper: the popup surface (white in
-											// light) with a lift instead of the settings page's grey fill and
-											// hairline, which reads as a form once the page behind it is tinted.
-											"[&_.bg-settings-plate]:rounded-2xl [&_.bg-settings-plate]:border-transparent [&_.bg-settings-plate]:bg-popup [&_.bg-settings-plate]:shadow-[0_1px_2px_color-mix(in_srgb,var(--blue)_10%,transparent),0_18px_46px_-30px_color-mix(in_srgb,var(--blue)_42%,transparent)]",
+											// Match opensession.com's card glass: translucent paper, a quiet
+											// hairline, and the same 14px blur with restrained saturation.
+											"[&_.bg-settings-plate]:rounded-2xl [&_.bg-settings-plate]:border-divider-soft [&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--popup-surface)_80%,transparent)] [&_.bg-settings-plate]:shadow-[0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:[backdrop-filter:blur(14px)_saturate(1.08)]",
 											// First-run fields use the large field step, with extra room
 											// for the fixed-width organization and product names.
 											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9 [&_input[data-setup-field='identity']]:w-[240px] [&_input[data-setup-field='org-name']]:w-[320px]",
