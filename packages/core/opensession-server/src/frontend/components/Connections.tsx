@@ -955,7 +955,7 @@ function GithubAppWizard({
                 </div>
                 <div className="flex items-center gap-2 text-supporting text-dim">
                   <PulseDot size={7} />
-                  <span>Waiting for GitHub…</span>
+                  <span>Waiting for GitHub. Authorize there, then close that tab.</span>
                 </div>
               </div>
             ) : error ? (
@@ -1206,7 +1206,7 @@ setError(e.message);
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <PulseDot size={7} />
           <span className="min-w-0">
-            Waiting for GitHub. Sign in as the account you want to connect.
+            Waiting for GitHub. Authorize there, then close that tab and return here.
           </span>
         </span>
         <Button
@@ -1262,7 +1262,9 @@ setError(e.message);
               <SettingRowDescription className="leading-snug">
                 {connected
                   ? `All sessions clone and open pull requests as @${account.login}.`
-                  : "Connect a GitHub App to clone your private repositories and open pull requests."}
+                  : data.connectAvailable
+                    ? "Sign in so sessions can clone private repositories and open pull requests as you."
+                    : "Set up a GitHub App to access private repositories and open pull requests."}
               </SettingRowDescription>
             </SettingRowText>
             <SettingRowControl className="flex items-center gap-3">
@@ -1318,7 +1320,7 @@ setError(e.message);
                         onClick={startConnect}
                         disabled={flowState !== "idle"}
                       >
-                        {flowState === "starting" ? "Starting…" : "Connect GitHub App"}
+                        {flowState === "starting" ? "Starting…" : "Sign in with GitHub"}
                       </Button>
                       {data.appInstallUrl && (
                         <Button
@@ -1333,13 +1335,14 @@ setError(e.message);
                             />
                           }
                         >
-                          Install on your repositories
+                          Manage repositories
                         </Button>
                       )}
                     </div>
                     <div className="text-meta leading-snug text-faint">
-                      Authorize with a one-time code. No sign-in here, so every
-                      session shares the connected account.
+                      GitHub opens in a new tab. Authorize with the one-time code,
+                      then close that tab and return here. Every session shares the
+                      connected account.
                     </div>
                     {/* A config-set app can be cleared live; an env-set one only
                         gets named, since it needs a restart to change. */}
@@ -1541,7 +1544,7 @@ setError(e.message);
                   : needsReconnect
                     ? "Reconnect"
                     : personal
-                      ? "Connect"
+                      ? "Sign in"
                       : "Connect account"}
               </Button>
             )}
@@ -1652,7 +1655,7 @@ setError(e.message);
       {personal && (
         <SettingsHint>
           {active
-            ? "Connect GitHub to open pull requests as yourself in interactive sessions. Automations and unconnected teammates use the workspace bot."
+            ? "Sign in with GitHub to open pull requests as yourself in interactive sessions. Automations and unconnected teammates use the workspace bot."
             : "Personal GitHub sign-in is not enabled for this workspace. Pull requests use the workspace bot."}
         </SettingsHint>
       )}

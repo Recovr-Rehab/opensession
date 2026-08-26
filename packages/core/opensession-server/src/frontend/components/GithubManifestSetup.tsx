@@ -8,6 +8,7 @@ import {
 	githubAppCreateOwner,
 	githubAppInstallUrlForSlug,
 	githubAppSettingsUrlForSlug,
+	githubAppSetupOwner,
 	githubManifestAction,
 	type GithubAppOwnerType,
 } from "../lib/github-app-setup";
@@ -37,7 +38,7 @@ export function GithubManifestSetup({
 }) {
 	const initialOwner = githubAppCreateOwner(github.appCreateUrl);
 	const [owner, setOwner] = useState<GithubAppOwnerType>(
-		github.appOrg ? "organization" : initialOwner.type,
+		githubAppSetupOwner(github),
 	);
 	const [ownerDrafts, setOwnerDrafts] = useState<Record<GithubAppOwnerType, string>>({
 		personal: initialOwner.type === "personal" ? github.installationOwner ?? "" : "",
@@ -53,7 +54,7 @@ export function GithubManifestSetup({
 	const ownerReady = owner === "personal" || Boolean(installationOwner.trim());
 	const settingsUrl = githubAppSettingsUrlForSlug(
 		github.appSlug,
-		github.appOrg ?? (initialOwner.type === "organization" ? initialOwner.login : null),
+		github.appOrg,
 	);
 	const installUrl = githubAppInstallUrlForSlug(github.appSlug ?? "");
 	const result =

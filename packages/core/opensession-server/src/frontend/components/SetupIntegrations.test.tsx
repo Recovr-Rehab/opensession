@@ -70,16 +70,29 @@ describe("GitHub App onboarding actions", () => {
 		);
 	});
 
-	test("links Device Flow settings and installation when the App slug is known", () => {
+	test("links personal App settings independently from its organization installation", () => {
 		const markup = renderGithub("open-session-acme");
 		expect(markup).toContain(
-			'href="https://github.com/organizations/acme/settings/apps/open-session-acme"',
+			'href="https://github.com/settings/apps/open-session-acme"',
 		);
+		expect(markup).not.toContain("/organizations/acme/settings/apps/open-session-acme");
 		expect(markup).toContain("2. Enable Device Flow");
 		expect(markup).toContain(
 			'href="https://github.com/apps/open-session-acme/installations/new"',
 		);
 		expect(markup).toContain("3. Install GitHub App");
+	});
+
+	test("links organization App settings only when appOrg identifies the owner", () => {
+		const markup = renderToStaticMarkup(
+			<GithubManifestSetup
+				github={{ ...github, appSlug: "open-session-acme", appOrg: "acme" }}
+				returnTo="welcome"
+			/>,
+		);
+		expect(markup).toContain(
+			'href="https://github.com/organizations/acme/settings/apps/open-session-acme"',
+		);
 	});
 
 	test("shows only manifest setup during onboarding", () => {

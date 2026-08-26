@@ -5,6 +5,13 @@ export interface GithubAppCreateOwner {
 	login: string;
 }
 
+interface GithubAppSetupOwnerInput {
+	appSlug?: string | null;
+	clientIdConfigured: boolean;
+	appOrg?: string | null;
+	appCreateUrl: string;
+}
+
 /** Accept only GitHub's HTTPS registration endpoint before a setup response is
  * turned into a top-level form submission. */
 export function githubManifestAction(value: string): string | null {
@@ -60,6 +67,19 @@ export function githubAppCreateOwner(value: string): GithubAppCreateOwner {
 		}
 	} catch {}
 	return { type: "personal", login: "" };
+}
+
+/** Resolve the actual owner of an existing App independently from the account
+ * suggested for creating a new one. An installation owner can be an
+ * organization even when the App itself belongs to a personal account. */
+export function githubAppSetupOwner(
+	github: GithubAppSetupOwnerInput,
+): GithubAppOwnerType {
+	const appExists = Boolean(github.appSlug?.trim() || github.clientIdConfigured);
+	if (appExists) return github.appOrg?.trim() ? "organization" : "personal";
+	return github.appOrg?.trim()
+		? "organization"
+		: githubAppCreateOwner(github.appCreateUrl).type;
 }
 
 /** Keep all prefilled App settings while changing who creates the App. */

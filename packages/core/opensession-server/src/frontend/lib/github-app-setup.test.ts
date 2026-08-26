@@ -4,6 +4,7 @@ import {
 	githubAppCreateUrlForOwner,
 	githubAppInstallUrlForSlug,
 	githubAppSettingsUrlForSlug,
+	githubAppSetupOwner,
 	githubManifestAction,
 	shouldReloadAfterGithubAuthEnabled,
 } from "./github-app-setup";
@@ -61,6 +62,25 @@ describe("GitHub App creation owner", () => {
 		expect(githubAppCreateOwner(
 			"https://github.com/settings/apps/new?name=Open+Session",
 		)).toEqual({ type: "personal", login: "" });
+	});
+
+	test("does not confuse a personal App's organization installation with App ownership", () => {
+		expect(
+			githubAppSetupOwner({
+				appSlug: "open-session-uzag",
+				clientIdConfigured: true,
+				appOrg: null,
+				appCreateUrl: "https://github.com/organizations/happylinks/settings/apps/new",
+			}),
+		).toBe("personal");
+		expect(
+			githubAppSetupOwner({
+				appSlug: null,
+				clientIdConfigured: false,
+				appOrg: null,
+				appCreateUrl: "https://github.com/organizations/happylinks/settings/apps/new",
+			}),
+		).toBe("organization");
 	});
 
 	test("switches account level without dropping prefilled App settings", () => {
