@@ -1450,13 +1450,14 @@ dialog::backdrop {
 }
 
 .download-card {
+	--download-card-surface: color-mix(in oklch, var(--card) 94%, var(--accent-blue) 6%);
 	display: flex;
 	overflow: hidden;
 	flex-direction: column;
 	height: 320px;
-	border-radius: calc(20px * var(--rf));
+	border-radius: calc(24px * var(--rf));
 	corner-shape: var(--cs);
-	background: rgba(var(--ink-rgb), 0.04);
+	background: var(--download-card-surface);
 }
 
 .download-card-preview {
@@ -1488,7 +1489,11 @@ dialog::backdrop {
 	display: flex;
 	padding: 22px 12px 0;
 	justify-content: center;
-	background: linear-gradient(140deg, rgba(0, 170, 90, 0.14), rgba(18, 128, 207, 0.14));
+	background-image:
+		linear-gradient(oklch(0.952 0.187 117.448 / 0.6), oklch(0.952 0.187 117.448 / 0.6)),
+		url("./demo-background.webp");
+	background-position: center;
+	background-size: cover;
 }
 
 .download-card-preview-phone img {
@@ -1510,7 +1515,7 @@ dialog::backdrop {
 	bottom: 0;
 	left: 0;
 	height: 34%;
-	background: linear-gradient(to bottom, transparent, var(--card));
+	background: linear-gradient(to bottom, transparent, var(--download-card-surface));
 	pointer-events: none;
 }
 
@@ -1521,7 +1526,7 @@ dialog::backdrop {
 	flex: none;
 	flex-direction: column;
 	padding: 0 18px 18px;
-	background: var(--card);
+	background: var(--download-card-surface);
 }
 
 .download-card-body strong {
