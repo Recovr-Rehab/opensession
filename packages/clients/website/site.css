@@ -1298,6 +1298,22 @@ summary:focus-visible {
 		font-size: 22px;
 	}
 
+	.feature {
+		display: grid;
+		grid-template-columns: 28px minmax(0, 1fr);
+		column-gap: 14px;
+	}
+
+	.feature-icon {
+		align-self: center;
+		margin-bottom: 0;
+	}
+
+	.feature-head,
+	.feature p {
+		grid-column: 2;
+	}
+
 	.landing-setup-steps > li {
 		padding: 16px;
 	}
