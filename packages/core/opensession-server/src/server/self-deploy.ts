@@ -204,7 +204,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 	const tools = [
 		tool(
 			"deploy_self",
-			"Deploy THIS Open Session instance to an immutable git release and RESTART THE LIVE SERVER. The shared WIP checkout is only an object source and is never changed. Prepares locked dependencies, atomically switches the runtime pointer, health-gates the gateway/kernel/executor release, and switches back to the last-known-good release on failure. Detached engine turns survive and sessions reattach, but the UI blips. Requires confirm: true.",
+			"Deploy THIS Open Session instance to an immutable git release and RESTART THE LIVE SERVER. The target must advance from the currently running release; stale or parallel targets are refused (rollback is a separate operation). The shared WIP checkout is only an object source and is never changed. Prepares locked dependencies, atomically switches the runtime pointer, health-gates the gateway/kernel/executor release, and switches back to the last-known-good release on failure. Detached engine turns survive and sessions reattach, but the UI blips. Requires confirm: true.",
 			{
 				sha: z
 					.string()
@@ -248,6 +248,23 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 						return text(`Refusing: cannot resolve '${targetRef}': ${rev.err.slice(0, 300)}`);
 					}
 					const targetSha = rev.out;
+					const runtime = `${stateDir}/current`;
+					if (existsSync(runtime)) {
+						const current = await git(runtime, ["rev-parse", "HEAD"]);
+						if (current.code === 0 && current.out !== targetSha) {
+							const advance = await git(checkout, [
+								"merge-base",
+								"--is-ancestor",
+								current.out,
+								targetSha,
+							]);
+							if (advance.code !== 0) {
+								return text(
+									`Refusing stale or parallel release ${targetSha.slice(0, 10)}: it does not advance current ${current.out.slice(0, 10)}. Use the explicit rollback path for rollback, or the root deploy for an operator-selected history line.`,
+								);
+							}
+						}
+					}
 					const unit = `opensession-self-deploy-${Date.now()}`;
 					await launchDeployUnit(unit, targetSha);
 					const stateDir = deployStateDir();

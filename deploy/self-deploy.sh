@@ -429,6 +429,13 @@ do_deploy() {
     log "ERROR: no pinned runtime at $CURRENT_LINK — run the root deploy once to bootstrap releases"
     exit 1
   fi
+  if [ "$target_sha" != "$current" ] \
+    && ! git_repo merge-base --is-ancestor "$current" "$target_sha"; then
+    log "ERROR: refusing stale/parallel release ${target_sha:0:10}; current ${current:0:10} is not its ancestor"
+    write_result false deploy "$current" "$current" \
+      "target $target_sha does not advance current release $current; use rollback-only for rollback or the root deploy for an operator-selected line"
+    exit 1
+  fi
 
   # Pin the pre-deploy runtime as last-known-good BEFORE moving anything: this is
   # what --rollback-only and the watchdog restore. --pin overrides it for

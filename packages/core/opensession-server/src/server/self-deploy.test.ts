@@ -167,6 +167,8 @@ describe("deploy/self-deploy.sh", () => {
 		expect(script).toContain('migration_env+=("OPENSESSION_STATE_DIR=');
 		expect(script).toContain('migration_env+=("OPENSESSION_SESSIONS_DIR=');
 		expect(script).toContain("migrate-session-kernel-storage.ts");
+		expect(script).toContain('merge-base --is-ancestor "$current" "$target_sha"');
+		expect(script).toContain("refusing stale/parallel release");
 	});
 
 	test("the server launches through the fixed privileged helper", async () => {
