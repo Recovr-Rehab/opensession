@@ -844,7 +844,7 @@ export function IngressPanel({
 								>
 									{tailscaleAction.kind === "operator" ? (
 										<>
-											Run this once on the server, then start Funnel again.
+											This changes Tailscale’s local operator to the Open Session service account. Run it once on the server, then start Funnel again.
 											<div className="mt-2"><CodeBlock>{tailscaleAction.command}</CodeBlock></div>
 										</>
 									) : (
