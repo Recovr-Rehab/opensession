@@ -204,7 +204,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 	const tools = [
 		tool(
 			"deploy_self",
-			"Deploy THIS Open Session instance to an immutable git release and RESTART THE LIVE SERVER. The target must advance from the currently running release; stale or parallel targets are refused (rollback is a separate operation). The shared WIP checkout is only an object source and is never changed. Prepares locked dependencies, atomically switches the runtime pointer, health-gates the gateway/kernel/executor release, and switches back to the last-known-good release on failure. Detached engine turns survive and sessions reattach, but the UI blips. Requires confirm: true.",
+			"Standard (light) deploy of THIS Open Session instance to an immutable git release. Use for ordinary frontend, backend, protocol, and dependency changes only. It DOES NOT install changed root-owned artifacts. If the target changes the live deploy controllers, opensession*.service, credential installers, the fixed run-host helper/installer, or root-deploy-managed systemd units/drop-ins, do not use this tool: run the documented full root deploy instead. The target must advance from the running release; stale or parallel targets are refused. The shared WIP checkout is only an object source and is never changed. Prepares locked dependencies, atomically switches the runtime pointer, restarts and health-gates the gateway/kernel/executor release, and switches back to last-known-good on failure. Detached engine turns survive and sessions reattach, but the UI blips. Requires confirm: true.",
 			{
 				sha: z
 					.string()

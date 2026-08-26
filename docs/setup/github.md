@@ -346,23 +346,32 @@ sudo deploy/deploy.sh <git-sha>   # deploy a specific fetched revision
 
 There is no deployment workflow in this repository. The script:
 
-1. fetches origin and runs `git merge --ff-only <target>` as the checkout owner;
-   it never resets the live shared checkout,
-2. runs `bun install --frozen-lockfile` when `bun.lock` or the root
-   `package.json` changed,
-3. classifies changed files by runtime layer, installs the executor and session
-   kernel credentials and fixed run-host helper, syncs the executor, session
-   kernel, and gateway units as needed, and health-gates both actor services,
-4. installs the gateway resource override and the per-user
-   `opensession.slice` aggregate budget for detached engine and preview scopes,
-5. when Caddy is installed, syncs its Tailscale boot-order/retry drop-in and
-   restarts a failed Caddy after that drop-in changes,
-6. only when gateway changes require a restart, waits up to
-   `MAX_DRAIN_WAIT` (480 seconds) for `activeRuns == 0` on `/api/health`, then
-   restarts `opensession.service` and requires `/ready` to recover. An
-   executor-only deploy leaves the gateway, browser sockets, and active run
-   hosts alone.
+1. fetches origin and resolves the target without checking out, merging,
+   resetting, or installing dependencies in the shared WIP checkout,
+2. refuses a target that does not descend from the pinned runtime unless the
+   operator deliberately sets `OPENSESSION_DEPLOY_ALLOW_DIVERGED=1`,
+3. creates or reuses a detached worktree for the exact commit under the deploy
+   state directory, runs `bun install --frozen-lockfile` there, and verifies its
+   tracked files,
+4. installs the executor and session-kernel credentials and fixed run-host
+   helper, synchronizes all three units and the gateway release environment,
+   and validates the installed helper policy,
+5. installs the gateway resource override and per-user `opensession.slice`, and
+   when Caddy is installed, synchronizes its Tailscale boot-order drop-in,
+6. waits up to `MAX_DRAIN_WAIT` (480 seconds by default) for
+   `activeRuns == 0`, records the previous release as last-known-good, and
+   atomically switches the `current` release pointer,
+7. stops the gateway before replacing its protocol peer, runs the offline
+   session migration, restarts and readiness-checks the executor and session
+   kernel, then restarts the gateway and requires `/ready` to recover, and
+8. switches the pointer back and restarts the previous release when a
+   post-switch readiness or health check fails, subject to the kernel schema
+   compatibility floor.
 
-The core contract is fast-forward-only update, conditional dependency install,
-change-scoped service rollout, and a drain before gateway restart. Divergence
-aborts instead of discarding work.
+Every source release is one gateway + kernel + executor version, so the root
+script rolls out all three even for a frontend-only commit. Detached run-host
+units keep executing their original release until their turns finish. For
+ordinary source changes that do not update privileged installed artifacts, an
+interactive admin can use the lighter `deploy_self` path described in
+[self-development.md](../self-development.md); it still restarts all three
+runtime services.

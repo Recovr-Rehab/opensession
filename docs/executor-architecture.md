@@ -78,14 +78,21 @@ The gateway `Requires=` the kernel service and `Wants=` the executor. The
 executor has no `PartOf=` relationship. Linux user scope installs the gateway
 and kernel units but disables the executor and detached local runs.
 
-An executor-only deployment restarts only the executor. A kernel replacement
-stops the gateway first; deployment restarts and health-checks the executor and
-kernel before starting the gateway. Self-deploy refreshes an installed executor,
-records the kernel schema floor, stops the gateway, refreshes the installed
-kernel service, and then restarts the gateway. It does not copy privileged
-units, credentials, or helpers from the writable checkout. Run
-`opensession service install` again when a release changes those system
-artifacts.
+A source release is one pinned gateway + kernel + executor version. Both rollout
+paths restart and readiness-check the executor and kernel before starting the
+gateway; a kernel replacement always happens while the gateway is stopped. The
+executor can still be restarted independently for operational recovery because
+it is not the parent of active run hosts, but that is not a source deployment.
+
+The standard `deploy_self` path reuses the installed root-owned units,
+credentials, helper, sudo policy, and drop-ins. The full root
+`deploy/deploy.sh` path synchronizes those privileged artifacts before switching
+the same immutable release. Use the full path when a release changes its live
+deploy controllers, `opensession*.service`, credential installers, fixed
+run-host helper/installer, or a systemd artifact managed by the root script.
+Other operator-managed artifacts keep their own rollout procedures. Generic
+installations that change service-rendering behavior may also need
+`opensession service install` rerun explicitly.
 
 During the first upgrade only, installations that already granted the previous
 fixed `systemd-run` launch command keep using it until the service installer

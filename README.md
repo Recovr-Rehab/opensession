@@ -100,11 +100,11 @@ run `bash install.sh --help` for the complete installer list. A source checkout
 requires Bun and git.
 
 > Letting the agent improve Open Session itself? Clone your fork, not this
-> repo. Self-sessions commit and push to `origin` (and `deploy_self`
-> fast-forwards from it), so pointed at `tellahq/opensession` every push is
-> rejected and, once you've self-modified, updates from us stop
-> fast-forwarding. Fork, clone the fork, and keep us as an `upstream` remote.
-> Config-only use (your repos, your integrations) needs no fork.
+> repo. Self-sessions commit and push to `origin`, and `deploy_self` advances
+> the pinned runtime to a descendant commit from it. Pointed at
+> `tellahq/opensession`, every push is rejected. Fork, clone the fork, and keep
+> us as an `upstream` remote. Config-only use (your repos, your integrations)
+> needs no fork.
 
 > Authentication is available, and it is opt-in. By default, Open Session
 > trusts everyone who can reach the address it binds to. GitHub sign-in can
