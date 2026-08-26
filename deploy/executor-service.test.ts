@@ -27,6 +27,7 @@ describe("executor deployment", () => {
     expect(deploy).toContain('RELEASE_DIR="$(run_release prepare "$TARGET_COMMIT")"');
     expect(deploy).toContain('run_release switch "$TARGET_COMMIT"');
     expect(deploy).toContain('workdir="$CURRENT_LINK"');
+    expect(deploy).toContain("Environment=OPENSESSION_PREBUILT_FRONTEND=0");
     expect(deploy).toContain("RESTART_EXECUTOR=1");
     expect(deploy).toContain("RESTART_KERNEL=1");
     expect(deploy).toContain("RESTART_GATEWAY=1");
