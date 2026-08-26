@@ -9,28 +9,44 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, parse, resolve } from "node:path";
-import { createServer, connect, type Server, type Socket } from "node:net";
+import { connect, createServer, type Server, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
   AGENT_HOST_SUPERVISION_AUDIENCE,
   AGENT_HOST_SUPERVISION_PURPOSE,
+  INITIAL_AGENT_HOST_STREAM_BYTES,
+  INITIAL_AGENT_HOST_STREAM_CHUNKS,
+  MAX_AGENT_HOST_REPLAY_BYTES,
+  MAX_AGENT_HOST_REPLAY_FRAMES,
+  MAX_AGENT_HOST_STREAM_BYTES,
+  MAX_AGENT_HOST_STREAM_CHUNKS,
+  MAX_AGENT_HOST_WRITABLE_BYTES,
+  decodeAgentHostAttach,
   decodeAgentHostHello,
+  decodeAgentHostOperationCancelReceipt,
+  decodeAgentHostOperationQueryReceipt,
+  decodeAgentHostOperationReceipt,
+  decodeAgentHostOperationStream,
   decodeAgentHostStartTurn,
-  decodeAgentImages,
   decodeAgentHostSupervisionPublicKeyringV2,
   decodeExecutorId,
-  hashAgentTurnSpecV1,
-  isAgentTurnFence,
+  hashAgentTurnSpecV2,
   verifySignedAgentHostSupervisionEnvelopeV2,
+  type AgentHostAttachResumeCursorV4,
   type AgentHostClientMessage,
+  type AgentHostInitialOperationV4,
+  type AgentHostOperationCancelV4,
   type AgentHostServerMessage,
   type AgentHostSupervisionPublicKeyringV2,
+  type AgentOperationReceiptV1,
   type AgentTurnFence,
   type AgentTurnSpec,
-  type StreamEvent,
-  type TranscriptEntry,
 } from "@tellahq/opensession-protocol";
 import type {
+  AgentHostOperationCancel,
+  AgentHostOperationQuery,
+  AgentHostOperationRequest,
+  AgentHostOperationTransport,
   AgentTurnDriver,
   AgentTurnDriverFactory,
   AgentTurnResult,
@@ -41,6 +57,14 @@ import {
   encodeNdjsonFrame,
 } from "./socket-framing";
 
+export type AgentHostFailpoint =
+  | "afterAttachChallengeConsumed"
+  | "afterAttachVerifiedBeforeOwnerSwap"
+  | "afterOwnerSwapBeforeAttachedWrite"
+  | "afterOperationIntentBufferedBeforeWrite"
+  | "afterStreamAcceptedBeforeDriverDelivery"
+  | "afterDriverDeliveryBeforeStreamAck"
+  | "onReconnectDeadline";
 export interface AgentHostOptions {
   socketPath: string;
   createDriver: AgentTurnDriverFactory;
@@ -52,1122 +76,1005 @@ export interface AgentHostOptions {
   cancellationDeadlineMs?: number;
   livenessProbeTimeoutMs?: number;
   attachDeadlineMs?: number;
+  reconnectGraceMs?: number;
   now?: () => number;
   setTimeout?: typeof globalThis.setTimeout;
   clearTimeout?: typeof globalThis.clearTimeout;
-  controlDeadlineMs?: number;
+  failpoint?: (point: AgentHostFailpoint) => void | Promise<void>;
 }
-
-interface AttachedAuthority {
-  fence: AgentTurnFence;
+type Timer = ReturnType<typeof setTimeout>;
+interface Authority {
+  fence: Readonly<AgentTurnFence>;
   planHash: string;
   supervisorEpoch: number;
+  envelope: unknown;
 }
-
-interface ConnectionState {
-  readonly id: string;
+interface Peer {
   socket: Socket;
-  handshake: boolean;
+  hello: boolean;
   challenge?: string;
-  challengeConsumed: boolean;
-  attached?: AttachedAuthority;
-  attachTimer?: ReturnType<typeof setTimeout>;
+  attached?: Authority;
   closed: boolean;
-  queue: Promise<void>;
+  timer?: Timer;
+  reads: Promise<void>;
+  writes: Promise<void>;
+  queuedBytes: number;
 }
-
-interface ActiveTurn {
-  fence: AgentTurnFence;
+interface Op {
+  request: Readonly<AgentHostInitialOperationV4>;
+  receipt?: AgentOperationReceiptV1;
+  receiptJson?: string;
+  sent: Set<number>;
+  through: number;
+  pending: number;
+  creditsBytes: number;
+  creditsChunks: number;
+  terminal: boolean;
+  delivery: Promise<void>;
+  owedCreditBytes: number;
+  owedCreditChunks: number;
+  timer?: Timer;
+}
+interface Frame {
+  seq: number;
+  bytes: Buffer;
+}
+interface Turn {
+  fence: Readonly<AgentTurnFence>;
+  spec: AgentTurnSpec;
   driver: AgentTurnDriver;
-  owner: ConnectionState;
+  owner: Peer;
+  authority: Authority;
   requestId: string;
-  pendingAppendId?: string;
-  askIds: Set<string>;
-  abandonTimer?: ReturnType<typeof setTimeout>;
-  deadlineTimer?: ReturnType<typeof setTimeout>;
+  ops: Map<string, Op>;
+  seq: number;
+  replay: Frame[];
+  replayBytes: number;
+  reconnect?: Timer;
+  deadline?: Timer;
+  runSettled: boolean;
+  result?: AgentTurnResult;
   cancelling: boolean;
   cancelSettled: boolean;
-  runSettled: boolean;
-  pendingControls: number;
-  controlTimers: Set<ReturnType<typeof setTimeout>>;
-  shutdownStarted: boolean;
-  result?: AgentTurnResult;
 }
-
-interface SocketIdentity {
+interface Identity {
   dev: number;
   ino: number;
 }
-
-type DriverEmission =
-  | { t: "event"; event: StreamEvent }
-  | { t: "transcript_proposal"; appendId: string; entries: TranscriptEntry[] }
-  | { t: "ask"; askId: string; input: Record<string, unknown> };
-
-const allowed = (value: Record<string, unknown>, keys: string[]) =>
-  Object.keys(value).every((key) => keys.includes(key));
-const record = (value: unknown): value is Record<string, unknown> =>
-  !!value && typeof value === "object" && !Array.isArray(value);
-const nonempty = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0;
-
-function sameLineage(left: AgentTurnFence, right: AgentTurnFence): boolean {
-  return (
-    left.sessionId === right.sessionId &&
-    left.runId === right.runId &&
-    left.turnId === right.turnId
-  );
-}
-
-function sameFence(left: AgentTurnFence, right: AgentTurnFence): boolean {
-  return sameLineage(left, right) && left.generation === right.generation;
-}
-
-function decodeMessage(value: unknown): AgentHostClientMessage | undefined {
-  if (
-    !record(value) ||
-    value.version !== AGENT_HOST_PROTOCOL_VERSION ||
-    !nonempty(value.requestId) ||
-    !nonempty(value.t)
-  )
-    return undefined;
-  if (value.t === "hello") return decodeAgentHostHello(value);
-  if (value.t === "start_turn") return decodeAgentHostStartTurn(value);
-  if (!isAgentTurnFence(value.fence)) return undefined;
-  switch (value.t) {
-    case "steer":
-      return allowed(value, [
-        "t",
-        "version",
-        "requestId",
-        "fence",
-        "text",
-        "images",
-        "steerId",
-      ]) &&
-        nonempty(value.text) &&
-        nonempty(value.steerId)
-        ? (() => {
-            const images =
-              value.images === undefined
-                ? undefined
-                : decodeAgentImages(value.images);
-            return value.images !== undefined && !images
-              ? undefined
-              : ({ ...value, images } as unknown as AgentHostClientMessage);
-          })()
-        : undefined;
-    case "answer": {
-      const result = value.result;
-      const validResult =
-        record(result) &&
-        (result.behavior === "allow"
-          ? record(result.updatedInput) &&
-            allowed(result, ["behavior", "updatedInput"])
-          : result.behavior === "deny" &&
-            typeof result.message === "string" &&
-            allowed(result, ["behavior", "message"]));
-      return allowed(value, [
-        "t",
-        "version",
-        "requestId",
-        "fence",
-        "askId",
-        "result",
-      ]) &&
-        nonempty(value.askId) &&
-        validResult
-        ? (value as unknown as AgentHostClientMessage)
-        : undefined;
-    }
-    case "cancel":
-    case "shutdown":
-      return allowed(value, ["t", "version", "requestId", "fence"])
-        ? (value as unknown as AgentHostClientMessage)
-        : undefined;
-    case "transcript_ack":
-      return allowed(value, [
-        "t",
-        "version",
-        "requestId",
-        "fence",
-        "appendId",
-        "changeSeq",
-      ]) &&
-        nonempty(value.appendId) &&
-        Number.isSafeInteger(value.changeSeq) &&
-        (value.changeSeq as number) >= 0
-        ? (value as unknown as AgentHostClientMessage)
-        : undefined;
-    default:
-      return undefined;
-  }
-}
+const rec = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+const id = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+const sameFence = (a: AgentTurnFence, b: AgentTurnFence) =>
+  a.sessionId === b.sessionId &&
+  a.runId === b.runId &&
+  a.turnId === b.turnId &&
+  a.generation === b.generation;
+const terminal = (s: AgentOperationReceiptV1["state"]) =>
+  s === "settled" || s === "indeterminate";
+const rank = (s: AgentOperationReceiptV1["state"]) =>
+  s === "prepared" ? 0 : s === "executing" ? 1 : 2;
 
 export class AgentHost {
   private server?: Server;
   private starting?: Promise<void>;
   private stopping?: Promise<void>;
-  private active?: ActiveTurn;
-  private socketIdentity?: SocketIdentity;
-  private claimIdentity?: SocketIdentity;
-  private claimNonce?: string;
-  private serverEpoch?: string;
+  private active?: Turn;
+  private attaching?: Peer;
+  private owner?: Peer;
   private poisoned = false;
-  private attaching?: ConnectionState;
-  private attachedOwner?: ConnectionState;
-  private readonly highWaterSupervisorEpochs = new Map<string, number>();
-  private readonly highWaterGenerations = new Map<string, number>();
-  private readonly connections = new Set<ConnectionState>();
-  private readonly keyring: AgentHostSupervisionPublicKeyringV2;
-  private readonly hostId: string;
-  private readonly hostGeneration: number;
-  private readonly hostIncarnation: string;
-
-  constructor(private readonly options: AgentHostOptions) {
-    const keyring = decodeAgentHostSupervisionPublicKeyringV2(
+  private socketIdentity?: Identity;
+  private claimIdentity?: Identity;
+  private claimNonce?: string;
+  private peers = new Set<Peer>();
+  private epochs = new Map<string, number>();
+  private generations = new Map<string, number>();
+  private keyring: AgentHostSupervisionPublicKeyringV2;
+  constructor(private options: AgentHostOptions) {
+    const ring = decodeAgentHostSupervisionPublicKeyringV2(
       options.supervisionKeyring,
     );
     if (
       !decodeExecutorId(options.hostId) ||
       !Number.isSafeInteger(options.hostGeneration) ||
       options.hostGeneration < 1 ||
-      typeof options.hostIncarnation !== "string" ||
       !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,255}$/.test(options.hostIncarnation) ||
-      !keyring
+      !ring
     )
-      throw new Error("Invalid Agent Host v3 identity or public keyring");
-    this.hostId = options.hostId;
-    this.hostGeneration = options.hostGeneration;
-    this.hostIncarnation = options.hostIncarnation;
-    this.keyring = keyring;
+      throw new Error("Invalid Agent Host v4 identity or public keyring");
+    this.keyring = ring;
   }
-
-  start(): Promise<void> {
+  start() {
     if (this.server?.listening) return Promise.resolve();
     if (this.starting) return this.starting;
-    if (this.stopping) throw new Error("Agent Host is stopping");
-    this.starting = this.startListening().finally(() => {
+    this.starting = this.listen().finally(() => {
       this.starting = undefined;
     });
     return this.starting;
   }
-
-  stop(): Promise<void> {
+  stop() {
     if (this.stopping) return this.stopping;
-    this.stopping = this.stopInternal().finally(() => {
+    this.stopping = this.stopInner().finally(() => {
       this.stopping = undefined;
     });
     return this.stopping;
   }
+  private now() {
+    return (this.options.now ?? Date.now)();
+  }
+  private duration(v: number | undefined, fallback: number, name: string) {
+    const n = v ?? fallback;
+    if (!Number.isFinite(n) || n <= 0)
+      throw new Error(`${name} must be positive`);
+    return n;
+  }
+  private set(fn: () => void, ms: number) {
+    const t = (this.options.setTimeout ?? setTimeout)(fn, ms);
+    t.unref?.();
+    return t;
+  }
+  private clear(t?: Timer) {
+    if (t) (this.options.clearTimeout ?? clearTimeout)(t);
+  }
+  private async hit(point: AgentHostFailpoint) {
+    await this.options.failpoint?.(point);
+  }
 
-  private async startListening(): Promise<void> {
+  private async listen() {
     if (this.poisoned)
       throw new Error("Agent Host requires process replacement");
-    await this.prepareSocketParent();
+    await this.prepareParent();
     try {
-      await this.acquireClaim();
-      await this.removeStaleSocketWhileClaimed();
-      const server = createServer((socket) => this.accept(socket));
+      await this.claim();
+      await this.removeStale();
+      const server = createServer((s) => this.accept(s));
       this.server = server;
-      this.serverEpoch = crypto.randomUUID();
-      await new Promise<void>((resolveListen, rejectListen) => {
-        const onError = (error: Error) => rejectListen(error);
-        server.once("error", onError);
-        server.listen(this.options.socketPath, () => {
-          server.off("error", onError);
-          resolveListen();
-        });
+      await new Promise<void>((ok, fail) => {
+        server.once("error", fail);
+        server.listen(this.options.socketPath, ok);
       });
-      const socketStat = await lstat(this.options.socketPath);
-      if (!socketStat.isSocket() || socketStat.isSymbolicLink())
-        throw new Error("Agent Host socket path is unsafe");
+      const st = await lstat(this.options.socketPath);
+      if (!st.isSocket() || st.isSymbolicLink())
+        throw new Error("unsafe Agent Host socket");
       await chmod(this.options.socketPath, 0o600);
-      this.socketIdentity = { dev: socketStat.dev, ino: socketStat.ino };
-    } catch (error) {
-      const server = this.server;
-      this.server = undefined;
-      this.serverEpoch = undefined;
-      if (server?.listening)
-        await new Promise<void>((resolveClose) =>
-          server.close(() => resolveClose()),
-        );
-      await this.unlinkOwnedSocket();
+      this.socketIdentity = { dev: st.dev, ino: st.ino };
+    } catch (e) {
+      await this.unlinkSocket();
       await this.releaseClaim();
-      throw error;
+      throw e;
     }
   }
-
-  private async stopInternal(): Promise<void> {
-    await this.starting?.catch(() => undefined);
+  private async stopInner() {
+    await this.starting?.catch(() => {});
     const server = this.server;
     this.server = undefined;
-    if (this.attaching) this.poisoned = true;
-    this.attaching = undefined;
-    this.attachedOwner = undefined;
-    this.serverEpoch = undefined;
-    const active = this.active;
-    if (active) {
+    if (this.active) {
       this.poisoned = true;
-      this.beginCancellation(active);
-      this.clearAbandonTimer(active);
-      this.clearControlTimers(active);
-      if (!active.shutdownStarted)
-        this.invokeDriver(() => active.driver.shutdown());
+      this.invoke(() => this.active!.driver.cancel());
+      this.invoke(() => this.active!.driver.shutdown());
     }
-    for (const connection of this.connections) {
-      connection.closed = true;
-      connection.socket.removeAllListeners();
-      connection.socket.destroy();
+    for (const p of this.peers) {
+      p.closed = true;
+      p.socket.destroy();
     }
-    this.connections.clear();
+    this.peers.clear();
     if (server?.listening)
-      await new Promise<void>((resolveClose) =>
-        server.close(() => resolveClose()),
-      );
-    await this.unlinkOwnedSocket();
-    if (!active) await this.releaseClaim();
+      await new Promise<void>((ok) => server.close(() => ok()));
+    await this.unlinkSocket();
+    if (!this.active) await this.releaseClaim();
   }
-
-  private async prepareSocketParent(): Promise<void> {
-    const socketPath = this.options.socketPath;
-    if (!isAbsolute(socketPath) || resolve(socketPath) !== socketPath)
+  private async prepareParent() {
+    const path = this.options.socketPath;
+    if (!isAbsolute(path) || resolve(path) !== path)
       throw new Error("Agent Host socket path must be absolute and normalized");
-    const parent = dirname(socketPath);
-    const root = parse(parent).root;
-    if (parent === root)
-      throw new Error(
-        "Agent Host socket parent must not be the filesystem root",
-      );
+    const parent = dirname(path),
+      root = parse(parent).root;
+    if (parent === root) throw new Error("invalid socket parent");
     let current = root;
     for (const part of parent.slice(root.length).split("/").filter(Boolean)) {
       current = resolve(current, part);
       try {
-        const currentStat = await lstat(current);
-        if (!currentStat.isDirectory() || currentStat.isSymbolicLink())
-          throw new Error(
-            "Agent Host socket path contains an unsafe component",
-          );
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        const st = await lstat(current);
+        if (!st.isDirectory() || st.isSymbolicLink())
+          throw new Error("unsafe socket parent");
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
         await mkdir(current, { mode: 0o700 });
-        const created = await lstat(current);
-        if (!created.isDirectory() || created.isSymbolicLink())
-          throw new Error("Agent Host socket parent creation raced a symlink");
       }
     }
-    const parentStat = await lstat(parent);
-    const uid = process.getuid?.();
-    if (uid !== undefined && parentStat.uid !== uid)
-      throw new Error("Agent Host socket parent has a different owner");
+    const st = await lstat(parent),
+      uid = process.getuid?.();
+    if (uid !== undefined && st.uid !== uid)
+      throw new Error("socket parent owner mismatch");
     await chmod(parent, 0o700);
   }
-
-  private get claimPath(): string {
+  private get claimPath() {
     return `${this.options.socketPath}.claim`;
   }
-
-  private async acquireClaim(): Promise<void> {
-    const nonce = crypto.randomUUID();
-    const temporary = `${this.claimPath}.tmp-${nonce}`;
-    await writeFile(temporary, JSON.stringify({ pid: process.pid, nonce }), {
+  private async claim() {
+    const nonce = crypto.randomUUID(),
+      tmp = `${this.claimPath}.tmp-${nonce}`;
+    await writeFile(tmp, JSON.stringify({ pid: process.pid, nonce }), {
       flag: "wx",
-      mode: 0o600,
+      mode: 0o400,
     });
-    await chmod(temporary, 0o400);
-    const temporaryStat = await lstat(temporary);
-    if (!temporaryStat.isFile() || temporaryStat.isSymbolicLink())
-      throw new Error("Agent Host temporary claim is unsafe");
+    const st = await lstat(tmp);
     try {
-      await link(temporary, this.claimPath);
+      await link(tmp, this.claimPath);
       this.claimNonce = nonce;
-      this.claimIdentity = {
-        dev: temporaryStat.dev,
-        ino: temporaryStat.ino,
-      };
-      await this.verifyClaim(this.claimPath, nonce, this.claimIdentity);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST")
+      this.claimIdentity = { dev: st.dev, ino: st.ino };
+      await this.verifyClaim(this.claimPath);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "EEXIST")
         throw Object.assign(new Error("Agent Host socket is already claimed"), {
           code: "EADDRINUSE",
         });
-      throw error;
+      throw e;
     } finally {
-      await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== "ENOENT") throw error;
-      });
+      await unlink(tmp).catch(() => {});
     }
   }
-
-  private async removeStaleSocketWhileClaimed(): Promise<void> {
-    if (!this.claimNonce) throw new Error("Agent Host socket is not claimed");
-    let socketStat;
-    try {
-      socketStat = await lstat(this.options.socketPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-      throw error;
-    }
-    if (socketStat.isSymbolicLink() || !socketStat.isSocket())
-      throw new Error("Agent Host socket path is unsafe");
-    if (await this.socketAcceptsConnections())
-      throw Object.assign(new Error("Agent Host socket is already live"), {
-        code: "EADDRINUSE",
-      });
-    const stalePath = `${this.options.socketPath}.stale-${crypto.randomUUID()}`;
-    await rename(this.options.socketPath, stalePath);
-    await unlink(stalePath);
-  }
-
-  private socketAcceptsConnections(): Promise<boolean> {
-    return new Promise((resolveProbe, rejectProbe) => {
-      const socket = connect(this.options.socketPath);
-      const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
-      const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
-      let settled = false;
-      const settle = (live: boolean, error?: Error) => {
-        if (settled) return;
-        settled = true;
-        clearTimer(timer);
-        socket.destroy();
-        if (error) rejectProbe(error);
-        else resolveProbe(live);
-      };
-      const timeoutMs = this.positiveDeadline(
-        this.options.livenessProbeTimeoutMs,
-        250,
-        "livenessProbeTimeoutMs",
-      );
-      const timer = setTimer(
-        () => settle(false, new Error("Agent Host liveness probe timed out")),
-        timeoutMs,
-      );
-      timer.unref?.();
-      socket.once("connect", () => settle(true));
-      socket.once("error", (error: NodeJS.ErrnoException) => {
-        if (error.code === "ECONNREFUSED" || error.code === "ENOENT")
-          settle(false);
-        else settle(false, error);
-      });
-    });
-  }
-
-  private async unlinkOwnedSocket(): Promise<void> {
-    const identity = this.socketIdentity;
-    this.socketIdentity = undefined;
-    if (!identity || !this.claimNonce) return;
-    try {
-      const current = await lstat(this.options.socketPath);
-      if (
-        !current.isSocket() ||
-        current.isSymbolicLink() ||
-        current.dev !== identity.dev ||
-        current.ino !== identity.ino
-      )
-        return;
-      const cleanupPath = `${this.options.socketPath}.cleanup-${crypto.randomUUID()}`;
-      await rename(this.options.socketPath, cleanupPath);
-      await unlink(cleanupPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-  }
-
-  private async releaseClaim(): Promise<void> {
-    const nonce = this.claimNonce;
-    const identity = this.claimIdentity;
-    if (!nonce || !identity) return;
-    await this.verifyClaim(this.claimPath, nonce, identity);
-    const quarantine = `${this.claimPath}.release-${nonce}`;
-    await rename(this.claimPath, quarantine);
-    try {
-      await this.verifyClaim(quarantine, nonce, identity);
-    } catch (error) {
-      this.poisoned = true;
-      try {
-        await link(quarantine, this.claimPath);
-        await unlink(quarantine);
-      } catch {}
-      throw error;
-    }
-    await unlink(quarantine);
-    this.claimNonce = undefined;
-    this.claimIdentity = undefined;
-  }
-
-  private async verifyClaim(
-    path: string,
-    nonce: string,
-    identity: SocketIdentity,
-  ): Promise<void> {
-    const claimStat = await lstat(path);
-    const claim = JSON.parse(await readFile(path, "utf8")) as {
-      nonce?: unknown;
-    };
+  private async verifyClaim(path: string) {
+    const st = await lstat(path),
+      data = JSON.parse(await readFile(path, "utf8"));
+    const i = this.claimIdentity;
     if (
-      !claimStat.isFile() ||
-      claimStat.isSymbolicLink() ||
-      claimStat.dev !== identity.dev ||
-      claimStat.ino !== identity.ino ||
-      claim.nonce !== nonce
+      !i ||
+      !st.isFile() ||
+      st.isSymbolicLink() ||
+      st.dev !== i.dev ||
+      st.ino !== i.ino ||
+      data.nonce !== this.claimNonce
     ) {
       this.poisoned = true;
       throw new Error("Agent Host claim ownership changed");
     }
   }
-
-  private positiveDeadline(
-    configured: number | undefined,
-    fallback: number,
-    name: string,
-  ): number {
-    const value = configured ?? fallback;
-    if (!Number.isFinite(value) || value <= 0)
-      throw new Error(`${name} must be a positive finite number`);
-    return value;
+  private async removeStale() {
+    try {
+      const st = await lstat(this.options.socketPath);
+      if (!st.isSocket() || st.isSymbolicLink())
+        throw new Error("unsafe socket");
+      if (await this.probe())
+        throw Object.assign(new Error("Agent Host socket is already live"), {
+          code: "EADDRINUSE",
+        });
+      const old = `${this.options.socketPath}.stale-${crypto.randomUUID()}`;
+      await rename(this.options.socketPath, old);
+      await unlink(old);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    }
+  }
+  private probe() {
+    return new Promise<boolean>((ok, fail) => {
+      const s = connect(this.options.socketPath);
+      let done = false;
+      const finish = (v: boolean, e?: Error) => {
+        if (done) return;
+        done = true;
+        this.clear(timer);
+        s.destroy();
+        e ? fail(e) : ok(v);
+      };
+      const timer = this.set(
+        () => finish(false, new Error("liveness probe timed out")),
+        this.duration(
+          this.options.livenessProbeTimeoutMs,
+          250,
+          "livenessProbeTimeoutMs",
+        ),
+      );
+      s.once("connect", () => finish(true));
+      s.once("error", (e: NodeJS.ErrnoException) =>
+        e.code === "ENOENT" || e.code === "ECONNREFUSED"
+          ? finish(false)
+          : finish(false, e),
+      );
+    });
+  }
+  private async unlinkSocket() {
+    const i = this.socketIdentity;
+    this.socketIdentity = undefined;
+    if (!i) return;
+    try {
+      const st = await lstat(this.options.socketPath);
+      if (
+        st.isSocket() &&
+        !st.isSymbolicLink() &&
+        st.dev === i.dev &&
+        st.ino === i.ino
+      ) {
+        const q = `${this.options.socketPath}.cleanup-${crypto.randomUUID()}`;
+        await rename(this.options.socketPath, q);
+        await unlink(q);
+      }
+    } catch {}
+  }
+  private async releaseClaim() {
+    if (!this.claimNonce || !this.claimIdentity) return;
+    await this.verifyClaim(this.claimPath);
+    const q = `${this.claimPath}.release-${this.claimNonce}`;
+    await rename(this.claimPath, q);
+    await this.verifyClaim(q);
+    await unlink(q);
+    this.claimNonce = undefined;
+    this.claimIdentity = undefined;
   }
 
-  private accept(socket: Socket): void {
-    const state: ConnectionState = {
-      id: crypto.randomUUID(),
+  private accept(socket: Socket) {
+    const p: Peer = {
       socket,
-      handshake: false,
-      challengeConsumed: false,
+      hello: false,
       closed: false,
-      queue: Promise.resolve(),
+      reads: Promise.resolve(),
+      writes: Promise.resolve(),
+      queuedBytes: 0,
     };
+    this.peers.add(p);
     const decoder = new BoundedNdjsonDecoder(
       this.options.maxFrameBytes ?? AGENT_HOST_MAX_FRAME_BYTES,
     );
-    this.connections.add(state);
-    const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
-    state.attachTimer = setTimer(
-      () => this.close(state),
-      this.positiveDeadline(
-        this.options.attachDeadlineMs,
-        5_000,
-        "attachDeadlineMs",
-      ),
+    p.timer = this.set(
+      () => this.close(p),
+      this.duration(this.options.attachDeadlineMs, 5_000, "attachDeadlineMs"),
     );
-    state.attachTimer.unref?.();
-    socket.on("data", (chunk) => {
+    socket.on("data", (b) => {
       try {
-        for (const value of decoder.push(Buffer.from(chunk))) {
-          state.queue = state.queue
-            .then(() => this.receive(state, value))
-            .catch(() => this.close(state));
-        }
+        for (const v of decoder.push(Buffer.from(b)))
+          p.reads = p.reads
+            .then(() => this.receive(p, v))
+            .catch(() => this.close(p));
       } catch {
-        this.close(state);
+        this.close(p);
       }
     });
     socket.on("end", () => {
       try {
         decoder.finish();
-      } catch {}
+      } catch {
+        this.close(p);
+      }
     });
-    socket.on("error", () => this.close(state));
-    socket.on("close", () => this.disconnected(state));
+    socket.on("error", () => this.close(p));
+    socket.on("close", () => this.disconnected(p));
   }
-
-  private async receive(
-    connection: ConnectionState,
-    value: unknown,
-  ): Promise<void> {
-    if (connection.closed) return;
-    if (!connection.handshake) {
-      const hello = decodeAgentHostHello(value);
+  private async receive(p: Peer, raw: unknown) {
+    if (p.closed) return;
+    if (!p.hello) {
+      const hello = decodeAgentHostHello(raw);
       if (!hello) {
-        if (
-          record(value) &&
-          nonempty(value.requestId) &&
-          value.version !== AGENT_HOST_PROTOCOL_VERSION
-        ) {
-          this.send(connection, {
+        if (rec(raw) && id(raw.requestId) && raw.version !== 4)
+          this.send(p, {
             t: "error",
-            version: AGENT_HOST_PROTOCOL_VERSION,
-            requestId: value.requestId,
+            version: 4,
+            requestId: raw.requestId,
             code: "unsupported_version",
             message: "Unsupported Agent Host protocol version",
           });
-          connection.closed = true;
-          connection.socket.end();
-        } else {
-          this.close(connection);
-        }
+        this.close(p);
         return;
       }
-      connection.handshake = true;
-      connection.challenge = crypto.randomUUID();
-      this.send(connection, {
+      p.hello = true;
+      p.challenge = crypto.randomUUID();
+      this.send(p, {
         ...hello,
         accepted: true,
-        hostId: this.hostId,
-        hostGeneration: this.hostGeneration,
-        hostIncarnation: this.hostIncarnation,
-        hostChallenge: connection.challenge,
+        hostId: this.options.hostId,
+        hostGeneration: this.options.hostGeneration,
+        hostIncarnation: this.options.hostIncarnation,
+        hostChallenge: p.challenge,
       });
       return;
     }
-    if (!connection.attached) {
-      await this.attach(connection, value);
+    if (!p.attached) {
+      await this.attach(p, raw);
       return;
     }
-    const message = decodeMessage(value);
-    if (!message || message.t === "hello") {
-      this.error(
-        connection,
-        record(value) && nonempty(value.requestId)
-          ? value.requestId
-          : "invalid",
-        "invalid_request",
-        "Invalid Agent Host request",
-      );
-      this.close(connection);
-      return;
-    }
-    if (message.t === "start_turn") {
-      if (
-        !sameFence(connection.attached.fence, message.spec.fence) ||
-        connection.attached.planHash !== message.planHash
-      ) {
-        this.close(connection);
-        return;
-      }
-      await this.startAuthorizedTurn(
-        connection,
-        message.requestId,
-        message.spec,
-      );
-      return;
-    }
-    const active = this.active;
-    if (
-      !active ||
-      active.owner !== connection ||
-      !sameFence(active.fence, message.fence)
-    ) {
-      this.close(connection);
-      return;
-    }
-    try {
-      switch (message.t) {
-        case "steer":
-          this.dispatchControl(active, connection, message.requestId, () =>
-            active.driver.steer({
-              steerId: message.steerId,
-              text: message.text,
-              images: message.images,
-            }),
-          );
-          break;
-        case "answer":
-          if (!active.askIds.delete(message.askId))
-            throw new Error("Unknown askId");
-          this.dispatchControl(active, connection, message.requestId, () =>
-            active.driver.answer(message.askId, message.result),
-          );
-          break;
-        case "cancel":
-          this.beginCancellation(active);
-          break;
-        case "transcript_ack":
-          if (active.pendingAppendId !== message.appendId)
-            throw new Error("Unknown appendId");
-          active.pendingAppendId = undefined;
-          this.dispatchControl(active, connection, message.requestId, () =>
-            active.driver.transcriptAck(message.appendId, message.changeSeq),
-          );
-          break;
-        case "shutdown":
-          this.beginCancellation(active);
-          active.shutdownStarted = true;
-          this.dispatchControl(active, connection, message.requestId, () =>
-            active.driver.shutdown(),
-          );
-          this.close(connection);
-          void this.stop();
-          break;
-      }
-    } catch (error) {
-      this.error(
-        connection,
-        message.requestId,
-        "invalid_request",
-        error instanceof Error ? error.message : String(error),
-        active.fence,
-      );
-    }
+    const m =
+      decodeAgentHostStartTurn(raw, this.now()) ??
+      decodeAgentHostOperationReceipt(raw) ??
+      decodeAgentHostOperationQueryReceipt(raw) ??
+      decodeAgentHostOperationCancelReceipt(raw) ??
+      decodeAgentHostOperationStream(raw);
+    if (!m) return this.invalid(p, raw);
+    if (m.t === "start_turn") return this.startTurn(p, m);
+    const turn = this.active;
+    if (!turn || turn.owner !== p || !sameFence(turn.fence, m.fence))
+      return this.close(p);
+    await this.operationMessage(turn, m);
   }
-
-  private async attach(
-    connection: ConnectionState,
-    value: unknown,
-  ): Promise<void> {
-    const requestId =
-      record(value) && nonempty(value.requestId) ? value.requestId : "invalid";
-    const challenge = connection.challenge;
-    // A challenge is consumed before any parsing or asynchronous verification.
-    connection.challenge = undefined;
-    connection.challengeConsumed = true;
+  private invalid(p: Peer, raw: unknown) {
+    this.send(p, {
+      t: "error",
+      version: 4,
+      requestId: rec(raw) && id(raw.requestId) ? raw.requestId : "invalid",
+      code: "invalid_request",
+      message: "Invalid Agent Host request",
+    });
+    this.close(p);
+  }
+  private async attach(p: Peer, raw: unknown) {
+    const challenge = p.challenge;
+    p.challenge = undefined;
+    await this.hit("afterAttachChallengeConsumed");
+    const m = decodeAgentHostAttach(raw);
+    if (!challenge || !m || this.attaching || this.poisoned)
+      return this.close(p);
+    const e = m.receipt.expected;
     if (
-      this.poisoned ||
-      this.attaching ||
-      this.attachedOwner ||
-      !challenge ||
-      !record(value) ||
-      !allowed(value, [
-        "t",
-        "version",
-        "requestId",
-        "fence",
-        "planHash",
-        "receipt",
-      ]) ||
-      value.t !== "attach" ||
-      value.version !== AGENT_HOST_PROTOCOL_VERSION ||
-      !nonempty(value.requestId) ||
-      !isAgentTurnFence(value.fence) ||
-      typeof value.planHash !== "string" ||
-      !/^sha256:[a-f0-9]{64}$/.test(value.planHash) ||
-      !record(value.receipt) ||
-      !allowed(value.receipt, ["expected", "envelope"]) ||
-      !record(value.receipt.expected)
-    ) {
-      this.close(connection);
-      return;
-    }
-    const expected = value.receipt.expected;
-    if (
-      !isAgentTurnFence(expected.fence) ||
-      !sameFence(expected.fence, value.fence) ||
-      expected.planHash !== value.planHash ||
-      expected.hostId !== this.hostId ||
-      expected.hostGeneration !== this.hostGeneration ||
-      expected.hostIncarnation !== this.hostIncarnation ||
-      expected.hostChallenge !== challenge ||
-      expected.audience !== AGENT_HOST_SUPERVISION_AUDIENCE ||
-      expected.purpose !== AGENT_HOST_SUPERVISION_PURPOSE
-    ) {
-      this.close(connection);
-      return;
-    }
-    this.attaching = connection;
-    const authority = await verifySignedAgentHostSupervisionEnvelopeV2(
-      value.receipt.envelope,
+      !sameFence(e.fence, m.fence) ||
+      e.planHash !== m.planHash ||
+      e.hostId !== this.options.hostId ||
+      e.hostGeneration !== this.options.hostGeneration ||
+      e.hostIncarnation !== this.options.hostIncarnation ||
+      e.hostChallenge !== challenge ||
+      e.audience !== AGENT_HOST_SUPERVISION_AUDIENCE ||
+      e.purpose !== AGENT_HOST_SUPERVISION_PURPOSE
+    )
+      return this.close(p);
+    this.attaching = p;
+    const a = await verifySignedAgentHostSupervisionEnvelopeV2(
+      m.receipt.envelope,
       this.keyring,
-      expected as never,
-      (this.options.now ?? Date.now)(),
+      e,
+      this.now(),
     );
+    await this.hit("afterAttachVerifiedBeforeOwnerSwap");
+    if (!a || p.closed || this.attaching !== p) return this.close(p);
+    const turn = this.active,
+      resumed =
+        !!turn &&
+        sameFence(turn.fence, a.fence) &&
+        turn.authority.planHash === a.planHash;
+    const oldEpoch = this.epochs.get(a.fence.sessionId) ?? 0,
+      oldGen = this.generations.get(a.fence.sessionId) ?? 0;
     if (
-      this.attaching !== connection ||
-      connection.closed ||
-      this.attachedOwner ||
-      !authority
-    ) {
-      if (this.attaching === connection) this.attaching = undefined;
-      this.close(connection);
-      return;
-    }
-    const sessionKey = authority.fence.sessionId;
-    const previousEpoch = this.highWaterSupervisorEpochs.get(sessionKey) ?? 0;
-    const previousGeneration = this.highWaterGenerations.get(sessionKey) ?? 0;
-    if (
-      authority.supervisorEpoch <= previousEpoch ||
-      authority.fence.generation < previousGeneration
+      a.supervisorEpoch <= oldEpoch ||
+      a.fence.generation < oldGen ||
+      (turn && !resumed) ||
+      (resumed && m.resume === null) ||
+      (!turn && m.resume !== null)
     ) {
       this.attaching = undefined;
-      this.close(connection);
-      return;
+      return this.close(p);
     }
-    this.highWaterSupervisorEpochs.set(sessionKey, authority.supervisorEpoch);
-    this.highWaterGenerations.set(sessionKey, authority.fence.generation);
-    connection.attached = {
-      fence: { ...authority.fence },
-      planHash: authority.planHash,
-      supervisorEpoch: authority.supervisorEpoch,
+    const authority: Authority = {
+      fence: Object.freeze({ ...a.fence }),
+      planHash: a.planHash,
+      supervisorEpoch: a.supervisorEpoch,
+      envelope: m.receipt.envelope,
     };
+    const old = resumed ? turn.owner : this.owner;
+    p.attached = authority;
+    this.owner = p;
+    if (resumed) turn.owner = p;
+    this.epochs.set(a.fence.sessionId, a.supervisorEpoch);
+    this.generations.set(a.fence.sessionId, a.fence.generation);
     this.attaching = undefined;
-    this.attachedOwner = connection;
-    if (connection.attachTimer)
-      (this.options.clearTimeout ?? globalThis.clearTimeout)(
-        connection.attachTimer,
-      );
-    const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
-    connection.attachTimer = setTimer(
-      () => {
-        if (
-          this.attachedOwner === connection &&
-          connection.attached &&
-          !this.active
-        )
-          this.close(connection);
-      },
-      this.positiveDeadline(
-        this.options.attachDeadlineMs,
-        5_000,
-        "attachDeadlineMs",
-      ),
-    );
-    connection.attachTimer.unref?.();
-    this.send(connection, {
+    this.clear(p.timer);
+    p.timer = undefined;
+    if (resumed) {
+      this.clear(turn.reconnect);
+      turn.reconnect = undefined;
+    }
+    if (old && old !== p) this.close(old);
+    await this.hit("afterOwnerSwapBeforeAttachedWrite");
+    const recovery = resumed && this.needsRecovery(turn, m.resume!);
+    this.send(p, {
       t: "attached",
-      version: AGENT_HOST_PROTOCOL_VERSION,
-      requestId,
-      fence: connection.attached.fence,
-      planHash: connection.attached.planHash,
-      supervisorEpoch: connection.attached.supervisorEpoch,
+      version: 4,
+      requestId: m.requestId,
+      fence: authority.fence,
+      planHash: authority.planHash as `sha256:${string}`,
+      supervisorEpoch: authority.supervisorEpoch,
+      mode: resumed ? (recovery ? "recovery_required" : "resumed") : "fresh",
+      replayFromHostSeq: resumed ? m.resume!.lastHostSeq + 1 : 0,
     });
+    if (resumed) {
+      if (recovery) await this.recover(turn, m.resume!);
+      else
+        for (const f of turn.replay)
+          if (f.seq > m.resume!.lastHostSeq) this.sendBytes(p, f.bytes);
+    } else
+      p.timer = this.set(
+        () => {
+          if (this.owner === p && !this.active) this.close(p);
+        },
+        this.duration(this.options.attachDeadlineMs, 5000, "attachDeadlineMs"),
+      );
   }
-
-  private async startAuthorizedTurn(
-    owner: ConnectionState,
-    requestId: string,
-    spec: AgentTurnSpec,
-  ): Promise<void> {
+  private async startTurn(
+    p: Peer,
+    m: Extract<AgentHostClientMessage, { t: "start_turn" }>,
+  ) {
+    const a = p.attached;
     if (
-      this.attachedOwner !== owner ||
-      !owner.attached ||
-      !sameFence(owner.attached.fence, spec.fence)
-    ) {
-      this.close(owner);
-      return;
-    }
-    const expectedPlanHash = owner.attached.planHash;
-    const actualPlanHash = await hashAgentTurnSpecV1(
-      spec,
-      (this.options.now ?? Date.now)(),
-    );
-    if (
-      this.attachedOwner !== owner ||
-      owner.closed ||
-      owner.attached.planHash !== expectedPlanHash ||
-      actualPlanHash !== expectedPlanHash
-    ) {
-      this.close(owner);
-      return;
-    }
-    if (owner.attachTimer) {
-      (this.options.clearTimeout ?? globalThis.clearTimeout)(owner.attachTimer);
-      owner.attachTimer = undefined;
-    }
-    if (this.active) {
-      const code =
-        sameLineage(this.active.fence, spec.fence) &&
-        !sameFence(this.active.fence, spec.fence)
-          ? "stale_generation"
-          : "host_busy";
-      this.error(
-        owner,
-        requestId,
-        code,
-        "Agent Host already owns a turn",
-        spec.fence,
-      );
-      return;
-    }
-    let driver: AgentTurnDriver;
+      !a ||
+      this.owner !== p ||
+      !sameFence(a.fence, m.spec.fence) ||
+      a.planHash !== m.planHash
+    )
+      return this.close(p);
+    let hash;
     try {
-      driver = this.options.createDriver(spec);
-    } catch (error) {
-      this.error(
-        owner,
-        requestId,
-        "turn_failed",
-        error instanceof Error ? error.message : String(error),
-        spec.fence,
-      );
+      hash = await hashAgentTurnSpecV2(m.spec, this.now());
+    } catch {
+      return this.close(p);
+    }
+    if (hash !== a.planHash) return this.close(p);
+    if (this.active) return this.invalid(p, m);
+    this.clear(p.timer);
+    p.timer = undefined;
+    let driver;
+    try {
+      driver = this.options.createDriver(m.spec);
+    } catch (e) {
+      this.send(p, {
+        t: "error",
+        version: 4,
+        requestId: m.requestId,
+        code: "turn_failed",
+        message: String(e),
+        fence: m.spec.fence,
+      });
       return;
     }
-    const active: ActiveTurn = {
-      fence: { ...spec.fence },
+    const t: Turn = {
+      fence: m.spec.fence,
+      spec: m.spec,
       driver,
-      owner,
-      requestId,
-      askIds: new Set(),
+      owner: p,
+      authority: a,
+      requestId: m.requestId,
+      ops: new Map(),
+      seq: 0,
+      replay: [],
+      replayBytes: 0,
+      runSettled: false,
       cancelling: false,
       cancelSettled: false,
-      runSettled: false,
-      pendingControls: 0,
-      controlTimers: new Set(),
-      shutdownStarted: false,
     };
-    this.active = active;
-    const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
-    active.deadlineTimer = setTimer(
-      () => {
-        if (this.active !== active) return;
-        active.shutdownStarted = true;
-        this.beginCancellation(active);
-        this.invokeDriver(() => active.driver.shutdown());
-      },
-      Math.max(0, spec.executorPolicy.deadlineMs - Date.now()),
+    this.active = t;
+    t.deadline = this.set(
+      () => this.cancelTurn(t, "turn_deadline"),
+      Math.max(0, m.spec.limits.turnDeadlineMs - this.now()),
     );
-    active.deadlineTimer.unref?.();
-    this.send(owner, {
+    this.sequenced(t, {
       t: "turn_started",
-      version: AGENT_HOST_PROTOCOL_VERSION,
-      requestId,
-      fence: active.fence,
-    });
-    let run: Promise<AgentTurnResult>;
+      version: 4,
+      requestId: m.requestId,
+      fence: t.fence,
+    } as never);
+    const transport: AgentHostOperationTransport = {
+      requestOperation: (r) => this.requestOp(t, r),
+      queryOperation: (q) => this.queryOp(t, q),
+      cancelOperation: (c) => this.cancelOp(t, c),
+    };
+    let run;
     try {
-      run = Promise.resolve(
-        driver.run(spec, {
-          event: (event) => this.emitFor(active, { t: "event", event }),
-          proposeTranscript: (appendId, entries) => {
-            if (!nonempty(appendId) || active.pendingAppendId)
-              throw new Error(
-                "Transcript proposal requires its prior acknowledgement",
-              );
-            if (
-              Buffer.byteLength(JSON.stringify(entries)) >
-              spec.transcriptPolicy.maxAppendBytes
-            )
-              throw new Error("Transcript proposal exceeds maxAppendBytes");
-            if (
-              !this.emitFor(active, {
-                t: "transcript_proposal",
-                appendId,
-                entries,
-              })
-            )
-              throw new Error("Transcript proposal owner is disconnected");
-            active.pendingAppendId = appendId;
-          },
-          ask: (askId, input) => {
-            if (!nonempty(askId) || active.askIds.has(askId))
-              throw new Error("Invalid askId");
-            if (!this.emitFor(active, { t: "ask", askId, input }))
-              throw new Error("Ask owner is disconnected");
-            active.askIds.add(askId);
-          },
-        }),
-      );
-    } catch (error) {
-      run = Promise.reject(error);
+      run = Promise.resolve(driver.run(m.spec, transport));
+    } catch (e) {
+      run = Promise.reject(e);
     }
     void run.then(
-      (result) => this.finishTurn(active, result),
-      (error) =>
-        this.finishTurn(active, {
-          status: "failed",
-          error: error instanceof Error ? error.message : String(error),
-        }),
+      (r) => {
+        t.runSettled = true;
+        t.result = r;
+        this.complete(t);
+      },
+      (e) => {
+        t.runSettled = true;
+        t.result = { status: "failed", error: String(e) };
+        this.complete(t);
+      },
     );
   }
-
-  private finishTurn(active: ActiveTurn, result: AgentTurnResult): void {
-    active.runSettled = true;
-    active.result = result;
-    this.completeIfDrained(active);
-  }
-
-  private emitFor(active: ActiveTurn, message: DriverEmission): boolean {
-    if (this.active !== active || active.cancelling || active.owner.closed)
-      return false;
-    return this.send(active.owner, {
-      ...message,
-      version: AGENT_HOST_PROTOCOL_VERSION,
-      requestId: active.requestId,
-      fence: active.fence,
-    } as AgentHostServerMessage);
-  }
-
-  private error(
-    connection: ConnectionState,
-    requestId: string,
-    code: Extract<AgentHostServerMessage, { t: "error" }>["code"],
-    message: string,
-    fence?: AgentTurnFence,
-  ): void {
-    this.send(connection, {
-      t: "error",
-      version: AGENT_HOST_PROTOCOL_VERSION,
-      requestId,
-      code,
-      message,
-      fence,
-    });
-  }
-
-  private send(
-    connection: ConnectionState,
-    message: AgentHostServerMessage,
-  ): boolean {
-    if (connection.closed || !connection.socket.writable) return false;
-    try {
-      connection.socket.write(
-        encodeNdjsonFrame(message, this.options.maxFrameBytes),
-      );
-      return true;
-    } catch {
-      this.close(connection);
-      return false;
-    }
-  }
-
-  private close(connection: ConnectionState): void {
-    if (connection.closed) return;
-    connection.closed = true;
-    connection.socket.destroy();
-  }
-
-  private disconnected(connection: ConnectionState): void {
-    connection.closed = true;
-    this.connections.delete(connection);
-    if (connection.attachTimer) {
-      (this.options.clearTimeout ?? globalThis.clearTimeout)(
-        connection.attachTimer,
-      );
-      connection.attachTimer = undefined;
-    }
-    if (this.attaching === connection) this.attaching = undefined;
-    const active = this.active;
-    if (active?.owner === connection) this.beginCancellation(active);
-    else if (this.attachedOwner === connection) this.attachedOwner = undefined;
-  }
-
-  private beginCancellation(active: ActiveTurn): void {
-    if (this.active !== active || active.cancelling) return;
-    active.cancelling = true;
-    const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
-    active.abandonTimer = setTimer(
+  private async requestOp(t: Turn, r: AgentHostOperationRequest) {
+    if (this.active !== t || t.cancelling) throw Error("turn unavailable");
+    if (
+      t.ops.has(r.operationId) ||
+      t.ops.size >= Math.min(8, t.spec.limits.maxInFlightOperations)
+    )
+      throw Error("operation limit");
+    if (
+      r.deadlineMs <= this.now() ||
+      r.deadlineMs > t.spec.limits.turnDeadlineMs
+    )
+      throw Error("invalid deadline");
+    const o: Op = {
+      request: r,
+      sent: new Set(),
+      through: 0,
+      pending: 0,
+      creditsBytes: 0,
+      creditsChunks: 0,
+      terminal: false,
+      delivery: Promise.resolve(),
+      owedCreditBytes: 0,
+      owedCreditChunks: 0,
+    };
+    t.ops.set(r.operationId, o);
+    const seq = this.buffer(t, {
+      t: "operation_request",
+      version: 4,
+      requestId: t.requestId,
+      fence: t.fence,
+      operationId: r.operationId,
+      descriptor: r.descriptor,
+      descriptorDigest: r.descriptorDigest,
+      deadlineMs: r.deadlineMs,
+    } as never);
+    o.sent.add(seq);
+    await this.hit("afterOperationIntentBufferedBeforeWrite");
+    this.writeBuffered(t, seq);
+    this.credit(
+      t,
+      o,
+      0,
+      INITIAL_AGENT_HOST_STREAM_BYTES,
+      INITIAL_AGENT_HOST_STREAM_CHUNKS,
+    );
+    o.timer = this.set(
       () => {
-        if (
-          this.active === active &&
-          (!active.runSettled || !active.cancelSettled)
-        )
-          this.poisoned = true;
+        void this.cancelOp(t, {
+          operationId: r.operationId,
+          cancelId: `deadline-${crypto.randomUUID()}`,
+          reason: "turn_deadline",
+        });
       },
-      this.positiveDeadline(
+      Math.max(0, r.deadlineMs - this.now()),
+    );
+  }
+  private async queryOp(t: Turn, q: AgentHostOperationQuery) {
+    const o = t.ops.get(q.operationId);
+    if (
+      !o ||
+      o.receipt?.payloadDigest !== q.payloadDigest ||
+      o.request.descriptorDigest !== q.descriptorDigest ||
+      o.request.descriptor.kind !== q.kind
+    )
+      throw Error("invalid query");
+    o.sent.add(
+      this.sequenced(t, {
+        t: "operation_query",
+        version: 4,
+        requestId: t.requestId,
+        fence: t.fence,
+        ...q,
+      } as never),
+    );
+  }
+  private async cancelOp(t: Turn, c: AgentHostOperationCancel) {
+    const o = t.ops.get(c.operationId);
+    if (!o) throw Error("unknown operation");
+    o.sent.add(
+      this.sequenced(t, {
+        t: "operation_cancel",
+        version: 4,
+        requestId: t.requestId,
+        fence: t.fence,
+        ...c,
+      } as never),
+    );
+  }
+  private async operationMessage(
+    t: Turn,
+    m: Exclude<
+      AgentHostClientMessage,
+      { t: "hello" | "attach" | "start_turn" }
+    >,
+  ) {
+    const o = t.ops.get(m.operationId);
+    if (!o) return this.invalid(t.owner, m);
+    if (m.t === "operation_stream") return this.stream(t, o, m);
+    if (
+      !o.sent.has(m.ackHostSeq) ||
+      !this.applyReceipt(o, m.receipt) ||
+      (m.t === "operation_query_receipt" && m.fromStreamSeq !== o.through + 1)
+    )
+      return this.invalid(t.owner, m);
+    this.complete(t);
+  }
+  private applyReceipt(o: Op, r: AgentOperationReceiptV1) {
+    if (
+      r.kind !== o.request.descriptor.kind ||
+      r.descriptorDigest !== o.request.descriptorDigest
+    )
+      return false;
+    const json = JSON.stringify(r),
+      old = o.receipt;
+    if (
+      old &&
+      (rank(r.state) < rank(old.state) ||
+        (r.state === old.state && json !== o.receiptJson) ||
+        (terminal(old.state) && json !== o.receiptJson) ||
+        r.planHash !== old.planHash ||
+        r.authorityHash !== old.authorityHash ||
+        r.payloadDigest !== old.payloadDigest ||
+        JSON.stringify(r.actorIdentity) !== JSON.stringify(old.actorIdentity))
+    )
+      return false;
+    o.receipt = r;
+    o.receiptJson = json;
+    o.terminal = terminal(r.state);
+    if (o.terminal) {
+      this.clear(o.timer);
+      o.timer = undefined;
+    }
+    return true;
+  }
+  private async stream(
+    t: Turn,
+    o: Op,
+    m: Extract<AgentHostClientMessage, { t: "operation_stream" }>,
+  ) {
+    const n = Buffer.from(m.bytes, "base64url").byteLength;
+    if (
+      o.terminal ||
+      !o.receipt ||
+      o.receipt.state === "prepared" ||
+      m.streamSeq !== o.through + o.pending + 1 ||
+      n > o.creditsBytes ||
+      o.creditsChunks < 1
+    )
+      return this.close(t.owner);
+    o.creditsBytes -= n;
+    o.creditsChunks--;
+    o.pending++;
+    try {
+      await this.hit("afterStreamAcceptedBeforeDriverDelivery");
+    } catch (error) {
+      o.pending--;
+      throw error;
+    }
+    o.delivery = o.delivery.then(async () => {
+      try {
+        await t.driver.deliverOperationStream({
+          operationId: m.operationId,
+          streamSeq: m.streamSeq,
+          encoding: m.encoding,
+          bytes: m.bytes,
+        });
+      } catch {
+        o.pending--;
+        this.cancelTurn(t, "shutdown");
+        return;
+      }
+      o.through = m.streamSeq;
+      o.pending--;
+      o.owedCreditBytes += n;
+      o.owedCreditChunks += 1;
+      await this.hit("afterDriverDeliveryBeforeStreamAck");
+      if (this.active === t) {
+        this.credit(t, o, o.through, o.owedCreditBytes, o.owedCreditChunks);
+        o.owedCreditBytes = 0;
+        o.owedCreditChunks = 0;
+      }
+      this.complete(t);
+    });
+    await o.delivery;
+  }
+  private credit(
+    t: Turn,
+    o: Op,
+    through: number,
+    bytes: number,
+    chunks: number,
+  ) {
+    const b = Math.min(
+        bytes,
+        MAX_AGENT_HOST_STREAM_BYTES - o.creditsBytes,
+        t.spec.limits.maxBufferedStreamBytes - o.creditsBytes,
+      ),
+      c = Math.min(
+        chunks,
+        MAX_AGENT_HOST_STREAM_CHUNKS - o.creditsChunks,
+        t.spec.limits.maxBufferedStreamChunks - o.creditsChunks,
+      );
+    if (b <= 0 || c <= 0) return;
+    o.creditsBytes += b;
+    o.creditsChunks += c;
+    o.sent.add(
+      this.sequenced(t, {
+        t: "operation_stream_ack",
+        version: 4,
+        requestId: t.requestId,
+        fence: t.fence,
+        operationId: o.request.operationId,
+        throughStreamSeq: through,
+        creditBytes: b,
+        creditChunks: c,
+      } as never),
+    );
+  }
+  private buffer(t: Turn, m: Omit<AgentHostServerMessage, "hostSeq">) {
+    const seq = ++t.seq,
+      bytes = encodeNdjsonFrame(
+        { ...m, hostSeq: seq },
+        this.options.maxFrameBytes,
+      );
+    t.replay.push({ seq, bytes });
+    t.replayBytes += bytes.length;
+    while (
+      t.replay.length > MAX_AGENT_HOST_REPLAY_FRAMES ||
+      t.replayBytes > MAX_AGENT_HOST_REPLAY_BYTES
+    ) {
+      const f = t.replay.shift()!;
+      t.replayBytes -= f.bytes.length;
+    }
+    return seq;
+  }
+  private writeBuffered(t: Turn, seq: number) {
+    const f = t.replay.find((x) => x.seq === seq);
+    if (!f) throw Error("intent evicted before write");
+    this.sendBytes(t.owner, f.bytes);
+  }
+  private sequenced(t: Turn, m: Omit<AgentHostServerMessage, "hostSeq">) {
+    const s = this.buffer(t, m);
+    this.writeBuffered(t, s);
+    return s;
+  }
+  private needsRecovery(t: Turn, r: AgentHostAttachResumeCursorV4) {
+    const oldest = t.replay[0]?.seq ?? t.seq + 1;
+    if (r.lastHostSeq > t.seq || r.lastHostSeq < oldest - 1) return true;
+    const c = new Map(
+      r.operations.map((x) => [x.operationId, x.throughStreamSeq]),
+    );
+    return [...t.ops].some(([k, o]) => (c.get(k) ?? 0) !== o.through);
+  }
+  private async recover(t: Turn, r: AgentHostAttachResumeCursorV4) {
+    const c = new Map(
+      r.operations.map((x) => [x.operationId, x.throughStreamSeq]),
+    );
+    for (const o of t.ops.values()) {
+      if (o.owedCreditChunks > 0) {
+        this.credit(t, o, o.through, o.owedCreditBytes, o.owedCreditChunks);
+        o.owedCreditBytes = 0;
+        o.owedCreditChunks = 0;
+        continue;
+      }
+      if (!o.receipt) {
+        o.sent.add(
+          this.sequenced(t, {
+            t: "operation_request",
+            version: 4,
+            requestId: t.requestId,
+            fence: t.fence,
+            operationId: o.request.operationId,
+            descriptor: o.request.descriptor,
+            descriptorDigest: o.request.descriptorDigest,
+            deadlineMs: o.request.deadlineMs,
+          } as never),
+        );
+      } else
+        await this.queryOp(t, {
+          operationId: o.request.operationId,
+          kind: o.request.descriptor.kind,
+          descriptorDigest: o.request.descriptorDigest,
+          payloadDigest: o.receipt.payloadDigest,
+          afterStreamSeq: c.get(o.request.operationId) ?? 0,
+        });
+    }
+  }
+  private send(p: Peer, m: AgentHostServerMessage) {
+    try {
+      return this.sendBytes(
+        p,
+        encodeNdjsonFrame(m, this.options.maxFrameBytes),
+      );
+    } catch {
+      return false;
+    }
+  }
+  private sendBytes(p: Peer, b: Buffer) {
+    if (
+      p.closed ||
+      !p.socket.writable ||
+      p.socket.writableLength + p.queuedBytes + b.length >
+        MAX_AGENT_HOST_WRITABLE_BYTES
+    ) {
+      this.close(p);
+      return false;
+    }
+    p.queuedBytes += b.length;
+    p.writes = p.writes
+      .then(
+        () =>
+          new Promise<void>((ok, fail) => {
+            if (
+              p.closed ||
+              p.socket.writableLength + b.length > MAX_AGENT_HOST_WRITABLE_BYTES
+            )
+              return fail();
+            p.socket.write(b, (e) => (e ? fail(e) : ok()));
+          }),
+      )
+      .finally(() => {
+        p.queuedBytes -= b.length;
+      })
+      .catch(() => this.close(p));
+    return true;
+  }
+  private disconnected(p: Peer) {
+    p.closed = true;
+    this.peers.delete(p);
+    this.clear(p.timer);
+    if (this.attaching === p) this.attaching = undefined;
+    const t = this.active;
+    if (t?.owner === p)
+      t.reconnect = this.set(
+        () => {
+          void this.hit("onReconnectDeadline").finally(() =>
+            this.cancelTurn(t, "reconnect_deadline"),
+          );
+        },
+        this.duration(
+          this.options.reconnectGraceMs,
+          30_000,
+          "reconnectGraceMs",
+        ),
+      );
+    else if (this.owner === p) this.owner = undefined;
+  }
+  private cancelTurn(t: Turn, reason: AgentHostOperationCancelV4["reason"]) {
+    if (this.active !== t || t.cancelling) return;
+    t.cancelling = true;
+    for (const o of t.ops.values())
+      if (!o.terminal)
+        void this.cancelOp(t, {
+          operationId: o.request.operationId,
+          cancelId: `cancel-${crypto.randomUUID()}`,
+          reason,
+        }).catch(() => {});
+    let p;
+    try {
+      p = Promise.resolve(t.driver.cancel());
+    } catch (e) {
+      p = Promise.reject(e);
+    }
+    const timer = this.set(
+      () => {
+        if (!t.cancelSettled) this.poisoned = true;
+      },
+      this.duration(
         this.options.cancellationDeadlineMs,
-        5_000,
+        5000,
         "cancellationDeadlineMs",
       ),
     );
-    active.abandonTimer.unref?.();
-    let cancel: Promise<void>;
-    try {
-      cancel = Promise.resolve(active.driver.cancel());
-    } catch (error) {
-      cancel = Promise.reject(error);
-    }
-    void cancel.then(
-      () => {
-        active.cancelSettled = true;
-        this.completeIfDrained(active);
-      },
-      () => {
-        active.cancelSettled = true;
-        this.completeIfDrained(active);
-      },
-    );
+    void p.finally(() => {
+      this.clear(timer);
+      t.cancelSettled = true;
+      this.complete(t);
+    });
   }
-
-  private dispatchControl(
-    active: ActiveTurn,
-    connection: ConnectionState,
-    requestId: string,
-    action: () => void | Promise<void>,
-  ): void {
-    if (this.active !== active) return;
-    active.pendingControls += 1;
-    const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
-    const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
-    let settled = false;
-    const timer = setTimer(
-      () => {
-        active.controlTimers.delete(timer);
-        if (settled) return;
-        this.poisoned = true;
-      },
-      this.positiveDeadline(
-        this.options.controlDeadlineMs ?? this.options.cancellationDeadlineMs,
-        5_000,
-        "controlDeadlineMs",
-      ),
-    );
-    timer.unref?.();
-    active.controlTimers.add(timer);
-    let control: Promise<void>;
-    try {
-      control = Promise.resolve(action());
-    } catch (error) {
-      control = Promise.reject(error);
-    }
-    void control.then(
-      () => settle(),
-      (error) => settle(error),
-    );
-    const settle = (error?: unknown) => {
-      if (settled) return;
-      settled = true;
-      clearTimer(timer);
-      active.controlTimers.delete(timer);
-      active.pendingControls -= 1;
-      if (error !== undefined && this.active === active)
-        this.error(
-          connection,
-          requestId,
-          "invalid_request",
-          error instanceof Error ? error.message : String(error),
-          active.fence,
-        );
-      this.completeIfDrained(active);
-    };
-  }
-
-  private completeIfDrained(active: ActiveTurn): void {
+  private complete(t: Turn) {
     if (
-      this.active !== active ||
-      !active.runSettled ||
-      active.pendingControls > 0
+      this.active !== t ||
+      !t.runSettled ||
+      [...t.ops.values()].some((o) => !o.terminal || o.pending) ||
+      (t.cancelling && !t.cancelSettled)
     )
       return;
-    if (active.cancelling && !active.cancelSettled) return;
-    this.clearAbandonTimer(active);
-    if (active.deadlineTimer) {
-      const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
-      clearTimer(active.deadlineTimer);
-      active.deadlineTimer = undefined;
-    }
+    this.clear(t.deadline);
+    this.clear(t.reconnect);
+    for (const o of t.ops.values()) this.clear(o.timer);
     this.active = undefined;
-    if (this.attachedOwner === active.owner) this.attachedOwner = undefined;
-    if (active.result)
-      this.send(active.owner, {
-        t: "turn_finished",
-        version: AGENT_HOST_PROTOCOL_VERSION,
-        requestId: active.requestId,
-        fence: active.fence,
-        ...active.result,
-      });
+    if (this.owner === t.owner) this.owner = undefined;
+    this.close(t.owner);
   }
-
-  private clearControlTimers(active: ActiveTurn): void {
-    const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
-    for (const timer of active.controlTimers) clearTimer(timer);
-    active.controlTimers.clear();
+  private close(p: Peer) {
+    if (!p.closed) {
+      p.closed = true;
+      p.socket.destroy();
+    }
   }
-
-  private clearAbandonTimer(active: ActiveTurn): void {
-    if (!active.abandonTimer) return;
-    const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
-    clearTimer(active.abandonTimer);
-    active.abandonTimer = undefined;
-  }
-
-  private invokeDriver(action: () => void | Promise<void>): void {
+  private invoke(f: () => void | Promise<void>) {
     try {
-      void Promise.resolve(action()).catch(() => undefined);
+      void Promise.resolve(f()).catch(() => {});
     } catch {}
   }
-
-  private lineageKey(fence: AgentTurnFence): string {
-    return `${fence.sessionId}\0${fence.runId}\0${fence.turnId}`;
-  }
 }
-
-export function createAgentHost(options: AgentHostOptions): AgentHost {
+export function createAgentHost(options: AgentHostOptions) {
   return new AgentHost(options);
 }
