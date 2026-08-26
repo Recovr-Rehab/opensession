@@ -185,9 +185,10 @@ export async function handleStaticAssetsRoutes(
 		"/onboarding-bg-dark.webp": "onboarding-bg-dark.webp",
 		// DownloadAppsDialog's app-card previews. Referenced by URL (not bundler
 		// imports) so both the Bun SPA build and the Next.js website build see a
-		// plain string instead of diverging asset module types. The background is
-		// the exact artwork used by the matching cards on opensession.com.
+		// plain string instead of diverging asset module types. The backgrounds are
+		// the exact light and dark artwork used behind opensession.com's landing page.
 		"/download-background.webp": "download-background.webp",
+		"/download-background-dark.webp": "download-background-dark.webp",
 		"/download-mac.webp": "download-mac.webp",
 		"/download-phone.webp": "download-phone.webp",
 	};
