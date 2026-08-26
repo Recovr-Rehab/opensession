@@ -548,9 +548,9 @@ export function IngressPanel({
 					{onboarding && (
 						<SettingsHint className="mt-2 mb-3">Optional. Skip this if you do not need webhooks, remote Sandbox callbacks, or public workload identity.</SettingsHint>
 					)}
-					<div className="grid grid-cols-[minmax(0,300px)_minmax(0,1fr)] items-stretch gap-3 phone:grid-cols-1">
-						<SettingsForm className="m-0 self-stretch p-3">
-							<div className="px-2 pt-1 text-item-title font-semibold text-fg">Connection method</div>
+					<div className="grid grid-cols-[minmax(0,300px)_minmax(0,1fr)] items-start gap-3.5 phone:grid-cols-1">
+						<div className="grid content-start gap-2">
+							<div className="px-1 text-label font-medium text-dim">Connection method</div>
 							<RadioGroup
 								aria-label="Public callback method"
 								value={method}
@@ -559,16 +559,16 @@ export function IngressPanel({
 								className="grid gap-2"
 							>
 								{INGRESS_METHODS.map((option) => (
-									<label key={option.value} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl px-3.5 py-3.5 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed">
+									<label key={option.value} className="flex cursor-pointer items-center gap-3.5 rounded-xl bg-settings-plate px-4 py-4 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed">
 										<span className="min-w-0 flex-1">
 											<span className="block text-item-title font-medium text-fg">{option.label}</span>
 											<span className="mt-1 block text-supporting text-dim">{option.description}</span>
 										</span>
-										<Radio value={option.value} className="mt-0.5 shrink-0" />
+										<Radio value={option.value} className="shrink-0" />
 									</label>
 								))}
 							</RadioGroup>
-						</SettingsForm>
+						</div>
 
 						<SettingsForm className="m-0 min-w-0">
 							<div>
@@ -695,11 +695,14 @@ export function IngressPanel({
 									{busy === "apply" ? "Setting up…" : method === "tailscale" ? "Start Funnel" : method === "custom" ? settings.exposure === "custom" ? "Update Caddy" : "Configure Caddy" : "Start tunnel"}
 								</Button>
 							</SettingsFormActions>
+							<div className="border-t border-line pt-3.5">
+								<div className="text-item-title font-medium text-fg">Private by default</div>
+								<p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">
+									Unknown methods and paths return 404. This endpoint never serves sessions, APIs, or the app UI.
+								</p>
+							</div>
 						</SettingsForm>
 					</div>
-					<SettingsHint>
-						Unknown methods and paths return 404. This endpoint never serves sessions, APIs, or the app UI.
-					</SettingsHint>
 					</>
 					)}
 					{!onboarding && <SetupRestart setup={setup} />}
