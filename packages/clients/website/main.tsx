@@ -531,48 +531,43 @@ function LandingPage() {
 
 				<section className="card">
 					<div className="features">
-						<Feature icon={<IconSparkle size={28} />} name="Any model">
-							Point a session at whatever model suits the work, and change it
-							mid-run without losing the thread.
+						<Feature icon={<IconSparkle size={28} />} name="Use any model">
+							Bring your own subscription and API keys. Switch models whenever you
+							like.
 						</Feature>
-						<Feature icon={<IconPeople size={28} />} name="Multiplayer by default">
-							Anyone on the team opens the same session, sees the run as it
-							happens, and sends the next turn.
+						<Feature icon={<IconPeople size={28} />} name="Multiplayer">
+							Sessions can be shared as links so you can collaborate with your team.
 						</Feature>
-						<Feature icon={<IconGlobe size={28} />} name="On your machines">
+						<Feature icon={<IconGlobe size={28} />} name="Self-host">
 							Self-hosted from the first minute. The checkouts, the transcripts
 							and the keys stay on hardware you run.
 						</Feature>
-						<Feature icon={<IconBranches size={28} />} name="A worktree each">
-							Every session gets its own branch and checkout, so ten agents work
-							at once without stepping on each other.
+						<Feature icon={<IconBranches size={28} />} name="Worktrees">
+							Every session gets its own branch and checkout so you can run agents in
+							parallel.
 						</Feature>
 						<Feature icon={<IconPullRequest size={28} />} name="Ends in a pull request">
 							Read the diff, then open the PR from the same place the work
 							happened. Review stays next to the transcript.
 						</Feature>
-						<Feature icon={<IconRobot size={28} />} name="Agents that delegate">
-							A session hands focused work to its own sub-agents and keeps their
-							noise out of the conversation you are reading.
+						<Feature icon={<IconRobot size={28} />} name="Sub-agents">
+							Your agents can delegate work to other agents so your main session
+							stays focussed.
 						</Feature>
-						<Feature icon={<IconClock size={28} />} name="Runs without you">
+						<Feature icon={<IconClock size={28} />} name="Automations">
 							Schedules, webhooks and watched channels start sessions on their
 							own, each scoped to the tools it is allowed.
 						</Feature>
 						<Feature icon={<IconTerminal size={28} />} name="Shells and previews">
-							Open a terminal in the worktree, or a running preview of the
-							branch, beside the session that built it.
+							Open a terminal in the worktree, or a preview of the branch alongside
+							the session that built it.
 						</Feature>
-						<Feature icon={<IconStack size={28} />} name="Everywhere you are">
-							A web app, a Mac app and a browser side panel, all on one server.
-						</Feature>
-						<Feature icon={<IconPhone size={28} />} name="Works on mobile">
-							Read a session, answer a question and send the next turn from your
-							phone. Native iOS coming soon.
+						<Feature icon={<IconStack size={28} />} name="Works where you work">
+							Use Open Session on web and desktop, or mobile with the PWA. iOS app
+							coming soon.
 						</Feature>
 						<Feature icon={<IconRepo size={28} />} name="Open source">
-							Read it, fork it, run it. There is no hosted tier in the path that
-							you have to take on trust.
+							Fork it, adapt it, and make it your own.
 						</Feature>
 					</div>
 				</section>
