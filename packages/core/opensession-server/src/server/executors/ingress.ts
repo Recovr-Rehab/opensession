@@ -41,11 +41,15 @@ export interface ExecutorAuthority {
   resolveGrant: (
     context: ExecutorContext,
     operation: ExecutorOperation,
+    deadlineMs: number,
   ) => ExecutorGrant | Promise<ExecutorGrant>;
-  resolveCleanupGrant: (
-    context: ExecutorContext,
-    streamId: string,
-  ) => ExecutorGrant | Promise<ExecutorGrant>;
+  resolveCleanupGrant: (input: {
+    context: ExecutorContext;
+    requestId: string;
+    targetRequestId: string;
+    streamId: string;
+    deadlineMs: number;
+  }) => ExecutorGrant | Promise<ExecutorGrant>;
 }
 
 export type ExecutorAuthenticationResult =

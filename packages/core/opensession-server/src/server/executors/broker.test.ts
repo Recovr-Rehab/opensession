@@ -5,7 +5,7 @@ import type {
 } from "@tellahq/opensession-protocol/executor";
 import { ExecutorBroker } from "./broker";
 import { ExecutorFailure, type Executor } from "./contract";
-import { ExecutorGrantAuthority } from "./grants";
+import { ExecutorGrantAuthority, executorOperationDigest } from "./grants";
 
 const now = 1_000;
 const baseFence: ExecutorFence = {
@@ -18,20 +18,30 @@ const baseFence: ExecutorFence = {
 
 function setup(executor: Executor) {
   const grants = new ExecutorGrantAuthority({ now: () => now });
-  const grant = grants.issue({ ...baseFence, expiresAtMs: 3_000 });
   const broker = new ExecutorBroker(grants, { now: () => now });
   broker.registerImplementation("local", executor);
   broker.bindRoot("root-1", "local");
-  return { broker, grant };
+  return { broker, grants };
 }
 
 function request(
-  grant: ReturnType<ExecutorGrantAuthority["issue"]>,
+  grants: ExecutorGrantAuthority,
   operation: ExecutorOperation,
   overrides: Partial<ExecutorFence> = {},
 ) {
+  const requestId = crypto.randomUUID();
+  const grant = grants.issue({
+    source: "broker",
+    executorId: "local",
+    ...baseFence,
+    action: {
+      purpose: "operation",
+      requestId,
+      operationDigest: executorOperationDigest(operation),
+    },
+  });
   return {
-    requestId: crypto.randomUUID(),
+    requestId,
     grant,
     fence: { ...baseFence, ...overrides },
     operation,
@@ -41,7 +51,7 @@ function request(
 describe("ExecutorBroker", () => {
   test("validates authority, binding, and deadline before dispatch", async () => {
     let calls = 0;
-    const { broker, grant } = setup({
+    const { broker, grants } = setup({
       execute: async () => {
         calls++;
         return { outcome: { kind: "fs.list", entries: [] } };
@@ -55,7 +65,7 @@ describe("ExecutorBroker", () => {
       { deadlineMs: now },
     ]) {
       const result = await broker.dispatch(
-        request(grant, { kind: "fs.list", path: "." }, overrides),
+        request(grants, { kind: "fs.list", path: "." }, overrides),
       );
       expect(result.ok).toBe(false);
     }
@@ -64,7 +74,7 @@ describe("ExecutorBroker", () => {
 
   test("retries retryable reads but never mutations", async () => {
     let calls = 0;
-    const { broker, grant } = setup({
+    const { broker, grants } = setup({
       execute: async () => {
         calls++;
         if (calls === 1) throw new ExecutorFailure("executor_busy", "busy");
@@ -72,7 +82,7 @@ describe("ExecutorBroker", () => {
       },
     });
     expect(
-      (await broker.dispatch(request(grant, { kind: "fs.list", path: "." })))
+      (await broker.dispatch(request(grants, { kind: "fs.list", path: "." })))
         .ok,
     ).toBe(true);
     expect(calls).toBe(2);
@@ -80,14 +90,14 @@ describe("ExecutorBroker", () => {
 
   test("rejects malformed mutation and read payloads before dispatch", async () => {
     let calls = 0;
-    const { broker, grant } = setup({
+    const { broker, grants } = setup({
       execute: async () => {
         calls++;
         return { outcome: { kind: "fs.changed", path: "a" } };
       },
     });
     const missingKey = await broker.dispatch(
-      request(grant, {
+      request(grants, {
         kind: "fs.write",
         path: "a",
         data: "x",
@@ -95,7 +105,7 @@ describe("ExecutorBroker", () => {
       } as unknown as ExecutorOperation),
     );
     const strayKey = await broker.dispatch(
-      request(grant, {
+      request(grants, {
         kind: "fs.read",
         path: "a",
         idempotencyKey: "stray",
@@ -108,7 +118,7 @@ describe("ExecutorBroker", () => {
 
   test("replays a successful mutation receipt without executing twice", async () => {
     let calls = 0;
-    const { broker, grant } = setup({
+    const { broker, grants } = setup({
       execute: async () => {
         calls++;
         return { outcome: { kind: "fs.changed", path: "a" } };
@@ -119,8 +129,8 @@ describe("ExecutorBroker", () => {
       path: "a",
       idempotencyKey: "same",
     } as const;
-    const first = await broker.dispatch(request(grant, operation));
-    const replay = await broker.dispatch(request(grant, operation));
+    const first = await broker.dispatch(request(grants, operation));
+    const replay = await broker.dispatch(request(grants, operation));
     expect(first.ok).toBe(true);
     expect(replay).toEqual(first);
     expect(calls).toBe(1);
@@ -128,7 +138,7 @@ describe("ExecutorBroker", () => {
 
   test("fails ambiguous mutations closed and replays the failed receipt", async () => {
     let calls = 0;
-    const { broker, grant } = setup({
+    const { broker, grants } = setup({
       execute: async () => {
         calls++;
         throw new Error("transport disappeared after dispatch");
@@ -139,8 +149,8 @@ describe("ExecutorBroker", () => {
       path: "a",
       idempotencyKey: "ambiguous",
     } as const;
-    const first = await broker.dispatch(request(grant, operation));
-    const replay = await broker.dispatch(request(grant, operation));
+    const first = await broker.dispatch(request(grants, operation));
+    const replay = await broker.dispatch(request(grants, operation));
     expect(first.ok).toBe(false);
     if (!first.ok) {
       expect(first.error.ambiguous).toBe(true);
@@ -151,13 +161,13 @@ describe("ExecutorBroker", () => {
   });
 
   test("marks typed Executor mutation failures ambiguous after acceptance", async () => {
-    const { broker, grant } = setup({
+    const { broker, grants } = setup({
       execute: async () => {
         throw new ExecutorFailure("operation_failed", "partial write");
       },
     });
     const result = await broker.dispatch(
-      request(grant, {
+      request(grants, {
         kind: "fs.write",
         path: "a",
         data: "x",
@@ -170,7 +180,7 @@ describe("ExecutorBroker", () => {
   });
 
   test("rejects reuse of an idempotency key for a different mutation", async () => {
-    const { broker, grant } = setup({
+    const { broker, grants } = setup({
       execute: async (_context, operation) => ({
         outcome: {
           kind: "fs.changed",
@@ -179,10 +189,10 @@ describe("ExecutorBroker", () => {
       }),
     });
     await broker.dispatch(
-      request(grant, { kind: "fs.mkdir", path: "a", idempotencyKey: "key" }),
+      request(grants, { kind: "fs.mkdir", path: "a", idempotencyKey: "key" }),
     );
     const conflict = await broker.dispatch(
-      request(grant, { kind: "fs.mkdir", path: "b", idempotencyKey: "key" }),
+      request(grants, { kind: "fs.mkdir", path: "b", idempotencyKey: "key" }),
     );
     expect(conflict.ok).toBe(false);
     if (!conflict.ok) expect(conflict.error.code).toBe("conflict");

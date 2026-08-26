@@ -9,10 +9,19 @@ import {
   EXECUTOR_SOURCE_HEADER,
   type ExecutorUpgradeData,
 } from "./ingress";
+import { executorOperationDigest } from "./grants";
 import { createExecutorRuntime } from "./runtime";
 
 const roots: string[] = [];
-function setup(overrides: { paired?: boolean; trusted?: boolean } = {}) {
+function setup(
+  overrides: {
+    paired?: boolean;
+    trusted?: boolean;
+    persistedGeneration?: number;
+    closeProviders?: () => void | Promise<void>;
+    beforeProviderCreate?: () => void | Promise<void>;
+  } = {},
+) {
   const root = mkdtempSync(join(tmpdir(), "executor-runtime-"));
   roots.push(root);
   const calls: unknown[] = [];
@@ -22,19 +31,40 @@ function setup(overrides: { paired?: boolean; trusted?: boolean } = {}) {
       managedStateDb: join(root, "managed-state.sqlite"),
       instanceClaimsDb: join(root, "claims.sqlite"),
     },
-    providers: [],
+    providers: [
+      {
+        id: "box",
+        create: async ({ executorId }) => {
+          await overrides.beforeProviderCreate?.();
+          return {
+            resourceId: `resource-${executorId}`,
+            workspaceId: `workspace-${executorId}`,
+          };
+        },
+        inspect: async () => ({ state: "awake" }),
+        start: async () => undefined,
+        stop: async () => {},
+        destroy: async () => {},
+        ensureExecutor: async ({ executorId }) => ({
+          executorId,
+          workspaceId: `workspace-${executorId}`,
+        }),
+        listManaged: async () => [],
+      },
+    ],
     runner: {
-      authenticatePairedToken: (input) => {
-        calls.push(["paired", input]);
-        return overrides.paired ?? true;
+      authenticateRunner: (input) => {
+        calls.push(["authenticate", input]);
+        return overrides.paired === false
+          ? undefined
+          : {
+              generation: overrides.persistedGeneration ?? 7,
+              capabilities: ["fs"],
+            };
       },
       isTrustedPeer: (address) => {
         calls.push(["peer", address]);
         return overrides.trusted ?? true;
-      },
-      authorize: (input) => {
-        calls.push(["authorize", input]);
-        return { connectable: true, capabilities: ["fs"] };
       },
     },
     managed: {
@@ -44,6 +74,7 @@ function setup(overrides: { paired?: boolean; trusted?: boolean } = {}) {
       },
       revokeExecutionAuthority: async () => {},
     },
+    closeProviders: overrides.closeProviders,
     ingress: {
       createId: () => crypto.randomUUID(),
       now: Date.now,
@@ -64,15 +95,24 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-function request(): Request {
+function request(generation = 7): Request {
+  return executorRequest("runner", "runner-1", generation, "paired-token");
+}
+
+function executorRequest(
+  source: "runner" | "managed",
+  executorId: string,
+  generation: number,
+  token: string,
+): Request {
   return new Request("http://localhost/executor/connect", {
     headers: {
-      authorization: "Bearer paired-token",
+      authorization: `Bearer ${token}`,
       connection: "Upgrade",
       upgrade: "websocket",
-      [EXECUTOR_SOURCE_HEADER]: "runner",
-      [EXECUTOR_ID_HEADER]: "runner-1",
-      [EXECUTOR_GENERATION_HEADER]: "7",
+      [EXECUTOR_SOURCE_HEADER]: source,
+      [EXECUTOR_ID_HEADER]: executorId,
+      [EXECUTOR_GENERATION_HEADER]: String(generation),
     },
   });
 }
@@ -94,7 +134,12 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("ExecutorRuntime", () => {
   test("is inert until start and closes idempotently", async () => {
-    const { root, runtime } = setup();
+    let providersClosed = 0;
+    const { root, runtime } = setup({
+      closeProviders: () => {
+        providersClosed++;
+      },
+    });
     expect(existsSync(join(root, "runner-ledger.sqlite"))).toBe(false);
     expect(() => runtime.ingress).toThrow("not started");
     const [firstStart, secondStart] = await Promise.all([
@@ -105,9 +150,64 @@ describe("ExecutorRuntime", () => {
     expect(secondStart).toBe(runtime);
     expect(existsSync(join(root, "runner-ledger.sqlite"))).toBe(true);
     expect(await runtime.start()).toBe(runtime);
-    runtime.close();
-    runtime.close();
+    const firstClose = runtime.close();
+    expect(runtime.close()).toBe(firstClose);
+    await firstClose;
+    expect(providersClosed).toBe(1);
     expect(() => runtime.ingress).toThrow("not started");
+  });
+
+  test("close drains admitted manager work before provider shutdown", async () => {
+    let entered!: () => void;
+    let release!: () => void;
+    const createEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const createGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let providersClosed = false;
+    const { runtime } = setup({
+      beforeProviderCreate: async () => {
+        entered();
+        await createGate;
+      },
+      closeProviders: () => {
+        providersClosed = true;
+      },
+    });
+    await runtime.start();
+    const manager = runtime.manager;
+    const creating = manager.create({
+      executorId: "executor-drain",
+      sessionId: "session-drain",
+      provider: "box",
+      project: {
+        revision: "revision-1",
+        baseCommit: "abc123",
+        durableDelta: "delta-1",
+      },
+    });
+    await createEntered;
+    const closing = runtime.close();
+    await Promise.resolve();
+    expect(providersClosed).toBe(false);
+    expect(() =>
+      manager.create({
+        executorId: "executor-late",
+        sessionId: "session-late",
+        provider: "box",
+        project: {
+          revision: "revision-1",
+          baseCommit: "abc123",
+          durableDelta: "delta-1",
+        },
+      }),
+    ).toThrow("draining");
+    release();
+    await expect(creating).resolves.toMatchObject({ lifecycle: "awake" });
+    await closing;
+    expect(providersClosed).toBe(true);
   });
 
   test("unwinds partial initialization and can retry cleanly", async () => {
@@ -117,7 +217,7 @@ describe("ExecutorRuntime", () => {
     await expect(runtime.start()).rejects.toThrow();
     rmSync(blocked, { recursive: true });
     await expect(runtime.start()).resolves.toBe(runtime);
-    runtime.close();
+    await runtime.close();
   });
 
   test("requires both the paired token and the real socket peer", async () => {
@@ -133,7 +233,7 @@ describe("ExecutorRuntime", () => {
         "100.64.0.9",
       );
       expect(response?.status).toBe(status);
-      runtime.close();
+      await runtime.close();
     }
 
     const { runtime } = setup();
@@ -145,7 +245,154 @@ describe("ExecutorRuntime", () => {
         })
       )?.status,
     ).toBe(403);
-    runtime.close();
+    await runtime.close();
+  });
+
+  test("issues one-use managed enrollment only for the exact durable awake generation", async () => {
+    const { runtime } = setup();
+    await runtime.start();
+    const awake = await runtime.manager.create({
+      executorId: "executor-1",
+      sessionId: "managed-session",
+      provider: "box",
+      project: {
+        revision: "revision-1",
+        baseCommit: "abc123",
+        durableDelta: "delta-1",
+      },
+    });
+    const token = await runtime.issueManagedEnrollment("executor-1");
+    const managed = executorRequest(
+      "managed",
+      "executor-1",
+      awake.instanceGeneration,
+      token,
+    );
+    expect(
+      (
+        await runtime.ingress.handleUpgrade(
+          managed,
+          { upgrade: () => false },
+          "203.0.113.4",
+        )
+      )?.status,
+    ).toBe(400);
+    expect(
+      (
+        await runtime.ingress.handleUpgrade(
+          managed,
+          { upgrade: () => false },
+          "203.0.113.4",
+        )
+      )?.status,
+    ).toBe(401);
+    const revokedToken = await runtime.issueManagedEnrollment("executor-1");
+    const sleeping = await runtime.manager.pause({
+      executorId: "executor-1",
+      expectedGeneration: awake.instanceGeneration,
+    });
+    expect(sleeping.lifecycle).toBe("sleeping");
+    expect(
+      (
+        await runtime.ingress.handleUpgrade(
+          executorRequest(
+            "managed",
+            "executor-1",
+            awake.instanceGeneration,
+            revokedToken,
+          ),
+          { upgrade: () => false },
+          "203.0.113.4",
+        )
+      )?.status,
+    ).toBe(401);
+    await expect(runtime.issueManagedEnrollment("executor-1")).rejects.toThrow(
+      "not connectable",
+    );
+    await runtime.close();
+  });
+
+  test("managed authority refuses a context for another session before grant issuance", async () => {
+    const { runtime } = setup();
+    await runtime.start();
+    const awake = await runtime.manager.create({
+      executorId: "executor-1",
+      sessionId: "managed-session",
+      provider: "box",
+      project: {
+        revision: "revision-1",
+        baseCommit: "abc123",
+        durableDelta: "delta-1",
+      },
+    });
+    const token = await runtime.issueManagedEnrollment("executor-1");
+    let data: ExecutorUpgradeData | undefined;
+    await runtime.ingress.handleUpgrade(
+      executorRequest("managed", "executor-1", awake.instanceGeneration, token),
+      {
+        upgrade: (_request, options) => {
+          data = options.data;
+          return true;
+        },
+      },
+      "203.0.113.4",
+    );
+    const socket = new Socket(data!);
+    runtime.ingress.websocket.open(socket);
+    runtime.ingress.websocket.message(
+      socket,
+      JSON.stringify({
+        t: "hello",
+        version: EXECUTOR_PROTOCOL_VERSION,
+        requestId: "hello-managed",
+        executorId: "executor-1",
+        instanceId: "instance-managed",
+        generation: awake.instanceGeneration,
+        capabilities: ["fs"],
+      }),
+    );
+    await tick();
+    await tick();
+    const remote = runtime.registry.get("executor-1")!;
+    await expect(
+      remote.execute(
+        {
+          rootId: "root-1",
+          sessionId: "other-session",
+          runId: "run-1",
+          generation: awake.instanceGeneration,
+          requestId: "request-wrong-session",
+        },
+        { kind: "fs.stat", path: "one" },
+      ),
+    ).rejects.toThrow("does not own this session");
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value))
+        .filter((value) => value.t === "execute"),
+    ).toHaveLength(0);
+    await runtime.close();
+  });
+
+  test("rejects client-selected future generations when durable auth returns another generation", async () => {
+    const { runtime, calls } = setup({ persistedGeneration: 7 });
+    await runtime.start();
+    const futureGeneration = 999_999_999_999_999;
+    const response = await runtime.ingress.handleUpgrade(
+      request(futureGeneration),
+      { upgrade: () => false },
+      "100.64.0.9",
+    );
+    expect(response?.status).toBe(403);
+    expect(calls).toContainEqual([
+      "authenticate",
+      {
+        runnerId: "runner-1",
+        token: "paired-token",
+        generation: futureGeneration,
+      },
+    ]);
+    await runtime.close();
   });
 
   test("passes the exact generation to authorization and issues fresh operation grants", async () => {
@@ -165,8 +412,8 @@ describe("ExecutorRuntime", () => {
       ),
     ).toBeUndefined();
     expect(calls).toContainEqual([
-      "authorize",
-      { runnerId: "runner-1", generation: 7 },
+      "authenticate",
+      { runnerId: "runner-1", token: "paired-token", generation: 7 },
     ]);
     const socket = new Socket(data!);
     runtime.ingress.websocket.open(socket);
@@ -205,9 +452,19 @@ describe("ExecutorRuntime", () => {
       .filter((value) => value.t === "execute");
     expect(executes).toHaveLength(2);
     expect(executes[0].grant).not.toBe(executes[1].grant);
-    expect(
-      runtime.validateExecutionGrant(executes[0].grant, executes[0].fence),
-    ).toBe(true);
+    const firstScope = {
+      source: "runner" as const,
+      executorId: "runner-1",
+      ...executes[0].fence,
+      action: {
+        purpose: "operation" as const,
+        requestId: executes[0].requestId,
+        operationDigest: executorOperationDigest(executes[0].operation),
+      },
+    };
+    expect(runtime.validateExecutionGrant(executes[0].grant, firstScope)).toBe(
+      true,
+    );
     for (const [index, requestId] of ["request-1", "request-2"].entries()) {
       runtime.ingress.websocket.message(
         socket,
@@ -235,9 +492,9 @@ describe("ExecutorRuntime", () => {
     await expect(second).resolves.toMatchObject({
       outcome: { kind: "fs.stat" },
     });
-    runtime.close();
-    expect(
-      runtime.validateExecutionGrant(executes[0].grant, executes[0].fence),
-    ).toBe(false);
+    await runtime.close();
+    expect(runtime.validateExecutionGrant(executes[0].grant, firstScope)).toBe(
+      false,
+    );
   });
 });

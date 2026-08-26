@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SqliteExecutorInstanceClaims } from "./sqlite-claims";
+import { SqliteRunnerExecutorClaims } from "./sqlite-claims";
 
 const roots: string[] = [];
 function path(): string {
@@ -15,83 +16,93 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-describe("SqliteExecutorInstanceClaims", () => {
-  test("atomically keeps one instance identity for a generation", () => {
-    const claims = new SqliteExecutorInstanceClaims(path());
-    expect(
-      claims.claim({
-        source: "runner",
-        executorId: "runner-1",
-        generation: 4,
-        instanceId: "instance-1",
-      }),
-    ).toBe(true);
-    expect(
-      claims.claim({
-        source: "runner",
-        executorId: "runner-1",
-        generation: 4,
-        instanceId: "instance-1",
-      }),
-    ).toBe(true);
-    expect(
-      claims.claim({
-        source: "runner",
-        executorId: "runner-1",
-        generation: 4,
-        instanceId: "instance-2",
-      }),
-    ).toBe(false);
-    expect(
-      claims.claim({
-        source: "runner",
-        executorId: "runner-1",
-        generation: 5,
-        instanceId: "instance-2",
-      }),
-    ).toBe(true);
+const claim = (generation: number, instanceId: string) => ({
+  executorId: "runner-1",
+  generation,
+  instanceId,
+});
+
+describe("SqliteRunnerExecutorClaims", () => {
+  test("atomically keeps one instance and a monotonic generation high-water mark", () => {
+    const claims = new SqliteRunnerExecutorClaims(path());
+    expect(claims.claim(claim(4, "instance-1"))).toBe(true);
+    expect(claims.claim(claim(4, "instance-1"))).toBe(true);
+    expect(claims.claim(claim(4, "instance-2"))).toBe(false);
+    expect(claims.claim(claim(6, "instance-2"))).toBe(true);
+    expect(claims.claim(claim(5, "instance-3"))).toBe(false);
     claims.close();
   });
 
-  test("persists claims and fail-closed generation revocations", () => {
+  test("persists fail-closed generation revocations", () => {
     const dbPath = path();
-    let claims = new SqliteExecutorInstanceClaims(dbPath);
-    expect(
-      claims.claim({
-        source: "managed",
-        executorId: "executor-1",
-        generation: 2,
-        instanceId: "instance-1",
-      }),
-    ).toBe(true);
-    claims.revokeThrough("managed", "executor-1", 3);
+    let claims = new SqliteRunnerExecutorClaims(dbPath);
+    expect(claims.claim(claim(2, "instance-1"))).toBe(true);
+    claims.revokeThrough("runner-1", 3);
     claims.close();
 
-    claims = new SqliteExecutorInstanceClaims(dbPath);
-    expect(
-      claims.claim({
-        source: "managed",
-        executorId: "executor-1",
-        generation: 2,
-        instanceId: "instance-1",
-      }),
-    ).toBe(false);
-    expect(
-      claims.claim({
-        source: "managed",
-        executorId: "executor-1",
-        generation: 3,
-        instanceId: "instance-2",
-      }),
-    ).toBe(false);
-    expect(
-      claims.claim({
-        source: "managed",
-        executorId: "executor-1",
-        generation: 4,
-        instanceId: "instance-2",
-      }),
-    ).toBe(true);
+    claims = new SqliteRunnerExecutorClaims(dbPath);
+    expect(claims.claim(claim(2, "instance-1"))).toBe(false);
+    expect(claims.claim(claim(3, "instance-2"))).toBe(false);
+    expect(claims.claim(claim(4, "instance-2"))).toBe(true);
     claims.close();
+  });
+
+  test("rejects symlink database and sidecar paths before SQLite opens them", () => {
+    const dbPath = path();
+    const target = `${dbPath}.target`;
+    writeFileSync(target, "target");
+    symlinkSync(target, dbPath);
+    expect(() => new SqliteRunnerExecutorClaims(dbPath)).toThrow();
+
+    const sidecarPath = path();
+    const sidecarTarget = `${sidecarPath}.wal-target`;
+    writeFileSync(sidecarTarget, "target");
+    symlinkSync(sidecarTarget, `${sidecarPath}-wal`);
+    expect(() => new SqliteRunnerExecutorClaims(sidecarPath)).toThrow(
+      "unsafe Runner Executor claims SQLite file",
+    );
+  });
+
+  test("fails closed on unknown, unversioned, and mismatched schemas", () => {
+    const newerPath = path();
+    const newer = new Database(newerPath);
+    newer.exec("PRAGMA user_version = 2");
+    newer.close();
+    expect(() => new SqliteRunnerExecutorClaims(newerPath)).toThrow(
+      "unsupported Runner Executor claims schema",
+    );
+
+    const unversionedPath = path();
+    const unversioned = new Database(unversionedPath);
+    unversioned.exec("CREATE TABLE unexpected (id TEXT)");
+    unversioned.close();
+    expect(() => new SqliteRunnerExecutorClaims(unversionedPath)).toThrow(
+      "unversioned Runner Executor claims schema",
+    );
+
+    const mismatchPath = path();
+    new SqliteRunnerExecutorClaims(mismatchPath).close();
+    const mismatch = new Database(mismatchPath);
+    mismatch.exec("DROP TABLE runner_executor_instance_claims");
+    mismatch.close();
+    expect(() => new SqliteRunnerExecutorClaims(mismatchPath)).toThrow(
+      "schema tables do not match",
+    );
+
+    const columnsPath = path();
+    new SqliteRunnerExecutorClaims(columnsPath).close();
+    const columns = new Database(columnsPath);
+    columns.exec(`
+      DROP TABLE runner_executor_instance_claims;
+      CREATE TABLE runner_executor_instance_claims (
+        executor_id TEXT,
+        generation INTEGER,
+        wrong_column TEXT
+      );
+    `);
+    columns.close();
+    expect(() => new SqliteRunnerExecutorClaims(columnsPath)).toThrow(
+      "schema columns do not match",
+    );
   });
 });

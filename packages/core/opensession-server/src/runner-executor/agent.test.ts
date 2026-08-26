@@ -199,10 +199,8 @@ describe("runner Executor agent", () => {
     const credits = control.messages.filter(
       (message: any) => message.t === "stream_credit",
     ) as any[];
-    expect(credits.length).toBeGreaterThan(1);
-    expect(credits.at(-1).fence.deadlineMs).toBeGreaterThanOrEqual(
-      executeFrame.fence.deadlineMs,
-    );
+    expect(credits.length).toBeGreaterThan(0);
+    expect(credits.at(-1).fence.deadlineMs).toBe(executeFrame.fence.deadlineMs);
   });
 
   test("scopes same-named stream queues and credits by request", async () => {
@@ -296,9 +294,10 @@ describe("runner Executor agent", () => {
     ).toHaveLength(2);
   });
 
-  test("fails closed when grant validation throws", async () => {
+  test("passes the complete exact target and operation scope to grant validation", async () => {
     const [control, daemon] = pair();
     const backend = new RecordingExecutor();
+    let validated: unknown;
     const agent = new RunnerExecutorAgent({
       ...identity,
       capabilities: [...identity.capabilities],
@@ -306,7 +305,8 @@ describe("runner Executor agent", () => {
       transport: daemon,
       executor: backend,
       ledger: new InMemoryCommandLedger(),
-      validateGrant: () => {
+      validateGrant: (_grant, expected) => {
+        validated = expected;
         throw new Error("validator unavailable");
       },
     });
@@ -322,6 +322,19 @@ describe("runner Executor agent", () => {
       remote.execute(context, { kind: "fs.read", path: "x" }),
     ).rejects.toMatchObject({ code: "invalid_grant" });
     expect(backend.calls).toBe(0);
+    expect(validated).toMatchObject({
+      source: "runner",
+      executorId: identity.executorId,
+      rootId: context.rootId,
+      sessionId: context.sessionId,
+      runId: context.runId,
+      generation: context.generation,
+      action: {
+        purpose: "operation",
+        requestId: context.requestId,
+        operationDigest: operationDigest({ kind: "fs.read", path: "x" }),
+      },
+    });
   });
 
   test("rejects operations outside its advertised capability before execution", async () => {

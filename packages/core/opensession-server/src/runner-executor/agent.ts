@@ -19,6 +19,11 @@ import {
   type Executor,
 } from "../server/executors/contract";
 import {
+  executorOperationDigest,
+  type ExecutorGrantAction,
+  type ExecutorGrantScope,
+} from "../server/executors/grants";
+import {
   LedgerFullError,
   operationDigest,
   type DurableCommandLedger,
@@ -42,7 +47,7 @@ export interface RunnerExecutorAgentOptions extends ExecutorConnectionIdentity {
   createId?: () => string;
   validateGrant: (
     grant: string,
-    fence: ExecutorFence,
+    expected: ExecutorGrantScope,
   ) => boolean | Promise<boolean>;
   maxQueuedEventBytes?: number;
 }
@@ -56,6 +61,7 @@ export class RunnerExecutorAgent {
     Array<{ requestId: string; event: ExecutorStreamEvent; bytes: number }>
   >();
   readonly #streamWaiters = new Map<string, Array<() => void>>();
+  readonly #operationActions = new Map<string, ExecutorGrantAction>();
   #queuedBytes = 0;
   #accepted = false;
   #stopped = false;
@@ -91,6 +97,7 @@ export class RunnerExecutorAgent {
     this.#credits.clear();
     this.#events.clear();
     this.#streamWaiters.clear();
+    this.#operationActions.clear();
     this.#queuedBytes = 0;
   }
 
@@ -136,12 +143,15 @@ export class RunnerExecutorAgent {
       );
       return;
     }
+    const expectedGrant = this.#grantScope(message);
     let grantAccepted = false;
     try {
-      grantAccepted = await this.#options.validateGrant(
-        message.grant as string,
-        message.fence,
-      );
+      grantAccepted =
+        !!expectedGrant &&
+        (await this.#options.validateGrant(
+          message.grant as string,
+          expectedGrant,
+        ));
     } catch {
       grantAccepted = false;
     }
@@ -160,6 +170,13 @@ export class RunnerExecutorAgent {
         "executor fence expired during authorization",
       );
       return;
+    }
+    if (message.t === "execute") {
+      if (this.#operationActions.size >= 10_000) {
+        const oldest = this.#operationActions.keys().next().value;
+        if (oldest) this.#operationActions.delete(oldest);
+      }
+      this.#operationActions.set(message.requestId, expectedGrant!.action);
     }
     switch (message.t) {
       case "execute":
@@ -180,6 +197,56 @@ export class RunnerExecutorAgent {
         );
         break;
     }
+  }
+
+  #grantScope(message: ExecutorClientMessage): ExecutorGrantScope | undefined {
+    let action: ExecutorGrantAction | undefined;
+    if (message.t === "execute") {
+      action = {
+        purpose: "operation",
+        requestId: message.requestId,
+        operationDigest: executorOperationDigest(message.operation),
+      };
+    } else if (message.t === "stream_credit") {
+      action = this.#operationActions.get(message.requestId);
+    } else if (message.t === "receipt_status") {
+      action = {
+        purpose: "receipt_status",
+        requestId: message.requestId,
+        receiptId: message.receiptId,
+      };
+    } else if (message.t === "cancel") {
+      action =
+        "streamId" in message.target
+          ? {
+              purpose: "cleanup",
+              requestId: message.requestId,
+              targetRequestId: message.target.requestId,
+              streamId: message.target.streamId,
+            }
+          : "receiptId" in message.target
+            ? {
+                purpose: "cancel_receipt",
+                requestId: message.requestId,
+                receiptId: message.target.receiptId,
+              }
+            : {
+                purpose: "cancel_request",
+                requestId: message.requestId,
+                targetRequestId: message.target.requestId,
+              };
+    }
+    if (!action || !("fence" in message)) return undefined;
+    return {
+      source: "runner",
+      executorId: this.#options.executorId,
+      rootId: message.fence.rootId,
+      sessionId: message.fence.sessionId,
+      runId: message.fence.runId,
+      generation: message.fence.generation,
+      deadlineMs: message.fence.deadlineMs,
+      action,
+    };
   }
 
   async #execute(

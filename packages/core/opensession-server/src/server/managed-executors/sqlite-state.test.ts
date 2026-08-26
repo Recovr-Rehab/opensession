@@ -2,13 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { scanModuleSideEffects } from "../../../../../../scripts/check-module-side-effects";
 import { ExecutorStateConflictError, type ExecutorRecord } from "./state";
 import { SqliteExecutorStateStore } from "./sqlite-state";
@@ -277,6 +279,15 @@ describe("SqliteExecutorStateStore", () => {
     const link = `${path}.link`;
     symlinkSync(path, link);
     expect(() => new SqliteExecutorStateStore(link)).toThrow();
+
+    const sidecarPath = databasePath();
+    mkdirSync(dirname(sidecarPath), { recursive: true });
+    const target = `${sidecarPath}.target`;
+    writeFileSync(target, "target");
+    symlinkSync(target, `${sidecarPath}-wal`);
+    expect(() => new SqliteExecutorStateStore(sidecarPath)).toThrow(
+      "unsafe managed Executor SQLite file",
+    );
   });
 
   test("migrates version 1 state with durable instance claims", async () => {

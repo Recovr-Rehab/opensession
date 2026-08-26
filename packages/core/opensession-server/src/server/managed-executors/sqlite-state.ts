@@ -97,7 +97,10 @@ export class SqliteExecutorStateStore implements ExecutorStateStore {
     if (typeof dbPath !== "string" || dbPath.length === 0) {
       throw new TypeError("Executor state database path must be explicit");
     }
-    if (dbPath !== ":memory:") preparePrivateDatabasePath(dbPath);
+    if (dbPath !== ":memory:") {
+      preparePrivateDatabasePath(dbPath);
+      preflightSidecars(dbPath);
+    }
 
     let db: Database | undefined;
     try {
@@ -747,6 +750,25 @@ function preparePrivateDatabasePath(dbPath: string): void {
     chmodSync(absolutePath, 0o600);
   } finally {
     closeSync(descriptor);
+  }
+}
+
+function preflightSidecars(dbPath: string): void {
+  for (const path of [`${resolve(dbPath)}-wal`, `${resolve(dbPath)}-shm`]) {
+    const stat = lstatSync(path, { throwIfNoEntry: false });
+    if (!stat) continue;
+    if (stat.isSymbolicLink() || !stat.isFile())
+      throw new Error(`unsafe managed Executor SQLite file: ${path}`);
+    const descriptor = openSync(
+      path,
+      constants.O_RDWR | (constants.O_NOFOLLOW ?? 0),
+    );
+    try {
+      if (!fstatSync(descriptor).isFile())
+        throw new Error(`unsafe managed Executor SQLite file: ${path}`);
+    } finally {
+      closeSync(descriptor);
+    }
   }
 }
 

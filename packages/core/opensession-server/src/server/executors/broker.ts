@@ -13,7 +13,7 @@ import {
   type ExecutorDispatchRequest,
   type ExecutorDispatchResult,
 } from "./contract";
-import { ExecutorGrantAuthority } from "./grants";
+import { ExecutorGrantAuthority, executorOperationDigest } from "./grants";
 
 interface StoredReceipt {
   operation: string;
@@ -70,13 +70,26 @@ export class ExecutorBroker {
     try {
       const operation = this.#validateRequest(request);
       const validatedRequest = { ...request, operation };
-      this.grants.validate(request.grant, request.fence);
       const implementationId = this.#roots.get(request.fence.rootId);
       if (!implementationId)
         throw new ExecutorFailure(
           "invalid_grant",
           "executor root is not bound",
         );
+      this.grants.validate(request.grant, {
+        source: "broker",
+        executorId: implementationId,
+        rootId: request.fence.rootId,
+        sessionId: request.fence.sessionId,
+        runId: request.fence.runId,
+        generation: request.fence.generation,
+        deadlineMs: request.fence.deadlineMs,
+        action: {
+          purpose: "operation",
+          requestId: request.requestId,
+          operationDigest: executorOperationDigest(operation),
+        },
+      });
       const implementation = this.#implementations.get(implementationId);
       if (!implementation)
         throw new ExecutorFailure(

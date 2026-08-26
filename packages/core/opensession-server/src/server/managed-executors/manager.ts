@@ -67,6 +67,8 @@ export class ExecutorManager {
   readonly #checkpointWorkspace: ExecutorManagerDependencies["checkpointWorkspace"];
   readonly #now: () => number;
   readonly #queues = new Map<string, Promise<void>>();
+  #draining = false;
+  #drainPromise?: Promise<void>;
 
   constructor(dependencies: ExecutorManagerDependencies) {
     this.#store = dependencies.store;
@@ -77,6 +79,7 @@ export class ExecutorManager {
   }
 
   create(input: CreateExecutorInput): Promise<ExecutorRecord> {
+    this.#assertAdmitting();
     return this.#serialized(input.executorId, async () => {
       assertIdentity(input.executorId, "executorId");
       assertIdentity(input.sessionId, "sessionId");
@@ -114,6 +117,7 @@ export class ExecutorManager {
   }
 
   wake(input: ExecutorTransitionInput): Promise<ExecutorRecord> {
+    this.#assertAdmitting();
     return this.#serialized(input.executorId, async () => {
       const current = await this.#expect(input);
       if (current.lifecycle !== "sleeping" || !current.resourceId) {
@@ -159,6 +163,7 @@ export class ExecutorManager {
   }
 
   pause(input: ExecutorTransitionInput): Promise<ExecutorRecord> {
+    this.#assertAdmitting();
     return this.#serialized(input.executorId, async () => {
       const current = await this.#expect(input);
       if (current.lifecycle !== "awake" || !current.resourceId) {
@@ -193,10 +198,12 @@ export class ExecutorManager {
   }
 
   destroy(input: ExecutorTransitionInput): Promise<void> {
+    this.#assertAdmitting();
     return this.#destroy(input, undefined);
   }
 
   forceDestroy(input: ForceDestroyExecutorInput): Promise<void> {
+    this.#assertAdmitting();
     if (!input.operatorId.trim() || !input.reason.trim()) {
       return Promise.reject(
         new Error("forceDestroy requires an operator and reason"),
@@ -209,6 +216,7 @@ export class ExecutorManager {
   }
 
   rebuild(input: RebuildExecutorInput): Promise<ExecutorRecord> {
+    this.#assertAdmitting();
     return this.#serialized(input.executorId, async () => {
       const current = await this.#expect(input);
       const replacement = this.#providers.get(
@@ -274,6 +282,7 @@ export class ExecutorManager {
   async assertNoUnknownManagedResources(
     providerId: ExecutorProviderId,
   ): Promise<void> {
+    this.#assertAdmitting();
     const provider = this.#providers.get(providerId);
     for (const resource of await provider.listManaged()) {
       const record = await this.#store.getByExecutorId(resource.executorId);
@@ -287,6 +296,35 @@ export class ExecutorManager {
         throw new UnknownExecutorResourceError(resource.resourceId);
       }
     }
+  }
+
+  /** Serializes a synchronous authority issuance against lifecycle transitions. */
+  withAwakeExecutor<T>(
+    executorId: string,
+    authorize: (record: ExecutorRecord) => T,
+  ): Promise<T> {
+    this.#assertAdmitting();
+    return this.#serialized(executorId, async () => {
+      const record = await this.#store.getByExecutorId(executorId);
+      if (!record || record.lifecycle !== "awake")
+        throw new Error("managed Executor is not connectable");
+      return authorize(record);
+    });
+  }
+
+  /** Stops lifecycle admission and waits for every admitted provider effect to settle. */
+  drain(): Promise<void> {
+    if (!this.#drainPromise) {
+      this.#draining = true;
+      this.#drainPromise = Promise.allSettled([...this.#queues.values()]).then(
+        () => undefined,
+      );
+    }
+    return this.#drainPromise;
+  }
+
+  #assertAdmitting(): void {
+    if (this.#draining) throw new Error("Executor manager is draining");
   }
 
   #destroy(

@@ -30,6 +30,7 @@ export interface RemoteExecutorConnectionOptions extends ExecutorConnectionIdent
     | ((
         context: ExecutorContext,
         operation: ExecutorOperation,
+        deadlineMs: number,
       ) => ExecutorGrant | Promise<ExecutorGrant>);
   deadlineMs?: (context: ExecutorContext) => number;
   maxPending?: number;
@@ -40,10 +41,13 @@ export interface RemoteExecutorConnectionOptions extends ExecutorConnectionIdent
   cleanupTimeoutMs?: number;
   helloTimeoutMs?: number;
   /** Required by ingress before streaming work can safely outlive its operation grant. */
-  cleanupGrant?: (
-    context: ExecutorContext,
-    streamId: string,
-  ) => ExecutorGrant | Promise<ExecutorGrant>;
+  cleanupGrant?: (input: {
+    context: ExecutorContext;
+    requestId: string;
+    targetRequestId: string;
+    streamId: string;
+    deadlineMs: number;
+  }) => ExecutorGrant | Promise<ExecutorGrant>;
   createId?: () => string;
 }
 
@@ -153,12 +157,14 @@ export class RemoteExecutorConnection implements Executor {
       throw new ExecutorFailure("invalid_request", "request ID is malformed");
     if (this.#pending.has(requestId))
       throw new ExecutorFailure("conflict", "request is already pending");
+    const requestContext =
+      context.requestId === requestId ? context : { ...context, requestId };
+    const deadlineMs =
+      this.#options.deadlineMs?.(requestContext) ?? Date.now() + 30_000;
     const grant =
       typeof this.#options.grant === "function"
-        ? await this.#options.grant(context, operation)
+        ? await this.#options.grant(requestContext, operation, deadlineMs)
         : this.#options.grant;
-    const deadlineMs =
-      this.#options.deadlineMs?.(context) ?? Date.now() + 30_000;
     return new Promise<ExecutorSuccess>((resolve, reject) => {
       const timeout = setTimeout(
         () => {
@@ -178,7 +184,7 @@ export class RemoteExecutorConnection implements Executor {
       );
       this.#pending.set(requestId, {
         operation,
-        context,
+        context: requestContext,
         grant,
         deadlineMs,
         accepted: false,
@@ -430,7 +436,7 @@ export class RemoteExecutorConnection implements Executor {
         sessionId: pending.context.sessionId,
         runId: pending.context.runId,
         generation: pending.context.generation,
-        deadlineMs: Date.now() + 30_000,
+        deadlineMs: pending.deadlineMs,
       },
       streamId,
       bytes,
@@ -474,12 +480,17 @@ export class RemoteExecutorConnection implements Executor {
     });
     const cleanup = Promise.all(
       streamIds.map(async (streamId) => {
-        const cleanupGrant = await this.#options.cleanupGrant!(
-          pending.context,
-          streamId,
-        );
-        if (!reservation.active) throw new Error("cleanup reservation expired");
         const cleanupRequestId = this.#id();
+        const deadlineMs =
+          Date.now() + (this.#options.cleanupTimeoutMs ?? 2_000);
+        const cleanupGrant = await this.#options.cleanupGrant!({
+          context: pending.context,
+          requestId: cleanupRequestId,
+          targetRequestId: requestId,
+          streamId,
+          deadlineMs,
+        });
+        if (!reservation.active) throw new Error("cleanup reservation expired");
         await this.#options.transport.send({
           t: "cancel",
           version: EXECUTOR_PROTOCOL_VERSION,
@@ -490,7 +501,7 @@ export class RemoteExecutorConnection implements Executor {
             sessionId: pending.context.sessionId,
             runId: pending.context.runId,
             generation: pending.context.generation,
-            deadlineMs: Date.now() + 30_000,
+            deadlineMs,
           },
           target: { requestId, streamId },
           idempotencyKey: `cleanup:${cleanupRequestId}`,

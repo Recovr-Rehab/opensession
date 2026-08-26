@@ -6,7 +6,10 @@ import {
 } from "@tellahq/opensession-protocol/executor";
 import type { DuplexJsonTransport } from "../../runner-executor/agent";
 import type { ExecutorFailure } from "./contract";
-import { RemoteExecutorConnection } from "./remote";
+import {
+  RemoteExecutorConnection,
+  type RemoteExecutorConnectionOptions,
+} from "./remote";
 import {
   RemoteExecutorRegistrationError,
   RemoteExecutorRegistry,
@@ -446,13 +449,19 @@ describe("remote Executor connection", () => {
   test("sends scoped stream cleanup with fresh grants on repeated timeouts", async () => {
     const transport = new ManualTransport();
     let cleanupGrants = 0;
+    const cleanupInputs: Array<
+      Parameters<
+        NonNullable<RemoteExecutorConnectionOptions["cleanupGrant"]>
+      >[0]
+    > = [];
     const remote = new RemoteExecutorConnection({
       ...identity,
       capabilities: [...identity.capabilities],
       transport,
       grant,
       deadlineMs: () => Date.now() + 8,
-      cleanupGrant: () => {
+      cleanupGrant: (input) => {
+        cleanupInputs.push(input);
         cleanupGrants++;
         return decodeExecutorGrant(`cleanup-${cleanupGrants}`) as ExecutorGrant;
       },
@@ -492,6 +501,16 @@ describe("remote Executor connection", () => {
       "cleanup-1",
       "cleanup-2",
     ]);
+    expect(cleanupInputs).toHaveLength(2);
+    for (const [index, input] of cleanupInputs.entries()) {
+      expect(input).toMatchObject({
+        context: { requestId: `cleanup-request-${index}` },
+        requestId: cleanups[index]?.requestId,
+        targetRequestId: `cleanup-request-${index}`,
+        streamId: "shared-stream",
+        deadlineMs: cleanups[index]?.fence.deadlineMs,
+      });
+    }
     expect(cleanups.map((message) => message.target.requestId)).toEqual([
       "cleanup-request-0",
       "cleanup-request-1",

@@ -224,6 +224,44 @@ describe("ExecutorManager", () => {
     expect(events.filter((event) => event === "destroy")).toHaveLength(0);
   });
 
+  test("drain stops admission and waits for admitted provider work", async () => {
+    let releaseCreate!: () => void;
+    let createEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      createEntered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+    const provider = new FakeProvider();
+    provider.beforeCreate = async () => {
+      createEntered();
+      await gate;
+    };
+    const { manager } = setup({ provider });
+    const creating = create(manager);
+    await entered;
+    let drained = false;
+    const drain = manager.drain().then(() => {
+      drained = true;
+    });
+    expect(() =>
+      manager.create({
+        executorId: "executor-2",
+        sessionId: "session-2",
+        provider: "box",
+        project,
+      }),
+    ).toThrow("draining");
+    await Promise.resolve();
+    expect(drained).toBe(false);
+    releaseCreate();
+    await expect(creating).resolves.toMatchObject({ lifecycle: "awake" });
+    await drain;
+    expect(drained).toBe(true);
+    expect(manager.drain()).toBe(manager.drain());
+  });
+
   test("keeps persistent resource identity separate from lifecycle generations", async () => {
     const provider = new FakeProvider();
     const { manager } = setup({ provider });

@@ -9,28 +9,27 @@ import {
   openSync,
 } from "node:fs";
 import { dirname, parse, resolve } from "node:path";
-import type { ExecutorSource } from "./ingress";
 
 const SCHEMA_VERSION = 1;
 
-/** Durable incarnation claims and generation revocations for Executor ingress. */
-export class SqliteExecutorInstanceClaims {
+/** Durable Runner incarnation claims and monotonic generation revocations. */
+export class SqliteRunnerExecutorClaims {
   readonly #db: Database;
   #closed = false;
 
   constructor(dbPath: string) {
     if (!dbPath || dbPath === ":memory:")
       throw new Error(
-        "a filesystem database path is required for Executor claims",
+        "a filesystem database path is required for Runner Executor claims",
       );
     const path = resolve(dbPath);
     preparePrivatePath(path);
+    preflightSidecars(path);
     const db = new Database(path, { create: true, strict: true });
     try {
-      db.exec(
-        "PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;",
-      );
+      db.exec("PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
       initialize(db);
+      db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
       secureFiles(path);
       this.#db = db;
     } catch (error) {
@@ -39,9 +38,8 @@ export class SqliteExecutorInstanceClaims {
     }
   }
 
-  /** Atomically claims one instance identity for an exact generation. */
+  /** Atomically claims one instance and refuses generations below the durable high-water mark. */
   claim(input: {
-    source: ExecutorSource;
     executorId: string;
     generation: number;
     instanceId: string;
@@ -51,55 +49,68 @@ export class SqliteExecutorInstanceClaims {
     assertIdentity(input.instanceId, "instanceId");
     assertGeneration(input.generation);
     const transaction = this.#db.transaction(() => {
-      const revoked = this.#db
-        .query<{ through_generation: number }, [string, string]>(
-          "SELECT through_generation FROM executor_generation_revocations WHERE source = ? AND executor_id = ?",
+      const authority = this.#db
+        .query<
+          { highest_generation: number; revoked_through: number },
+          [string]
+        >(
+          "SELECT highest_generation, revoked_through FROM runner_executor_authority WHERE executor_id = ?",
         )
-        .get(input.source, input.executorId);
-      if (revoked && input.generation <= revoked.through_generation)
+        .get(input.executorId);
+      if (
+        authority &&
+        (input.generation < authority.highest_generation ||
+          input.generation <= authority.revoked_through)
+      )
         return false;
+      if (!authority) {
+        this.#db
+          .query(
+            "INSERT INTO runner_executor_authority (executor_id, highest_generation, revoked_through) VALUES (?, ?, 0)",
+          )
+          .run(input.executorId, input.generation);
+      } else if (input.generation > authority.highest_generation) {
+        this.#db
+          .query(
+            "UPDATE runner_executor_authority SET highest_generation = ? WHERE executor_id = ?",
+          )
+          .run(input.generation, input.executorId);
+      }
       const existing = this.#db
-        .query<{ instance_id: string }, [string, string, number]>(
-          "SELECT instance_id FROM executor_instance_claims WHERE source = ? AND executor_id = ? AND generation = ?",
+        .query<{ instance_id: string }, [string, number]>(
+          "SELECT instance_id FROM runner_executor_instance_claims WHERE executor_id = ? AND generation = ?",
         )
-        .get(input.source, input.executorId, input.generation);
+        .get(input.executorId, input.generation);
       if (existing) return existing.instance_id === input.instanceId;
       this.#db
         .query(
-          "INSERT INTO executor_instance_claims (source, executor_id, generation, instance_id) VALUES (?, ?, ?, ?)",
+          "INSERT INTO runner_executor_instance_claims (executor_id, generation, instance_id) VALUES (?, ?, ?)",
         )
-        .run(
-          input.source,
-          input.executorId,
-          input.generation,
-          input.instanceId,
-        );
+        .run(input.executorId, input.generation, input.instanceId);
       return true;
     });
     return transaction.immediate();
   }
 
-  revokeThrough(
-    source: ExecutorSource,
-    executorId: string,
-    generation: number,
-  ): void {
+  revokeThrough(executorId: string, generation: number): void {
     this.#assertOpen();
     assertIdentity(executorId, "executorId");
     assertGeneration(generation);
     const transaction = this.#db.transaction(() => {
       this.#db
         .query(
-          `INSERT INTO executor_generation_revocations (source, executor_id, through_generation)
+          `INSERT INTO runner_executor_authority (executor_id, highest_generation, revoked_through)
            VALUES (?, ?, ?)
-           ON CONFLICT(source, executor_id) DO UPDATE SET through_generation = MAX(through_generation, excluded.through_generation)`,
+           ON CONFLICT(executor_id) DO UPDATE SET
+             highest_generation = MAX(highest_generation, excluded.highest_generation),
+             revoked_through = MAX(revoked_through, excluded.revoked_through)`,
         )
-        .run(source, executorId, generation);
+        .run(executorId, generation, generation);
       this.#db
         .query(
-          "DELETE FROM executor_instance_claims WHERE source = ? AND executor_id = ? AND generation <= ?",
+          "DELETE FROM runner_executor_instance_claims WHERE executor_id = ? AND generation <= ?",
         )
-        .run(source, executorId, generation);
+        .run(executorId, generation);
     });
     transaction.immediate();
   }
@@ -111,7 +122,8 @@ export class SqliteExecutorInstanceClaims {
   }
 
   #assertOpen(): void {
-    if (this.#closed) throw new Error("Executor claims database is closed");
+    if (this.#closed)
+      throw new Error("Runner Executor claims database is closed");
   }
 }
 
@@ -119,6 +131,8 @@ function initialize(db: Database): void {
   const version = db
     .query<{ user_version: number }, []>("PRAGMA user_version")
     .get()!.user_version;
+  if (version !== 0 && version !== SCHEMA_VERSION)
+    throw new Error(`unsupported Runner Executor claims schema: ${version}`);
   if (version === 0) {
     const tables = db
       .query<{ name: string }, []>(
@@ -126,25 +140,31 @@ function initialize(db: Database): void {
       )
       .all();
     if (tables.length)
-      throw new Error("unversioned Executor claims schema is not supported");
-    db.exec(`
-      CREATE TABLE executor_instance_claims (
-        source TEXT NOT NULL CHECK(source IN ('runner', 'managed')),
-        executor_id TEXT NOT NULL,
-        generation INTEGER NOT NULL CHECK(generation >= 1),
-        instance_id TEXT NOT NULL,
-        PRIMARY KEY(source, executor_id, generation)
-      ) STRICT;
-      CREATE TABLE executor_generation_revocations (
-        source TEXT NOT NULL CHECK(source IN ('runner', 'managed')),
-        executor_id TEXT NOT NULL,
-        through_generation INTEGER NOT NULL CHECK(through_generation >= 1),
-        PRIMARY KEY(source, executor_id)
-      ) STRICT;
-      PRAGMA user_version = ${SCHEMA_VERSION};
-    `);
-  } else if (version !== SCHEMA_VERSION) {
-    throw new Error(`unsupported Executor claims schema version: ${version}`);
+      throw new Error(
+        "unversioned Runner Executor claims schema is unsupported",
+      );
+    db.exec("BEGIN IMMEDIATE;");
+    try {
+      db.exec(`
+        CREATE TABLE runner_executor_authority (
+          executor_id TEXT PRIMARY KEY NOT NULL,
+          highest_generation INTEGER NOT NULL CHECK(highest_generation >= 1),
+          revoked_through INTEGER NOT NULL CHECK(revoked_through >= 0)
+        ) STRICT;
+        CREATE TABLE runner_executor_instance_claims (
+          executor_id TEXT NOT NULL,
+          generation INTEGER NOT NULL CHECK(generation >= 1),
+          instance_id TEXT NOT NULL,
+          PRIMARY KEY(executor_id, generation),
+          FOREIGN KEY(executor_id) REFERENCES runner_executor_authority(executor_id) ON DELETE CASCADE
+        ) STRICT;
+        PRAGMA user_version = ${SCHEMA_VERSION};
+      `);
+      db.exec("COMMIT;");
+    } catch (error) {
+      db.exec("ROLLBACK;");
+      throw error;
+    }
   }
   const tables = db
     .query<{ name: string }, []>(
@@ -154,9 +174,37 @@ function initialize(db: Database): void {
     .map(({ name }) => name);
   if (
     tables.join("\0") !==
-    "executor_generation_revocations\0executor_instance_claims"
+    "runner_executor_authority\0runner_executor_instance_claims"
   )
-    throw new Error("Executor claims schema tables do not match");
+    throw new Error("Runner Executor claims schema tables do not match");
+  assertColumns(db, "runner_executor_authority", [
+    "executor_id",
+    "highest_generation",
+    "revoked_through",
+  ]);
+  assertColumns(db, "runner_executor_instance_claims", [
+    "executor_id",
+    "generation",
+    "instance_id",
+  ]);
+}
+
+function assertColumns(
+  db: Database,
+  table: string,
+  expected: readonly string[],
+): void {
+  const columns = db
+    .query<{ name: string }, []>(`PRAGMA table_info('${table}')`)
+    .all()
+    .map(({ name }) => name);
+  if (
+    columns.length !== expected.length ||
+    columns.some((column, index) => column !== expected[index])
+  )
+    throw new Error(
+      `Runner Executor claims schema columns do not match: ${table}`,
+    );
 }
 
 function assertIdentity(value: string, name: string): void {
@@ -186,7 +234,9 @@ function preparePrivatePath(path: string): void {
     current = resolve(current, part);
     const stat = lstatSync(current);
     if (stat.isSymbolicLink() || !stat.isDirectory())
-      throw new Error(`unsafe Executor claims path component: ${current}`);
+      throw new Error(
+        `unsafe Runner Executor claims path component: ${current}`,
+      );
   }
   chmodSync(parent, 0o700);
   const descriptor = openSync(
@@ -196,10 +246,29 @@ function preparePrivatePath(path: string): void {
   );
   try {
     if (!fstatSync(descriptor).isFile())
-      throw new Error("Executor claims path is not a regular file");
+      throw new Error("Runner Executor claims path is not a regular file");
     chmodSync(path, 0o600);
   } finally {
     closeSync(descriptor);
+  }
+}
+
+function preflightSidecars(path: string): void {
+  for (const file of [`${path}-wal`, `${path}-shm`]) {
+    const stat = lstatSync(file, { throwIfNoEntry: false });
+    if (!stat) continue;
+    if (stat.isSymbolicLink() || !stat.isFile())
+      throw new Error(`unsafe Runner Executor claims SQLite file: ${file}`);
+    const descriptor = openSync(
+      file,
+      constants.O_RDWR | (constants.O_NOFOLLOW ?? 0),
+    );
+    try {
+      if (!fstatSync(descriptor).isFile())
+        throw new Error(`unsafe Runner Executor claims SQLite file: ${file}`);
+    } finally {
+      closeSync(descriptor);
+    }
   }
 }
 
@@ -208,7 +277,7 @@ function secureFiles(path: string): void {
     const stat = lstatSync(file, { throwIfNoEntry: false });
     if (!stat) continue;
     if (stat.isSymbolicLink() || !stat.isFile())
-      throw new Error(`unsafe Executor claims SQLite file: ${file}`);
+      throw new Error(`unsafe Runner Executor claims SQLite file: ${file}`);
     chmodSync(file, 0o600);
   }
 }

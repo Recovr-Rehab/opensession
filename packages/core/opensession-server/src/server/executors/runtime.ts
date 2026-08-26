@@ -1,23 +1,25 @@
 import type {
   ExecutorCapability,
-  ExecutorFence,
   ExecutorGrant,
-  ExecutorOperation,
 } from "@tellahq/opensession-protocol/executor";
 import {
   openSQLiteCommandLedger,
   type SQLiteCommandLedger,
 } from "../../runner-executor/sqlite-ledger";
-import type { ExecutorContext } from "./contract";
+import { ExecutorFailure, type ExecutorContext } from "./contract";
 import { ExecutorBroker } from "./broker";
-import { ExecutorGrantAuthority } from "./grants";
+import {
+  ExecutorGrantAuthority,
+  executorOperationDigest,
+  type ExecutorGrantScope,
+} from "./grants";
 import {
   ExecutorIngress,
   type ExecutorAuthority,
   type ExecutorIngressOptions,
 } from "./ingress";
 import { RemoteExecutorRegistry } from "./remote-registry";
-import { SqliteExecutorInstanceClaims } from "./sqlite-claims";
+import { SqliteRunnerExecutorClaims } from "./sqlite-claims";
 import { ExecutorEnrollmentAuthority } from "../managed-executors/enrollment";
 import {
   ExecutorManager,
@@ -36,25 +38,25 @@ export interface ExecutorRuntimePaths {
 }
 
 export interface RunnerExecutorAuthorization {
+  generation: number;
   capabilities: readonly ExecutorCapability[];
-  connectable: boolean;
 }
 
 export interface ExecutorRuntimeOptions {
   paths: ExecutorRuntimePaths;
   providers: readonly ExecutorProvider[];
   runner: {
-    /** Must verify the persisted paired Runner token. No ambient credentials are consulted. */
-    authenticatePairedToken(input: {
+    /** Atomically verifies pairing and exact durable generation/connectability. */
+    authenticateRunner(input: {
       runnerId: string;
       token: string;
-    }): boolean | Promise<boolean>;
+      generation: number;
+    }):
+      | RunnerExecutorAuthorization
+      | undefined
+      | Promise<RunnerExecutorAuthorization | undefined>;
     /** Must inspect the socket peer supplied by boot. Forwarded headers are not peer identity. */
     isTrustedPeer(remoteAddress: string): boolean | Promise<boolean>;
-    authorize(input: {
-      runnerId: string;
-      generation: number;
-    }): RunnerExecutorAuthorization | Promise<RunnerExecutorAuthorization>;
   };
   managed: {
     capabilities(record: ExecutorRecord): readonly ExecutorCapability[];
@@ -71,8 +73,11 @@ export interface ExecutorRuntimeOptions {
     ExecutorIngressOptions,
     "createId" | "now" | "rateLimit" | "timers" | "connectionPolicy"
   >;
-  grantTtlMs?: number;
+  maxGrantTtlMs?: number;
+  managedEnrollmentTtlMs?: number;
   runnerLedger?: Omit<Parameters<typeof openSQLiteCommandLedger>[0], "dbPath">;
+  /** Optional provider-client shutdown, called only after manager drain. */
+  closeProviders?: () => void | Promise<void>;
 }
 
 /**
@@ -82,7 +87,8 @@ export interface ExecutorRuntimeOptions {
  * provide the real paired-token and socket-peer callbacks, route the exact ingress path with
  * the kernel-reported peer address, attach `ingress.websocket` to Bun.serve, and call start()
  * before exposing routes. It must call close() during shutdown. Provider SDK construction and
- * credentials remain outside this module.
+ * credentials remain outside this module. Until those obligations and the grant-validation
+ * transport are wired by boot, this is scaffolding, not an active production security boundary.
  */
 export function createExecutorRuntime(
   options: ExecutorRuntimeOptions,
@@ -92,15 +98,16 @@ export function createExecutorRuntime(
 
 export class ExecutorRuntime {
   readonly registry = new RemoteExecutorRegistry();
-  readonly enrollment: ExecutorEnrollmentAuthority;
   readonly brokerGrants: ExecutorGrantAuthority;
   readonly broker: ExecutorBroker;
-  readonly providers = new ExecutorProviderRegistry();
+  readonly #enrollment: ExecutorEnrollmentAuthority;
+  readonly #providers = new ExecutorProviderRegistry();
   readonly #options: ExecutorRuntimeOptions;
   readonly #executionGrants = new ExecutorGrantAuthority();
   readonly #issuedByExecutor = new Map<string, Map<ExecutorGrant, number>>();
-  readonly #grantTtlMs: number;
-  #claims?: SqliteExecutorInstanceClaims;
+  readonly #maxGrantTtlMs: number;
+  readonly #managedEnrollmentTtlMs: number;
+  #claims?: SqliteRunnerExecutorClaims;
   #managedStore?: SqliteExecutorStateStore;
   #ledger?: SQLiteCommandLedger;
   #manager?: ExecutorManager;
@@ -108,12 +115,14 @@ export class ExecutorRuntime {
   #started = false;
   #closed = false;
   #startPromise?: Promise<this>;
+  #closePromise?: Promise<void>;
 
   constructor(options: ExecutorRuntimeOptions) {
     assertOptions(options);
     this.#options = options;
-    this.#grantTtlMs = options.grantTtlMs ?? 30_000;
-    this.enrollment = new ExecutorEnrollmentAuthority({
+    this.#maxGrantTtlMs = options.maxGrantTtlMs ?? 30_000;
+    this.#managedEnrollmentTtlMs = options.managedEnrollmentTtlMs ?? 60_000;
+    this.#enrollment = new ExecutorEnrollmentAuthority({
       now: options.ingress.now,
     });
     this.brokerGrants = new ExecutorGrantAuthority({
@@ -122,7 +131,8 @@ export class ExecutorRuntime {
     this.broker = new ExecutorBroker(this.brokerGrants, {
       now: options.ingress.now,
     });
-    for (const provider of options.providers) this.providers.register(provider);
+    for (const provider of options.providers)
+      this.#providers.register(provider);
   }
 
   start(): Promise<this> {
@@ -141,7 +151,7 @@ export class ExecutorRuntime {
   async #initialize(): Promise<this> {
     let ledger: SQLiteCommandLedger | undefined;
     let managedStore: SqliteExecutorStateStore | undefined;
-    let claims: SqliteExecutorInstanceClaims | undefined;
+    let claims: SqliteRunnerExecutorClaims | undefined;
     try {
       ledger = openSQLiteCommandLedger({
         ...this.#options.runnerLedger,
@@ -152,27 +162,22 @@ export class ExecutorRuntime {
       managedStore = new SqliteExecutorStateStore(
         this.#options.paths.managedStateDb,
       );
-      claims = new SqliteExecutorInstanceClaims(
+      claims = new SqliteRunnerExecutorClaims(
         this.#options.paths.instanceClaimsDb,
       );
 
       const manager = new ExecutorManager({
         store: managedStore,
-        providers: this.providers,
+        providers: this.#providers,
         now: this.#options.ingress.now,
         checkpointWorkspace: this.#options.managed.checkpointWorkspace,
         revokeExecutionAuthority: async (input) => {
-          claims!.revokeThrough(
-            "managed",
-            input.executorId,
-            input.throughGeneration,
-          );
           this.registry.disconnect(
             input.executorId,
             "Executor generation was revoked",
           );
           this.#revokeExecutorGrants("managed", input.executorId);
-          this.enrollment.revokeThrough(
+          this.#enrollment.revokeThrough(
             input.executorId,
             input.throughGeneration,
           );
@@ -189,18 +194,16 @@ export class ExecutorRuntime {
           remoteAddress,
         }) => {
           if (!remoteAddress) return { ok: false, status: 403 };
-          const paired = await this.#options.runner.authenticatePairedToken({
+          const authorization = await this.#options.runner.authenticateRunner({
             runnerId,
             token,
-          });
-          if (!paired) return { ok: false, status: 401 };
-          if (!(await this.#options.runner.isTrustedPeer(remoteAddress)))
-            return { ok: false, status: 403 };
-          const authorization = await this.#options.runner.authorize({
-            runnerId,
             generation,
           });
-          if (!authorization.connectable) return { ok: false, status: 403 };
+          if (!authorization) return { ok: false, status: 401 };
+          if (authorization.generation !== generation)
+            return { ok: false, status: 403 };
+          if (!(await this.#options.runner.isTrustedPeer(remoteAddress)))
+            return { ok: false, status: 403 };
           return {
             ok: true,
             authority: this.#authority(
@@ -212,7 +215,7 @@ export class ExecutorRuntime {
           };
         },
         consumeManagedEnrollment: (token, fence) =>
-          this.enrollment.consume(token, fence),
+          this.#enrollment.consume(token, fence),
         authorizeManaged: async ({ executorId, generation }) => {
           const record = await managedStore!.getByExecutorId(executorId);
           if (
@@ -227,6 +230,7 @@ export class ExecutorRuntime {
             generation,
             this.#options.managed.capabilities(record),
             (claim) => managedStore!.claimConnectableInstance(claim),
+            record.sessionId,
           );
         },
       });
@@ -257,38 +261,58 @@ export class ExecutorRuntime {
     return this.#requireStarted(this.#ledger);
   }
 
+  issueManagedEnrollment(executorId: string): Promise<string> {
+    const manager = this.#requireStarted(this.#manager);
+    return manager.withAwakeExecutor(executorId, (record) =>
+      this.#enrollment.issue({
+        executorId: record.executorId,
+        generation: record.instanceGeneration,
+        expiresAtMs: this.#options.ingress.now() + this.#managedEnrollmentTtlMs,
+      }),
+    );
+  }
+
   /** Durable unpair/disable seam. Boot must call this before retiring a generation. */
   revokeRunnerAuthority(runnerId: string, throughGeneration: number): void {
     const claims = this.#requireStarted(this.#claims);
-    claims.revokeThrough("runner", runnerId, throughGeneration);
+    claims.revokeThrough(runnerId, throughGeneration);
     this.registry.disconnect(runnerId, "Runner Executor authority was revoked");
     this.#revokeExecutorGrants("runner", runnerId);
   }
 
-  /** Validation seam for a future scoped grant route. It never consults ambient auth. */
-  validateExecutionGrant(grant: ExecutorGrant, fence: ExecutorFence): boolean {
+  /** Validation seam for a future scoped grant route. Full expected scope is mandatory. */
+  validateExecutionGrant(
+    grant: ExecutorGrant,
+    expected: ExecutorGrantScope,
+  ): boolean {
     try {
-      this.#executionGrants.validate(grant, fence);
+      this.#executionGrants.validate(grant, expected);
       return true;
     } catch {
       return false;
     }
   }
 
-  close(): void {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    if (this.#closePromise) return this.#closePromise;
     this.#closed = true;
     this.#ingress?.shutdown();
     this.registry.shutdown("Executor runtime closed");
-    for (const grants of this.#issuedByExecutor.values())
-      for (const grant of grants.keys()) this.#executionGrants.revoke(grant);
-    this.#issuedByExecutor.clear();
-    this.#executionGrants.revokeAll();
-    this.brokerGrants.revokeAll();
-    this.#claims?.close();
-    this.#managedStore?.close();
-    this.#ledger?.close();
-    this.#started = false;
+    this.#closePromise = (async () => {
+      try {
+        await this.#manager?.drain();
+        await this.#options.closeProviders?.();
+      } finally {
+        this.#issuedByExecutor.clear();
+        this.#executionGrants.revokeAll();
+        this.brokerGrants.revokeAll();
+        this.#claims?.close();
+        this.#managedStore?.close();
+        this.#ledger?.close();
+        this.#started = false;
+      }
+    })();
+    return this.#closePromise;
   }
 
   #authority(
@@ -297,17 +321,52 @@ export class ExecutorRuntime {
     generation: number,
     capabilities: readonly ExecutorCapability[],
     claimInstance?: ExecutorAuthority["claimInstance"],
+    boundSessionId?: string,
   ): ExecutorAuthority {
-    const issue = (context: ExecutorContext, _operation?: ExecutorOperation) =>
-      this.#issueGrant(source, executorId, context);
+    const assertSession = (context: ExecutorContext) => {
+      // Managed state owns a session identity but has no durable root ownership field yet.
+      if (boundSessionId && context.sessionId !== boundSessionId)
+        throw new ExecutorFailure(
+          "invalid_grant",
+          "managed Executor does not own this session",
+        );
+    };
     return {
       executorId,
       generation,
       capabilities: [...capabilities],
       claimInstance:
-        claimInstance ?? ((claim) => this.#claims!.claim({ source, ...claim })),
-      resolveGrant: issue,
-      resolveCleanupGrant: (context) => issue(context),
+        claimInstance ??
+        ((claim) =>
+          source === "runner" &&
+          this.#claims!.claim({
+            executorId: claim.executorId,
+            generation: claim.generation,
+            instanceId: claim.instanceId,
+          })),
+      resolveGrant: (context, operation, deadlineMs) => {
+        assertSession(context);
+        return this.#issueGrant(source, executorId, context, deadlineMs, {
+          purpose: "operation",
+          requestId: context.requestId,
+          operationDigest: executorOperationDigest(operation),
+        });
+      },
+      resolveCleanupGrant: (input) => {
+        assertSession(input.context);
+        return this.#issueGrant(
+          source,
+          executorId,
+          input.context,
+          input.deadlineMs,
+          {
+            purpose: "cleanup",
+            requestId: input.requestId,
+            targetRequestId: input.targetRequestId,
+            streamId: input.streamId,
+          },
+        );
+      },
     };
   }
 
@@ -315,22 +374,31 @@ export class ExecutorRuntime {
     source: "runner" | "managed",
     executorId: string,
     context: ExecutorContext,
+    deadlineMs: number,
+    action: ExecutorGrantScope["action"],
   ): ExecutorGrant {
     const now = this.#options.ingress.now();
-    const expiresAtMs = now + this.#grantTtlMs;
+    if (deadlineMs > now + this.#maxGrantTtlMs)
+      throw new ExecutorFailure(
+        "invalid_request",
+        "executor grant deadline exceeds runtime policy",
+      );
     const grant = this.#executionGrants.issue({
+      source,
+      executorId,
       rootId: context.rootId,
       sessionId: context.sessionId,
       runId: context.runId,
       generation: context.generation,
-      expiresAtMs,
+      deadlineMs,
+      action,
     });
     const key = `${source}:${executorId}`;
     const issued =
       this.#issuedByExecutor.get(key) ?? new Map<ExecutorGrant, number>();
     for (const [prior, expiry] of issued)
       if (expiry <= now) issued.delete(prior);
-    issued.set(grant, expiresAtMs);
+    issued.set(grant, deadlineMs);
     this.#issuedByExecutor.set(key, issued);
     return grant;
   }
@@ -347,7 +415,7 @@ export class ExecutorRuntime {
   }
 
   #requireStarted<T>(value: T | undefined): T {
-    if (!this.#started || !value)
+    if (this.#closed || !this.#started || !value)
       throw new Error("Executor runtime is not started");
     return value;
   }
@@ -374,9 +442,8 @@ function assertOptions(options: ExecutorRuntimeOptions): void {
   if (new Set(paths).size !== paths.length)
     throw new TypeError("Executor runtime database paths must be distinct");
   for (const callback of [
-    options.runner.authenticatePairedToken,
+    options.runner.authenticateRunner,
     options.runner.isTrustedPeer,
-    options.runner.authorize,
     options.managed.capabilities,
     options.managed.checkpointWorkspace,
     options.managed.revokeExecutionAuthority,
@@ -393,9 +460,23 @@ function assertOptions(options: ExecutorRuntimeOptions): void {
     typeof options.ingress.timers.clearTimeout !== "function"
   )
     throw new TypeError("Executor runtime timers are required");
-  const ttl = options.grantTtlMs ?? 30_000;
-  if (!Number.isSafeInteger(ttl) || ttl < 1 || ttl > 5 * 60_000)
+  const grantTtl = options.maxGrantTtlMs ?? 30_000;
+  const enrollmentTtl = options.managedEnrollmentTtlMs ?? 60_000;
+  if (!Number.isSafeInteger(grantTtl) || grantTtl < 1 || grantTtl > 5 * 60_000)
     throw new TypeError(
       "Executor runtime grant TTL must be between 1ms and 5 minutes",
     );
+  if (
+    !Number.isSafeInteger(enrollmentTtl) ||
+    enrollmentTtl < 1 ||
+    enrollmentTtl > 5 * 60_000
+  )
+    throw new TypeError(
+      "managed enrollment TTL must be between 1ms and 5 minutes",
+    );
+  if (
+    options.closeProviders !== undefined &&
+    typeof options.closeProviders !== "function"
+  )
+    throw new TypeError("closeProviders must be a function");
 }
