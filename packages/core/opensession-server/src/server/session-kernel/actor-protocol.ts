@@ -5,7 +5,7 @@ import type {
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 26;
+export const SESSION_KERNEL_ACTOR_VERSION = 27;
 export const SESSION_KERNEL_TRANSPORT_VERSION = 1;
 export const SESSION_KERNEL_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 export const SESSION_KERNEL_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
@@ -23,8 +23,7 @@ export type KernelActorAsyncRequest =
       timerKinds: string[];
       effectKinds: string[];
       limit: number;
-    }
-;
+    };
 
 export type KernelActorAsyncResponse =
   | { t: "ready"; rpcId: string; version: number; serviceEpoch?: string }
@@ -69,8 +68,7 @@ export type KernelActorServiceResponse =
     };
 
 export type KernelActorClientRequest =
-  | KernelActorAsyncRequest
-  | KernelActorClientCallRequest;
+  KernelActorAsyncRequest | KernelActorClientCallRequest;
 
 export type KernelActorClientResponse =
   | KernelActorAsyncResponse
@@ -103,7 +101,10 @@ export function isCriticalSettlementCommand(
   if (command.kind === "gateway")
     return command.request.op === "complete" || command.request.op === "fail";
   if (command.kind === "core")
-    return command.request.op === "ack_outbox" || command.request.op === "fail_outbox";
+    return (
+      command.request.op === "ack_outbox" ||
+      command.request.op === "fail_outbox"
+    );
   if (command.kind === "timer")
     return command.request.op === "complete" || command.request.op === "fail";
   if (command.kind === "delivery")

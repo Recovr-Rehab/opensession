@@ -76,6 +76,15 @@ is reduced and committed in one short actor turn, external work is emitted as a
 durable effect, and results return as fenced messages. The actor never waits for
 a model run or gateway callback before processing the next state fact.
 
+Schema 27 includes the production-unwired foundation for atomic signed Agent
+Host supervision receipts. Authority construction, bounded synchronous signing,
+receipt insertion, supersession and high-water updates share one immediate
+transaction. Production has no signing credential and therefore fails signed
+claim issuance closed. Legacy unsigned receipts remain explicitly
+non-authorizing. Separate service identities, credential provisioning and Host
+attach/wire verification are required before this foundation can authorize
+work.
+
 ## Durable state
 
 The storage router uses two durable locations within the active sessions

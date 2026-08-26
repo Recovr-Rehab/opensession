@@ -5,6 +5,7 @@ import {
   decodeAgentHostSupervisionAuthorityV2,
   type AgentHostSupervisionAuthorityV2,
 } from "@tellahq/opensession-protocol/agent-host";
+import type { SignedAgentHostSupervisionEnvelopeV1 } from "@tellahq/opensession-protocol/agent-host-supervision";
 import { decodeExecutorId } from "@tellahq/opensession-protocol/executor";
 
 export type AgentHostPlanRegistration = {
@@ -17,6 +18,7 @@ export type AgentHostPlanRegistration = {
   planHash: string;
 };
 
+/** Untrusted V3 claim intent. Issuer metadata is intentionally absent. */
 export type AgentHostSupervisionClaim = {
   op: "claim";
   claimId: string;
@@ -29,14 +31,6 @@ export type AgentHostSupervisionClaim = {
   hostGeneration: number;
   hostIncarnation: string;
   hostChallenge: string;
-  audience: typeof AGENT_HOST_SUPERVISION_AUDIENCE;
-  purpose: typeof AGENT_HOST_SUPERVISION_PURPOSE;
-  issuedAtMs: number;
-  expiresAtMs: number;
-  nonce: string;
-  keyId: string;
-  /** Overwritten by the authenticated actor service before mailbox admission. */
-  kernelServiceEpoch: string;
 };
 
 export type AgentHostSupervisionRequest =
@@ -48,10 +42,13 @@ export type AgentHostPlanRegistrationResult =
       reason: "stale_run" | "terminal_run" | "invalid_plan" | "plan_mismatch";
     };
 export type AgentHostSupervisionReceipt = {
+  format: "signed_v1";
   authority: AgentHostSupervisionAuthorityV2;
-  /** Canonical unsigned UTF-8 bytes encoded as base64. */
+  /** Preserved v26-compatible standard-base64 representation. */
   authorityBytes: string;
   authorityHash: string;
+  keyId: string;
+  envelope: SignedAgentHostSupervisionEnvelopeV1;
 };
 export type AgentHostSupervisionResult =
   | { accepted: true; replayed: boolean; receipt: AgentHostSupervisionReceipt }
@@ -67,8 +64,21 @@ export type AgentHostSupervisionResult =
         | "stale_host"
         | "plan_unregistered"
         | "plan_mismatch"
-        | "receipt_capacity";
+        | "receipt_capacity"
+        | "issuer_unavailable";
     };
+
+export type AgentHostSupervisionIssuerContext = {
+  readonly kernelServiceEpoch: string;
+  readonly keyId: string;
+  readonly leaseMs: number;
+  readonly now: () => number;
+  readonly nonce: () => string;
+  readonly sign: (
+    canonicalAuthorityBytes: Uint8Array,
+    nowMs: number,
+  ) => SignedAgentHostSupervisionEnvelopeV1;
+};
 
 const PLAN_KEYS = [
   "op",
@@ -80,6 +90,8 @@ const PLAN_KEYS = [
   "planHash",
 ] as const;
 const PLAN_HASH_RE = /^sha256:[a-f0-9]{64}$/;
+const HOST_INCARNATION_RE = /^[A-Za-z0-9._:-]{8,256}$/;
+const SUPERVISION_TOKEN_RE = /^[A-Za-z0-9_-]{16,256}$/;
 
 export function decodeAgentHostPlanRegistration(
   value: unknown,
@@ -116,18 +128,11 @@ const CLAIM_KEYS = [
   "hostGeneration",
   "hostIncarnation",
   "hostChallenge",
-  "audience",
-  "purpose",
-  "issuedAtMs",
-  "expiresAtMs",
-  "nonce",
-  "keyId",
-  "kernelServiceEpoch",
 ] as const;
 
+/** Exact V3 hard cut. Any former gateway-controlled issuer field is rejected. */
 export function decodeAgentHostSupervisionClaim(
   value: unknown,
-  nowMs?: number,
 ): AgentHostSupervisionClaim | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
@@ -136,19 +141,36 @@ export function decodeAgentHostSupervisionClaim(
     Object.keys(claim).length !== CLAIM_KEYS.length ||
     Object.keys(claim).some((key) => !CLAIM_KEYS.includes(key as never)) ||
     claim.op !== "claim" ||
-    !decodeExecutorId(claim.claimId)
+    !decodeExecutorId(claim.claimId) ||
+    !decodeExecutorId(claim.sessionId) ||
+    !decodeExecutorId(claim.runId) ||
+    !decodeExecutorId(claim.turnId) ||
+    !Number.isSafeInteger(claim.generation) ||
+    (claim.generation as number) < 0 ||
+    typeof claim.planHash !== "string" ||
+    !PLAN_HASH_RE.test(claim.planHash) ||
+    !decodeExecutorId(claim.hostId) ||
+    !Number.isSafeInteger(claim.hostGeneration) ||
+    (claim.hostGeneration as number) < 1 ||
+    typeof claim.hostIncarnation !== "string" ||
+    !HOST_INCARNATION_RE.test(claim.hostIncarnation) ||
+    typeof claim.hostChallenge !== "string" ||
+    !SUPERVISION_TOKEN_RE.test(claim.hostChallenge)
   )
     return undefined;
-  const typed = claim as AgentHostSupervisionClaim;
-  return authorityFromAgentHostSupervisionClaim(typed, 1, nowMs)
-    ? typed
-    : undefined;
+  return claim as AgentHostSupervisionClaim;
 }
 
 export function authorityFromAgentHostSupervisionClaim(
   claim: AgentHostSupervisionClaim,
-  supervisorEpoch: number,
-  nowMs?: number,
+  issuer: Readonly<{
+    supervisorEpoch: number;
+    kernelServiceEpoch: string;
+    issuedAtMs: number;
+    expiresAtMs: number;
+    nonce: string;
+    keyId: string;
+  }>,
 ): AgentHostSupervisionAuthorityV2 | undefined {
   return decodeAgentHostSupervisionAuthorityV2(
     {
@@ -163,16 +185,16 @@ export function authorityFromAgentHostSupervisionClaim(
       hostId: claim.hostId,
       hostGeneration: claim.hostGeneration,
       hostIncarnation: claim.hostIncarnation,
-      supervisorEpoch,
-      kernelServiceEpoch: claim.kernelServiceEpoch,
+      supervisorEpoch: issuer.supervisorEpoch,
+      kernelServiceEpoch: issuer.kernelServiceEpoch,
       hostChallenge: claim.hostChallenge,
-      audience: claim.audience,
-      purpose: claim.purpose,
-      issuedAtMs: claim.issuedAtMs,
-      expiresAtMs: claim.expiresAtMs,
-      nonce: claim.nonce,
-      keyId: claim.keyId,
+      audience: AGENT_HOST_SUPERVISION_AUDIENCE,
+      purpose: AGENT_HOST_SUPERVISION_PURPOSE,
+      issuedAtMs: issuer.issuedAtMs,
+      expiresAtMs: issuer.expiresAtMs,
+      nonce: issuer.nonce,
+      keyId: issuer.keyId,
     },
-    nowMs,
+    issuer.issuedAtMs,
   );
 }

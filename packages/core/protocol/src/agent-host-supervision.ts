@@ -393,3 +393,182 @@ export async function verifySignedAgentHostSupervisionEnvelopeV1(
     return undefined;
   }
 }
+
+export const AGENT_HOST_SUPERVISION_KEYRING_VERSION_V2 = 2 as const;
+export interface AgentHostSupervisionPublicKeyV2 {
+  readonly keyId: string;
+  readonly status: "active" | "retiring";
+  readonly publicKeySpki: string;
+  readonly signingNotBeforeMs: number;
+  readonly signingNotAfterMs: number;
+  readonly verifyUntilMs: number;
+}
+export interface AgentHostSupervisionPublicKeyringV2 {
+  readonly version: typeof AGENT_HOST_SUPERVISION_KEYRING_VERSION_V2;
+  readonly algorithm: typeof AGENT_HOST_SUPERVISION_SIGNATURE_ALGORITHM;
+  readonly domain: typeof AGENT_HOST_SUPERVISION_SIGNATURE_DOMAIN;
+  readonly keys: readonly AgentHostSupervisionPublicKeyV2[];
+}
+const PUBLIC_KEY_V2_KEYS = [
+  "keyId",
+  "status",
+  "publicKeySpki",
+  "signingNotBeforeMs",
+  "signingNotAfterMs",
+  "verifyUntilMs",
+] as const;
+export function decodeAgentHostSupervisionPublicKeyringV2(
+  value: unknown,
+): AgentHostSupervisionPublicKeyringV2 | undefined {
+  if (
+    !record(value) ||
+    !exact(value, KEYRING_KEYS) ||
+    value.version !== 2 ||
+    value.algorithm !== AGENT_HOST_SUPERVISION_SIGNATURE_ALGORITHM ||
+    value.domain !== AGENT_HOST_SUPERVISION_SIGNATURE_DOMAIN ||
+    !Array.isArray(value.keys) ||
+    value.keys.length === 0 ||
+    value.keys.length > MAX_KEYRING_KEYS
+  )
+    return undefined;
+  const seen = new Set<string>();
+  let active = 0;
+  const keys: AgentHostSupervisionPublicKeyV2[] = [];
+  for (const candidate of value.keys) {
+    if (!record(candidate) || !exact(candidate, PUBLIC_KEY_V2_KEYS))
+      return undefined;
+    const spki = decodeCanonicalBase64Url(
+      candidate.publicKeySpki,
+      ED25519_SPKI_BYTES,
+      ED25519_SPKI_BYTES,
+    );
+    if (
+      typeof candidate.keyId !== "string" ||
+      !KEY_ID_RE.test(candidate.keyId) ||
+      seen.has(candidate.keyId) ||
+      (candidate.status !== "active" && candidate.status !== "retiring") ||
+      !spki ||
+      !hasEd25519SpkiPrefix(spki) ||
+      !safeTime(candidate.signingNotBeforeMs) ||
+      !safeTime(candidate.signingNotAfterMs) ||
+      candidate.signingNotAfterMs <= candidate.signingNotBeforeMs ||
+      !safeTime(candidate.verifyUntilMs) ||
+      candidate.verifyUntilMs < candidate.signingNotAfterMs
+    )
+      return undefined;
+    if (candidate.status === "active") active += 1;
+    seen.add(candidate.keyId);
+    keys.push(
+      Object.freeze({
+        keyId: candidate.keyId,
+        status: candidate.status,
+        publicKeySpki: candidate.publicKeySpki as string,
+        signingNotBeforeMs: candidate.signingNotBeforeMs as number,
+        signingNotAfterMs: candidate.signingNotAfterMs as number,
+        verifyUntilMs: candidate.verifyUntilMs as number,
+      }),
+    );
+  }
+  if (active !== 1) return undefined;
+  return Object.freeze({
+    version: 2,
+    algorithm: AGENT_HOST_SUPERVISION_SIGNATURE_ALGORITHM,
+    domain: AGENT_HOST_SUPERVISION_SIGNATURE_DOMAIN,
+    keys: Object.freeze(keys),
+  });
+}
+export interface ExpectedAgentHostSupervisionBindingsV3 extends ExpectedAgentHostSupervisionBindingsV2 {
+  readonly keyId: string;
+  readonly issuedAtMs: number;
+  readonly expiresAtMs: number;
+}
+/** Authorizing future-path verifier. V1 remains legacy and non-authorizing. */
+export async function verifySignedAgentHostSupervisionEnvelopeV2(
+  envelopeValue: unknown,
+  keyringValue: unknown,
+  expected: ExpectedAgentHostSupervisionBindingsV3,
+  nowMs: number,
+): Promise<AgentHostSupervisionAuthorityV2 | undefined> {
+  if (
+    !safeTime(nowMs) ||
+    !record(expected) ||
+    !exact(expected, [...EXPECTED_KEYS, "keyId", "issuedAtMs", "expiresAtMs"])
+  )
+    return undefined;
+  const envelope = decodeSignedAgentHostSupervisionEnvelopeV1(envelopeValue);
+  const keyring = decodeAgentHostSupervisionPublicKeyringV2(keyringValue);
+  if (!envelope || !keyring) return undefined;
+  const authorityBytes = decodeCanonicalBase64Url(
+    envelope.authorityBytes,
+    undefined,
+    MAX_AUTHORITY_BYTES,
+  )!;
+  const authority = decodeCanonicalAgentHostSupervisionAuthorityBytesV2(
+    authorityBytes,
+    nowMs,
+  );
+  const legacyExpected = {
+    fence: expected.fence,
+    planHash: expected.planHash,
+    hostId: expected.hostId,
+    hostGeneration: expected.hostGeneration,
+    hostIncarnation: expected.hostIncarnation,
+    supervisorEpoch: expected.supervisorEpoch,
+    kernelServiceEpoch: expected.kernelServiceEpoch,
+    hostChallenge: expected.hostChallenge,
+    nonce: expected.nonce,
+    audience: expected.audience,
+    purpose: expected.purpose,
+  };
+  if (
+    !authority ||
+    !expectedMatches(authority, legacyExpected) ||
+    authority.keyId !== expected.keyId ||
+    authority.issuedAtMs !== expected.issuedAtMs ||
+    authority.expiresAtMs !== expected.expiresAtMs
+  )
+    return undefined;
+  const key = keyring.keys.find(
+    (candidate) => candidate.keyId === authority.keyId,
+  );
+  if (
+    !key ||
+    nowMs >= key.verifyUntilMs ||
+    authority.expiresAtMs >
+      key.verifyUntilMs - MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS ||
+    authority.issuedAtMs < key.signingNotBeforeMs ||
+    authority.issuedAtMs >= key.signingNotAfterMs
+  )
+    return undefined;
+  try {
+    const publicKey = await crypto.subtle.importKey(
+      "spki",
+      ownedArrayBuffer(
+        decodeCanonicalBase64Url(
+          key.publicKeySpki,
+          ED25519_SPKI_BYTES,
+          ED25519_SPKI_BYTES,
+        )!,
+      ),
+      { name: AGENT_HOST_SUPERVISION_SIGNATURE_ALGORITHM },
+      false,
+      ["verify"],
+    );
+    return (await crypto.subtle.verify(
+      AGENT_HOST_SUPERVISION_SIGNATURE_ALGORITHM,
+      publicKey,
+      ownedArrayBuffer(
+        decodeCanonicalBase64Url(
+          envelope.signature,
+          ED25519_SIGNATURE_BYTES,
+          ED25519_SIGNATURE_BYTES,
+        )!,
+      ),
+      ownedArrayBuffer(agentHostSupervisionSigningBytesV1(authorityBytes)),
+    ))
+      ? authority
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}

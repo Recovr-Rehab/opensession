@@ -16,17 +16,21 @@ Host workers have a 24-hour maximum lifetime. Capacity is bounded to 32 MiB per
 turn and 512 MiB globally, with a separate 64 MiB emergency reserve and 14
 worker slots reserved for control and recovery.
 
-SessionKernel schema 26 may issue canonical **unsigned** supervision payloads
-that bind the exact turn fence, plan hash, Host generation/incarnation, kernel
-service epoch, fresh challenge, nonce, audience, purpose, validity window, and
-future key id. They contain no credentials, prompt, transcript, model, provider,
-or MCP payload. Unsigned payloads do not authenticate a Host. The import-inert Ed25519 signing
-and public-key verification primitives now exist, but signed envelopes are not
-accepted by production composition. They remain non-authorizing until the kernel
-and Host run under separate service identities, credentials provision private
-keys only to the kernel, and signed receipts are integrated atomically. The
-current shared Ubuntu identity is explicitly not that boundary. An encrypted
-Host ledger is deferred.
+SessionKernel schema 27 provides transactional `signed_v1` supervision receipt
+storage and a Node-only synchronous Ed25519 signing primitive. The untrusted V3
+claim contains only the exact fence, plan and Host identity plus a fresh Host
+challenge. A trusted non-wire issuer owns service epoch, fixed lease, clock,
+nonce and the single active key. Existing schema-26 receipts migrate as
+`legacy_unsigned_v2`; they are never retro-signed and cannot authorize or be
+replayed as signed authority. Production deliberately injects no issuer
+credential, so new signed claims fail closed without affecting readiness.
+
+This remains a production-unwired, non-authorizing foundation. No Host attach
+or wire V3 verification accepts these envelopes yet. Authorization requires a
+later cutover to separate SessionKernel and Host service identities, private-key
+credential provisioning only to the kernel, and exact Host-side verification.
+The current shared Ubuntu identity is explicitly not that boundary. An
+encrypted Host ledger is deferred.
 Processes sharing a UID can inspect or interfere with each other and are not a
 security boundary.
 
