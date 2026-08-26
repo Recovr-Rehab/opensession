@@ -33,6 +33,8 @@ describe("executor deployment", () => {
     expect(deploy).toContain("RESTART_GATEWAY=1");
     expect(deploy).not.toContain("merge --ff-only");
     expect(deploy).not.toContain("reset --hard");
+    expect(deploy).toContain('merge-base --is-ancestor "$PREVIOUS_HEAD" "$TARGET_COMMIT"');
+    expect(deploy).toContain("OPENSESSION_DEPLOY_ALLOW_DIVERGED=1");
     expect(deploy).toContain("executor-credential.conf");
     expect(deploy).toContain(
       `sed -n 's/^EnvironmentFile=//p' "$REPO_DIR/opensession.service"`,

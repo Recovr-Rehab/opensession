@@ -94,6 +94,15 @@ echo "[deploy] fetching ${TARGET_SHA}; the WIP checkout will not be changed"
 run_as_service_user git -C "$SOURCE_DIR" fetch --prune origin
 TARGET_COMMIT="$(run_as_service_user git -C "$SOURCE_DIR" rev-parse "${TARGET_SHA}^{commit}")"
 PREVIOUS_HEAD="$(run_release current-sha 2>/dev/null || true)"
+if [ -n "$PREVIOUS_HEAD" ] && [ "$TARGET_COMMIT" != "$PREVIOUS_HEAD" ] \
+  && ! run_as_service_user git -C "$SOURCE_DIR" merge-base --is-ancestor "$PREVIOUS_HEAD" "$TARGET_COMMIT"; then
+  if [ "${OPENSESSION_DEPLOY_ALLOW_DIVERGED:-0}" != "1" ]; then
+    echo "[deploy] ERROR: target ${TARGET_COMMIT:0:10} does not advance current ${PREVIOUS_HEAD:0:10}" >&2
+    echo "[deploy] Refusing a stale/parallel release. Roll back explicitly, or set OPENSESSION_DEPLOY_ALLOW_DIVERGED=1 for a deliberate operator-selected history change." >&2
+    exit 1
+  fi
+  echo "[deploy] WARNING: operator override permits history change ${PREVIOUS_HEAD:0:10} -> ${TARGET_COMMIT:0:10}"
+fi
 RELEASE_DIR="$(run_release prepare "$TARGET_COMMIT")"
 # From here on, every source artifact comes from the exact prepared commit.
 # SOURCE_DIR remains only the git object source and the place agents do WIP.
