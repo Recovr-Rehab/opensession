@@ -43,6 +43,7 @@ import {
   sessionGatewayCommand,
   sessionKernel,
   sessionKernelActorActive,
+  sessionKernelStore,
   sessionTurn,
 } from "./session-kernel";
 import { withSessionMutationLock } from "./session-mutation-lock";
@@ -137,9 +138,18 @@ export function enrichSessionRuntime(
 	snapshot = sessionRuntimeSnapshot(),
 ): UnifiedSession[] {
 	const { runStarts, journalBusy } = snapshot;
+	// Full session lists must not make one compatibility RPC per historical
+	// session. Take the actor client's mirrored projection once; missing rows are
+	// idle. Small detail updates keep the targeted accessor to avoid copying the
+	// whole projection for a single session.
+	const runStateBySession = data.length > 32
+		? new Map(sessionKernelStore().runStates().map((state) => [state.sessionId, state]))
+		: undefined;
 	// Sessions driven from the web UI run in-process; surface those too
 	for (const s of data) {
-		const rs = getRunState(s.id);
+		const rs = runStateBySession
+			? ((runStateBySession.get(s.id)?.state as RunState | undefined) ?? "idle")
+			: getRunState(s.id);
 		const engineBusy = isAgentEngineBusy(
 			s.claudeSessionId,
 			s.codexThreadId,
@@ -279,6 +289,18 @@ export async function getCachedSessionsAsync(
 		return cached.data;
 	}
 	return await sessionsRefreshes[slice];
+}
+
+/**
+ * Read the durable list projection without attaching live runtime state.
+ * Background maintenance that only needs session metadata must use this path:
+ * enriching every historical row can otherwise monopolize the synchronous
+ * actor compatibility bridge even though the maintenance task itself is async.
+ */
+export async function getSessionListSnapshotAsync(
+	slice: SessionArchiveSlice = "include",
+): Promise<UnifiedSession[]> {
+	return indexedSessions(slice) ?? getAllSessionsAsync(slice);
 }
 
 /**
