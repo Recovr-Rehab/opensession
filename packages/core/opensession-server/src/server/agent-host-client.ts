@@ -1,231 +1,275 @@
 import { connect, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
-  decodeAgentTurnSpec,
+  INITIAL_AGENT_HOST_STREAM_BYTES,
+  INITIAL_AGENT_HOST_STREAM_CHUNKS,
+  decodeAgentHostAttached,
+  decodeAgentHostOperationCancel,
+  decodeAgentHostOperationQuery,
+  decodeAgentHostOperationRequest,
+  decodeAgentHostOperationStreamAck,
+  decodeAgentHostTurnStarted,
+  decodeAgentOperationReceiptV1,
   decodeExecutorId,
   isAgentTurnFence,
-  type AgentHostChallengeDescriptorV3,
+  type AgentHostAttachResumeCursorV4,
+  type AgentHostChallengeDescriptorV4,
   type AgentHostClientMessage,
+  type AgentHostOperationCancelV4,
+  type AgentHostOperationQueryV4,
+  type AgentHostOperationRequestV4,
+  type AgentHostOperationStreamAckV4,
   type AgentHostServerMessage,
-  type AgentHostSignedAttachReceiptV3,
+  type AgentHostSignedAttachReceiptV4,
+  type AgentOperationDescriptorV1,
+  type AgentOperationDigest,
+  type AgentOperationKind,
+  type AgentOperationReceiptV1,
   type AgentTurnFence,
   type AgentTurnSpec,
-  type AskResult,
-  type ImageInput,
+  decodeAgentTurnSpec,
 } from "@tellahq/opensession-protocol";
+import type { SignedAgentHostSupervisionEnvelopeV1 } from "@tellahq/opensession-protocol/agent-host-supervision";
 import {
   AGENT_HOST_MAX_FRAME_BYTES,
   BoundedNdjsonDecoder,
   encodeNdjsonFrame,
 } from "../agent-host/socket-framing";
 
+export type AgentHostClientFailpoint =
+  | "after_host_message"
+  | "after_coordinator_result"
+  | "after_stream_chunk"
+  | "before_receipt_write"
+  | "after_receipt_write";
+
+export interface AgentHostCoordinatorIntent {
+  readonly operationId: string;
+  readonly fence: Readonly<AgentTurnFence>;
+  readonly kind: AgentOperationKind;
+  readonly descriptorDigest: AgentOperationDigest;
+  readonly supervisionEnvelope: SignedAgentHostSupervisionEnvelopeV1;
+}
+export interface AgentHostDispatchIntent extends AgentHostCoordinatorIntent {
+  readonly descriptor: AgentOperationDescriptorV1;
+  readonly deadlineMs: number;
+}
+export interface AgentHostQueryIntent extends AgentHostCoordinatorIntent {
+  readonly payloadDigest?: AgentOperationDigest;
+  readonly afterStreamSeq: number;
+  /** Present for exact recovery when the raw dispatch grant and payload digest are gone. */
+  readonly descriptor?: AgentOperationDescriptorV1;
+  readonly recovery: boolean;
+}
+export interface AgentHostCancelIntent extends AgentHostCoordinatorIntent {
+  readonly cancelId: string;
+  readonly reason: AgentHostOperationCancelV4["reason"];
+}
+export interface AgentHostOperationResult {
+  readonly receipt: AgentOperationReceiptV1;
+  readonly chunks?: AsyncIterable<Uint8Array> | Iterable<Uint8Array>;
+}
+export interface AgentHostQueryResult extends AgentHostOperationResult {
+  readonly fromStreamSeq: number;
+}
+export interface AgentHostCancelResult {
+  readonly disposition:
+    "not_started" | "cancelled" | "too_late" | "indeterminate";
+  readonly receipt: AgentOperationReceiptV1;
+}
+
 export interface AgentHostClientOptions {
-  socketPath: string;
-  timeoutMs?: number;
-  maxFrameBytes?: number;
-  obtainSignedAttach: (
-    challenge: Readonly<AgentHostChallengeDescriptorV3>,
+  readonly socketPath: string;
+  readonly timeoutMs?: number;
+  readonly maxFrameBytes?: number;
+  readonly obtainSignedAttach: (
+    challenge: Readonly<AgentHostChallengeDescriptorV4>,
     requested: Readonly<{ fence: AgentTurnFence; planHash: string }>,
-  ) => Promise<AgentHostSignedAttachReceiptV3>;
-  onMessage?: (
-    message: Exclude<AgentHostServerMessage, { t: "hello" | "attached" }>,
-  ) => void;
+  ) => Promise<AgentHostSignedAttachReceiptV4>;
+  /** These callbacks are the only operation authority. The client never selects an adapter,
+   * provider, model, MCP server, identity, or policy, and never creates a dispatch grant. */
+  readonly dispatchOperation: (
+    intent: Readonly<AgentHostDispatchIntent>,
+    signal: AbortSignal,
+  ) => Promise<AgentHostOperationResult>;
+  readonly queryOperation: (
+    intent: Readonly<AgentHostQueryIntent>,
+    signal: AbortSignal,
+  ) => Promise<AgentHostQueryResult>;
+  readonly cancelOperation: (
+    intent: Readonly<AgentHostCancelIntent>,
+    signal: AbortSignal,
+  ) => Promise<AgentHostCancelResult>;
+  readonly onError?: (error: Error) => void;
+  readonly failpoint?: (
+    point: AgentHostClientFailpoint,
+  ) => void | Promise<void>;
+}
+
+type ServerHello = Extract<AgentHostServerMessage, { t: "hello" }>;
+type ServerError = Extract<AgentHostServerMessage, { t: "error" }>;
+const record = (value: unknown): value is Record<string, unknown> =>
+  !!value &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  Object.getPrototypeOf(value) === Object.prototype;
+const exact = (value: Record<string, unknown>, keys: readonly string[]) =>
+  Object.keys(value).length === keys.length &&
+  Object.keys(value).every((key) => keys.includes(key));
+const id = (value: unknown): value is string =>
+  typeof value === "string" && !!decodeExecutorId(value);
+const sameFence = (a: Readonly<AgentTurnFence>, b: Readonly<AgentTurnFence>) =>
+  a.sessionId === b.sessionId &&
+  a.runId === b.runId &&
+  a.turnId === b.turnId &&
+  a.generation === b.generation;
+
+/** Strict gateway-side v4 hello codec. */
+export function decodeAgentHostServerHelloV4(
+  value: unknown,
+): ServerHello | undefined {
+  if (
+    !record(value) ||
+    !exact(value, [
+      "t",
+      "version",
+      "requestId",
+      "accepted",
+      "hostId",
+      "hostGeneration",
+      "hostIncarnation",
+      "hostChallenge",
+    ]) ||
+    value.t !== "hello" ||
+    value.version !== AGENT_HOST_PROTOCOL_VERSION ||
+    !id(value.requestId) ||
+    value.accepted !== true ||
+    !id(value.hostId) ||
+    !Number.isSafeInteger(value.hostGeneration) ||
+    (value.hostGeneration as number) < 1 ||
+    typeof value.hostIncarnation !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,255}$/.test(value.hostIncarnation) ||
+    typeof value.hostChallenge !== "string" ||
+    !/^[A-Za-z0-9_-]{16,256}$/.test(value.hostChallenge)
+  )
+    return undefined;
+  return Object.freeze(structuredClone(value)) as unknown as ServerHello;
+}
+/** Strict gateway-side v4 error codec. */
+export function decodeAgentHostServerErrorV4(
+  value: unknown,
+): ServerError | undefined {
+  if (!record(value)) return undefined;
+  const keys = [
+    "t",
+    "version",
+    "requestId",
+    "code",
+    "message",
+    ...(value.fence === undefined ? [] : ["fence"]),
+  ];
+  if (
+    !exact(value, keys) ||
+    value.t !== "error" ||
+    value.version !== 4 ||
+    !id(value.requestId) ||
+    ![
+      "unsupported_version",
+      "invalid_request",
+      "stale_generation",
+      "host_busy",
+      "turn_failed",
+    ].includes(String(value.code)) ||
+    typeof value.message !== "string" ||
+    (value.fence !== undefined && !isAgentTurnFence(value.fence))
+  )
+    return undefined;
+  return Object.freeze(structuredClone(value)) as unknown as ServerError;
+}
+/** Strict decoder for every Host-to-gateway v4 frame. */
+export async function decodeAgentHostServerMessageV4(
+  value: unknown,
+  nowMs = Date.now(),
+  turnDeadlineMs?: number,
+): Promise<AgentHostServerMessage | undefined> {
+  return (
+    decodeAgentHostServerHelloV4(value) ??
+    decodeAgentHostAttached(value) ??
+    decodeAgentHostTurnStarted(value) ??
+    (await decodeAgentHostOperationRequest(value, nowMs, turnDeadlineMs)) ??
+    decodeAgentHostOperationQuery(value) ??
+    decodeAgentHostOperationCancel(value) ??
+    decodeAgentHostOperationStreamAck(value) ??
+    decodeAgentHostServerErrorV4(value)
+  );
 }
 
 interface PendingRequest {
-  expected: AgentHostServerMessage["t"];
+  expected: "hello" | "attached" | "turn_started";
   resolve: (message: AgentHostServerMessage) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-
-const record = (value: unknown): value is Record<string, unknown> =>
-  !!value && typeof value === "object" && !Array.isArray(value);
-const nonempty = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0;
-const allowed = (value: Record<string, unknown>, keys: string[]) =>
-  Object.keys(value).every((key) => keys.includes(key));
-
-function sameFence(left: AgentTurnFence, right: AgentTurnFence): boolean {
-  return (
-    left.sessionId === right.sessionId &&
-    left.runId === right.runId &&
-    left.turnId === right.turnId &&
-    left.generation === right.generation
-  );
-}
-
-function decodeServerMessage(
-  value: unknown,
-): AgentHostServerMessage | undefined {
-  if (
-    !record(value) ||
-    value.version !== AGENT_HOST_PROTOCOL_VERSION ||
-    !nonempty(value.requestId) ||
-    !nonempty(value.t)
-  )
-    return undefined;
-  switch (value.t) {
-    case "hello":
-      return allowed(value, [
-        "t",
-        "version",
-        "requestId",
-        "accepted",
-        "hostId",
-        "hostGeneration",
-        "hostIncarnation",
-        "hostChallenge",
-      ]) &&
-        value.accepted === true &&
-        !!decodeExecutorId(value.hostId) &&
-        Number.isSafeInteger(value.hostGeneration) &&
-        (value.hostGeneration as number) > 0 &&
-        typeof value.hostIncarnation === "string" &&
-        /^[A-Za-z0-9][A-Za-z0-9._:-]{7,255}$/.test(value.hostIncarnation) &&
-        typeof value.hostChallenge === "string" &&
-        /^[A-Za-z0-9_-]{16,256}$/.test(value.hostChallenge)
-        ? (value as unknown as AgentHostServerMessage)
-        : undefined;
-    case "attached":
-      return allowed(value, [
-        "t",
-        "version",
-        "requestId",
-        "fence",
-        "planHash",
-        "supervisorEpoch",
-      ]) &&
-        isAgentTurnFence(value.fence) &&
-        typeof value.planHash === "string" &&
-        Number.isSafeInteger(value.supervisorEpoch) &&
-        (value.supervisorEpoch as number) > 0
-        ? (value as unknown as AgentHostServerMessage)
-        : undefined;
-    case "error":
-      return allowed(value, [
-        "t",
-        "version",
-        "requestId",
-        "code",
-        "message",
-        "fence",
-      ]) &&
-        [
-          "unsupported_version",
-          "invalid_request",
-          "stale_generation",
-          "host_busy",
-          "turn_failed",
-        ].includes(String(value.code)) &&
-        typeof value.message === "string" &&
-        (value.fence === undefined || isAgentTurnFence(value.fence))
-        ? (value as unknown as AgentHostServerMessage)
-        : undefined;
-    case "turn_started":
-      return allowed(value, ["t", "version", "requestId", "fence"]) &&
-        isAgentTurnFence(value.fence)
-        ? (value as unknown as AgentHostServerMessage)
-        : undefined;
-    case "event":
-      return allowed(value, ["t", "version", "requestId", "fence", "event"]) &&
-        isAgentTurnFence(value.fence) &&
-        record(value.event)
-        ? (value as unknown as AgentHostServerMessage)
-        : undefined;
-    case "transcript_proposal":
-      return allowed(value, [
-        "t",
-        "version",
-        "requestId",
-        "fence",
-        "appendId",
-        "entries",
-      ]) &&
-        isAgentTurnFence(value.fence) &&
-        nonempty(value.appendId) &&
-        Array.isArray(value.entries)
-        ? (value as unknown as AgentHostServerMessage)
-        : undefined;
-    case "ask":
-      return allowed(value, [
-        "t",
-        "version",
-        "requestId",
-        "fence",
-        "askId",
-        "input",
-      ]) &&
-        isAgentTurnFence(value.fence) &&
-        nonempty(value.askId) &&
-        record(value.input)
-        ? (value as unknown as AgentHostServerMessage)
-        : undefined;
-    case "turn_finished":
-      return allowed(value, [
-        "t",
-        "version",
-        "requestId",
-        "fence",
-        "status",
-        "error",
-      ]) &&
-        isAgentTurnFence(value.fence) &&
-        ["completed", "cancelled", "failed"].includes(String(value.status)) &&
-        (value.error === undefined || typeof value.error === "string")
-        ? (value as unknown as AgentHostServerMessage)
-        : undefined;
-    default:
-      return undefined;
-  }
+interface OperationState {
+  readonly operationId: string;
+  readonly kind: AgentOperationKind;
+  readonly descriptorDigest: AgentOperationDigest;
+  readonly descriptor?: AgentOperationDescriptorV1;
+  payloadDigest?: AgentOperationDigest;
+  receipt?: AgentOperationReceiptV1;
+  receiptRank: number;
+  throughStreamSeq: number;
+  sentStreamSeq: number;
+  creditBytes: number;
+  creditChunks: number;
+  waiters: Set<() => void>;
+  launched: boolean;
+  uncertain: boolean;
 }
 
 export class AgentHostClient {
   private socket?: Socket;
   private connecting?: Promise<void>;
-  private connectingFence?: AgentTurnFence;
-  private connectingPlanHash?: string;
   private fence?: AgentTurnFence;
   private planHash?: string;
+  private receipt?: AgentHostSignedAttachReceiptV4;
+  private turnDeadlineMs = Number.MAX_SAFE_INTEGER;
   private ready = false;
-  private uncertain = false;
+  private closed = false;
   private readonly pending = new Map<string, PendingRequest>();
+  private readonly operations = new Map<string, OperationState>();
+  private readonly consumedHostSeq = new Set<number>();
+  private lastHostSeq = 0;
+  private highestHostSeq = 0;
   private requestSequence = 0;
+  private receiveChain = Promise.resolve();
+  private generation = 0;
 
   constructor(private readonly options: AgentHostClientOptions) {}
 
   connect(fence: AgentTurnFence, planHash: string): Promise<void> {
     if (!isAgentTurnFence(fence) || !/^sha256:[a-f0-9]{64}$/.test(planHash))
       throw new Error("Invalid Agent Host attachment request");
-    if (this.uncertain)
-      throw new Error(
-        "Agent Host ownership is uncertain; retry after host replacement",
-      );
-    if (this.connecting) {
-      if (
-        !this.connectingFence ||
-        !sameFence(this.connectingFence, fence) ||
-        this.connectingPlanHash !== planHash
-      )
-        throw new Error("Agent Host client is attaching to another turn");
-      return this.connecting;
-    }
-    if (this.ready && this.socket && !this.socket.destroyed) {
-      if (
-        !this.fence ||
-        !sameFence(this.fence, fence) ||
-        this.planHash !== planHash
-      )
-        throw new Error("Agent Host client is attached to another turn");
+    if (this.closed) throw new Error("Agent Host client is closed");
+    if (
+      this.fence &&
+      (!sameFence(this.fence, fence) || this.planHash !== planHash)
+    )
+      throw new Error("Agent Host client is attached to another turn");
+    if (this.connecting) return this.connecting;
+    if (this.ready && this.socket && !this.socket.destroyed)
       return Promise.resolve();
-    }
-    const requested = Object.freeze({
-      fence: Object.freeze({ ...fence }),
-      planHash,
+    this.fence = { ...fence };
+    this.planHash = planHash;
+    const generation = ++this.generation;
+    this.connecting = this.open(generation).finally(() => {
+      if (generation === this.generation) this.connecting = undefined;
     });
-    this.connectingFence = { ...fence };
-    this.connectingPlanHash = planHash;
-    this.connecting = new Promise<void>((resolveConnect, rejectConnect) => {
+    return this.connecting;
+  }
+
+  private open(generation: number): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
       const socket = connect(this.options.socketPath);
       const decoder = new BoundedNdjsonDecoder(
         this.options.maxFrameBytes ?? AGENT_HOST_MAX_FRAME_BYTES,
@@ -233,170 +277,501 @@ export class AgentHostClient {
       this.socket = socket;
       this.ready = false;
       let settled = false;
-      const timeout = setTimeout(
-        () => failConnect(new Error("Agent Host connect/attach timed out")),
-        this.options.timeoutMs ?? 5_000,
-      );
-      timeout.unref?.();
-      const failConnect = (error: Error) => {
-        clearTimeout(timeout);
-        this.uncertain = true;
-        this.fail(error, socket);
-        this.disposeSocket(socket);
-        if (!settled) {
-          settled = true;
-          rejectConnect(error);
-        }
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        error ? reject(error) : resolve();
       };
-      socket.on("connect", async () => {
-        try {
-          const helloId = this.nextRequestId();
-          const hello = await this.request(helloId, "hello", {
-            t: "hello",
-            version: AGENT_HOST_PROTOCOL_VERSION,
-            requestId: helloId,
-          });
-          if (hello.t !== "hello" || settled || this.socket !== socket) return;
-          const challenge = Object.freeze({
-            hostId: hello.hostId,
-            hostGeneration: hello.hostGeneration,
-            hostIncarnation: hello.hostIncarnation,
-            hostChallenge: hello.hostChallenge,
-          });
-          const receipt = await this.options.obtainSignedAttach(
-            challenge,
-            requested,
-          );
-          if (settled || this.socket !== socket) return;
-          const attachId = this.nextRequestId();
-          const attached = await this.request(attachId, "attached", {
-            t: "attach",
-            version: AGENT_HOST_PROTOCOL_VERSION,
-            requestId: attachId,
-            fence: requested.fence,
-            planHash,
-            receipt,
-          });
-          if (
-            attached.t !== "attached" ||
-            !sameFence(attached.fence, requested.fence) ||
-            attached.planHash !== planHash ||
-            attached.supervisorEpoch !== receipt.expected.supervisorEpoch ||
-            settled ||
-            this.socket !== socket
-          )
-            throw new Error(
-              "Agent Host returned a mismatched attach acknowledgement",
-            );
-          settled = true;
-          clearTimeout(timeout);
-          this.ready = true;
-          this.fence = { ...fence };
-          this.planHash = planHash;
-          resolveConnect();
-        } catch (error) {
-          failConnect(
-            error instanceof Error ? error : new Error(String(error)),
-          );
-        }
-      });
+      const fail = (error: Error) => {
+        if (generation !== this.generation) return;
+        this.disconnect(socket, error);
+        finish(error);
+      };
+      socket.on(
+        "connect",
+        () =>
+          void (async () => {
+            try {
+              const hello = await this.request("hello", {
+                t: "hello",
+                version: 4,
+                requestId: this.nextRequestId(),
+              });
+              if (hello.t !== "hello")
+                throw new Error("Agent Host hello mismatch");
+              const requested = Object.freeze({
+                fence: Object.freeze({ ...this.fence! }),
+                planHash: this.planHash!,
+              });
+              const receipt = await this.options.obtainSignedAttach(
+                Object.freeze({
+                  hostId: hello.hostId,
+                  hostGeneration: hello.hostGeneration,
+                  hostIncarnation: hello.hostIncarnation,
+                  hostChallenge: hello.hostChallenge,
+                }),
+                requested,
+              );
+              const resume = this.resumeCursor();
+              const attached = await this.request("attached", {
+                t: "attach",
+                version: 4,
+                requestId: this.nextRequestId(),
+                fence: requested.fence,
+                planHash: requested.planHash as AgentOperationDigest,
+                receipt,
+                resume,
+              });
+              if (
+                attached.t !== "attached" ||
+                !sameFence(attached.fence, requested.fence) ||
+                attached.planHash !== requested.planHash ||
+                attached.supervisorEpoch !== receipt.expected.supervisorEpoch
+              )
+                throw new Error("Agent Host attach acknowledgement mismatch");
+              this.receipt = receipt;
+              this.ready = true;
+              finish();
+              if (attached.mode === "recovery_required")
+                void this.recoverOperations(generation);
+            } catch (error) {
+              fail(error instanceof Error ? error : new Error(String(error)));
+            }
+          })(),
+      );
       socket.on("data", (chunk) => {
         try {
           for (const value of decoder.push(Buffer.from(chunk)))
-            this.receive(socket, value);
+            this.receiveChain = this.receiveChain
+              .then(() => this.receive(socket, generation, value))
+              .catch((error) =>
+                fail(error instanceof Error ? error : new Error(String(error))),
+              );
         } catch {
-          failConnect(new Error("Malformed Agent Host frame"));
+          fail(new Error("Malformed Agent Host frame"));
         }
       });
       socket.on("end", () => {
         try {
           decoder.finish();
         } catch {
-          failConnect(new Error("Malformed Agent Host frame"));
+          fail(new Error("Malformed Agent Host frame"));
         }
       });
-      socket.on("error", failConnect);
-      socket.on("close", () =>
-        failConnect(new Error("Agent Host disconnected")),
-      );
-    }).finally(() => {
-      this.connecting = undefined;
-      this.connectingFence = undefined;
-      this.connectingPlanHash = undefined;
+      socket.on("error", fail);
+      socket.on("close", () => fail(new Error("Agent Host disconnected")));
     });
-    return this.connecting;
   }
 
   async startTurn(spec: AgentTurnSpec): Promise<void> {
-    if (this.connecting || !this.ready || !this.socket || this.socket.destroyed)
+    if (!this.ready || !this.fence || !this.planHash)
       throw new Error("Agent Host handshake is not complete");
-    if (!this.fence || !this.planHash || !sameFence(this.fence, spec.fence))
-      throw new Error("Agent Host client is not attached to this turn");
-    if (!decodeAgentTurnSpec(spec))
+    const decoded = decodeAgentTurnSpec(spec);
+    if (!decoded || !sameFence(decoded.fence, this.fence))
       throw new Error("Invalid Agent Host turn specification");
-    const requestId = this.nextRequestId();
-    await this.request(requestId, "turn_started", {
+    this.turnDeadlineMs = decoded.limits.turnDeadlineMs;
+    const result = await this.request("turn_started", {
       t: "start_turn",
-      version: AGENT_HOST_PROTOCOL_VERSION,
-      requestId,
-      planHash: this.planHash,
-      spec,
+      version: 4,
+      requestId: this.nextRequestId(),
+      planHash: this.planHash as AgentOperationDigest,
+      spec: decoded,
     });
-  }
-
-  steer(text: string, steerId: string, images?: ImageInput[]): string {
-    return this.sendFenced({ t: "steer", text, steerId, images });
-  }
-
-  answer(askId: string, result: AskResult): string {
-    return this.sendFenced({ t: "answer", askId, result });
-  }
-
-  cancel(): string {
-    return this.sendFenced({ t: "cancel" });
-  }
-  transcriptAck(appendId: string, changeSeq: number): string {
-    return this.sendFenced({ t: "transcript_ack", appendId, changeSeq });
-  }
-  shutdown(): string {
-    return this.sendFenced({ t: "shutdown" });
+    if (result.t !== "turn_started")
+      throw new Error("Agent Host turn start mismatch");
   }
 
   close(): void {
-    const socket = this.socket;
-    if (socket) {
-      this.fail(new Error("Agent Host client closed"), socket);
-      this.disposeSocket(socket);
-    }
-    this.socket = undefined;
-    this.ready = false;
-    this.fence = undefined;
-    this.planHash = undefined;
+    this.closed = true;
+    this.generation++;
+    if (this.socket)
+      this.disconnect(this.socket, new Error("Agent Host client closed"));
   }
 
-  private sendFenced(message: Record<string, unknown>): string {
-    if (!this.fence) throw new Error("Agent Host client has no active turn");
-    const requestId = this.nextRequestId();
-    this.write({
-      ...message,
-      version: AGENT_HOST_PROTOCOL_VERSION,
-      requestId,
-      fence: this.fence,
-    } as AgentHostClientMessage);
-    return requestId;
+  private resumeCursor(): AgentHostAttachResumeCursorV4 | null {
+    if (!this.lastHostSeq && !this.operations.size) return null;
+    return {
+      lastHostSeq: this.lastHostSeq,
+      operations: [...this.operations.values()]
+        .map((op) => ({
+          operationId: op.operationId,
+          throughStreamSeq: op.throughStreamSeq,
+        }))
+        .sort((a, b) => a.operationId.localeCompare(b.operationId)),
+    };
+  }
+
+  private async receive(
+    socket: Socket,
+    generation: number,
+    raw: unknown,
+  ): Promise<void> {
+    if (socket !== this.socket || generation !== this.generation) return;
+    const message = await decodeAgentHostServerMessageV4(
+      raw,
+      Date.now(),
+      this.turnDeadlineMs,
+    );
+    if (!message) throw new Error("Invalid Agent Host message");
+    await this.options.failpoint?.("after_host_message");
+    const pending = this.pending.get(message.requestId);
+    if (message.t === "error") {
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pending.delete(message.requestId);
+        pending.reject(new Error(`${message.code}: ${message.message}`));
+      } else
+        this.options.onError?.(
+          new Error(`${message.code}: ${message.message}`),
+        );
+      return;
+    }
+    if (pending && pending.expected === message.t) {
+      clearTimeout(pending.timer);
+      this.pending.delete(message.requestId);
+      pending.resolve(message);
+      return;
+    }
+    if (
+      message.t === "hello" ||
+      message.t === "attached" ||
+      message.t === "turn_started"
+    )
+      return;
+    if (!this.fence || !sameFence(this.fence, message.fence))
+      throw new Error("Stale Agent Host fence");
+    if (message.hostSeq <= this.highestHostSeq) return;
+    if (message.hostSeq !== this.highestHostSeq + 1)
+      throw new Error("Agent Host stream gap requires recovery");
+    this.highestHostSeq = message.hostSeq;
+    if (message.t === "operation_stream_ack") {
+      this.consumeStreamAck(message);
+      this.markConsumed(message.hostSeq);
+      return;
+    }
+    void this.consumeIntent(message, generation).catch((error) =>
+      this.desynchronize(
+        error instanceof Error ? error : new Error(String(error)),
+      ),
+    );
+  }
+
+  private async consumeIntent(
+    message:
+      | AgentHostOperationRequestV4
+      | AgentHostOperationQueryV4
+      | AgentHostOperationCancelV4,
+    generation: number,
+  ): Promise<void> {
+    const op = this.operationFor(message);
+    const signal = new AbortController().signal;
+    if (message.t === "operation_request") {
+      const repeated = op.launched;
+      op.launched = true;
+      if (repeated) {
+        const result = await this.options.queryOperation(
+          this.queryIntent(op, op.throughStreamSeq, true),
+          signal,
+        );
+        await this.options.failpoint?.("after_coordinator_result");
+        await this.sendResult(
+          op,
+          result,
+          "operation_query_receipt",
+          message.hostSeq,
+          generation,
+        );
+      } else {
+        const result = await this.options.dispatchOperation(
+          Object.freeze({
+            ...this.intent(op),
+            descriptor: message.descriptor,
+            deadlineMs: message.deadlineMs,
+          }),
+          signal,
+        );
+        await this.options.failpoint?.("after_coordinator_result");
+        await this.sendResult(
+          op,
+          { ...result, fromStreamSeq: op.sentStreamSeq + 1 },
+          "operation_receipt",
+          message.hostSeq,
+          generation,
+        );
+      }
+    } else if (message.t === "operation_query") {
+      op.payloadDigest = message.payloadDigest;
+      const result = await this.options.queryOperation(
+        this.queryIntent(op, message.afterStreamSeq, false),
+        signal,
+      );
+      await this.options.failpoint?.("after_coordinator_result");
+      await this.sendResult(
+        op,
+        result,
+        "operation_query_receipt",
+        message.hostSeq,
+        generation,
+      );
+    } else {
+      const result = await this.options.cancelOperation(
+        Object.freeze({
+          ...this.intent(op),
+          cancelId: message.cancelId,
+          reason: message.reason,
+        }),
+        signal,
+      );
+      await this.options.failpoint?.("after_coordinator_result");
+      this.acceptReceipt(op, result.receipt);
+      this.markConsumed(message.hostSeq);
+      await this.writeReceipt(
+        {
+          t: "operation_cancel_receipt",
+          version: 4,
+          requestId: this.nextRequestId(),
+          fence: this.fence!,
+          ackHostSeq: this.lastHostSeq,
+          operationId: op.operationId,
+          cancelId: message.cancelId,
+          disposition: result.disposition,
+          receipt: result.receipt,
+        },
+        generation,
+      );
+    }
+  }
+
+  private operationFor(
+    message:
+      | AgentHostOperationRequestV4
+      | AgentHostOperationQueryV4
+      | AgentHostOperationCancelV4,
+  ): OperationState {
+    const existing = this.operations.get(message.operationId);
+    if (existing) {
+      if (
+        existing.descriptorDigest !==
+          ("descriptorDigest" in message
+            ? message.descriptorDigest
+            : existing.descriptorDigest) ||
+        ("kind" in message && existing.kind !== message.kind) ||
+        (message.t === "operation_request" &&
+          JSON.stringify(existing.descriptor) !==
+            JSON.stringify(message.descriptor))
+      )
+        throw new Error("Agent Host operation descriptor identity changed");
+      return existing;
+    }
+    if (message.t === "operation_cancel")
+      throw new Error("Agent Host cancelled an unknown operation");
+    const op: OperationState = {
+      operationId: message.operationId,
+      kind:
+        message.t === "operation_request"
+          ? message.descriptor.kind
+          : message.kind,
+      descriptorDigest: message.descriptorDigest,
+      ...(message.t === "operation_request"
+        ? { descriptor: message.descriptor }
+        : {}),
+      ...(message.t === "operation_query"
+        ? { payloadDigest: message.payloadDigest }
+        : {}),
+      receiptRank: -1,
+      throughStreamSeq:
+        message.t === "operation_query" ? message.afterStreamSeq : 0,
+      sentStreamSeq:
+        message.t === "operation_query" ? message.afterStreamSeq : 0,
+      creditBytes: INITIAL_AGENT_HOST_STREAM_BYTES,
+      creditChunks: INITIAL_AGENT_HOST_STREAM_CHUNKS,
+      waiters: new Set(),
+      launched: message.t === "operation_query",
+      uncertain: false,
+    };
+    this.operations.set(op.operationId, op);
+    return op;
+  }
+
+  private intent(op: OperationState): AgentHostCoordinatorIntent {
+    if (!this.fence || !this.receipt)
+      throw new Error("Agent Host supervision unavailable");
+    return Object.freeze({
+      operationId: op.operationId,
+      fence: Object.freeze({ ...this.fence }),
+      kind: op.kind,
+      descriptorDigest: op.descriptorDigest,
+      supervisionEnvelope: this.receipt.envelope,
+    });
+  }
+  private queryIntent(
+    op: OperationState,
+    afterStreamSeq: number,
+    recovery: boolean,
+  ): AgentHostQueryIntent {
+    return Object.freeze({
+      ...this.intent(op),
+      ...(op.payloadDigest ? { payloadDigest: op.payloadDigest } : {}),
+      afterStreamSeq,
+      ...(op.descriptor ? { descriptor: op.descriptor } : {}),
+      recovery,
+    });
+  }
+
+  private async sendResult(
+    op: OperationState,
+    result: AgentHostQueryResult,
+    type: "operation_receipt" | "operation_query_receipt",
+    hostSeq: number,
+    generation: number,
+  ): Promise<void> {
+    this.acceptReceipt(op, result.receipt);
+    if (result.fromStreamSeq < 1 || result.fromStreamSeq > op.sentStreamSeq + 1)
+      throw new Error("Invalid operation replay cursor");
+    let seq = result.fromStreamSeq;
+    for await (const raw of result.chunks ?? []) {
+      const bytes = raw instanceof Uint8Array ? raw.slice() : undefined;
+      if (!bytes?.byteLength)
+        throw new Error("Invalid empty operation stream chunk");
+      await this.awaitCredit(op, bytes.byteLength, generation);
+      this.write({
+        t: "operation_stream",
+        version: 4,
+        requestId: this.nextRequestId(),
+        fence: this.fence!,
+        operationId: op.operationId,
+        streamSeq: seq,
+        encoding: "base64url+opensession-operation-v1",
+        bytes: Buffer.from(bytes).toString("base64url"),
+      });
+      op.creditBytes -= bytes.byteLength;
+      op.creditChunks--;
+      op.sentStreamSeq = Math.max(op.sentStreamSeq, seq);
+      seq++;
+      await this.options.failpoint?.("after_stream_chunk");
+    }
+    this.markConsumed(hostSeq);
+    const common = {
+      version: 4 as const,
+      requestId: this.nextRequestId(),
+      fence: this.fence!,
+      ackHostSeq: this.lastHostSeq,
+      operationId: op.operationId,
+      receipt: result.receipt,
+    };
+    await this.writeReceipt(
+      type === "operation_receipt"
+        ? { ...common, t: type }
+        : { ...common, t: type, fromStreamSeq: result.fromStreamSeq },
+      generation,
+    );
+  }
+
+  private acceptReceipt(
+    op: OperationState,
+    receipt: AgentOperationReceiptV1,
+  ): void {
+    const decoded = decodeAgentOperationReceiptV1(receipt);
+    if (
+      !decoded ||
+      decoded.operationId !== op.operationId ||
+      decoded.kind !== op.kind ||
+      decoded.descriptorDigest !== op.descriptorDigest ||
+      !this.fence ||
+      !sameFence(decoded.fence, this.fence)
+    )
+      throw new Error("Coordinator returned a mismatched operation receipt");
+    const rank = ["prepared", "executing", "settled", "indeterminate"].indexOf(
+      decoded.state,
+    );
+    if (
+      op.receipt &&
+      (rank < op.receiptRank ||
+        (op.receiptRank >= 2 &&
+          JSON.stringify(decoded) !== JSON.stringify(op.receipt)))
+    )
+      throw new Error(
+        "Coordinator receipt state regressed or changed terminal identity",
+      );
+    op.receipt = decoded;
+    op.receiptRank = rank;
+    op.payloadDigest = decoded.payloadDigest;
+  }
+
+  private consumeStreamAck(message: AgentHostOperationStreamAckV4): void {
+    const op = this.operations.get(message.operationId);
+    if (
+      !op ||
+      message.throughStreamSeq < op.throughStreamSeq ||
+      message.throughStreamSeq > op.sentStreamSeq
+    )
+      throw new Error("Invalid operation stream acknowledgement");
+    op.throughStreamSeq = message.throughStreamSeq;
+    op.creditBytes += message.creditBytes;
+    op.creditChunks += message.creditChunks;
+    for (const wake of op.waiters) wake();
+    op.waiters.clear();
+  }
+  private async awaitCredit(
+    op: OperationState,
+    bytes: number,
+    generation: number,
+  ): Promise<void> {
+    while (op.creditBytes < bytes || op.creditChunks < 1) {
+      if (generation !== this.generation || !this.ready)
+        throw new Error("Agent Host disconnected during operation stream");
+      await new Promise<void>((resolve) => op.waiters.add(resolve));
+    }
+  }
+  private markConsumed(hostSeq: number): void {
+    this.consumedHostSeq.add(hostSeq);
+    while (this.consumedHostSeq.delete(this.lastHostSeq + 1))
+      this.lastHostSeq++;
+  }
+  private async writeReceipt(
+    message: AgentHostClientMessage,
+    generation: number,
+  ): Promise<void> {
+    await this.options.failpoint?.("before_receipt_write");
+    if (generation !== this.generation)
+      throw new Error("Agent Host receipt write became uncertain");
+    this.write(message);
+    await this.options.failpoint?.("after_receipt_write");
+  }
+
+  private async recoverOperations(generation: number): Promise<void> {
+    for (const op of this.operations.values()) {
+      try {
+        const result = await this.options.queryOperation(
+          this.queryIntent(op, op.throughStreamSeq, true),
+          new AbortController().signal,
+        );
+        await this.sendResult(
+          op,
+          result,
+          "operation_query_receipt",
+          this.lastHostSeq,
+          generation,
+        );
+        op.uncertain = false;
+      } catch (error) {
+        this.desynchronize(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        return;
+      }
+    }
   }
 
   private request(
-    requestId: string,
-    expected: AgentHostServerMessage["t"],
+    expected: PendingRequest["expected"],
     message: AgentHostClientMessage,
   ): Promise<AgentHostServerMessage> {
-    return new Promise<AgentHostServerMessage>((resolve, reject) => {
+    return new Promise((resolve, reject) => {
+      const requestId = message.requestId;
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
-        const error = new Error(`Agent Host ${expected} timed out`);
-        if (expected === "turn_started") this.desynchronize(error);
-        reject(error);
+        reject(new Error(`Agent Host ${expected} timed out`));
       }, this.options.timeoutMs ?? 5_000);
       timer.unref?.();
       this.pending.set(requestId, { expected, resolve, reject, timer });
@@ -409,88 +784,12 @@ export class AgentHostClient {
       }
     });
   }
-
   private write(message: AgentHostClientMessage): void {
     if (!this.socket || this.socket.destroyed || !this.socket.writable)
       throw new Error("Agent Host is disconnected");
     this.socket.write(encodeNdjsonFrame(message, this.options.maxFrameBytes));
   }
-
-  private receive(socket: Socket, value: unknown): void {
-    if (socket !== this.socket || this.uncertain) return;
-    const message = decodeServerMessage(value);
-    if (!message) {
-      this.socket?.destroy(new Error("Invalid Agent Host message"));
-      return;
-    }
-    if (
-      message.t !== "hello" &&
-      message.t !== "attached" &&
-      message.t !== "error"
-    ) {
-      if (!this.fence || !sameFence(this.fence, message.fence)) {
-        this.socket?.destroy(new Error("Stale Agent Host fence"));
-        return;
-      }
-    }
-    const pending = this.pending.get(message.requestId);
-    if (message.t === "error") {
-      if (pending) {
-        clearTimeout(pending.timer);
-        this.pending.delete(message.requestId);
-        pending.reject(new Error(`${message.code}: ${message.message}`));
-      } else {
-        this.options.onMessage?.(message);
-      }
-      return;
-    }
-    if (pending && pending.expected === message.t) {
-      clearTimeout(pending.timer);
-      this.pending.delete(message.requestId);
-      pending.resolve(message);
-    }
-    if (message.t === "turn_finished") {
-      this.fence = undefined;
-      this.planHash = undefined;
-    }
-    if (
-      message.t !== "hello" &&
-      message.t !== "attached" &&
-      message.t !== "turn_started"
-    )
-      this.options.onMessage?.(message);
-  }
-
-  private desynchronize(error: Error): void {
-    const socket = this.socket;
-    if (!socket || this.uncertain) return;
-    this.uncertain = true;
-    this.ready = false;
-    if (this.fence && socket.writable) {
-      const requestId = this.nextRequestId();
-      try {
-        socket.end(
-          encodeNdjsonFrame(
-            {
-              t: "cancel",
-              version: AGENT_HOST_PROTOCOL_VERSION,
-              requestId,
-              fence: this.fence,
-            },
-            this.options.maxFrameBytes,
-          ),
-        );
-        socket.destroySoon();
-      } catch {
-        socket.destroy();
-      }
-    } else {
-      socket.destroy();
-    }
-    this.fail(error, socket, true);
-  }
-
-  private fail(error: Error, socket: Socket, preserveFence = false): void {
+  private disconnect(socket: Socket, error: Error): void {
     if (socket !== this.socket) return;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
@@ -499,19 +798,21 @@ export class AgentHostClient {
     this.pending.clear();
     this.socket = undefined;
     this.ready = false;
-    if (!preserveFence) {
-      this.fence = undefined;
-      this.planHash = undefined;
+    this.highestHostSeq = this.lastHostSeq;
+    for (const op of this.operations.values()) {
+      op.uncertain = true;
+      for (const wake of op.waiters) wake();
+      op.waiters.clear();
     }
-  }
-
-  private disposeSocket(socket: Socket): void {
     socket.removeAllListeners();
     socket.destroy();
+    this.options.onError?.(error);
   }
-
+  private desynchronize(error: Error): void {
+    if (this.socket) this.disconnect(this.socket, error);
+    else this.options.onError?.(error);
+  }
   private nextRequestId(): string {
-    this.requestSequence += 1;
-    return `agent-host-${this.requestSequence}-${crypto.randomUUID()}`;
+    return `agent-host-${++this.requestSequence}-${crypto.randomUUID()}`;
   }
 }
