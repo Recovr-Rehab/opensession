@@ -20,12 +20,6 @@ export function AnnouncementArticle({
 				runs in your browser, on Mac, and on Windows. iOS is coming soon.
 			</p>
 
-			{showDemo && (
-				<div className="stage announcement-article-demo">
-					<ProductDemo />
-				</div>
-			)}
-
 			<p>
 				Open Session was built by{" "}
 				<a
@@ -40,6 +34,12 @@ export function AnnouncementArticle({
 				existing apps to be either the wrong fit or too expensive. It’s also just
 				fun to build your own tools.
 			</p>
+
+			{showDemo && (
+				<div className="stage announcement-article-demo">
+					<ProductDemo />
+				</div>
+			)}
 
 			<p>
 				We could just keep Open Session for ourselves but we’re open-sourcing it
