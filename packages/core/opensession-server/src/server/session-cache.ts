@@ -38,14 +38,19 @@ import {
 } from "./models";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import type { UnifiedSession, NativeSessionFile } from "./types";
-import { publicSessionSafety } from "./session-safety";
+import {
+	publicSessionSafety,
+	reconcileAutomaticallyRecoverableSessionSafety,
+} from "./session-safety";
 import {
   sessionDeliveryProjection,
   sessionDeliveryProjectionCached,
   quarantineSessionForSafety,
+  releaseSessionQuarantine,
   sessionGatewayCommand,
   sessionKernel,
   sessionKernelActorActive,
+  sessionQuarantines,
   sessionRunStateProjections,
   sessionTurn,
 } from "./session-kernel";
@@ -420,8 +425,38 @@ function checkRunStateWedge(
 	});
 }
 
-type OwnershipWatchdogState = { timer?: ReturnType<typeof setTimeout> };
+type OwnershipWatchdogState = {
+	timer?: ReturnType<typeof setTimeout>;
+	safetyReconciliation?: Promise<void>;
+};
 const ownershipWatchdog: OwnershipWatchdogState = (g.__sessionOwnershipWatchdog ??= {});
+
+function reconcileRecoverableSafetyFences(): void {
+	if (ownershipWatchdog.safetyReconciliation) return;
+	ownershipWatchdog.safetyReconciliation = (async () => {
+		const released = await reconcileAutomaticallyRecoverableSessionSafety(
+			await sessionQuarantines(),
+			releaseSessionQuarantine,
+		);
+		if (!released.length) return;
+		invalidateSessionsCache();
+		for (const sessionId of released) {
+			audit({
+				msg: "session_safety_automatically_reconciled",
+				session_id: sessionId,
+			});
+			broadcastToAll({
+				type: "session_status",
+				sessionId,
+				isRunning: isAgentSessionBusy(sessionId),
+			});
+		}
+	})().catch((error) => {
+		console.error("[session-safety] automatic reconciliation failed:", error);
+	}).finally(() => {
+		ownershipWatchdog.safetyReconciliation = undefined;
+	});
+}
 
 /** Independently enforce the visible-ownership invariant even when nobody has
  * the session list open. The scan reads the actor client's local projection
@@ -429,6 +464,7 @@ const ownershipWatchdog: OwnershipWatchdogState = (g.__sessionOwnershipWatchdog 
 export function startSessionOwnershipWatchdog(): void {
 	if (ownershipWatchdog.timer) return;
 	const tick = () => {
+		reconcileRecoverableSafetyFences();
 		try {
 			const recovery = sessionRuntimeSnapshot();
 			for (const run of sessionRunStateProjections()) {
@@ -445,6 +481,9 @@ export function startSessionOwnershipWatchdog(): void {
 			ownershipWatchdog.timer.unref?.();
 		}
 	};
+	// Reconcile proven actor-restart fences as soon as boot recovery establishes
+	// ownership. The regular tick catches evidence that becomes sufficient later.
+	reconcileRecoverableSafetyFences();
 	ownershipWatchdog.timer = setTimeout(tick, 30_000);
 	ownershipWatchdog.timer.unref?.();
 }

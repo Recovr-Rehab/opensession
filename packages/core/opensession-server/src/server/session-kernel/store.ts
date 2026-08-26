@@ -1716,7 +1716,7 @@ export class SessionKernelStore {
 	private recoverableGatewaySettlementCommands(
 		sessionId: string,
 		commandKind: string,
-	): Array<{ requestId: string }> | undefined {
+	): Array<{ requestId: string; retryable: false }> | undefined {
 		if (commandKind !== "gateway:complete" && commandKind !== "gateway:fail")
 			return;
 		const rows = this.db.query(
@@ -1731,22 +1731,56 @@ export class SessionKernelStore {
 				String(row.type) as (typeof GATEWAY_COMMAND_OPERATIONS)[number],
 			)
 		)) return;
-		return rows.map((row) => ({ requestId: String(row.request_id) }));
+		return rows.map((row) => ({
+			requestId: String(row.request_id),
+			retryable: false as const,
+		}));
 	}
 
-	quarantineRepairEvidence(sessionId: string, commandKind = "unknown"): boolean {
-		const recoverableGatewaySettlement =
-			this.recoverableGatewaySettlementCommands(sessionId, commandKind);
+	private recoverableDeliverySettlementCommands(
+		sessionId: string,
+		commandKind: string,
+		reason?: string,
+	): Array<{ requestId: string; retryable: true }> | undefined {
+		if (
+			(commandKind !== "delivery:complete_submit_command" &&
+				commandKind !== "delivery:fail_submit_command") ||
+			(reason !== "actor restarted before execution admission" &&
+				reason !== "actor restarted before acknowledgement" &&
+				reason !== "actor restarted after execution began")
+		) return;
+		const rows = this.db.query(
+			`SELECT request_id, type, status, replay_safe
+			 FROM session_kernel_commands
+			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate')`,
+		).all(sessionId) as Array<Record<string, unknown>>;
+		if (!rows.every((row) =>
+			row.type === "submit_prompt" && Number(row.replay_safe) === 1
+		)) return;
+		return rows.map((row) => ({
+			requestId: String(row.request_id),
+			retryable: true as const,
+		}));
+	}
+
+	quarantineRepairEvidence(
+		sessionId: string,
+		commandKind = "unknown",
+		reason?: string,
+	): boolean {
+		const recoverableSettlement =
+			this.recoverableGatewaySettlementCommands(sessionId, commandKind) ??
+			this.recoverableDeliverySettlementCommands(sessionId, commandKind, reason);
 		if (
 			["preparing", "starting", "running", "ask_blocked", "interrupted", "reattaching"]
 				.includes(this.runState(sessionId).state) &&
-			!recoverableGatewaySettlement
+			!recoverableSettlement
 		) return false;
 		const ambiguousCommands = this.db.query(
 			`SELECT 1 FROM session_kernel_commands
 			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate') LIMIT 1`,
 		).get(sessionId);
-		if (ambiguousCommands && !recoverableGatewaySettlement) return false;
+		if (ambiguousCommands && !recoverableSettlement) return false;
 		const claimedTimer = this.db.query(
 			"SELECT 1 FROM session_kernel_timers WHERE session_id = ? AND token IS NOT NULL LIMIT 1",
 		).get(sessionId);
@@ -1774,12 +1808,13 @@ export class SessionKernelStore {
 			.get(sessionId) as Record<string, unknown> | null;
 		if (!row) return undefined;
 		const commandKind = String(row.command_kind);
+		const reason = String(row.reason);
 		return {
 			sessionId: String(row.session_id),
-			reason: String(row.reason),
+			reason,
 			commandKind,
 			quarantinedAt: Number(row.quarantined_at),
-			repairable: this.quarantineRepairEvidence(sessionId, commandKind),
+			repairable: this.quarantineRepairEvidence(sessionId, commandKind, reason),
 		};
 	}
 
@@ -1794,12 +1829,13 @@ export class SessionKernelStore {
 		return rows.map((row) => {
 			const sessionId = String(row.session_id);
 			const commandKind = String(row.command_kind);
+			const reason = String(row.reason);
 			return {
 				sessionId,
-				reason: String(row.reason),
+				reason,
 				commandKind,
 				quarantinedAt: Number(row.quarantined_at),
-				repairable: this.quarantineRepairEvidence(sessionId, commandKind),
+				repairable: this.quarantineRepairEvidence(sessionId, commandKind, reason),
 			};
 		});
 	}
@@ -1809,16 +1845,23 @@ export class SessionKernelStore {
 		const transaction = this.db.transaction(() => {
 			const quarantine = this.quarantinedSession(sessionId);
 			if (!quarantine?.repairable) return;
-			const recoverable = this.recoverableGatewaySettlementCommands(
-				sessionId,
-				quarantine.commandKind,
-			);
+			const recoverable =
+				this.recoverableGatewaySettlementCommands(
+					sessionId,
+					quarantine.commandKind,
+				) ?? this.recoverableDeliverySettlementCommands(
+					sessionId,
+					quarantine.commandKind,
+					quarantine.reason,
+				);
 			for (const command of recoverable ?? []) {
 				this.failCommand(
 					sessionId,
 					command.requestId,
-					"Ambiguous gateway settlement was abandoned during safe session recovery",
-					false,
+					command.retryable
+						? "Replay-safe delivery settlement was re-admitted during session recovery"
+						: "Ambiguous gateway settlement was abandoned during safe session recovery",
+					command.retryable,
 				);
 			}
 			released = this.db.run(
@@ -3493,7 +3536,7 @@ export class SessionKernelStore {
     };
   }
 
-  private gatewaySettlementMayRecover(record: DurableCommandRecord): boolean {
+  private commandSettlementMayRecover(record: DurableCommandRecord): boolean {
     if (record.status === "processing") return true;
     if (
       record.status === "indeterminate" &&
@@ -3564,7 +3607,7 @@ export class SessionKernelStore {
       throw new Error("Gateway command receipt is missing");
     }
     if (record.status === "completed") return record.result;
-    if (!this.gatewaySettlementMayRecover(record))
+    if (!this.commandSettlementMayRecover(record))
       throw new Error(record.error || "Gateway command is not executing");
     this.completeCommand(input.sessionId, input.requestId, input.result);
     return input.result;
@@ -3587,7 +3630,7 @@ export class SessionKernelStore {
       throw new Error("Gateway command receipt is missing");
     }
     if (record.status === "completed") return;
-    if (!this.gatewaySettlementMayRecover(record))
+    if (!this.commandSettlementMayRecover(record))
       throw new Error(record.error || "Gateway command is not executing");
     this.failCommand(
       input.sessionId,
@@ -3637,7 +3680,7 @@ export class SessionKernelStore {
     if (!record || record.type !== "submit_prompt")
       throw new Error("Submit prompt command receipt is missing");
     if (record.status === "completed") return record.result;
-    if (record.status === "indeterminate" || record.status === "failed")
+    if (!this.commandSettlementMayRecover(record))
       throw new Error(record.error || "Submit prompt command failed");
     this.completeCommand(input.sessionId, input.requestId, input.result);
     return input.result;

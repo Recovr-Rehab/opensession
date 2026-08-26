@@ -25,9 +25,44 @@ export function safetyOperationLabel(commandKind: string): string {
   return normalized.replaceAll("_", " ") || "session work";
 }
 
-export function automaticSafetyReconciliationRunning(sessionId: string): boolean {
-  return activeRunRecords().some(
-    (run) => run.osSessionId === sessionId && !!run.claimedAt,
+export function automaticallyRecoverableSessionSafety(
+  quarantine: DurableSessionQuarantine,
+): boolean {
+  if (!quarantine.repairable) return false;
+  const actorRestart =
+    quarantine.reason === "actor restarted before execution admission" ||
+    quarantine.reason === "actor restarted before acknowledgement" ||
+    quarantine.reason === "actor restarted after execution began";
+  if (!actorRestart) return false;
+  return (
+    quarantine.commandKind === "gateway:complete" ||
+    quarantine.commandKind === "gateway:fail" ||
+    quarantine.commandKind === "delivery:complete_submit_command" ||
+    quarantine.commandKind === "delivery:fail_submit_command"
+  );
+}
+
+export async function reconcileAutomaticallyRecoverableSessionSafety(
+  quarantines: DurableSessionQuarantine[],
+  release: (sessionId: string) => Promise<boolean>,
+): Promise<string[]> {
+  const released: string[] = [];
+  for (const quarantine of quarantines) {
+    if (!automaticallyRecoverableSessionSafety(quarantine)) continue;
+    if (await release(quarantine.sessionId)) released.push(quarantine.sessionId);
+  }
+  return released;
+}
+
+export function automaticSafetyReconciliationRunning(
+  sessionId: string,
+  quarantine?: DurableSessionQuarantine,
+): boolean {
+  return (
+    (!!quarantine && automaticallyRecoverableSessionSafety(quarantine)) ||
+    activeRunRecords().some(
+      (run) => run.osSessionId === sessionId && !!run.claimedAt,
+    )
   );
 }
 
@@ -40,6 +75,7 @@ export function publicSessionSafety(
       "Open Session paused this session because it could not confirm whether the last action finished. Nothing will be retried automatically unless it can be proven safe.",
     automaticReconciliationRunning: automaticSafetyReconciliationRunning(
       quarantine.sessionId,
+      quarantine,
     ),
     pausedAt: new Date(quarantine.quarantinedAt).toISOString(),
     operation: safetyOperationLabel(quarantine.commandKind),

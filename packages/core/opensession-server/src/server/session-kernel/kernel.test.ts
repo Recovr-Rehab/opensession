@@ -466,6 +466,59 @@ describe("SessionKernel", () => {
 		}
 	});
 
+	test("accepts and repairs exact submit settlements across an actor restart", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-submit-settlement-"));
+		const path = join(dir, "kernel.sqlite");
+		let durableStore = new SessionKernelStore(path);
+		const input = {
+			sessionId: "submit-settlement",
+			requestId: "delivery-settlement",
+			identity: { content: "hello", attachmentsHash: "none" },
+		};
+		try {
+			expect(durableStore.requestSubmitPromptCommand(input)).toEqual({
+				status: "execute",
+			});
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			expect(durableStore.command(input.sessionId, input.requestId)).toMatchObject({
+				status: "failed",
+				replaySafe: true,
+				retryable: true,
+			});
+			expect(durableStore.completeSubmitPromptCommand({
+				sessionId: input.sessionId,
+				requestId: input.requestId,
+				result: { status: "queued" },
+			})).toEqual({ status: "queued" });
+
+			const recovery = { ...input, requestId: "delivery-recovery" };
+			expect(durableStore.requestSubmitPromptCommand(recovery)).toEqual({
+				status: "execute",
+			});
+			durableStore.quarantineSession(
+				input.sessionId,
+				"actor restarted before execution admission",
+				"delivery:complete_submit_command",
+			);
+			expect(durableStore.quarantinedSession(input.sessionId)).toMatchObject({
+				repairable: true,
+			});
+			expect(durableStore.releaseQuarantine(input.sessionId)).toBe(true);
+			expect(durableStore.command(input.sessionId, recovery.requestId)).toMatchObject({
+				status: "failed",
+				replaySafe: true,
+				retryable: true,
+			});
+			expect(durableStore.requestSubmitPromptCommand(recovery)).toEqual({
+				status: "execute",
+			});
+		} finally {
+			durableStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	test("turns pre-execution pending admission into a durable retry receipt", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "session-kernel-pending-restart-"));
 		const path = join(dir, "kernel.sqlite");

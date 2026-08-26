@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { publicSessionSafety, safetyOperationLabel } from "./session-safety";
+import {
+  automaticallyRecoverableSessionSafety,
+  publicSessionSafety,
+  reconcileAutomaticallyRecoverableSessionSafety,
+  safetyOperationLabel,
+} from "./session-safety";
 
 describe("public session safety state", () => {
   test("explains quarantine without exposing internal failure text", () => {
@@ -25,5 +30,45 @@ describe("public session safety state", () => {
   test("turns actor command kinds into readable operations", () => {
     expect(safetyOperationLabel("delivery:ack_dispatch")).toBe("delivering a message");
     expect(safetyOperationLabel("run_state:reattaching")).toBe("recovering the active run");
+  });
+
+  test("automatically releases only proven actor-restart command fences", async () => {
+    const recoverable = {
+      sessionId: "recoverable-session",
+      reason: "actor restarted after execution began",
+      commandKind: "gateway:complete",
+      quarantinedAt: 1,
+      repairable: true,
+    };
+    const delivery = {
+      ...recoverable,
+      sessionId: "delivery-session",
+      reason: "actor restarted before execution admission",
+      commandKind: "delivery:complete_submit_command",
+    };
+    const contradiction = {
+      ...recoverable,
+      sessionId: "contradictory-session",
+      reason: "receipt identity mismatch",
+    };
+    const unreconciled = {
+      ...recoverable,
+      sessionId: "unreconciled-session",
+      repairable: false,
+    };
+    expect(automaticallyRecoverableSessionSafety(recoverable)).toBe(true);
+    expect(automaticallyRecoverableSessionSafety(delivery)).toBe(true);
+    expect(automaticallyRecoverableSessionSafety(contradiction)).toBe(false);
+    expect(automaticallyRecoverableSessionSafety(unreconciled)).toBe(false);
+
+    const attempted: string[] = [];
+    expect(await reconcileAutomaticallyRecoverableSessionSafety(
+      [contradiction, recoverable, delivery, unreconciled],
+      async (sessionId) => {
+        attempted.push(sessionId);
+        return true;
+      },
+    )).toEqual(["recoverable-session", "delivery-session"]);
+    expect(attempted).toEqual(["recoverable-session", "delivery-session"]);
   });
 });
