@@ -1508,7 +1508,7 @@ dialog::backdrop {
 }
 
 .download-card {
-	--download-card-surface: color-mix(in oklch, var(--card) 94%, var(--accent-blue) 6%);
+	--download-card-surface: color-mix(in oklch, var(--card) 97%, var(--accent-blue) 3%);
 	display: flex;
 	overflow: hidden;
 	flex-direction: column;
@@ -1557,7 +1557,7 @@ dialog::backdrop {
 .download-card-preview-phone img {
 	width: auto;
 	max-width: none;
-	height: 125%;
+	height: 135%;
 	border-radius: calc(18px * var(--rf));
 	corner-shape: var(--cs);
 	filter: drop-shadow(0 14px 30px rgba(16, 18, 22, 0.22));
