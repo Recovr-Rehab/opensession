@@ -1212,6 +1212,16 @@ export function SessionViewer({
 	const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
 		useState(0);
 	const indexAnchorHoldCancelRef = useRef<(() => void) | null>(null);
+	// Retire the bounded index-anchor hold on an explicit return to the live
+	// edge. The hold repositions scrollTop toward the pre-refresh anchor every
+	// frame and only stops on gestures aimed at the scroller itself — a Send
+	// click or the jump pill happens outside it, so without this the hold drags
+	// the reader back up for the rest of its window while they watch their own
+	// message fail to stay in view.
+	function cancelIndexAnchorHold() {
+		indexAnchorHoldCancelRef.current?.();
+		indexAnchorHoldCancelRef.current = null;
+	}
 	const pendingIndexPositionRef = useRef<{
 		sessionId: string;
 		keepLiveEdge: boolean;
@@ -2937,8 +2947,20 @@ export function SessionViewer({
 					break;
 				}
 				case "transcript_index": {
-					const keepLiveEdge = followingLive.current;
 					const scrollContainer = messagesRef.current;
+					// `following` can be silently dropped by a layout-driven scroll
+					// event (only a real gesture re-engages it), so a reader visually
+					// parked at the bottom still counts as at the live edge. Treating
+					// them as a history reader armed a long anchor hold at the
+					// pre-refresh position, which then fought the next send's jump and
+					// crawled the transcript back up.
+					const keepLiveEdge =
+						followingLive.current ||
+						(!!scrollContainer &&
+							scrollContainer.scrollHeight -
+								scrollContainer.scrollTop -
+								scrollContainer.clientHeight <
+								90);
 					const previousBottomGap =
 						!keepLiveEdge && scrollContainer
 							? Math.max(
@@ -4332,6 +4354,7 @@ export function SessionViewer({
 		// optimistic bubble arrives below the fold with nothing moving — and a
 		// send is unambiguous intent to watch this turn. Instant, not smooth: the
 		// glue that follows sets scrollTop directly and would fight an animation.
+		cancelIndexAnchorHold();
 		scrollToLatest("auto");
 		if (!isolated) {
 			dropStagingAttachments(draftKey);
@@ -7629,7 +7652,10 @@ export function SessionViewer({
 										)}
 										type="button"
 										aria-label="Scroll to the bottom"
-										onClick={() => scrollToLatest("auto")}
+										onClick={() => {
+											cancelIndexAnchorHold();
+											scrollToLatest("auto");
+										}}
 									>
 										<IconArrowDown
 											size={13}
@@ -7705,7 +7731,10 @@ export function SessionViewer({
 															className={TRANSCRIPT_ICON_BUTTON}
 															type="button"
 															aria-label="Scroll to the bottom"
-															onClick={() => scrollToLatest("auto")}
+															onClick={() => {
+																cancelIndexAnchorHold();
+																scrollToLatest("auto");
+															}}
 														>
 															<IconArrowDown
 																size={13}
