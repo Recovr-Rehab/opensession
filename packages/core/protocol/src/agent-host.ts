@@ -11,9 +11,13 @@ import type { GitIdentity } from "./identity";
 import { decodeExecutorGrant, decodeExecutorId } from "./executor";
 import type { AskResult } from "./runner";
 import type { TranscriptEntry } from "./session";
+import type {
+  ExpectedAgentHostSupervisionBindingsV3,
+  SignedAgentHostSupervisionEnvelopeV1,
+} from "./agent-host-supervision";
 
-export const AGENT_HOST_PROTOCOL_VERSION = 2 as const;
-/** Additive durable supervision contract alongside the exact v2 turn wire. */
+export const AGENT_HOST_PROTOCOL_VERSION = 3 as const;
+/** Durable authority payload version consumed by the exact v3 attach wire. */
 export const AGENT_HOST_SUPERVISION_VERSION = 2 as const;
 export const AGENT_HOST_SUPERVISION_AUDIENCE =
   "opensession-agent-host" as const;
@@ -194,10 +198,32 @@ interface FencedAgentHostMessage extends AgentHostMessageBase {
   fence: AgentTurnFence;
 }
 
+export interface AgentHostChallengeDescriptorV3 {
+  readonly hostId: string;
+  readonly hostGeneration: number;
+  readonly hostIncarnation: string;
+  readonly hostChallenge: string;
+}
+
+/** Exact actor-issued receipt. The envelope alone is never attach authority. */
+export interface AgentHostSignedAttachReceiptV3 {
+  readonly expected: ExpectedAgentHostSupervisionBindingsV3;
+  readonly envelope: SignedAgentHostSupervisionEnvelopeV1;
+}
+
 /** Control plane → Agent Host. */
 export type AgentHostClientMessage =
   | (AgentHostMessageBase & { t: "hello" })
-  | (AgentHostMessageBase & { t: "start_turn"; spec: AgentTurnSpec })
+  | (FencedAgentHostMessage & {
+      t: "attach";
+      planHash: string;
+      receipt: AgentHostSignedAttachReceiptV3;
+    })
+  | (AgentHostMessageBase & {
+      t: "start_turn";
+      planHash: string;
+      spec: AgentTurnSpec;
+    })
   | (FencedAgentHostMessage & {
       t: "steer";
       text: string;
@@ -216,7 +242,19 @@ export type AgentHostClientMessage =
 /** Agent Host → control plane. Transcript entries are proposals; authority to
  * persist, order, rewrite, and compact them remains in the control plane. */
 export type AgentHostServerMessage =
-  | (AgentHostMessageBase & { t: "hello"; accepted: true })
+  | (AgentHostMessageBase & {
+      t: "hello";
+      accepted: true;
+      hostId: string;
+      hostGeneration: number;
+      hostIncarnation: string;
+      hostChallenge: string;
+    })
+  | (FencedAgentHostMessage & {
+      t: "attached";
+      planHash: string;
+      supervisorEpoch: number;
+    })
   | (FencedAgentHostMessage & { t: "turn_started" })
   | (FencedAgentHostMessage & { t: "event"; event: StreamEvent })
   | (FencedAgentHostMessage & {
@@ -661,16 +699,54 @@ export function decodeAgentTurnSpec(
   return value as unknown as AgentTurnSpec;
 }
 
+const AGENT_TURN_PLAN_HASH_DOMAIN = "OpenSession-Agent-Turn-Plan-v1\0";
+
+function canonicalJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJsonValue);
+  if (record(value)) {
+    const canonical: Record<string, unknown> = {};
+    for (const key of Object.keys(value).sort()) {
+      if (value[key] !== undefined)
+        canonical[key] = canonicalJsonValue(value[key]);
+    }
+    return canonical;
+  }
+  return value;
+}
+
+/** Canonical digest of every execution-relevant turn field. This exact digest
+ * is registered with SessionKernel and signed into the attach authority. */
+export async function hashAgentTurnSpecV1(
+  spec: AgentTurnSpec,
+  nowMs = Date.now(),
+): Promise<string> {
+  const decoded = decodeAgentTurnSpec(spec, nowMs);
+  if (!decoded) throw new Error("Invalid Agent Host turn specification");
+  const bytes = textEncoder.encode(
+    `${AGENT_TURN_PLAN_HASH_DOMAIN}${JSON.stringify(canonicalJsonValue(decoded))}`,
+  );
+  const source = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", source));
+  return `sha256:${[...digest]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
 export function decodeAgentHostStartTurn(
   value: unknown,
   nowMs = Date.now(),
 ): Extract<AgentHostClientMessage, { t: "start_turn" }> | undefined {
   if (
     !record(value) ||
-    !exact(value, ["t", "version", "requestId", "spec"]) ||
+    !exact(value, ["t", "version", "requestId", "planHash", "spec"]) ||
     value.t !== "start_turn" ||
     value.version !== AGENT_HOST_PROTOCOL_VERSION ||
     !decodeExecutorId(value.requestId) ||
+    typeof value.planHash !== "string" ||
+    !SHA256_RE.test(value.planHash) ||
     !decodeAgentTurnSpec(value.spec, nowMs)
   )
     return undefined;

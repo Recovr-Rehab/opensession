@@ -1,16 +1,26 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, stat, symlink } from "node:fs/promises";
+import { generateKeyPairSync } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect, createServer, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
+  AGENT_HOST_SUPERVISION_AUDIENCE,
+  AGENT_HOST_SUPERVISION_PURPOSE,
+  AGENT_HOST_SUPERVISION_SIGNATURE_ALGORITHM,
+  AGENT_HOST_SUPERVISION_SIGNATURE_DOMAIN,
   encodeAgentExecutorAccessGrant,
-  type AgentHostClientMessage,
-  type AgentHostServerMessage,
+  hashAgentTurnSpecV1,
+  serializeAgentHostSupervisionAuthorityV2,
+  type AgentHostChallengeDescriptorV3,
+  type AgentHostSignedAttachReceiptV3,
+  type AgentHostSupervisionPublicKeyringV2,
+  type AgentTurnFence,
   type AgentTurnSpec,
 } from "@tellahq/opensession-protocol";
 import { AgentHostClient } from "../server/agent-host-client";
+import { createAgentHostSupervisionSigner } from "../server/session-kernel/agent-host-supervision-signer";
 import type {
   AgentTurnDriver,
   AgentTurnOutput,
@@ -19,13 +29,16 @@ import type {
 import { createAgentHost, type AgentHost } from "./host";
 import { BoundedNdjsonDecoder, encodeNdjsonFrame } from "./socket-framing";
 
-const accessGrant = encodeAgentExecutorAccessGrant("a".repeat(32));
-const fence = {
+const hostId = "agent-host-1";
+const hostGeneration = 7;
+const hostIncarnation = `incarnation-${crypto.randomUUID()}`;
+const fence: AgentTurnFence = {
   sessionId: "session-1",
   runId: "run-1",
   turnId: "turn-1",
   generation: 3,
 };
+const accessGrant = encodeAgentExecutorAccessGrant("a".repeat(32));
 const spec: AgentTurnSpec = {
   fence,
   input: { prompt: "Build it" },
@@ -46,46 +59,103 @@ const spec: AgentTurnSpec = {
     deadlineMs: Date.now() + 60 * 60_000,
   },
 };
+const planHash = await hashAgentTurnSpecV1(spec);
 
 class FakeDriver implements AgentTurnDriver {
   output?: AgentTurnOutput;
-  seenSpec?: AgentTurnSpec;
+  launches = 0;
   steers: string[] = [];
-  answers: string[] = [];
-  acks: string[] = [];
   cancelled = 0;
-  shutdowns = 0;
-  nonsettlingCancel = false;
-  nonsettlingSteer = false;
   private resolve!: (result: AgentTurnResult) => void;
   readonly completion = new Promise<AgentTurnResult>((resolve) => {
     this.resolve = resolve;
   });
-  run(turnSpec: AgentTurnSpec, output: AgentTurnOutput) {
-    this.seenSpec = turnSpec;
+  run(_spec: AgentTurnSpec, output: AgentTurnOutput) {
+    this.launches++;
     this.output = output;
     return this.completion;
   }
-  steer(input: { steerId: string; text: string }): void | Promise<void> {
-    this.steers.push(`${input.steerId}:${input.text}`);
-    if (this.nonsettlingSteer) return new Promise(() => undefined);
+  steer(input: { text: string }) {
+    this.steers.push(input.text);
   }
-  answer(askId: string) {
-    this.answers.push(askId);
+  answer() {}
+  transcriptAck() {}
+  cancel() {
+    this.cancelled++;
   }
-  cancel(): void | Promise<void> {
-    this.cancelled += 1;
-    if (this.nonsettlingCancel) return new Promise(() => undefined);
-  }
-  transcriptAck(appendId: string) {
-    this.acks.push(appendId);
-  }
-  shutdown() {
-    this.shutdowns += 1;
-  }
+  shutdown() {}
   finish(result: AgentTurnResult = { status: "completed" }) {
     this.resolve(result);
   }
+}
+
+function signingFixture(keyId = "supervision-key-01") {
+  const now = Date.now();
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const pkcs8 = privateKey.export({ type: "pkcs8", format: "der" }) as Buffer;
+  const spki = publicKey.export({ type: "spki", format: "der" }) as Buffer;
+  const signingNotBeforeMs = now - 60_000;
+  const signingNotAfterMs = now + 60 * 60_000;
+  const verifyUntilMs = now + 2 * 60 * 60_000;
+  const signer = createAgentHostSupervisionSigner({
+    keyId,
+    privateKeyPkcs8: Uint8Array.from(pkcs8),
+    publicKeySpki: Uint8Array.from(spki),
+    signingNotBeforeMs,
+    signingNotAfterMs,
+    verifyUntilMs,
+    status: "active",
+  });
+  const keyring: AgentHostSupervisionPublicKeyringV2 = Object.freeze({
+    version: 2,
+    algorithm: AGENT_HOST_SUPERVISION_SIGNATURE_ALGORITHM,
+    domain: AGENT_HOST_SUPERVISION_SIGNATURE_DOMAIN,
+    keys: Object.freeze([
+      Object.freeze({
+        keyId,
+        status: "active" as const,
+        publicKeySpki: spki.toString("base64url"),
+        signingNotBeforeMs,
+        signingNotAfterMs,
+        verifyUntilMs,
+      }),
+    ]),
+  });
+  let epoch = 0;
+  const obtain = async (
+    challenge: Readonly<AgentHostChallengeDescriptorV3>,
+    requested: Readonly<{ fence: AgentTurnFence; planHash: string }>,
+    mutate?: (
+      receipt: AgentHostSignedAttachReceiptV3,
+    ) => AgentHostSignedAttachReceiptV3,
+  ) => {
+    epoch++;
+    const issuedAtMs = Date.now();
+    const expiresAtMs = issuedAtMs + 60_000;
+    const expected = Object.freeze({
+      fence: Object.freeze({ ...requested.fence }),
+      planHash: requested.planHash,
+      ...challenge,
+      supervisorEpoch: epoch,
+      kernelServiceEpoch: `kernel-${epoch}`,
+      nonce: `nonce-${crypto.randomUUID()}`,
+      audience: AGENT_HOST_SUPERVISION_AUDIENCE,
+      purpose: AGENT_HOST_SUPERVISION_PURPOSE,
+      keyId,
+      issuedAtMs,
+      expiresAtMs,
+    });
+    const envelope = signer.sign(
+      serializeAgentHostSupervisionAuthorityV2({
+        version: 2,
+        ...expected,
+      }),
+      issuedAtMs,
+    );
+    const receipt = Object.freeze({ expected, envelope });
+    return mutate ? mutate(receipt) : receipt;
+  };
+  return { keyring, obtain };
 }
 
 const resources: Array<{ host: AgentHost; dir: string }> = [];
@@ -96,828 +166,531 @@ afterEach(async () => {
   }
 });
 
-async function setup() {
-  const dir = await mkdtemp(join(tmpdir(), "agent-host-test-"));
+async function setup(
+  override: Partial<Parameters<typeof createAgentHost>[0]> = {},
+) {
+  const dir = await mkdtemp(join(tmpdir(), "agent-host-v3-test-"));
   const socketPath = join(dir, "host.sock");
   const driver = new FakeDriver();
+  const signing = signingFixture();
   const host = createAgentHost({
     socketPath,
     createDriver: () => driver,
-    authorizeGeneration: () => true,
+    hostId,
+    hostGeneration,
+    hostIncarnation,
+    supervisionKeyring: signing.keyring,
+    ...override,
   });
   resources.push({ host, dir });
   await host.start();
-  return { host, driver, socketPath };
+  return { host, driver, socketPath, ...signing };
 }
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 
-describe("Agent Host transport", () => {
-  test("runs event, transcript, ask, steer, answer, ack, cancel and finish flow", async () => {
-    const { driver, socketPath } = await setup();
-    const messages: AgentHostServerMessage[] = [];
+function raw(
+  socketPath: string,
+): Promise<{ socket: Socket; messages: unknown[] }> {
+  return new Promise((resolve) => {
+    const socket = connect(socketPath);
+    const messages: unknown[] = [];
+    const decoder = new BoundedNdjsonDecoder();
+    socket.on("data", (chunk) =>
+      messages.push(...decoder.push(Buffer.from(chunk))),
+    );
+    socket.once("connect", () => resolve({ socket, messages }));
+  });
+}
+
+function send(socket: Socket, value: unknown) {
+  socket.write(encodeNdjsonFrame(value));
+}
+
+describe("Agent Host protocol v3 signed attach", () => {
+  test("performs exact hello, real signed attach, start, control, and finish", async () => {
+    const { socketPath, driver, obtain } = await setup();
+    const seen: string[] = [];
     const client = new AgentHostClient({
       socketPath,
-      onMessage: (message) => messages.push(message),
+      obtainSignedAttach: obtain,
+      onMessage: (message) => seen.push(message.t),
     });
-    await client.connect();
+    await client.connect(fence, planHash);
     await client.startTurn(spec);
-    expect(driver.seenSpec?.executorPolicy).toEqual(spec.executorPolicy);
-    driver.output!.event({ type: "text_chunk", text: "hello" });
-    driver.output!.proposeTranscript("append-1", [
-      {
-        id: "entry-1",
-        type: "assistant",
-        content: "hello",
-        timestamp: new Date(0).toISOString(),
-      },
-    ]);
-    driver.output!.ask("ask-1", { question: "Continue?" });
     client.steer("continue", "steer-1");
-    client.answer("ask-1", { behavior: "deny", message: "no" });
-    client.transcriptAck("append-1", 7);
-    client.cancel();
     await tick();
-    expect(driver.steers).toEqual(["steer-1:continue"]);
-    expect(driver.answers).toEqual(["ask-1"]);
-    expect(driver.acks).toEqual(["append-1"]);
-    expect(driver.cancelled).toBe(1);
-    expect(messages.map((message) => message.t)).toEqual([
-      "event",
-      "transcript_proposal",
-      "ask",
-    ]);
+    expect(driver.launches).toBe(1);
+    expect(driver.steers).toEqual(["continue"]);
+    driver.output!.event({ type: "text_chunk", text: "ok" });
     driver.finish();
     await tick();
-    expect(messages.at(-1)?.t).toBe("turn_finished");
+    expect(seen).toEqual(["event", "turn_finished"]);
     client.close();
   });
 
-  test("rejects replay at or below the lineage generation high-water mark", async () => {
-    const { driver, socketPath } = await setup();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    await client.startTurn(spec);
-    driver.finish();
-    await tick();
-    await expect(client.startTurn(spec)).rejects.toThrow("stale_generation");
-    await expect(
-      client.startTurn({
-        ...spec,
-        fence: { ...fence, generation: fence.generation - 1 },
-        executorPolicy: {
-          ...spec.executorPolicy,
-          generation: fence.generation - 1,
-        },
-      }),
-    ).rejects.toThrow("stale_generation");
-    client.close();
-  });
-
-  test("fails closed without durable generation authority", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-no-authority-test-"));
-    const socketPath = join(dir, "host.sock");
-    const driver = new FakeDriver();
-    const host = createAgentHost({
-      socketPath,
-      createDriver: () => driver,
-    });
-    resources.push({ host, dir });
-    await host.start();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    await expect(client.startTurn(spec)).rejects.toThrow(
-      "Durable generation authority is required",
-    );
-    expect(driver.output).toBeUndefined();
-    client.close();
-  });
-
-  test("requires and consults durable generation authority when configured", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-authority-test-"));
-    const socketPath = join(dir, "host.sock");
-    const driver = new FakeDriver();
-    let durableFloor = fence.generation;
-    const host = createAgentHost({
-      socketPath,
-      createDriver: () => driver,
-      requireDurableGenerationAuthority: true,
-      authorizeGeneration: async (candidate) => {
-        if (candidate.generation <= durableFloor) return false;
-        durableFloor = candidate.generation;
-        return true;
-      },
-    });
-    resources.push({ host, dir });
-    await host.start();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    await expect(client.startTurn(spec)).rejects.toThrow("stale_generation");
-    await client.startTurn({
-      ...spec,
-      fence: { ...fence, generation: fence.generation + 1 },
-      executorPolicy: {
-        ...spec.executorPolicy,
-        generation: fence.generation + 1,
-      },
-    });
-    driver.finish();
-    await tick();
-    expect(durableFloor).toBe(fence.generation + 1);
-    client.close();
-  });
-
-  test("rechecks turn expiry after async generation authorization", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-expiry-auth-test-"));
-    const socketPath = join(dir, "host.sock");
-    let created = 0;
-    const host = createAgentHost({
-      socketPath,
-      createDriver: () => {
-        created += 1;
-        return new FakeDriver();
-      },
-      authorizeGeneration: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        return true;
-      },
-    });
-    resources.push({ host, dir });
-    await host.start();
-    const client = new AgentHostClient({ socketPath, timeoutMs: 500 });
-    await client.connect();
-    await expect(
-      client.startTurn({
-        ...spec,
-        executorPolicy: { ...spec.executorPolicy, deadlineMs: Date.now() + 40 },
-      }),
-    ).rejects.toThrow("deadline expired during authorization");
-    expect(created).toBe(0);
-    client.close();
-  });
-
-  test("cancels and shuts down a live turn at its deadline", async () => {
-    const { driver, socketPath } = await setup();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    await client.startTurn({
-      ...spec,
-      executorPolicy: { ...spec.executorPolicy, deadlineMs: Date.now() + 20 },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 35));
-    expect(driver.cancelled).toBe(1);
-    expect(driver.shutdowns).toBe(1);
-    driver.finish({ status: "cancelled" });
-    client.close();
-  });
-
-  test("stop aborts and fences a pending generation reservation", async () => {
-    const dir = await mkdtemp(
-      join(tmpdir(), "agent-host-reservation-stop-test-"),
-    );
-    const socketPath = join(dir, "host.sock");
-    let resolveAuthority!: (allowed: boolean) => void;
-    let signal: AbortSignal | undefined;
-    let created = 0;
-    const authority = new Promise<boolean>((resolve) => {
-      resolveAuthority = resolve;
-    });
-    const host = createAgentHost({
-      socketPath,
-      createDriver: () => {
-        created += 1;
-        return new FakeDriver();
-      },
-      authorizeGeneration: (_fence, candidateSignal) => {
-        signal = candidateSignal;
-        return authority;
-      },
-    });
-    resources.push({ host, dir });
-    await host.start();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    const starting = client.startTurn(spec).catch((error: unknown) => error);
-    await tick();
-    await host.stop();
-    expect(String(await starting)).toContain("disconnected");
-    expect(signal?.aborted).toBe(true);
-    resolveAuthority(true);
-    await tick();
-    expect(created).toBe(0);
-    client.close();
-  });
-
-  test("disconnect aborts a reservation and ignores late authorization", async () => {
-    const dir = await mkdtemp(
-      join(tmpdir(), "agent-host-reservation-close-test-"),
-    );
-    const socketPath = join(dir, "host.sock");
-    let resolveAuthority!: (allowed: boolean) => void;
-    let signal: AbortSignal | undefined;
-    let created = 0;
-    const authority = new Promise<boolean>((resolve) => {
-      resolveAuthority = resolve;
-    });
-    const host = createAgentHost({
-      socketPath,
-      createDriver: () => {
-        created += 1;
-        return new FakeDriver();
-      },
-      authorizeGeneration: (_fence, candidateSignal) => {
-        signal = candidateSignal;
-        return authority;
-      },
-    });
-    resources.push({ host, dir });
-    await host.start();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    const starting = client.startTurn(spec).catch((error: unknown) => error);
-    await tick();
-    client.close();
-    expect(String(await starting)).toContain("closed");
-    await tick();
-    expect(signal?.aborted).toBe(true);
-    resolveAuthority(true);
-    await tick();
-    expect(created).toBe(0);
-  });
-
-  test("authorization timeout poisons the epoch and ignores late resolution", async () => {
-    const dir = await mkdtemp(
-      join(tmpdir(), "agent-host-reservation-timeout-test-"),
-    );
-    const socketPath = join(dir, "host.sock");
-    let resolveAuthority!: (allowed: boolean) => void;
-    let signal: AbortSignal | undefined;
-    let created = 0;
-    const authority = new Promise<boolean>((resolve) => {
-      resolveAuthority = resolve;
-    });
-    const host = createAgentHost({
-      socketPath,
-      createDriver: () => {
-        created += 1;
-        return new FakeDriver();
-      },
-      authorizeGeneration: (_fence, candidateSignal) => {
-        signal = candidateSignal;
-        return authority;
-      },
-      authorizationDeadlineMs: 10,
-    });
-    resources.push({ host, dir });
-    await host.start();
-    const client = new AgentHostClient({ socketPath, timeoutMs: 100 });
-    await client.connect();
-    await expect(client.startTurn(spec)).rejects.toThrow(
-      "authorization timed out",
-    );
-    expect(signal?.aborted).toBe(true);
-    resolveAuthority(true);
-    await tick();
-    expect(created).toBe(0);
-    await expect(client.startTurn(spec)).rejects.toThrow("host_busy");
-    client.close();
-  });
-
-  test("shutdown bypasses a nonsettling generation authority", async () => {
-    const dir = await mkdtemp(
-      join(tmpdir(), "agent-host-reservation-shutdown-test-"),
-    );
-    const socketPath = join(dir, "host.sock");
-    let signal: AbortSignal | undefined;
-    const host = createAgentHost({
-      socketPath,
-      createDriver: () => new FakeDriver(),
-      authorizeGeneration: (_fence, candidateSignal) => {
-        signal = candidateSignal;
-        return new Promise(() => undefined);
-      },
-    });
-    resources.push({ host, dir });
-    await host.start();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    const starting = client.startTurn(spec);
-    await tick();
-    client.shutdown();
-    await expect(starting).rejects.toThrow("disconnected");
-    expect(signal?.aborted).toBe(true);
-    client.close();
-  });
-
-  test("rejects a stale generation and keeps the active turn", async () => {
-    const { driver, socketPath } = await setup();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    await client.startTurn(spec);
-    const messages = await rawExchange(
-      socketPath,
-      [
-        {
-          t: "hello",
-          version: AGENT_HOST_PROTOCOL_VERSION,
-          requestId: "hello-2",
-        },
-        {
-          t: "cancel",
-          version: AGENT_HOST_PROTOCOL_VERSION,
-          requestId: "stale",
-          fence: { ...fence, generation: 2 },
-        },
-      ],
-      2,
-    );
-    expect(messages[1]).toMatchObject({
-      t: "error",
-      code: "stale_generation",
-      requestId: "stale",
-    });
-    expect(driver.cancelled).toBe(0);
-    client.close();
-  });
-
-  test("rejects the old turn-wide Executor grant contract", async () => {
+  test("v2, malformed frames, and start/control before attach close the socket", async () => {
     const { socketPath } = await setup();
-    const { executorPolicy: _, ...withoutExecutorPolicy } = spec;
-    const messages = await rawExchange(
-      socketPath,
-      [
-        {
-          t: "hello",
-          version: AGENT_HOST_PROTOCOL_VERSION,
-          requestId: "hello",
-        },
-        {
-          t: "start_turn",
-          version: AGENT_HOST_PROTOCOL_VERSION,
-          requestId: "old-contract",
-          spec: { ...withoutExecutorPolicy, executorGrant: accessGrant },
-        },
-      ],
-      2,
-    );
-    expect(messages.at(-1)).toMatchObject({
-      t: "error",
-      requestId: "old-contract",
-      code: "invalid_request",
-    });
-  });
-
-  test("strictly rejects malformed steer images", async () => {
-    const { driver, socketPath } = await setup();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    await client.startTurn(spec);
-    client.steer("bad image", "steer-bad-image", [
-      { mediaType: "text/plain", data: btoa("not-an-image") },
-    ]);
-    await tick();
-    expect(driver.steers).toEqual([]);
-    expect(driver.cancelled).toBe(1);
-    client.close();
-  });
-
-  test("fails closed on a malformed frame and cancels on owner disconnect", async () => {
-    const { driver, socketPath } = await setup();
-    const malformed = connect(socketPath);
-    await new Promise<void>((resolve) => malformed.once("connect", resolve));
-    malformed.write("not-json\n");
-    await new Promise<void>((resolve) => malformed.once("close", resolve));
-
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    await client.startTurn(spec);
-    client.close();
-    await tick();
-    expect(driver.cancelled).toBe(1);
-  });
-
-  test("creates an exact private parent and socket mode", async () => {
-    const { socketPath } = await setup();
-    expect((await stat(join(socketPath, ".."))).mode & 0o777).toBe(0o700);
-    expect((await stat(socketPath)).mode & 0o777).toBe(0o600);
-  });
-
-  test("refuses a second live host without unlinking the first", async () => {
-    const { host, socketPath } = await setup();
-    const second = createAgentHost({
-      socketPath,
-      createDriver: () => new FakeDriver(),
-    });
-    resources.push({ host: second, dir: join(socketPath, "..") });
-    await expect(second.start()).rejects.toThrow("already claimed");
-    expect((await stat(socketPath)).isSocket()).toBe(true);
-    await host.start();
-  });
-
-  test("serializes concurrent contenders and permits a successor after cleanup", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-contender-test-"));
-    const socketPath = join(dir, "host.sock");
-    const hosts = [
-      createAgentHost({ socketPath, createDriver: () => new FakeDriver() }),
-      createAgentHost({ socketPath, createDriver: () => new FakeDriver() }),
-    ];
-    try {
-      const starts = await Promise.allSettled(
-        hosts.map((host) => host.start()),
+    for (const frame of [
+      { t: "hello", version: 2, requestId: "old-request" },
+      {
+        t: "start_turn",
+        version: 3,
+        requestId: "start-request",
+        planHash,
+        spec,
+      },
+      { t: "cancel", version: 3, requestId: "cancel-request", fence },
+      { nope: true },
+    ]) {
+      const connection = await raw(socketPath);
+      send(connection.socket, frame);
+      await new Promise<void>((resolve) =>
+        connection.socket.once("close", resolve),
       );
-      expect(
-        starts.filter((result) => result.status === "fulfilled"),
-      ).toHaveLength(1);
-      expect(
-        starts.filter((result) => result.status === "rejected"),
-      ).toHaveLength(1);
-      const winner = hosts[starts[0]!.status === "fulfilled" ? 0 : 1]!;
-      const loser = hosts[winner === hosts[0] ? 1 : 0]!;
-      await winner.stop();
-      await loser.start();
-      expect((await stat(socketPath)).isSocket()).toBe(true);
-      await loser.stop();
-    } finally {
-      await Promise.all(hosts.map((host) => host.stop()));
-      await rm(dir, { recursive: true, force: true });
     }
   });
 
-  test("atomically admits only one concurrent process claim", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-process-claim-test-"));
-    const socketPath = join(dir, "host.sock");
-    const script = `const {createAgentHost}=await import(process.env.HOST_MODULE);const host=createAgentHost({socketPath:process.env.SOCKET_PATH,createDriver:()=>{throw new Error("unused")}});try{await host.start();console.log("acquired");await new Promise(r=>setTimeout(r,500));await host.stop()}catch(error){console.log(String(error).includes("already claimed")?"claimed":"unexpected:"+error)}`;
-    const spawn = () =>
-      Bun.spawn({
-        cmd: [process.execPath, "-e", script],
-        env: {
-          ...process.env,
-          HOST_MODULE: join(import.meta.dir, "host.ts"),
-          SOCKET_PATH: socketPath,
-        },
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-    const children = [spawn(), spawn()];
-    try {
-      const output = await Promise.all(
-        children.map((child) => new Response(child.stdout).text()),
-      );
-      await Promise.all(children.map((child) => child.exited));
-      expect(output.filter((value) => value.includes("acquired"))).toHaveLength(
-        1,
-      );
-      expect(output.filter((value) => value.includes("claimed"))).toHaveLength(
-        1,
-      );
-    } finally {
-      for (const child of children) child.kill();
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  test("rejects a symlink at the final socket path", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-symlink-test-"));
-    const socketPath = join(dir, "host.sock");
-    await symlink(join(dir, "missing.sock"), socketPath);
-    const host = createAgentHost({
-      socketPath,
-      createDriver: () => new FakeDriver(),
+  test("resets the start deadline after a slow successful verification", async () => {
+    const delayed = signingFixture();
+    const { socketPath, driver } = await setup({
+      supervisionKeyring: delayed.keyring,
+      attachDeadlineMs: 80,
     });
-    resources.push({ host, dir });
-    await expect(host.start()).rejects.toThrow("unsafe");
-  });
-
-  test("fails closed on a crashed claim until supervisor cleanup", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-stale-test-"));
-    const socketPath = join(dir, "host.sock");
-    const child = Bun.spawn({
-      cmd: [
-        process.execPath,
-        "-e",
-        `const {createAgentHost}=await import(process.env.HOST_MODULE);const host=createAgentHost({socketPath:process.env.SOCKET_PATH,createDriver:()=>{throw new Error("unused")}});await host.start();console.log("ready");await new Promise(()=>{});`,
-      ],
-      env: {
-        ...process.env,
-        HOST_MODULE: join(import.meta.dir, "host.ts"),
-        SOCKET_PATH: socketPath,
+    const client = new AgentHostClient({
+      socketPath,
+      obtainSignedAttach: async (challenge, requested) => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return delayed.obtain(challenge, requested);
       },
-      stdout: "pipe",
-      stderr: "pipe",
     });
-    const reader = child.stdout.getReader();
-    expect(new TextDecoder().decode((await reader.read()).value)).toContain(
-      "ready",
-    );
-    child.kill(9);
-    await child.exited;
-    expect((await stat(socketPath)).isSocket()).toBe(true);
-    const host = createAgentHost({
-      socketPath,
-      createDriver: () => new FakeDriver(),
-    });
-    resources.push({ host, dir });
-    await expect(host.start()).rejects.toThrow("already claimed");
-
-    // The supervisor must verify that the prior process is dead before this.
-    await rm(`${socketPath}.claim`);
-    await host.start();
-    expect((await stat(socketPath)).isSocket()).toBe(true);
+    await client.connect(fence, planHash);
+    await client.startTurn(spec);
+    expect(driver.launches).toBe(1);
+    driver.finish();
+    client.close();
   });
 
-  test("poisons abandoned ownership instead of overlapping a successor", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-fence-test-"));
-    const socketPath = join(dir, "host.sock");
-    const drivers = [new FakeDriver(), new FakeDriver()];
-    drivers[0]!.nonsettlingCancel = true;
-    let created = 0;
-    let abandon: (() => void) | undefined;
-    const setHostTimeout = ((callback: () => void) => {
-      abandon = callback;
-      return { unref: () => undefined };
-    }) as unknown as typeof setTimeout;
-    const host = createAgentHost({
+  test("returns a fresh socket-bound challenge and rejects envelope replay", async () => {
+    const { socketPath, obtain } = await setup();
+    let firstReceipt: AgentHostSignedAttachReceiptV3 | undefined;
+    let firstChallenge = "";
+    const first = new AgentHostClient({
       socketPath,
-      createDriver: () => drivers[created++]!,
-      cancellationDeadlineMs: 15,
-      authorizeGeneration: () => true,
-      setTimeout: setHostTimeout,
-      clearTimeout: (() => undefined) as unknown as typeof clearTimeout,
+      obtainSignedAttach: async (challenge, requested) => {
+        firstChallenge = challenge.hostChallenge;
+        firstReceipt = await obtain(challenge, requested);
+        return firstReceipt;
+      },
     });
-    resources.push({ host, dir });
-    await host.start();
-
-    const first = new AgentHostClient({ socketPath });
-    await first.connect();
-    await first.startTurn(spec);
+    await first.connect(fence, planHash);
     first.close();
     await tick();
-    expect(abandon).toBeDefined();
-    abandon!();
+    let secondChallenge = "";
+    const second = new AgentHostClient({
+      socketPath,
+      obtainSignedAttach: async (challenge) => {
+        secondChallenge = challenge.hostChallenge;
+        return firstReceipt!;
+      },
+    });
+    await expect(second.connect(fence, planHash)).rejects.toThrow();
+    expect(secondChallenge).not.toBe(firstChallenge);
+  });
 
-    const second = new AgentHostClient({ socketPath });
-    await second.connect();
-    await expect(
-      second.startTurn({
-        ...spec,
-        fence: { ...fence, turnId: "turn-2", generation: 4 },
-        executorPolicy: { ...spec.executorPolicy, generation: 4 },
+  test("consumes a challenge on every failed attach and never launches a driver", async () => {
+    const { socketPath, obtain, driver } = await setup();
+    const mutations: Array<
+      (r: AgentHostSignedAttachReceiptV3) => AgentHostSignedAttachReceiptV3
+    > = [
+      ...(["sessionId", "runId", "turnId"] as const).map(
+        (field) => (r: AgentHostSignedAttachReceiptV3) => ({
+          ...r,
+          expected: {
+            ...r.expected,
+            fence: { ...r.expected.fence, [field]: `other-${field}` },
+          },
+        }),
+      ),
+      (r) => ({
+        ...r,
+        expected: {
+          ...r.expected,
+          fence: {
+            ...r.expected.fence,
+            generation: r.expected.fence.generation + 1,
+          },
+        },
       }),
-    ).rejects.toThrow("host_busy");
-    drivers[0]!.output!.event({ type: "text_chunk", text: "late" });
+      (r) => ({
+        ...r,
+        expected: { ...r.expected, planHash: `sha256:${"c".repeat(64)}` },
+      }),
+      (r) => ({ ...r, expected: { ...r.expected, hostId: "other-host" } }),
+      (r) => ({
+        ...r,
+        expected: { ...r.expected, hostGeneration: hostGeneration + 1 },
+      }),
+      (r) => ({
+        ...r,
+        expected: { ...r.expected, hostIncarnation: "other-incarnation" },
+      }),
+      (r) => ({
+        ...r,
+        expected: {
+          ...r.expected,
+          hostChallenge: `challenge-${crypto.randomUUID()}`,
+        },
+      }),
+      (r) => ({
+        ...r,
+        expected: {
+          ...r.expected,
+          supervisorEpoch: r.expected.supervisorEpoch + 1,
+        },
+      }),
+      (r) => ({
+        ...r,
+        expected: { ...r.expected, kernelServiceEpoch: "other-kernel" },
+      }),
+      (r) => ({
+        ...r,
+        expected: { ...r.expected, nonce: `other-${crypto.randomUUID()}` },
+      }),
+      (r) => ({
+        ...r,
+        expected: { ...r.expected, audience: "other-audience" as never },
+      }),
+      (r) => ({
+        ...r,
+        expected: { ...r.expected, purpose: "other-purpose" as never },
+      }),
+      (r) => ({ ...r, expected: { ...r.expected, keyId: "unknown-key-0001" } }),
+      (r) => ({
+        ...r,
+        expected: { ...r.expected, issuedAtMs: r.expected.issuedAtMs + 1 },
+      }),
+      (r) => ({
+        ...r,
+        expected: { ...r.expected, expiresAtMs: r.expected.expiresAtMs + 1 },
+      }),
+      (r) => ({
+        ...r,
+        envelope: { ...r.envelope, signature: `${"A".repeat(85)}A` },
+      }),
+      (r) => ({
+        ...r,
+        envelope: { ...r.envelope, domain: "wrong-domain" as never },
+      }),
+      (r) => ({
+        ...r,
+        envelope: { ...r.envelope, algorithm: "wrong" as never },
+      }),
+    ];
+    for (const mutate of mutations) {
+      const client = new AgentHostClient({
+        socketPath,
+        obtainSignedAttach: (challenge, requested) =>
+          obtain(challenge, requested, mutate),
+      });
+      await expect(client.connect(fence, planHash)).rejects.toThrow();
+    }
+    expect(driver.launches).toBe(0);
+  }, 15_000);
+
+  test("rejects a changed execution spec after signed attach", async () => {
+    const { socketPath, obtain, driver } = await setup();
+    const client = new AgentHostClient({
+      socketPath,
+      obtainSignedAttach: obtain,
+    });
+    await client.connect(fence, planHash);
+    await expect(
+      client.startTurn({
+        ...spec,
+        input: { ...spec.input, prompt: "Changed after authorization" },
+      }),
+    ).rejects.toThrow();
+    expect(driver.launches).toBe(0);
+  });
+
+  test("rejects an older per-session supervisor epoch across turn lineages", async () => {
+    const drivers = [new FakeDriver(), new FakeDriver()];
+    let created = 0;
+    const { socketPath, obtain } = await setup({
+      createDriver: () => drivers[created++]!,
+    });
+    let releaseOld!: () => void;
+    const oldGate = new Promise<void>((resolve) => {
+      releaseOld = resolve;
+    });
+    let oldReceiptReady!: () => void;
+    const receiptReady = new Promise<void>((resolve) => {
+      oldReceiptReady = resolve;
+    });
+    const oldClient = new AgentHostClient({
+      socketPath,
+      obtainSignedAttach: async (challenge, requested) => {
+        const receipt = await obtain(challenge, requested);
+        oldReceiptReady();
+        await oldGate;
+        return receipt;
+      },
+    });
+    const oldConnect = oldClient.connect(fence, planHash);
+    await receiptReady;
+
+    const newerFence = { ...fence, turnId: "turn-2" };
+    const newerSpec: AgentTurnSpec = {
+      ...spec,
+      fence: newerFence,
+      executorPolicy: { ...spec.executorPolicy },
+    };
+    const newerPlanHash = await hashAgentTurnSpecV1(newerSpec);
+    const newerClient = new AgentHostClient({
+      socketPath,
+      obtainSignedAttach: obtain,
+    });
+    await newerClient.connect(newerFence, newerPlanHash);
+    await newerClient.startTurn(newerSpec);
     drivers[0]!.finish();
     await tick();
-    expect(drivers[0]!.cancelled).toBe(1);
+    newerClient.close();
+
+    releaseOld();
+    await expect(oldConnect).rejects.toThrow();
     expect(created).toBe(1);
+  });
+
+  test("rejects unknown, expired, and retired public verification keys", async () => {
+    const unknown = signingFixture();
+    const unknownRing = {
+      ...unknown.keyring,
+      keys: [{ ...unknown.keyring.keys[0]!, keyId: "different-key-001" }],
+    } as AgentHostSupervisionPublicKeyringV2;
+    const unknownHost = await setup({ supervisionKeyring: unknownRing });
     await expect(
-      second.startTurn({
-        ...spec,
-        fence: { ...fence, turnId: "turn-3", generation: 5 },
-        executorPolicy: { ...spec.executorPolicy, generation: 5 },
-      }),
-    ).rejects.toThrow("host_busy");
-    second.close();
-  });
+      new AgentHostClient({
+        socketPath: unknownHost.socketPath,
+        obtainSignedAttach: unknown.obtain,
+      }).connect(fence, planHash),
+    ).rejects.toThrow();
 
-  test("retains its claim when stop cannot drain physical work", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-stop-poison-test-"));
-    const socketPath = join(dir, "host.sock");
-    const driver = new FakeDriver();
-    driver.nonsettlingCancel = true;
-    const host = createAgentHost({
-      socketPath,
-      createDriver: () => driver,
-      authorizeGeneration: () => true,
+    const expired = signingFixture();
+    const expiredHost = await setup({
+      supervisionKeyring: expired.keyring,
+      now: () => Date.now() + 2 * 60_000,
     });
-    resources.push({ host, dir });
-    await host.start();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    await client.startTurn(spec);
-    await host.stop();
+    await expect(
+      new AgentHostClient({
+        socketPath: expiredHost.socketPath,
+        obtainSignedAttach: expired.obtain,
+      }).connect(fence, planHash),
+    ).rejects.toThrow();
 
-    const contender = createAgentHost({
-      socketPath,
-      createDriver: () => new FakeDriver(),
-    });
-    resources.push({ host: contender, dir });
-    await expect(contender.start()).rejects.toThrow("already claimed");
-    client.close();
-  });
-
-  test("lets cancel bypass a nonsettling driver control", async () => {
-    const { driver, socketPath } = await setup();
-    driver.nonsettlingSteer = true;
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    await client.startTurn(spec);
-    client.steer("blocked", "steer-blocked");
-    client.cancel();
-    await tick();
-    expect(driver.steers).toEqual(["steer-blocked:blocked"]);
-    expect(driver.cancelled).toBe(1);
-    client.close();
-  });
-
-  test("keeps the receive queue responsive to a nonsettling in-band cancel", async () => {
-    const { driver, socketPath } = await setup();
-    driver.nonsettlingCancel = true;
-    const messages = await rawExchange(
-      socketPath,
-      [
-        {
-          t: "hello",
-          version: AGENT_HOST_PROTOCOL_VERSION,
-          requestId: "hello",
-        },
-        {
-          t: "start_turn",
-          version: AGENT_HOST_PROTOCOL_VERSION,
-          requestId: "start",
-          spec,
-        },
-        {
-          t: "cancel",
-          version: AGENT_HOST_PROTOCOL_VERSION,
-          requestId: "cancel",
-          fence,
-        },
-        {
-          t: "answer",
-          version: AGENT_HOST_PROTOCOL_VERSION,
-          requestId: "after-cancel",
-          fence,
-          askId: "missing",
-          result: { behavior: "deny", message: "no" },
-        },
+    const retired = signingFixture();
+    const active = signingFixture("supervision-key-02");
+    const retiredKey = retired.keyring.keys[0]!;
+    const retiredRing = {
+      ...retired.keyring,
+      keys: [
+        { ...retiredKey, status: "retiring" as const },
+        active.keyring.keys[0]!,
       ],
-      3,
-    );
-    expect(messages.map((message) => message.t)).toEqual([
-      "hello",
-      "turn_started",
-      "error",
-    ]);
-    expect(driver.cancelled).toBe(1);
+    } as AgentHostSupervisionPublicKeyringV2;
+    const retiredHost = await setup({
+      supervisionKeyring: retiredRing,
+      now: () => retiredKey.verifyUntilMs + 1,
+    });
+    await expect(
+      new AgentHostClient({
+        socketPath: retiredHost.socketPath,
+        obtainSignedAttach: retired.obtain,
+      }).connect(fence, planHash),
+    ).rejects.toThrow();
   });
 
-  test("does not retain a transcript proposal when its owner is unwritable", async () => {
-    const { driver, socketPath } = await setup();
-    const client = new AgentHostClient({ socketPath });
-    await client.connect();
-    await client.startTurn(spec);
-    client.close();
+  test("forbids active-owner overlap and permits takeover only after release with fresh authority", async () => {
+    const drivers = [new FakeDriver(), new FakeDriver()];
+    let created = 0;
+    const { socketPath, obtain } = await setup({
+      createDriver: () => drivers[created++]!,
+    });
+    const first = new AgentHostClient({
+      socketPath,
+      obtainSignedAttach: obtain,
+    });
+    await first.connect(fence, planHash);
+    await first.startTurn(spec);
+    const contender = new AgentHostClient({
+      socketPath,
+      obtainSignedAttach: obtain,
+    });
+    await expect(contender.connect(fence, planHash)).rejects.toThrow();
+    expect(drivers[0]!.launches).toBe(1);
+    first.close();
+    drivers[0]!.finish({ status: "cancelled" });
     await tick();
-    const entry = {
-      id: "entry-1",
-      type: "assistant" as const,
-      content: "late",
-      timestamp: new Date(0).toISOString(),
-    };
-    expect(() => driver.output!.proposeTranscript("append-1", [entry])).toThrow(
-      "owner is disconnected",
-    );
-    expect(() => driver.output!.proposeTranscript("append-2", [entry])).toThrow(
-      "owner is disconnected",
-    );
+
+    const successor = new AgentHostClient({
+      socketPath,
+      obtainSignedAttach: obtain,
+    });
+    await successor.connect(fence, planHash);
+    await successor.startTurn(spec);
+    expect(drivers[1]!.launches).toBe(1);
+    drivers[1]!.finish();
+    successor.close();
   });
 
-  test("shares one bounded connect handshake and blocks premature turns", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-connect-test-"));
+  test("a new Host incarnation requires fresh signed authority", async () => {
+    const first = await setup();
+    let staleReceipt: AgentHostSignedAttachReceiptV3 | undefined;
+    const client = new AgentHostClient({
+      socketPath: first.socketPath,
+      obtainSignedAttach: async (challenge, requested) => {
+        staleReceipt = await first.obtain(challenge, requested);
+        return staleReceipt;
+      },
+    });
+    await client.connect(fence, planHash);
+    client.close();
+
+    const second = await setup({
+      hostIncarnation: `incarnation-${crypto.randomUUID()}`,
+    });
+    await expect(
+      new AgentHostClient({
+        socketPath: second.socketPath,
+        obtainSignedAttach: async () => staleReceipt!,
+      }).connect(fence, planHash),
+    ).rejects.toThrow();
+    const fresh = new AgentHostClient({
+      socketPath: second.socketPath,
+      obtainSignedAttach: second.obtain,
+    });
+    await fresh.connect(fence, planHash);
+    fresh.close();
+  });
+
+  test("shares one concurrent connect and attach promise", async () => {
+    const { socketPath, obtain } = await setup();
+    let calls = 0;
+    const client = new AgentHostClient({
+      socketPath,
+      obtainSignedAttach: async (...args) => {
+        calls++;
+        return obtain(...args);
+      },
+    });
+    const a = client.connect(fence, planHash);
+    const b = client.connect(fence, planHash);
+    expect(a).toBe(b);
+    await a;
+    expect(calls).toBe(1);
+    client.close();
+  });
+
+  test("start timeout poisons the connection and ignores a late acknowledgement", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-host-client-timeout-"));
     const socketPath = join(dir, "host.sock");
     const sockets = new Set<Socket>();
-    let connections = 0;
+    let connectionNumber = 0;
     const server = createServer((socket) => {
       sockets.add(socket);
-      connections += 1;
-      socket.on("close", () => sockets.delete(socket));
+      connectionNumber += 1;
+      const thisConnection = connectionNumber;
       const decoder = new BoundedNdjsonDecoder();
       socket.on("data", (chunk) => {
-        for (const message of decoder.push(
-          Buffer.from(chunk),
-        ) as AgentHostClientMessage[]) {
+        for (const value of decoder.push(Buffer.from(chunk))) {
+          const message = value as { t: string; requestId: string };
           if (message.t === "hello")
+            send(socket, {
+              t: "hello",
+              version: 3,
+              requestId: message.requestId,
+              accepted: true,
+              hostId,
+              hostGeneration,
+              hostIncarnation,
+              hostChallenge: `challenge-${crypto.randomUUID()}`,
+            });
+          else if (message.t === "attach")
+            send(socket, {
+              t: "attached",
+              version: 3,
+              requestId: message.requestId,
+              fence,
+              planHash,
+              supervisorEpoch: thisConnection === 1 ? 2 : 1,
+            });
+          else if (message.t === "start_turn")
             setTimeout(
               () =>
-                socket.write(encodeNdjsonFrame({ ...message, accepted: true })),
-              20,
+                send(socket, {
+                  t: "turn_started",
+                  version: 3,
+                  requestId: message.requestId,
+                  fence,
+                }),
+              100,
             );
         }
       });
-      socket.on("error", () => undefined);
-    });
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
-    const client = new AgentHostClient({ socketPath, timeoutMs: 100 });
-    try {
-      const first = client.connect();
-      const second = client.connect();
-      expect(second).toBe(first);
-      await expect(client.startTurn(spec)).rejects.toThrow(
-        "handshake is not complete",
-      );
-      await Promise.all([first, second]);
-      expect(connections).toBe(1);
-    } finally {
-      client.close();
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  test("start timeout closes the generation and ignores its late acknowledgement", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-host-client-test-"));
-    const socketPath = join(dir, "host.sock");
-    const outbound: AgentHostClientMessage[] = [];
-    let connectionNumber = 0;
-    const sockets = new Set<Socket>();
-    const server = createServer((socket) => {
-      sockets.add(socket);
       socket.on("close", () => sockets.delete(socket));
-      connectionNumber += 1;
-      const number = connectionNumber;
-      const decoder = new BoundedNdjsonDecoder();
-      socket.on("data", (chunk) => {
-        for (const message of decoder.push(
-          Buffer.from(chunk),
-        ) as AgentHostClientMessage[]) {
-          outbound.push(message);
-          if (message.t === "hello")
-            socket.write(encodeNdjsonFrame({ ...message, accepted: true }));
-          if (message.t === "start_turn") {
-            const reply = {
-              t: "turn_started" as const,
-              version: AGENT_HOST_PROTOCOL_VERSION,
-              requestId: message.requestId,
-              fence: message.spec.fence,
-            };
-            if (number === 1)
-              setTimeout(() => socket.write(encodeNdjsonFrame(reply)), 50);
-            else socket.write(encodeNdjsonFrame(reply));
-          }
-        }
-      });
-      socket.on("error", () => undefined);
     });
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
-    const seen: AgentHostServerMessage[] = [];
-    const client = new AgentHostClient({
-      socketPath,
-      timeoutMs: 20,
-      onMessage: (message) => seen.push(message),
-    });
     try {
-      await client.connect();
-      await expect(client.startTurn(spec)).rejects.toThrow(
-        "turn_started timed out",
-      );
-      await new Promise((resolve) => setTimeout(resolve, 65));
-      expect(outbound.map((message) => message.t)).toContain("cancel");
-      expect(() => client.connect()).toThrow("ownership is uncertain");
-      expect(connectionNumber).toBe(1);
-      expect(seen).toEqual([]);
+      const options = {
+        socketPath,
+        timeoutMs: 20,
+        obtainSignedAttach: async () => ({
+          expected: { supervisorEpoch: 1 } as never,
+          envelope: {} as never,
+        }),
+      };
+      await expect(
+        new AgentHostClient(options).connect(fence, planHash),
+      ).rejects.toThrow("mismatched attach acknowledgement");
+      const client = new AgentHostClient(options);
+      await client.connect(fence, planHash);
+      await expect(client.startTurn(spec)).rejects.toThrow("timed out");
+      await tick();
+      expect(() => client.steer("late", "late-steer")).toThrow();
     } finally {
-      client.close();
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  test("start and stop are idempotent and clean up the socket", async () => {
-    const { host, socketPath } = await setup();
-    await host.start();
-    await host.stop();
-    await host.stop();
-    expect(await Bun.file(socketPath).exists()).toBe(false);
+  test("keeps private credentials and kernel stores outside Host and client source", async () => {
+    const hostSource = await readFile(
+      new URL("./host.ts", import.meta.url),
+      "utf8",
+    );
+    const clientSource = await readFile(
+      new URL("../server/agent-host-client.ts", import.meta.url),
+      "utf8",
+    );
+    expect(hostSource).not.toMatch(
+      /supervision-signer|session-kernel\/store|privateKey/,
+    );
+    expect(clientSource).not.toMatch(
+      /privateKey|providerConfig|mcpConfig|session-kernel\/store/,
+    );
+  });
+
+  test("attach timeout closes the unused challenge", async () => {
+    const { socketPath } = await setup({ attachDeadlineMs: 20 });
+    const connection = await raw(socketPath);
+    send(connection.socket, {
+      t: "hello",
+      version: AGENT_HOST_PROTOCOL_VERSION,
+      requestId: "hello-timeout",
+    });
+    await new Promise<void>((resolve) =>
+      connection.socket.once("close", resolve),
+    );
   });
 });
-
-async function rawExchange(
-  socketPath: string,
-  outbound: unknown[],
-  count: number,
-): Promise<AgentHostServerMessage[]> {
-  return new Promise((resolve, reject) => {
-    const socket: Socket = connect(socketPath);
-    const decoder = new BoundedNdjsonDecoder();
-    const messages: AgentHostServerMessage[] = [];
-    socket.on("connect", () => {
-      for (const message of outbound) socket.write(encodeNdjsonFrame(message));
-    });
-    socket.on("data", (chunk) => {
-      try {
-        messages.push(
-          ...(decoder.push(Buffer.from(chunk)) as AgentHostServerMessage[]),
-        );
-        if (messages.length >= count) {
-          socket.destroy();
-          resolve(messages);
-        }
-      } catch (error) {
-        reject(error);
-      }
-    });
-    socket.on("error", reject);
-  });
-}

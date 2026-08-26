@@ -12,12 +12,19 @@ import { dirname, isAbsolute, parse, resolve } from "node:path";
 import { createServer, connect, type Server, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
+  AGENT_HOST_SUPERVISION_AUDIENCE,
+  AGENT_HOST_SUPERVISION_PURPOSE,
   decodeAgentHostHello,
   decodeAgentHostStartTurn,
   decodeAgentImages,
+  decodeAgentHostSupervisionPublicKeyringV2,
+  decodeExecutorId,
+  hashAgentTurnSpecV1,
   isAgentTurnFence,
+  verifySignedAgentHostSupervisionEnvelopeV2,
   type AgentHostClientMessage,
   type AgentHostServerMessage,
+  type AgentHostSupervisionPublicKeyringV2,
   type AgentTurnFence,
   type AgentTurnSpec,
   type StreamEvent,
@@ -37,23 +44,34 @@ import {
 export interface AgentHostOptions {
   socketPath: string;
   createDriver: AgentTurnDriverFactory;
+  readonly hostId: string;
+  readonly hostGeneration: number;
+  readonly hostIncarnation: string;
+  readonly supervisionKeyring: AgentHostSupervisionPublicKeyringV2;
   maxFrameBytes?: number;
   cancellationDeadlineMs?: number;
   livenessProbeTimeoutMs?: number;
+  attachDeadlineMs?: number;
+  now?: () => number;
   setTimeout?: typeof globalThis.setTimeout;
   clearTimeout?: typeof globalThis.clearTimeout;
-  authorizeGeneration?: (
-    fence: AgentTurnFence,
-    signal: AbortSignal,
-  ) => boolean | Promise<boolean>;
-  requireDurableGenerationAuthority?: boolean;
-  authorizationDeadlineMs?: number;
   controlDeadlineMs?: number;
 }
 
+interface AttachedAuthority {
+  fence: AgentTurnFence;
+  planHash: string;
+  supervisorEpoch: number;
+}
+
 interface ConnectionState {
+  readonly id: string;
   socket: Socket;
   handshake: boolean;
+  challenge?: string;
+  challengeConsumed: boolean;
+  attached?: AttachedAuthority;
+  attachTimer?: ReturnType<typeof setTimeout>;
   closed: boolean;
   queue: Promise<void>;
 }
@@ -79,17 +97,6 @@ interface ActiveTurn {
 interface SocketIdentity {
   dev: number;
   ino: number;
-}
-
-interface StartReservation {
-  owner: ConnectionState;
-  requestId: string;
-  spec: AgentTurnSpec;
-  fence: AgentTurnFence;
-  epoch: string;
-  claimNonce: string;
-  controller: AbortController;
-  timer: ReturnType<typeof setTimeout>;
 }
 
 type DriverEmission =
@@ -207,11 +214,34 @@ export class AgentHost {
   private claimNonce?: string;
   private serverEpoch?: string;
   private poisoned = false;
-  private reservation?: StartReservation;
+  private attaching?: ConnectionState;
+  private attachedOwner?: ConnectionState;
+  private readonly highWaterSupervisorEpochs = new Map<string, number>();
   private readonly highWaterGenerations = new Map<string, number>();
   private readonly connections = new Set<ConnectionState>();
+  private readonly keyring: AgentHostSupervisionPublicKeyringV2;
+  private readonly hostId: string;
+  private readonly hostGeneration: number;
+  private readonly hostIncarnation: string;
 
-  constructor(private readonly options: AgentHostOptions) {}
+  constructor(private readonly options: AgentHostOptions) {
+    const keyring = decodeAgentHostSupervisionPublicKeyringV2(
+      options.supervisionKeyring,
+    );
+    if (
+      !decodeExecutorId(options.hostId) ||
+      !Number.isSafeInteger(options.hostGeneration) ||
+      options.hostGeneration < 1 ||
+      typeof options.hostIncarnation !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,255}$/.test(options.hostIncarnation) ||
+      !keyring
+    )
+      throw new Error("Invalid Agent Host v3 identity or public keyring");
+    this.hostId = options.hostId;
+    this.hostGeneration = options.hostGeneration;
+    this.hostIncarnation = options.hostIncarnation;
+    this.keyring = keyring;
+  }
 
   start(): Promise<void> {
     if (this.server?.listening) return Promise.resolve();
@@ -272,11 +302,9 @@ export class AgentHost {
     await this.starting?.catch(() => undefined);
     const server = this.server;
     this.server = undefined;
-    const reservation = this.reservation;
-    if (reservation) {
-      this.poisoned = true;
-      this.invalidateReservation(reservation);
-    }
+    if (this.attaching) this.poisoned = true;
+    this.attaching = undefined;
+    this.attachedOwner = undefined;
     this.serverEpoch = undefined;
     const active = this.active;
     if (active) {
@@ -501,8 +529,10 @@ export class AgentHost {
 
   private accept(socket: Socket): void {
     const state: ConnectionState = {
+      id: crypto.randomUUID(),
       socket,
       handshake: false,
+      challengeConsumed: false,
       closed: false,
       queue: Promise.resolve(),
     };
@@ -510,6 +540,16 @@ export class AgentHost {
       this.options.maxFrameBytes ?? AGENT_HOST_MAX_FRAME_BYTES,
     );
     this.connections.add(state);
+    const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
+    state.attachTimer = setTimer(
+      () => this.close(state),
+      this.positiveDeadline(
+        this.options.attachDeadlineMs,
+        5_000,
+        "attachDeadlineMs",
+      ),
+    );
+    state.attachTimer.unref?.();
     socket.on("data", (chunk) => {
       try {
         for (const value of decoder.push(Buffer.from(chunk))) {
@@ -558,7 +598,19 @@ export class AgentHost {
         return;
       }
       connection.handshake = true;
-      this.send(connection, { ...hello, accepted: true });
+      connection.challenge = crypto.randomUUID();
+      this.send(connection, {
+        ...hello,
+        accepted: true,
+        hostId: this.hostId,
+        hostGeneration: this.hostGeneration,
+        hostIncarnation: this.hostIncarnation,
+        hostChallenge: connection.challenge,
+      });
+      return;
+    }
+    if (!connection.attached) {
+      await this.attach(connection, value);
       return;
     }
     const message = decodeMessage(value);
@@ -575,30 +627,18 @@ export class AgentHost {
       return;
     }
     if (message.t === "start_turn") {
-      this.reserveStart(connection, message.requestId, message.spec);
-      return;
-    }
-    const reservation = this.reservation;
-    if (
-      reservation?.owner === connection &&
-      sameFence(reservation.fence, message.fence)
-    ) {
-      if (message.t === "cancel" || message.t === "shutdown") {
-        this.poisoned = true;
-        this.invalidateReservation(reservation);
-        if (message.t === "shutdown") {
-          this.close(connection);
-          void this.stop();
-        }
-      } else {
-        this.error(
-          connection,
-          message.requestId,
-          "host_busy",
-          "Agent Host is authorizing the turn",
-          reservation.fence,
-        );
+      if (
+        !sameFence(connection.attached.fence, message.spec.fence) ||
+        connection.attached.planHash !== message.planHash
+      ) {
+        this.close(connection);
+        return;
       }
+      await this.startAuthorizedTurn(
+        connection,
+        message.requestId,
+        message.spec,
+      );
       return;
     }
     const active = this.active;
@@ -607,13 +647,7 @@ export class AgentHost {
       active.owner !== connection ||
       !sameFence(active.fence, message.fence)
     ) {
-      this.error(
-        connection,
-        message.requestId,
-        "stale_generation",
-        "Request does not own the active turn",
-        message.fence,
-      );
+      this.close(connection);
       return;
     }
     try {
@@ -666,177 +700,156 @@ export class AgentHost {
     }
   }
 
-  private reserveStart(
-    owner: ConnectionState,
-    requestId: string,
-    spec: AgentTurnSpec,
-  ): void {
-    const epoch = this.serverEpoch;
-    const claimNonce = this.claimNonce;
+  private async attach(
+    connection: ConnectionState,
+    value: unknown,
+  ): Promise<void> {
+    const requestId =
+      record(value) && nonempty(value.requestId) ? value.requestId : "invalid";
+    const challenge = connection.challenge;
+    // A challenge is consumed before any parsing or asynchronous verification.
+    connection.challenge = undefined;
+    connection.challengeConsumed = true;
     if (
       this.poisoned ||
-      this.reservation ||
-      this.active ||
-      !epoch ||
-      !claimNonce ||
-      !this.server?.listening
+      this.attaching ||
+      this.attachedOwner ||
+      !challenge ||
+      !record(value) ||
+      !allowed(value, [
+        "t",
+        "version",
+        "requestId",
+        "fence",
+        "planHash",
+        "receipt",
+      ]) ||
+      value.t !== "attach" ||
+      value.version !== AGENT_HOST_PROTOCOL_VERSION ||
+      !nonempty(value.requestId) ||
+      !isAgentTurnFence(value.fence) ||
+      typeof value.planHash !== "string" ||
+      !/^sha256:[a-f0-9]{64}$/.test(value.planHash) ||
+      !record(value.receipt) ||
+      !allowed(value.receipt, ["expected", "envelope"]) ||
+      !record(value.receipt.expected)
     ) {
-      this.error(
-        owner,
-        requestId,
-        "host_busy",
-        this.poisoned
-          ? "Agent Host requires process replacement"
-          : "Agent Host already owns or is authorizing a turn",
-        spec.fence,
-      );
+      this.close(connection);
       return;
     }
-    const requireAuthority =
-      this.options.requireDurableGenerationAuthority ?? true;
-    if (!this.options.authorizeGeneration && requireAuthority) {
-      this.error(
-        owner,
-        requestId,
-        "turn_failed",
-        "Durable generation authority is required",
-        spec.fence,
-      );
+    const expected = value.receipt.expected;
+    if (
+      !isAgentTurnFence(expected.fence) ||
+      !sameFence(expected.fence, value.fence) ||
+      expected.planHash !== value.planHash ||
+      expected.hostId !== this.hostId ||
+      expected.hostGeneration !== this.hostGeneration ||
+      expected.hostIncarnation !== this.hostIncarnation ||
+      expected.hostChallenge !== challenge ||
+      expected.audience !== AGENT_HOST_SUPERVISION_AUDIENCE ||
+      expected.purpose !== AGENT_HOST_SUPERVISION_PURPOSE
+    ) {
+      this.close(connection);
       return;
     }
-    const controller = new AbortController();
+    this.attaching = connection;
+    const authority = await verifySignedAgentHostSupervisionEnvelopeV2(
+      value.receipt.envelope,
+      this.keyring,
+      expected as never,
+      (this.options.now ?? Date.now)(),
+    );
+    if (
+      this.attaching !== connection ||
+      connection.closed ||
+      this.attachedOwner ||
+      !authority
+    ) {
+      if (this.attaching === connection) this.attaching = undefined;
+      this.close(connection);
+      return;
+    }
+    const sessionKey = authority.fence.sessionId;
+    const previousEpoch = this.highWaterSupervisorEpochs.get(sessionKey) ?? 0;
+    const previousGeneration = this.highWaterGenerations.get(sessionKey) ?? 0;
+    if (
+      authority.supervisorEpoch <= previousEpoch ||
+      authority.fence.generation < previousGeneration
+    ) {
+      this.attaching = undefined;
+      this.close(connection);
+      return;
+    }
+    this.highWaterSupervisorEpochs.set(sessionKey, authority.supervisorEpoch);
+    this.highWaterGenerations.set(sessionKey, authority.fence.generation);
+    connection.attached = {
+      fence: { ...authority.fence },
+      planHash: authority.planHash,
+      supervisorEpoch: authority.supervisorEpoch,
+    };
+    this.attaching = undefined;
+    this.attachedOwner = connection;
+    if (connection.attachTimer)
+      (this.options.clearTimeout ?? globalThis.clearTimeout)(
+        connection.attachTimer,
+      );
     const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
-    const reservation = {} as StartReservation;
-    const timer = setTimer(
+    connection.attachTimer = setTimer(
       () => {
-        if (this.reservation !== reservation) return;
-        this.poisoned = true;
-        this.invalidateReservation(reservation);
-        this.error(
-          owner,
-          requestId,
-          "turn_failed",
-          "Durable generation authorization timed out",
-          spec.fence,
-        );
+        if (
+          this.attachedOwner === connection &&
+          connection.attached &&
+          !this.active
+        )
+          this.close(connection);
       },
       this.positiveDeadline(
-        this.options.authorizationDeadlineMs,
+        this.options.attachDeadlineMs,
         5_000,
-        "authorizationDeadlineMs",
+        "attachDeadlineMs",
       ),
     );
-    timer.unref?.();
-    Object.assign(reservation, {
-      owner,
+    connection.attachTimer.unref?.();
+    this.send(connection, {
+      t: "attached",
+      version: AGENT_HOST_PROTOCOL_VERSION,
       requestId,
-      spec,
-      fence: { ...spec.fence },
-      epoch,
-      claimNonce,
-      controller,
-      timer,
+      fence: connection.attached.fence,
+      planHash: connection.attached.planHash,
+      supervisorEpoch: connection.attached.supervisorEpoch,
     });
-    this.reservation = reservation;
-    let authorization: Promise<boolean>;
-    try {
-      authorization = Promise.resolve(
-        this.options.authorizeGeneration?.(
-          reservation.fence,
-          controller.signal,
-        ) ?? true,
-      );
-    } catch (error) {
-      authorization = Promise.reject(error);
-    }
-    void authorization.then(
-      (allowed) => this.finishReservation(reservation, allowed),
-      (error) => this.finishReservation(reservation, false, error),
-    );
   }
 
-  private finishReservation(
-    reservation: StartReservation,
-    allowed: boolean,
-    error?: unknown,
-  ): void {
-    if (this.reservation !== reservation) return;
-    const live =
-      !this.poisoned &&
-      !reservation.owner.closed &&
-      !reservation.owner.socket.destroyed &&
-      reservation.owner.socket.writable &&
-      this.serverEpoch === reservation.epoch &&
-      this.claimNonce === reservation.claimNonce &&
-      this.server?.listening === true &&
-      sameFence(reservation.fence, reservation.spec.fence);
-    this.invalidateReservation(reservation);
-    if (!live) {
-      this.poisoned = true;
-      return;
-    }
-    if (error !== undefined) {
-      this.poisoned = true;
-      this.error(
-        reservation.owner,
-        reservation.requestId,
-        "turn_failed",
-        error instanceof Error ? error.message : String(error),
-        reservation.fence,
-      );
-      return;
-    }
-    if (!allowed) {
-      this.error(
-        reservation.owner,
-        reservation.requestId,
-        "stale_generation",
-        "Durable generation authority rejected the turn",
-        reservation.fence,
-      );
-      return;
-    }
-    if (reservation.spec.executorPolicy.deadlineMs <= Date.now()) {
-      this.error(
-        reservation.owner,
-        reservation.requestId,
-        "turn_failed",
-        "Agent Host turn deadline expired during authorization",
-        reservation.fence,
-      );
-      return;
-    }
-    this.startAuthorizedTurn(
-      reservation.owner,
-      reservation.requestId,
-      reservation.spec,
-    );
-  }
-
-  private invalidateReservation(reservation: StartReservation): void {
-    if (this.reservation !== reservation) return;
-    const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
-    clearTimer(reservation.timer);
-    this.reservation = undefined;
-    reservation.controller.abort();
-  }
-
-  private startAuthorizedTurn(
+  private async startAuthorizedTurn(
     owner: ConnectionState,
     requestId: string,
     spec: AgentTurnSpec,
-  ): void {
-    const lineage = this.lineageKey(spec.fence);
-    const highWater = this.highWaterGenerations.get(lineage);
-    if (highWater !== undefined && spec.fence.generation <= highWater) {
-      this.error(
-        owner,
-        requestId,
-        "stale_generation",
-        "Agent Host generation was already observed",
-        spec.fence,
-      );
+  ): Promise<void> {
+    if (
+      this.attachedOwner !== owner ||
+      !owner.attached ||
+      !sameFence(owner.attached.fence, spec.fence)
+    ) {
+      this.close(owner);
       return;
+    }
+    const expectedPlanHash = owner.attached.planHash;
+    const actualPlanHash = await hashAgentTurnSpecV1(
+      spec,
+      (this.options.now ?? Date.now)(),
+    );
+    if (
+      this.attachedOwner !== owner ||
+      owner.closed ||
+      owner.attached.planHash !== expectedPlanHash ||
+      actualPlanHash !== expectedPlanHash
+    ) {
+      this.close(owner);
+      return;
+    }
+    if (owner.attachTimer) {
+      (this.options.clearTimeout ?? globalThis.clearTimeout)(owner.attachTimer);
+      owner.attachTimer = undefined;
     }
     if (this.active) {
       const code =
@@ -891,7 +904,6 @@ export class AgentHost {
       Math.max(0, spec.executorPolicy.deadlineMs - Date.now()),
     );
     active.deadlineTimer.unref?.();
-    this.highWaterGenerations.set(lineage, spec.fence.generation);
     this.send(owner, {
       t: "turn_started",
       version: AGENT_HOST_PROTOCOL_VERSION,
@@ -1004,13 +1016,16 @@ export class AgentHost {
   private disconnected(connection: ConnectionState): void {
     connection.closed = true;
     this.connections.delete(connection);
-    const reservation = this.reservation;
-    if (reservation?.owner === connection) {
-      this.poisoned = true;
-      this.invalidateReservation(reservation);
+    if (connection.attachTimer) {
+      (this.options.clearTimeout ?? globalThis.clearTimeout)(
+        connection.attachTimer,
+      );
+      connection.attachTimer = undefined;
     }
+    if (this.attaching === connection) this.attaching = undefined;
     const active = this.active;
     if (active?.owner === connection) this.beginCancellation(active);
+    else if (this.attachedOwner === connection) this.attachedOwner = undefined;
   }
 
   private beginCancellation(active: ActiveTurn): void {
@@ -1118,6 +1133,7 @@ export class AgentHost {
       active.deadlineTimer = undefined;
     }
     this.active = undefined;
+    if (this.attachedOwner === active.owner) this.attachedOwner = undefined;
     if (active.result)
       this.send(active.owner, {
         t: "turn_finished",

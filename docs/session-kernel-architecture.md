@@ -81,9 +81,11 @@ Host supervision receipts. Authority construction, bounded synchronous signing,
 receipt insertion, supersession and high-water updates share one immediate
 transaction. Production has no signing credential and therefore fails signed
 claim issuance closed. Legacy unsigned receipts remain explicitly
-non-authorizing. Separate service identities, credential provisioning and Host
-attach/wire verification are required before this foundation can authorize
-work.
+non-authorizing. The exact protocol-v3 Host attach path now verifies that foundation with only
+a strict public keyring and fresh socket-bound challenges, but remains
+production-unwired. Separate Host and gateway service identities, peer
+credentials, private/public key provisioning, and detached Host deployment are
+still required before it can authorize production work.
 
 ## Durable state
 
@@ -341,8 +343,8 @@ Schema 26 is an additive migration from live schemas 24 and 25 and raises the
 normal `user_version` rollback floor, so an older actor refuses the migrated
 store. Its receipt and plan backfill is transactional, crash-resumable, and
 validates every canonical authority before raising that floor.
-It adds a v2 Agent Host supervision authority alongside the
-existing Host implementation. Before any claim, a short typed SessionKernel
+It adds a v2 Agent Host supervision authority consumed by the exact
+production-unwired Agent Host wire protocol v3. Before any claim, a short typed SessionKernel
 reduction registers the exact current run/generation, turn ID, and canonical
 plan hash once. Exact registration replays and any mismatch fails closed. A
 second short claim reduction must match that actor-owned plan, consumes a Host
@@ -360,12 +362,15 @@ performs no provider, executor, model, socket, or signing work. Superseded and s
 skew. The actor prunes only expired non-active receipts before enforcing its
 fixed capacity; active and unexpired receipts are never pruned, and the separate
 supervisor and Host-generation high-water marks survive terminal runs, pruning,
-and restart. The returned payload is deliberately unsigned and provides no Host
-authentication. Import-inert Ed25519 signing and strict rotating public-key
-verification primitives exist, but production does not accept their envelopes.
-They remain non-authorizing until separate kernel and Host service identities,
-private credential provisioning, and atomic signed-receipt integration land.
-The current shared Ubuntu identity is not a security boundary.
+and restart. Legacy migrated payloads remain deliberately unsigned and provide no Host
+authentication. New schema-27 receipts are signed atomically. The import-inert
+wire-v3 Host consumes a fresh one-use challenge and strict V2 public keyring,
+then verifies the signed envelope against the exact actor-issued attachment
+descriptor before admitting one fenced turn. It is not referenced by boot or
+existing Pi routing. Separate Host and gateway service identities, peer
+credentials, keyring provisioning, and detached service deployment must land
+before production wiring. The current shared Ubuntu identity is not a security
+boundary.
 
 The hardened detached-host target keeps provider and MCP access gateway-proxied;
 ambiguous proxy outcomes are visible `indeterminate` failures rather than

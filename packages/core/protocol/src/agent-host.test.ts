@@ -6,6 +6,7 @@ import {
   decodeAgentExecutorAccessGrant,
   encodeAgentExecutorAccessGrant,
   hashAgentHostSupervisionAuthorityV2,
+  hashAgentTurnSpecV1,
   decodeAgentHostHello,
   decodeAgentHostSupervisionAuthorityV2,
   decodeAgentHostStartTurn,
@@ -86,6 +87,7 @@ describe("Agent Host protocol", () => {
       t: "start_turn" as const,
       version: AGENT_HOST_PROTOCOL_VERSION,
       requestId: "request-1",
+      planHash: `sha256:${"b".repeat(64)}`,
       spec,
     };
     expect(decodeAgentTurnSpec(spec, now)).toEqual(spec);
@@ -99,6 +101,35 @@ describe("Agent Host protocol", () => {
         now,
       ),
     ).toBeUndefined();
+  });
+
+  test("canonically hashes every execution-relevant turn field", async () => {
+    const hash = await hashAgentTurnSpecV1(spec, now);
+    expect(await hashAgentTurnSpecV1({ ...spec }, now)).toBe(hash);
+    const variants: AgentTurnSpec[] = [
+      { ...spec, input: { ...spec.input, prompt: "changed" } },
+      { ...spec, modelPolicy: { ...spec.modelPolicy, model: "other-model" } },
+      { ...spec, mcpPolicy: { servers: ["other-server"] } },
+      {
+        ...spec,
+        runPolicy: { ...spec.runPolicy, deniedTools: { bash: "no" } },
+      },
+      { ...spec, environmentPolicy: { ...spec.environmentPolicy, aws: true } },
+      {
+        ...spec,
+        workspacePolicy: { ...spec.workspacePolicy, rootId: "root-2" },
+        executorPolicy: { ...spec.executorPolicy, rootId: "root-2" },
+      },
+      {
+        ...spec,
+        executorPolicy: {
+          ...spec.executorPolicy,
+          accessGrant: encodeAgentExecutorAccessGrant("z".repeat(32)),
+        },
+      },
+    ];
+    for (const variant of variants)
+      expect(await hashAgentTurnSpecV1(variant, now)).not.toBe(hash);
   });
 
   test("rejects stale, mismatched, malformed, and operation-grant-shaped bindings", () => {

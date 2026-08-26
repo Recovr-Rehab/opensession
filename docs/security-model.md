@@ -25,10 +25,14 @@ nonce and the single active key. Existing schema-26 receipts migrate as
 replayed as signed authority. Production deliberately injects no issuer
 credential, so new signed claims fail closed without affecting readiness.
 
-This remains a production-unwired, non-authorizing foundation. No Host attach
-or wire V3 verification accepts these envelopes yet. Authorization requires a
-later cutover to separate SessionKernel and Host service identities, private-key
-credential provisioning only to the kernel, and exact Host-side verification.
+Protocol v3 now implements the production-unwired signed attach foundation.
+Each physical Host connection receives a fresh one-use challenge and may attach
+only after public-key-only verification of the schema-27 envelope and every
+actor-issued binding. The envelope alone and operation IDs are never authority.
+This is not composed into production boot or existing Pi routing. Deployment
+still requires separate Host and gateway service identities and peer
+credentials, private signing-key provisioning only to SessionKernel, strict
+public keyring provisioning to Hosts, and a detached Host service deployment.
 The current shared Ubuntu identity is explicitly not that boundary. An
 encrypted Host ledger is deferred.
 Processes sharing a UID can inspect or interfere with each other and are not a
@@ -63,7 +67,7 @@ supplies exact, tested reconciliation proof. Provider request or response IDs
 alone are not idempotency proof. Abort, timeout, cancellation and disconnect
 also do not prove settlement.
 
-The Agent Host turn socket uses exact protocol v2. Agent-to-gateway dispatch
+The production-unwired Agent Host turn socket uses exact protocol v3 with no v2 compatibility. Agent-to-gateway dispatch
 capabilities and Executor operation grants have distinct canonical wire domains
 and are cross-rejected at runtime, not merely separated with TypeScript brands.
 Hosts receive a root descriptor rather than a raw gateway filesystem path.

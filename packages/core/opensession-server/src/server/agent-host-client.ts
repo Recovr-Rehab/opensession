@@ -2,9 +2,12 @@ import { connect, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
   decodeAgentTurnSpec,
+  decodeExecutorId,
   isAgentTurnFence,
+  type AgentHostChallengeDescriptorV3,
   type AgentHostClientMessage,
   type AgentHostServerMessage,
+  type AgentHostSignedAttachReceiptV3,
   type AgentTurnFence,
   type AgentTurnSpec,
   type AskResult,
@@ -20,14 +23,18 @@ export interface AgentHostClientOptions {
   socketPath: string;
   timeoutMs?: number;
   maxFrameBytes?: number;
+  obtainSignedAttach: (
+    challenge: Readonly<AgentHostChallengeDescriptorV3>,
+    requested: Readonly<{ fence: AgentTurnFence; planHash: string }>,
+  ) => Promise<AgentHostSignedAttachReceiptV3>;
   onMessage?: (
-    message: Exclude<AgentHostServerMessage, { t: "hello" }>,
+    message: Exclude<AgentHostServerMessage, { t: "hello" | "attached" }>,
   ) => void;
 }
 
 interface PendingRequest {
   expected: AgentHostServerMessage["t"];
-  resolve: () => void;
+  resolve: (message: AgentHostServerMessage) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -60,8 +67,39 @@ function decodeServerMessage(
     return undefined;
   switch (value.t) {
     case "hello":
-      return allowed(value, ["t", "version", "requestId", "accepted"]) &&
-        value.accepted === true
+      return allowed(value, [
+        "t",
+        "version",
+        "requestId",
+        "accepted",
+        "hostId",
+        "hostGeneration",
+        "hostIncarnation",
+        "hostChallenge",
+      ]) &&
+        value.accepted === true &&
+        !!decodeExecutorId(value.hostId) &&
+        Number.isSafeInteger(value.hostGeneration) &&
+        (value.hostGeneration as number) > 0 &&
+        typeof value.hostIncarnation === "string" &&
+        /^[A-Za-z0-9][A-Za-z0-9._:-]{7,255}$/.test(value.hostIncarnation) &&
+        typeof value.hostChallenge === "string" &&
+        /^[A-Za-z0-9_-]{16,256}$/.test(value.hostChallenge)
+        ? (value as unknown as AgentHostServerMessage)
+        : undefined;
+    case "attached":
+      return allowed(value, [
+        "t",
+        "version",
+        "requestId",
+        "fence",
+        "planHash",
+        "supervisorEpoch",
+      ]) &&
+        isAgentTurnFence(value.fence) &&
+        typeof value.planHash === "string" &&
+        Number.isSafeInteger(value.supervisorEpoch) &&
+        (value.supervisorEpoch as number) > 0
         ? (value as unknown as AgentHostServerMessage)
         : undefined;
     case "error":
@@ -145,7 +183,10 @@ function decodeServerMessage(
 export class AgentHostClient {
   private socket?: Socket;
   private connecting?: Promise<void>;
+  private connectingFence?: AgentTurnFence;
+  private connectingPlanHash?: string;
   private fence?: AgentTurnFence;
+  private planHash?: string;
   private ready = false;
   private uncertain = false;
   private readonly pending = new Map<string, PendingRequest>();
@@ -153,14 +194,37 @@ export class AgentHostClient {
 
   constructor(private readonly options: AgentHostClientOptions) {}
 
-  connect(): Promise<void> {
+  connect(fence: AgentTurnFence, planHash: string): Promise<void> {
+    if (!isAgentTurnFence(fence) || !/^sha256:[a-f0-9]{64}$/.test(planHash))
+      throw new Error("Invalid Agent Host attachment request");
     if (this.uncertain)
       throw new Error(
         "Agent Host ownership is uncertain; retry after host replacement",
       );
-    if (this.connecting) return this.connecting;
-    if (this.ready && this.socket && !this.socket.destroyed)
+    if (this.connecting) {
+      if (
+        !this.connectingFence ||
+        !sameFence(this.connectingFence, fence) ||
+        this.connectingPlanHash !== planHash
+      )
+        throw new Error("Agent Host client is attaching to another turn");
+      return this.connecting;
+    }
+    if (this.ready && this.socket && !this.socket.destroyed) {
+      if (
+        !this.fence ||
+        !sameFence(this.fence, fence) ||
+        this.planHash !== planHash
+      )
+        throw new Error("Agent Host client is attached to another turn");
       return Promise.resolve();
+    }
+    const requested = Object.freeze({
+      fence: Object.freeze({ ...fence }),
+      planHash,
+    });
+    this.connectingFence = { ...fence };
+    this.connectingPlanHash = planHash;
     this.connecting = new Promise<void>((resolveConnect, rejectConnect) => {
       const socket = connect(this.options.socketPath);
       const decoder = new BoundedNdjsonDecoder(
@@ -170,12 +234,13 @@ export class AgentHostClient {
       this.ready = false;
       let settled = false;
       const timeout = setTimeout(
-        () => failConnect(new Error("Agent Host connect timed out")),
+        () => failConnect(new Error("Agent Host connect/attach timed out")),
         this.options.timeoutMs ?? 5_000,
       );
       timeout.unref?.();
       const failConnect = (error: Error) => {
         clearTimeout(timeout);
+        this.uncertain = true;
         this.fail(error, socket);
         this.disposeSocket(socket);
         if (!settled) {
@@ -183,20 +248,57 @@ export class AgentHostClient {
           rejectConnect(error);
         }
       };
-      socket.on("connect", () => {
-        const requestId = this.nextRequestId();
-        this.request(requestId, "hello", {
-          t: "hello",
-          version: AGENT_HOST_PROTOCOL_VERSION,
-          requestId,
-        }).then(() => {
+      socket.on("connect", async () => {
+        try {
+          const helloId = this.nextRequestId();
+          const hello = await this.request(helloId, "hello", {
+            t: "hello",
+            version: AGENT_HOST_PROTOCOL_VERSION,
+            requestId: helloId,
+          });
+          if (hello.t !== "hello" || settled || this.socket !== socket) return;
+          const challenge = Object.freeze({
+            hostId: hello.hostId,
+            hostGeneration: hello.hostGeneration,
+            hostIncarnation: hello.hostIncarnation,
+            hostChallenge: hello.hostChallenge,
+          });
+          const receipt = await this.options.obtainSignedAttach(
+            challenge,
+            requested,
+          );
           if (settled || this.socket !== socket) return;
+          const attachId = this.nextRequestId();
+          const attached = await this.request(attachId, "attached", {
+            t: "attach",
+            version: AGENT_HOST_PROTOCOL_VERSION,
+            requestId: attachId,
+            fence: requested.fence,
+            planHash,
+            receipt,
+          });
+          if (
+            attached.t !== "attached" ||
+            !sameFence(attached.fence, requested.fence) ||
+            attached.planHash !== planHash ||
+            attached.supervisorEpoch !== receipt.expected.supervisorEpoch ||
+            settled ||
+            this.socket !== socket
+          )
+            throw new Error(
+              "Agent Host returned a mismatched attach acknowledgement",
+            );
           settled = true;
           clearTimeout(timeout);
           this.ready = true;
-          this.fence = undefined;
+          this.fence = { ...fence };
+          this.planHash = planHash;
           resolveConnect();
-        }, failConnect);
+        } catch (error) {
+          failConnect(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        }
       });
       socket.on("data", (chunk) => {
         try {
@@ -219,6 +321,8 @@ export class AgentHostClient {
       );
     }).finally(() => {
       this.connecting = undefined;
+      this.connectingFence = undefined;
+      this.connectingPlanHash = undefined;
     });
     return this.connecting;
   }
@@ -226,22 +330,18 @@ export class AgentHostClient {
   async startTurn(spec: AgentTurnSpec): Promise<void> {
     if (this.connecting || !this.ready || !this.socket || this.socket.destroyed)
       throw new Error("Agent Host handshake is not complete");
-    if (this.fence) throw new Error("Agent Host client already owns a turn");
+    if (!this.fence || !this.planHash || !sameFence(this.fence, spec.fence))
+      throw new Error("Agent Host client is not attached to this turn");
     if (!decodeAgentTurnSpec(spec))
       throw new Error("Invalid Agent Host turn specification");
     const requestId = this.nextRequestId();
-    this.fence = { ...spec.fence };
-    try {
-      await this.request(requestId, "turn_started", {
-        t: "start_turn",
-        version: AGENT_HOST_PROTOCOL_VERSION,
-        requestId,
-        spec,
-      });
-    } catch (error) {
-      if (!this.uncertain) this.fence = undefined;
-      throw error;
-    }
+    await this.request(requestId, "turn_started", {
+      t: "start_turn",
+      version: AGENT_HOST_PROTOCOL_VERSION,
+      requestId,
+      planHash: this.planHash,
+      spec,
+    });
   }
 
   steer(text: string, steerId: string, images?: ImageInput[]): string {
@@ -271,6 +371,7 @@ export class AgentHostClient {
     this.socket = undefined;
     this.ready = false;
     this.fence = undefined;
+    this.planHash = undefined;
   }
 
   private sendFenced(message: Record<string, unknown>): string {
@@ -289,8 +390,8 @@ export class AgentHostClient {
     requestId: string,
     expected: AgentHostServerMessage["t"],
     message: AgentHostClientMessage,
-  ): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+  ): Promise<AgentHostServerMessage> {
+    return new Promise<AgentHostServerMessage>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
         const error = new Error(`Agent Host ${expected} timed out`);
@@ -322,7 +423,11 @@ export class AgentHostClient {
       this.socket?.destroy(new Error("Invalid Agent Host message"));
       return;
     }
-    if (message.t !== "hello" && message.t !== "error") {
+    if (
+      message.t !== "hello" &&
+      message.t !== "attached" &&
+      message.t !== "error"
+    ) {
       if (!this.fence || !sameFence(this.fence, message.fence)) {
         this.socket?.destroy(new Error("Stale Agent Host fence"));
         return;
@@ -342,10 +447,17 @@ export class AgentHostClient {
     if (pending && pending.expected === message.t) {
       clearTimeout(pending.timer);
       this.pending.delete(message.requestId);
-      pending.resolve();
+      pending.resolve(message);
     }
-    if (message.t === "turn_finished") this.fence = undefined;
-    if (message.t !== "hello" && message.t !== "turn_started")
+    if (message.t === "turn_finished") {
+      this.fence = undefined;
+      this.planHash = undefined;
+    }
+    if (
+      message.t !== "hello" &&
+      message.t !== "attached" &&
+      message.t !== "turn_started"
+    )
       this.options.onMessage?.(message);
   }
 
@@ -387,7 +499,10 @@ export class AgentHostClient {
     this.pending.clear();
     this.socket = undefined;
     this.ready = false;
-    if (!preserveFence) this.fence = undefined;
+    if (!preserveFence) {
+      this.fence = undefined;
+      this.planHash = undefined;
+    }
   }
 
   private disposeSocket(socket: Socket): void {
