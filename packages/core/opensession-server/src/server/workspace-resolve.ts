@@ -56,6 +56,17 @@ function newestFirst(sessions: UnifiedSession[]): UnifiedSession[] {
   );
 }
 
+async function worktreeOwnersForRepo(
+  repoId: string,
+): Promise<Map<string, Workspace>> {
+  const byBranch = new Map<string, Workspace>();
+  for (const worktree of await listWorktrees(repoId)) {
+    const workspace = workspaceOwningWorktree(worktree.path);
+    if (workspace) byBranch.set(worktree.branch, workspace);
+  }
+  return byBranch;
+}
+
 function prWorkspaceName(
   number: number | undefined,
   branch: string | undefined,
@@ -166,6 +177,8 @@ export async function resolvePrWorkspace(input: {
   branch?: string;
   title?: string;
   createdBy: string;
+  /** Shared by bulk resolution so each repo shells out to git at most once. */
+  worktreeOwnersByRepo?: Map<string, Promise<Map<string, Workspace>>>;
 }): Promise<ResolvedWorkspace | null> {
   const repoId = getRepo(input.repoId).id;
   return serialized(`pr:${repoId}:${input.number ?? ""}:${input.branch ?? ""}`, async () => {
@@ -228,9 +241,15 @@ export async function resolvePrWorkspace(input: {
         adoptSiblingSessions(stamped.id, matches);
         return { workspace: stamped, created: false, pr };
       }
-      // 3. A workspace owning the PR head branch's worktree.
-      const wt = (await listWorktrees(repoId)).find((w) => w.branch === branch);
-      const owner = wt ? workspaceOwningWorktree(wt.path) : null;
+      // 3. A workspace owning the PR head branch's worktree. Bulk callers
+      // share this lookup: running `git worktree list` once per open PR made
+      // the first sidebar request take minutes on repos with large queues.
+      let owners = input.worktreeOwnersByRepo?.get(repoId);
+      if (!owners) {
+        owners = worktreeOwnersForRepo(repoId);
+        input.worktreeOwnersByRepo?.set(repoId, owners);
+      }
+      const owner = (await owners).get(branch) || null;
       if (owner) {
         const stamped = stampWorkspaceIdentity(owner.id, stamp) || owner;
         adoptSiblingSessions(stamped.id, matches);
@@ -270,6 +289,10 @@ export async function ensureOpenPrWorkspaces<
   },
 >(prs: T[]): Promise<Array<T & { workspaceId: string }>> {
   const attached: Array<T & { workspaceId: string }> = [];
+  const worktreeOwnersByRepo = new Map<
+    string,
+    Promise<Map<string, Workspace>>
+  >();
   for (const pr of prs) {
     const resolved = await resolvePrWorkspace({
       repoId: pr.repo,
@@ -277,6 +300,7 @@ export async function ensureOpenPrWorkspaces<
       branch: pr.branch,
       title: pr.title,
       createdBy: pr.person || pr.author || "GitHub",
+      worktreeOwnersByRepo,
     });
     if (!resolved) {
       throw new Error(`Could not resolve workspace for ${pr.repo}#${pr.number}`);
