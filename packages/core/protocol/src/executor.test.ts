@@ -8,6 +8,7 @@ import {
   decodeExecutorHello,
   decodeExecutorOperation,
   decodeExecutorServerMessage,
+  encodeExecutorGrant,
   isExecutorOutcomeCompatible,
   type ExecutorClientMessage,
   type ExecutorOperation,
@@ -83,10 +84,9 @@ describe("executor versioning", () => {
 });
 
 describe("executor authority fencing", () => {
-  test("treats grants as bounded opaque values", () => {
-    expect(decodeExecutorGrant("opaque.capability") as string).toBe(
-      "opaque.capability",
-    );
+  test("requires the Executor operation capability domain", () => {
+    const grant = encodeExecutorGrant("e".repeat(32));
+    expect(decodeExecutorGrant(grant)).toBe(grant);
     expect(decodeExecutorGrant("")).toBeUndefined();
     expect(decodeExecutorGrant("x".repeat(16 * 1024 + 1))).toBeUndefined();
   });

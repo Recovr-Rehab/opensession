@@ -65,6 +65,7 @@ interface ActiveTurn {
   pendingAppendId?: string;
   askIds: Set<string>;
   abandonTimer?: ReturnType<typeof setTimeout>;
+  deadlineTimer?: ReturnType<typeof setTimeout>;
   cancelling: boolean;
   cancelSettled: boolean;
   runSettled: boolean;
@@ -787,6 +788,16 @@ export class AgentHost {
       );
       return;
     }
+    if (reservation.spec.executorPolicy.deadlineMs <= Date.now()) {
+      this.error(
+        reservation.owner,
+        reservation.requestId,
+        "turn_failed",
+        "Agent Host turn deadline expired during authorization",
+        reservation.fence,
+      );
+      return;
+    }
     this.startAuthorizedTurn(
       reservation.owner,
       reservation.requestId,
@@ -861,6 +872,17 @@ export class AgentHost {
       shutdownStarted: false,
     };
     this.active = active;
+    const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
+    active.deadlineTimer = setTimer(
+      () => {
+        if (this.active !== active) return;
+        active.shutdownStarted = true;
+        this.beginCancellation(active);
+        this.invokeDriver(() => active.driver.shutdown());
+      },
+      Math.max(0, spec.executorPolicy.deadlineMs - Date.now()),
+    );
+    active.deadlineTimer.unref?.();
     this.highWaterGenerations.set(lineage, spec.fence.generation);
     this.send(owner, {
       t: "turn_started",
@@ -1082,6 +1104,11 @@ export class AgentHost {
       return;
     if (active.cancelling && !active.cancelSettled) return;
     this.clearAbandonTimer(active);
+    if (active.deadlineTimer) {
+      const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
+      clearTimer(active.deadlineTimer);
+      active.deadlineTimer = undefined;
+    }
     this.active = undefined;
     if (active.result)
       this.send(active.owner, {

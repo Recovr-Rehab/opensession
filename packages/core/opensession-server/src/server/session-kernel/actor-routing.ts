@@ -23,6 +23,12 @@ export function sessionActorReducerRoute(
   command: SessionActorReducerCommand,
 ): SessionActorRoute {
   switch (command.kind) {
+    case "agent_host_supervision":
+      return {
+        scope: "session",
+        sessionId: command.request.sessionId,
+        mutation: true,
+      };
     case "creation_event":
       return {
         scope: "session",

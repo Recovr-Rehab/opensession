@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   EXECUTOR_PROTOCOL_VERSION,
   decodeExecutorGrant,
+  encodeExecutorGrant,
   type ExecutorCapability,
   type ExecutorGrant,
 } from "@tellahq/opensession-protocol/executor";
@@ -28,7 +29,7 @@ class Socket {
   }
 }
 
-const grant = decodeExecutorGrant("operation-grant") as ExecutorGrant;
+const grant = encodeExecutorGrant("e".repeat(32));
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const hello = (
   executorId = "runner-1",

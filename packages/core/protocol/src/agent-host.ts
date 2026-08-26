@@ -8,17 +8,25 @@
 
 import type { ImageInput, StreamEvent } from "./events";
 import type { GitIdentity } from "./identity";
-import { decodeExecutorId } from "./executor";
+import { decodeExecutorGrant, decodeExecutorId } from "./executor";
 import type { AskResult } from "./runner";
 import type { TranscriptEntry } from "./session";
 
-export const AGENT_HOST_PROTOCOL_VERSION = 1 as const;
+export const AGENT_HOST_PROTOCOL_VERSION = 2 as const;
+/** Additive durable supervision contract alongside the exact v2 turn wire. */
+export const AGENT_HOST_SUPERVISION_VERSION = 2 as const;
+export const AGENT_HOST_SUPERVISION_AUDIENCE =
+  "opensession-agent-host" as const;
+export const AGENT_HOST_SUPERVISION_PURPOSE = "agent-host-supervision" as const;
+export const MAX_AGENT_HOST_SUPERVISION_LEASE_MS = 5 * 60_000;
+const MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS = 30_000;
 
 const MAX_CAPABILITY_BYTES = 16 * 1024;
 const MAX_SHORT_TEXT_BYTES = 16 * 1024;
 const MAX_PROMPT_BYTES = 768 * 1024;
 const MAX_REPOSITORIES_NOTE_BYTES = 256 * 1024;
-const MAX_IMAGE_BYTES = 768 * 1024;
+const MAX_IMAGE_BYTES = 128 * 1024;
+const MAX_IMAGES_BYTES = 128 * 1024;
 const MAX_IMAGES = 32;
 const MAX_MCP_SERVERS = 1_024;
 const MAX_TOOL_RULES = 4_096;
@@ -52,17 +60,34 @@ const boundedName = (
  * A future durable v2 contract must persist a descriptor and reacquire this
  * short-lived IPC capability instead of persisting the token.
  */
+export const AGENT_EXECUTOR_ACCESS_GRANT_PREFIX = "osah_dispatch_v1." as const;
+const CAPABILITY_BODY_RE = /^[A-Za-z0-9_-]{32,512}$/;
 declare const agentExecutorAccessGrantBrand: unique symbol;
 export type AgentExecutorAccessGrant = string & {
   readonly [agentExecutorAccessGrantBrand]: "AgentExecutorAccessGrant";
 };
 
+export function encodeAgentExecutorAccessGrant(
+  entropy: string,
+): AgentExecutorAccessGrant {
+  if (!CAPABILITY_BODY_RE.test(entropy))
+    throw new Error("Invalid Agent Host dispatch grant entropy");
+  return `${AGENT_EXECUTOR_ACCESS_GRANT_PREFIX}${entropy}` as AgentExecutorAccessGrant;
+}
+
 export function decodeAgentExecutorAccessGrant(
   value: unknown,
 ): AgentExecutorAccessGrant | undefined {
-  return boundedString(value, MAX_CAPABILITY_BYTES)
-    ? (value as AgentExecutorAccessGrant)
-    : undefined;
+  if (
+    !boundedString(value, MAX_CAPABILITY_BYTES) ||
+    !value.startsWith(AGENT_EXECUTOR_ACCESS_GRANT_PREFIX) ||
+    !CAPABILITY_BODY_RE.test(
+      value.slice(AGENT_EXECUTOR_ACCESS_GRANT_PREFIX.length),
+    ) ||
+    decodeExecutorGrant(value)
+  )
+    return undefined;
+  return value as AgentExecutorAccessGrant;
 }
 
 export interface AgentTurnFence {
@@ -102,8 +127,8 @@ export interface AgentEnginePolicy {
 
 /** Trust and tool registration policy, using the existing runner semantics. */
 export interface AgentRunPolicy {
-  trustProfile: "interactive" | "automation";
-  runKind: string;
+  /** Exact control-plane classification. It cannot contradict a second kind. */
+  classification: "interactive_prompt" | "automation_prompt";
   deniedTools?: Record<string, string>;
   confirmTools?: Record<string, string>;
 }
@@ -123,8 +148,8 @@ export interface AgentEnvironmentPolicy {
 }
 
 export interface AgentWorkspacePolicy {
-  /** Control-plane-selected path corresponding to executorPolicy.rootId. */
-  executionRoot: string;
+  /** Canonical descriptor only. The Host never receives a gateway filesystem path. */
+  rootId: string;
   /** Existing model-visible note for the primary and attached repositories. */
   repositoriesNote?: string;
 }
@@ -221,6 +246,155 @@ export type AgentHostServerMessage =
       fence?: AgentTurnFence;
     });
 
+export interface AgentHostSupervisionAuthorityV2 {
+  readonly version: typeof AGENT_HOST_SUPERVISION_VERSION;
+  readonly fence: Readonly<AgentTurnFence>;
+  readonly planHash: string;
+  readonly hostId: string;
+  readonly hostGeneration: number;
+  readonly hostIncarnation: string;
+  readonly supervisorEpoch: number;
+  readonly kernelServiceEpoch: string;
+  readonly hostChallenge: string;
+  readonly audience: typeof AGENT_HOST_SUPERVISION_AUDIENCE;
+  readonly purpose: typeof AGENT_HOST_SUPERVISION_PURPOSE;
+  readonly issuedAtMs: number;
+  readonly expiresAtMs: number;
+  readonly nonce: string;
+  readonly keyId: string;
+}
+
+const SUPERVISION_KEYS = [
+  "version",
+  "fence",
+  "planHash",
+  "hostId",
+  "hostGeneration",
+  "hostIncarnation",
+  "supervisorEpoch",
+  "kernelServiceEpoch",
+  "hostChallenge",
+  "audience",
+  "purpose",
+  "issuedAtMs",
+  "expiresAtMs",
+  "nonce",
+  "keyId",
+] as const;
+const SUPERVISION_TOKEN_RE = /^[A-Za-z0-9_-]{16,256}$/;
+const SHA256_RE = /^sha256:[a-f0-9]{64}$/;
+
+/** Strict structural decode. Time admission is optional so persisted receipts
+ * remain decodable after expiry. Unknown fields fail closed. */
+export function decodeAgentHostSupervisionAuthorityV2(
+  value: unknown,
+  nowMs?: number,
+): AgentHostSupervisionAuthorityV2 | undefined {
+  if (
+    !record(value) ||
+    Object.keys(value).length !== SUPERVISION_KEYS.length ||
+    !exact(value, SUPERVISION_KEYS)
+  )
+    return undefined;
+  if (
+    value.version !== AGENT_HOST_SUPERVISION_VERSION ||
+    !isAgentTurnFence(value.fence) ||
+    typeof value.planHash !== "string" ||
+    !SHA256_RE.test(value.planHash) ||
+    !decodeExecutorId(value.hostId) ||
+    !Number.isSafeInteger(value.hostGeneration) ||
+    (value.hostGeneration as number) < 1 ||
+    !boundedName(value.hostIncarnation, 256) ||
+    !Number.isSafeInteger(value.supervisorEpoch) ||
+    (value.supervisorEpoch as number) < 1 ||
+    !boundedName(value.kernelServiceEpoch, 256) ||
+    typeof value.hostChallenge !== "string" ||
+    !SUPERVISION_TOKEN_RE.test(value.hostChallenge) ||
+    value.audience !== AGENT_HOST_SUPERVISION_AUDIENCE ||
+    value.purpose !== AGENT_HOST_SUPERVISION_PURPOSE ||
+    !Number.isSafeInteger(value.issuedAtMs) ||
+    (value.issuedAtMs as number) < 0 ||
+    !Number.isSafeInteger(value.expiresAtMs) ||
+    (value.expiresAtMs as number) <= (value.issuedAtMs as number) ||
+    (value.expiresAtMs as number) - (value.issuedAtMs as number) >
+      MAX_AGENT_HOST_SUPERVISION_LEASE_MS ||
+    typeof value.nonce !== "string" ||
+    !SUPERVISION_TOKEN_RE.test(value.nonce) ||
+    !boundedName(value.keyId, 256)
+  )
+    return undefined;
+  if (
+    nowMs !== undefined &&
+    ((value.issuedAtMs as number) >
+      nowMs + MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS ||
+      (value.expiresAtMs as number) <= nowMs)
+  )
+    return undefined;
+
+  return Object.freeze({
+    version: AGENT_HOST_SUPERVISION_VERSION,
+    fence: Object.freeze({ ...(value.fence as AgentTurnFence) }),
+    planHash: value.planHash,
+    hostId: value.hostId,
+    hostGeneration: value.hostGeneration,
+    hostIncarnation: value.hostIncarnation,
+    supervisorEpoch: value.supervisorEpoch,
+    kernelServiceEpoch: value.kernelServiceEpoch,
+    hostChallenge: value.hostChallenge,
+    audience: AGENT_HOST_SUPERVISION_AUDIENCE,
+    purpose: AGENT_HOST_SUPERVISION_PURPOSE,
+    issuedAtMs: value.issuedAtMs,
+    expiresAtMs: value.expiresAtMs,
+    nonce: value.nonce,
+    keyId: value.keyId,
+  } as AgentHostSupervisionAuthorityV2);
+}
+
+/** Canonical UTF-8 JSON with a fixed field order. The bytes, not a mutable
+ * object supplied by a gateway, are the future signer's input. */
+export function serializeAgentHostSupervisionAuthorityV2(
+  value: AgentHostSupervisionAuthorityV2,
+): Uint8Array {
+  const decoded = decodeAgentHostSupervisionAuthorityV2(value);
+  if (!decoded) throw new Error("Invalid Agent Host supervision authority");
+  return textEncoder.encode(
+    JSON.stringify({
+      version: decoded.version,
+      fence: {
+        sessionId: decoded.fence.sessionId,
+        runId: decoded.fence.runId,
+        turnId: decoded.fence.turnId,
+        generation: decoded.fence.generation,
+      },
+      planHash: decoded.planHash,
+      hostId: decoded.hostId,
+      hostGeneration: decoded.hostGeneration,
+      hostIncarnation: decoded.hostIncarnation,
+      supervisorEpoch: decoded.supervisorEpoch,
+      kernelServiceEpoch: decoded.kernelServiceEpoch,
+      hostChallenge: decoded.hostChallenge,
+      audience: decoded.audience,
+      purpose: decoded.purpose,
+      issuedAtMs: decoded.issuedAtMs,
+      expiresAtMs: decoded.expiresAtMs,
+      nonce: decoded.nonce,
+      keyId: decoded.keyId,
+    }),
+  );
+}
+
+export async function hashAgentHostSupervisionAuthorityV2(
+  value: AgentHostSupervisionAuthorityV2,
+): Promise<string> {
+  const bytes = serializeAgentHostSupervisionAuthorityV2(value);
+  const source = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", source));
+  return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
 export function isAgentTurnFence(value: unknown): value is AgentTurnFence {
   if (
     !record(value) ||
@@ -236,10 +410,31 @@ export function isAgentTurnFence(value: unknown): value is AgentTurnFence {
   );
 }
 
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 8_192)
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 8_192));
+  return btoa(binary);
+}
+
 function decodeImage(value: unknown): ImageInput | undefined {
   if (!record(value) || !exact(value, ["mediaType", "data"])) return undefined;
-  return boundedName(value.mediaType) &&
-    boundedString(value.data, MAX_IMAGE_BYTES)
+  if (
+    typeof value.mediaType !== "string" ||
+    !/^image\/[a-z0-9][a-z0-9.+-]{0,63}$/.test(value.mediaType) ||
+    typeof value.data !== "string" ||
+    value.data.length === 0 ||
+    value.data.length % 4 !== 0 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      value.data,
+    )
+  )
+    return undefined;
+  const bytes = Uint8Array.from(atob(value.data), (character) =>
+    character.charCodeAt(0),
+  );
+  return bytes.byteLength <= MAX_IMAGE_BYTES &&
+    base64FromBytes(bytes) === value.data
     ? { mediaType: value.mediaType, data: value.data }
     : undefined;
 }
@@ -255,7 +450,7 @@ function decodeToolRules(value: unknown): Record<string, string> | undefined {
     )
       return undefined;
   }
-  return value;
+  return value as Record<string, string>;
 }
 
 function decodeGitIdentity(value: unknown): GitIdentity | null | undefined {
@@ -301,7 +496,11 @@ export function decodeAgentTurnSpec(
     (images !== undefined &&
       (!Array.isArray(images) ||
         images.length > MAX_IMAGES ||
-        images.some((image) => !decodeImage(image))))
+        images.some((image) => !decodeImage(image)) ||
+        images.reduce(
+          (total, image) => total + atob((image as ImageInput).data).length,
+          0,
+        ) > MAX_IMAGES_BYTES))
   )
     return undefined;
 
@@ -367,17 +566,10 @@ export function decodeAgentTurnSpec(
   const runPolicy = value.runPolicy;
   if (
     !record(runPolicy) ||
-    !exact(runPolicy, [
-      "trustProfile",
-      "runKind",
-      "deniedTools",
-      "confirmTools",
-    ]) ||
-    !(
-      runPolicy.trustProfile === "interactive" ||
-      runPolicy.trustProfile === "automation"
-    ) ||
-    !decodeExecutorId(runPolicy.runKind)
+    !exact(runPolicy, ["classification", "deniedTools", "confirmTools"]) ||
+    !["interactive_prompt", "automation_prompt"].includes(
+      String(runPolicy.classification),
+    )
   )
     return undefined;
   const deniedTools =
@@ -426,8 +618,8 @@ export function decodeAgentTurnSpec(
   const workspacePolicy = value.workspacePolicy;
   if (
     !record(workspacePolicy) ||
-    !exact(workspacePolicy, ["executionRoot", "repositoriesNote"]) ||
-    !boundedName(workspacePolicy.executionRoot) ||
+    !exact(workspacePolicy, ["rootId", "repositoriesNote"]) ||
+    !decodeExecutorId(workspacePolicy.rootId) ||
     (workspacePolicy.repositoriesNote !== undefined &&
       (!boundedString(
         workspacePolicy.repositoriesNote,
@@ -451,6 +643,7 @@ export function decodeAgentTurnSpec(
     !decodeExecutorId(executorPolicy.executorId) ||
     !decodeExecutorId(executorPolicy.rootId) ||
     executorPolicy.generation !== value.fence.generation ||
+    executorPolicy.rootId !== workspacePolicy.rootId ||
     !decodeAgentExecutorAccessGrant(executorPolicy.accessGrant) ||
     !Number.isSafeInteger(executorPolicy.deadlineMs) ||
     (executorPolicy.deadlineMs as number) <= nowMs ||

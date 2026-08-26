@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { connect, createServer, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
-  decodeAgentExecutorAccessGrant,
+  encodeAgentExecutorAccessGrant,
   type AgentHostClientMessage,
   type AgentHostServerMessage,
   type AgentTurnSpec,
@@ -19,7 +19,7 @@ import type {
 import { createAgentHost, type AgentHost } from "./host";
 import { BoundedNdjsonDecoder, encodeNdjsonFrame } from "./socket-framing";
 
-const accessGrant = decodeAgentExecutorAccessGrant("test-agent-host-access")!;
+const accessGrant = encodeAgentExecutorAccessGrant("a".repeat(32));
 const fence = {
   sessionId: "session-1",
   runId: "run-1",
@@ -34,10 +34,10 @@ const spec: AgentTurnSpec = {
   enginePolicy: {},
   mcpPolicy: { servers: [] },
   transcriptPolicy: { maxAppendBytes: 4096, requireAck: true },
-  runPolicy: { trustProfile: "interactive", runKind: "prompt" },
+  runPolicy: { classification: "interactive_prompt" },
   identityPolicy: {},
   environmentPolicy: {},
-  workspacePolicy: { executionRoot: "/work/session-1" },
+  workspacePolicy: { rootId: "root-1" },
   executorPolicy: {
     executorId: "executor-1",
     rootId: "root-1",
@@ -224,6 +224,50 @@ describe("Agent Host transport", () => {
     driver.finish();
     await tick();
     expect(durableFloor).toBe(fence.generation + 1);
+    client.close();
+  });
+
+  test("rechecks turn expiry after async generation authorization", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-host-expiry-auth-test-"));
+    const socketPath = join(dir, "host.sock");
+    let created = 0;
+    const host = createAgentHost({
+      socketPath,
+      createDriver: () => {
+        created += 1;
+        return new FakeDriver();
+      },
+      authorizeGeneration: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        return true;
+      },
+    });
+    resources.push({ host, dir });
+    await host.start();
+    const client = new AgentHostClient({ socketPath, timeoutMs: 500 });
+    await client.connect();
+    await expect(
+      client.startTurn({
+        ...spec,
+        executorPolicy: { ...spec.executorPolicy, deadlineMs: Date.now() + 40 },
+      }),
+    ).rejects.toThrow("deadline expired during authorization");
+    expect(created).toBe(0);
+    client.close();
+  });
+
+  test("cancels and shuts down a live turn at its deadline", async () => {
+    const { driver, socketPath } = await setup();
+    const client = new AgentHostClient({ socketPath });
+    await client.connect();
+    await client.startTurn({
+      ...spec,
+      executorPolicy: { ...spec.executorPolicy, deadlineMs: Date.now() + 20 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    expect(driver.cancelled).toBe(1);
+    expect(driver.shutdowns).toBe(1);
+    driver.finish({ status: "cancelled" });
     client.close();
   });
 

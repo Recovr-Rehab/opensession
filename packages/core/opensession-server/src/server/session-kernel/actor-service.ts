@@ -706,7 +706,25 @@ export async function startSessionKernelService(
         return json({ error: "Session kernel transport is full" }, { status: 429 });
       admittedTransportRequests += 1;
       try {
-        const response = await actorRequest(envelope.request);
+        const actorBoundRequest =
+          envelope.request.t === "call" &&
+          envelope.request.request.t === "reduce" &&
+          envelope.request.request.command.kind === "agent_host_supervision"
+            ? {
+                ...envelope.request,
+                request: {
+                  ...envelope.request.request,
+                  command: {
+                    ...envelope.request.request.command,
+                    request: {
+                      ...envelope.request.request.command.request,
+                      kernelServiceEpoch: serviceEpoch,
+                    },
+                  },
+                },
+              }
+            : envelope.request;
+        const response = await actorRequest(actorBoundRequest);
         const fencedResponse = response.t === "ready"
           ? { ...response, serviceEpoch }
           : response;

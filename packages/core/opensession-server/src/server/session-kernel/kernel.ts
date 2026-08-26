@@ -7,6 +7,10 @@
  */
 import { audit } from "../audit";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
+import type {
+  AgentHostSupervisionRequest,
+  AgentHostSupervisionResult,
+} from "./agent-host-supervision-protocol";
 import {
 	type SessionActorEffectFor,
 	type SessionActorEffectKind,
@@ -76,6 +80,13 @@ function compatibilityStoreForTest(
 			`Session ${domain} mutation requires the authoritative actor`,
 		);
 	return sessionKernelStore();
+}
+
+export function claimAgentHostSupervision(
+  request: AgentHostSupervisionRequest,
+): AgentHostSupervisionResult {
+  if (state.actor) return state.actor.decideAgentHostSupervision(request);
+  return compatibilityStoreForTest("core").claimAgentHostSupervision(request);
 }
 
 export function sessionAsk<T extends AskActorRequest>(

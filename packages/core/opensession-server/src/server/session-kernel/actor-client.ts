@@ -1,4 +1,8 @@
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
+import type {
+  AgentHostSupervisionRequest,
+  AgentHostSupervisionResult,
+} from "./agent-host-supervision-protocol";
 import {
   SessionKernelStore,
   type CreationEventDecision,
@@ -357,6 +361,22 @@ export class SessionKernelActorClient {
     return (response as DeliveryMutationReply<DeliveryActorResult<T>>).result;
   }
 
+  decideAgentHostSupervision(
+    request: AgentHostSupervisionRequest,
+  ): AgentHostSupervisionResult {
+    return this.callSync<AgentHostSupervisionResult>(
+      {
+        t: "reduce",
+        command: {
+          kind: "agent_host_supervision",
+          commandId: request.claimId,
+          request,
+        },
+      },
+      "Agent Host supervision claim",
+    );
+  }
+
   decideCreationEvent(
     decision: CreationEventDecision,
   ): CreationEventDecisionResult {
@@ -649,6 +669,11 @@ class RemoteStore implements SessionKernelStoreApi {
     return this.readStore
       ? this.readStore.creationState(sessionId)
       : this.call<DurableCreationState | undefined>("creationState", sessionId);
+  }
+  claimAgentHostSupervision(
+    input: Parameters<SessionKernelStoreApi["claimAgentHostSupervision"]>[0],
+  ) {
+    return this.actor.decideAgentHostSupervision(input);
   }
   applyCreationEvent(input: CreationEventDecision) {
     return this.actor.decideCreationEvent(input);

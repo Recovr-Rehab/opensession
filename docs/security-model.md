@@ -7,6 +7,30 @@ rule is guidance, a stripped tool or scoped token is a guarantee. This
 document is the full reference behind the invariant summary in
 [AGENTS.md](../AGENTS.md).
 
+## Detached Agent Host boundary
+
+The detached Agent Host design keeps provider and MCP traffic behind the
+gateway and surfaces ambiguous proxy outcomes as visible `indeterminate`
+failures. Hosts and the SessionKernel use separate service users. Blue/green
+Host workers have a 24-hour maximum lifetime. Capacity is bounded to 32 MiB per
+turn and 512 MiB globally, with a separate 64 MiB emergency reserve and 14
+worker slots reserved for control and recovery.
+
+SessionKernel schema 24 may issue canonical **unsigned** supervision payloads
+that bind the exact turn fence, plan hash, Host generation/incarnation, kernel
+service epoch, fresh challenge, nonce, audience, purpose, validity window, and
+future key id. They contain no credentials, prompt, transcript, model, provider,
+or MCP payload. Unsigned payloads do not authenticate a Host. Service-side
+Ed25519 signing, signed challenge leases, and keyring verification are mandatory
+before use and are the next slice. An encrypted Host ledger is deferred.
+Processes sharing a UID can inspect or interfere with each other and are not a
+security boundary.
+
+The Agent Host turn socket uses exact protocol v2. Agent-to-gateway dispatch
+capabilities and Executor operation grants have distinct canonical wire domains
+and are cross-rejected at runtime, not merely separated with TypeScript brands.
+Hosts receive a root descriptor rather than a raw gateway filesystem path.
+
 ## Automation least-privilege
 
 Automation runs (especially event-triggered ones like support-ticket triage)
@@ -33,8 +57,8 @@ configuration for the run.
   reductions are not stored in the checkpoint. A Slack input never grants the
   primary model Slack tools; optional Slack output is likewise server-side,
   disabled independently, and derived from the final structured report.
-- Automation runs hard-deny *customer-facing, identity-mutating, and incident.io
-  mutation* tools (enforced for direct runs and interactive resumes of
+- Automation runs hard-deny _customer-facing, identity-mutating, and incident.io
+  mutation_ tools (enforced for direct runs and interactive resumes of
   automation sessions):
   Plain thread writes (reply_to_thread, mark_thread_done/todo, snooze_thread)
   and the WorkOS write/destructive subset (create/delete/update user+org,
@@ -181,7 +205,7 @@ at `~/.opensession/github-app.pem` (or the path in
 Enabling `userPrAuth` activates both halves below:
 
 - **PRs as the session owner** (packages/core/opensession-server/src/server/github-auth.ts): teammates connect
-  their GitHub account via the OAuth *device flow* (Connections UI card, or
+  their GitHub account via the OAuth _device flow_ (Connections UI card, or
   implicitly by signing in). Tokens live per-login in
   `~/.opensession/github-auth.json` (0600, never returned by any API). The
   runner injects them as GH_TOKEN/GITHUB_TOKEN into the engine-server env —
@@ -277,7 +301,7 @@ knows they exist.
 The `opensession-sessions` in-process MCP (packages/core/opensession-server/src/agents/slack/sessions-tools.ts)
 is a sibling, wired in its unrestricted shape only to interactive runs. The
 scoped `automationSelf` shape is described below. It lets the agent see and
-steer every *other* Open Session session: read tools
+steer every _other_ Open Session session: read tools
 `list_sessions` (with a `waiting` state filter and an exact `createdBy`
 identity filter) and `get_session` (explicit creator/creation timestamp, state,
 pending question, and transcript tail) are open to any whitelisted user; the control tools —

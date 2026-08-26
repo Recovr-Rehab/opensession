@@ -1,4 +1,15 @@
 import { DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS } from "./gateway-command-protocol";
+import {
+  decodeAgentHostSupervisionAuthorityV2,
+  serializeAgentHostSupervisionAuthorityV2,
+} from "@tellahq/opensession-protocol/agent-host";
+import {
+  authorityFromAgentHostSupervisionClaim,
+  decodeAgentHostSupervisionClaim,
+  type AgentHostSupervisionClaim,
+  type AgentHostSupervisionReceipt,
+  type AgentHostSupervisionResult,
+} from "./agent-host-supervision-protocol";
 /**
  * Durable state for the session actor boundary.
  *
@@ -224,7 +235,8 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 23;
+export const SESSION_KERNEL_SCHEMA_VERSION = 24;
+export const SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS = 64;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -383,6 +395,7 @@ const SESSION_KERNEL_SESSION_TABLES = [
   "session_kernel_delivery",
   "session_kernel_turn",
   "session_kernel_turn_projections",
+  "session_kernel_agent_host_supervision",
   "session_kernel_commands",
   "session_kernel_changes",
   "session_kernel_timers",
@@ -539,6 +552,31 @@ export class SessionKernelStore {
         cancel TEXT,
         updated_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS session_kernel_agent_host_supervision (
+        session_id TEXT NOT NULL,
+        supervisor_epoch INTEGER NOT NULL,
+        claim_id TEXT NOT NULL,
+        request_hash TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        run_generation INTEGER NOT NULL,
+        host_id TEXT NOT NULL,
+        host_generation INTEGER NOT NULL,
+        host_incarnation TEXT NOT NULL,
+        kernel_service_epoch TEXT NOT NULL,
+        challenge TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'superseded', 'settled')),
+        authority TEXT NOT NULL,
+        authority_bytes TEXT NOT NULL,
+        authority_hash TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, supervisor_epoch),
+        UNIQUE (session_id, claim_id),
+        UNIQUE (session_id, challenge),
+        UNIQUE (session_id, nonce)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_skahs_active
+        ON session_kernel_agent_host_supervision(session_id) WHERE status = 'active';
       CREATE TABLE IF NOT EXISTS session_kernel_turn_projections (
         session_id TEXT NOT NULL,
         projection_id TEXT NOT NULL,
@@ -1520,6 +1558,117 @@ export class SessionKernelStore {
     return result;
   }
 
+  claimAgentHostSupervision(input: AgentHostSupervisionClaim): AgentHostSupervisionResult {
+    if (!decodeAgentHostSupervisionClaim(input))
+      return { accepted: false, reason: "invalid_claim" };
+    if (this.isTombstoned(input.sessionId))
+      throw new Error(`Session ${input.sessionId} was deleted`);
+    const requestText = JSON.stringify([
+      input.op, input.claimId, input.sessionId, input.runId, input.turnId,
+      input.generation, input.planHash, input.hostId, input.hostGeneration,
+      input.hostIncarnation, input.hostChallenge, input.audience, input.purpose,
+      input.issuedAtMs, input.expiresAtMs, input.nonce, input.keyId,
+      input.kernelServiceEpoch,
+    ]);
+    const requestHash = `sha256:${digest(requestText)}`;
+    const existing = this.db.query(
+      `SELECT request_hash, authority, authority_bytes, authority_hash
+       FROM session_kernel_agent_host_supervision
+       WHERE session_id = ? AND claim_id = ?`,
+    ).get(input.sessionId, input.claimId) as Record<string, unknown> | null;
+    if (existing) {
+      if (existing.request_hash !== requestHash)
+        return { accepted: false, reason: "claim_mismatch" };
+      const authority = decodeAgentHostSupervisionAuthorityV2(parsed(existing.authority as string));
+      if (!authority) throw new Error("Invalid durable Agent Host authority");
+      const bytes = serializeAgentHostSupervisionAuthorityV2(authority);
+      const authorityBytes = Buffer.from(bytes).toString("base64");
+      const authorityHash = `sha256:${digest(Buffer.from(bytes).toString("utf8"))}`;
+      if (existing.authority_bytes !== authorityBytes || existing.authority_hash !== authorityHash)
+        throw new Error("Corrupt durable Agent Host authority receipt");
+      return { accepted: true, replayed: true, receipt: { authority, authorityBytes, authorityHash } };
+    }
+    if (!decodeAgentHostSupervisionClaim(input, Date.now()))
+      return { accepted: false, reason: "invalid_claim" };
+
+    const run = this.runState(input.sessionId);
+    if (run.currentRunId !== input.runId || run.generation !== input.generation)
+      return { accepted: false, reason: "stale_run" };
+    if (!["starting", "running", "ask_blocked", "interrupted", "reattaching"].includes(run.state))
+      return { accepted: false, reason: "terminal_run" };
+
+    const current = this.db.query(
+      `SELECT supervisor_epoch, host_id, host_generation, host_incarnation,
+              kernel_service_epoch, authority
+       FROM session_kernel_agent_host_supervision
+       WHERE session_id = ? AND status = 'active'`,
+    ).get(input.sessionId) as Record<string, unknown> | null;
+    const latestEpoch = Number((this.db.query(
+      `SELECT COALESCE(MAX(supervisor_epoch), 0) AS epoch
+       FROM session_kernel_agent_host_supervision WHERE session_id = ?`,
+    ).get(input.sessionId) as { epoch: number }).epoch);
+    const priorAuthority = current
+      ? decodeAgentHostSupervisionAuthorityV2(parsed(current.authority as string))
+      : undefined;
+    if (current && !priorAuthority)
+      throw new Error("Invalid durable active Agent Host authority");
+    if (priorAuthority && priorAuthority.planHash !== input.planHash)
+      return { accepted: false, reason: "invalid_claim" };
+    if (current) {
+      const priorHostGeneration = Number(current.host_generation);
+      if (input.hostGeneration < priorHostGeneration)
+        return { accepted: false, reason: "stale_host" };
+      if (input.hostGeneration === priorHostGeneration &&
+          (input.hostId !== current.host_id || input.hostIncarnation !== current.host_incarnation))
+        return { accepted: false, reason: "stale_host" };
+      if (input.kernelServiceEpoch !== current.kernel_service_epoch &&
+          input.hostGeneration <= priorHostGeneration)
+        return { accepted: false, reason: "stale_service_epoch" };
+    }
+    if (this.db.query(
+      "SELECT 1 FROM session_kernel_agent_host_supervision WHERE session_id = ? AND challenge = ?",
+    ).get(input.sessionId, input.hostChallenge))
+      return { accepted: false, reason: "challenge_reused" };
+    if (this.db.query(
+      "SELECT 1 FROM session_kernel_agent_host_supervision WHERE session_id = ? AND nonce = ?",
+    ).get(input.sessionId, input.nonce))
+      return { accepted: false, reason: "nonce_reused" };
+    const count = Number((this.db.query(
+      "SELECT COUNT(*) AS count FROM session_kernel_agent_host_supervision WHERE session_id = ?",
+    ).get(input.sessionId) as { count: number }).count);
+    if (count >= SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS)
+      return { accepted: false, reason: "receipt_capacity" };
+
+    const supervisorEpoch = latestEpoch + 1;
+    const authority = authorityFromAgentHostSupervisionClaim(input, supervisorEpoch);
+    if (!authority) return { accepted: false, reason: "invalid_claim" };
+    const authorityBytes = Buffer.from(serializeAgentHostSupervisionAuthorityV2(authority));
+    const receipt: AgentHostSupervisionReceipt = {
+      authority,
+      authorityBytes: authorityBytes.toString("base64"),
+      authorityHash: `sha256:${digest(authorityBytes.toString("utf8"))}`,
+    };
+    const tx = this.db.transaction(() => {
+      this.db.run(
+        `UPDATE session_kernel_agent_host_supervision SET status = 'superseded'
+         WHERE session_id = ? AND status = 'active'`, [input.sessionId]);
+      this.db.run(
+        `INSERT INTO session_kernel_agent_host_supervision
+         (session_id, supervisor_epoch, claim_id, request_hash, run_id,
+          run_generation, host_id, host_generation, host_incarnation,
+          kernel_service_epoch, challenge, nonce, status, authority,
+          authority_bytes, authority_hash, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+        [input.sessionId, supervisorEpoch, input.claimId, requestHash,
+          input.runId, input.generation, input.hostId, input.hostGeneration,
+          input.hostIncarnation, input.kernelServiceEpoch, input.hostChallenge,
+          input.nonce, json(authority), receipt.authorityBytes,
+          receipt.authorityHash, Date.now()]);
+    });
+    tx.immediate();
+    return { accepted: true, replayed: false, receipt };
+  }
+
 	applyRunEvent(input: RunEventDecision): RunEventDecisionResult {
 		const now = Date.now();
 		const since = new Date(now).toISOString();
@@ -1615,6 +1764,12 @@ export class SessionKernelStore {
           ? input.runKey
           : prior.currentRunId;
 			const changeSeq = prior.changeSeq + 1;
+      if (["idle", "stopped", "failed"].includes(to))
+        this.db.run(
+          `UPDATE session_kernel_agent_host_supervision SET status = 'settled'
+           WHERE session_id = ? AND status = 'active'`,
+          [input.sessionId],
+        );
 			this.db.run(
 				`INSERT INTO session_kernel_state
 					(session_id, run_state, run_since, last_event, generation,
@@ -1759,6 +1914,7 @@ export class SessionKernelStore {
         "session_kernel_delivery",
         "session_kernel_turn",
         "session_kernel_turn_projections",
+        "session_kernel_agent_host_supervision",
 				"session_kernel_quarantine",
 				"session_kernel_commands",
 				"session_kernel_changes",
@@ -1786,6 +1942,7 @@ export class SessionKernelStore {
         "session_kernel_delivery",
         "session_kernel_turn",
         "session_kernel_turn_projections",
+        "session_kernel_agent_host_supervision",
 				"session_kernel_quarantine",
 				"session_kernel_commands",
 				"session_kernel_changes",

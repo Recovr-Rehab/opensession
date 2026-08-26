@@ -4,17 +4,20 @@ import {
   MAX_AGENT_TRANSCRIPT_APPEND_BYTES,
   MAX_AGENT_TURN_DURATION_MS,
   decodeAgentExecutorAccessGrant,
+  encodeAgentExecutorAccessGrant,
+  hashAgentHostSupervisionAuthorityV2,
   decodeAgentHostHello,
+  decodeAgentHostSupervisionAuthorityV2,
   decodeAgentHostStartTurn,
   decodeAgentTurnSpec,
   isAgentTurnFence,
+  serializeAgentHostSupervisionAuthorityV2,
   type AgentTurnSpec,
 } from "./agent-host";
+import { decodeExecutorGrant, encodeExecutorGrant } from "./executor";
 
 const now = 1_000;
-const accessGrant = decodeAgentExecutorAccessGrant(
-  "opaque-dispatch-capability",
-)!;
+const accessGrant = encodeAgentExecutorAccessGrant("a".repeat(32));
 const spec: AgentTurnSpec = {
   fence: {
     sessionId: "session-1",
@@ -28,13 +31,13 @@ const spec: AgentTurnSpec = {
   enginePolicy: { engineSessionId: "engine-session-1" },
   mcpPolicy: { servers: [] },
   transcriptPolicy: { maxAppendBytes: 64_000, requireAck: true },
-  runPolicy: { trustProfile: "interactive", runKind: "prompt" },
+  runPolicy: { classification: "interactive_prompt" },
   identityPolicy: { user: "Ada", mcpGrantUser: "Ada" },
   environmentPolicy: {
     author: { name: "Ada", email: "ada@example.test" },
   },
   workspacePolicy: {
-    executionRoot: "/work/session-1",
+    rootId: "root-1",
     repositoriesNote: "Primary repository: opensession",
   },
   executorPolicy: {
@@ -54,7 +57,7 @@ describe("Agent Host protocol", () => {
       requestId: "request-1",
     };
     expect(decodeAgentHostHello(hello)).toEqual(hello);
-    expect(decodeAgentHostHello({ ...hello, version: 2 })).toBeUndefined();
+    expect(decodeAgentHostHello({ ...hello, version: 1 })).toBeUndefined();
     expect(decodeAgentHostHello({ ...hello, extra: true })).toBeUndefined();
   });
 
@@ -67,7 +70,11 @@ describe("Agent Host protocol", () => {
   });
 
   test("brands a bounded Agent Host access grant separately", () => {
-    expect(decodeAgentExecutorAccessGrant("opaque") as string).toBe("opaque");
+    const executorGrant = encodeExecutorGrant("e".repeat(32));
+    expect(decodeAgentExecutorAccessGrant(accessGrant)).toBe(accessGrant);
+    expect(decodeAgentExecutorAccessGrant(executorGrant)).toBeUndefined();
+    expect(decodeExecutorGrant(accessGrant)).toBeUndefined();
+    expect(decodeExecutorGrant(executorGrant)).toBe(executorGrant);
     expect(decodeAgentExecutorAccessGrant("")).toBeUndefined();
     expect(
       decodeAgentExecutorAccessGrant("x".repeat(16 * 1024 + 1)),
@@ -143,6 +150,80 @@ describe("Agent Host protocol", () => {
     ).toBeUndefined();
   });
 
+  test("strictly canonicalizes the bounded supervision v2 payload", async () => {
+    const authority = decodeAgentHostSupervisionAuthorityV2(
+      {
+        version: 2,
+        fence: spec.fence,
+        planHash: `sha256:${"a".repeat(64)}`,
+        hostId: "host-1",
+        hostGeneration: 1,
+        hostIncarnation: "incarnation-00000001",
+        supervisorEpoch: 1,
+        kernelServiceEpoch: "kernel-service-epoch-1",
+        hostChallenge: "challenge-000000000001",
+        audience: "opensession-agent-host",
+        purpose: "agent-host-supervision",
+        issuedAtMs: now,
+        expiresAtMs: now + 60_000,
+        nonce: "nonce-000000000000001",
+        keyId: "future-ed25519-key-1",
+      },
+      now,
+    );
+    expect(authority).toBeDefined();
+    const bytes = serializeAgentHostSupervisionAuthorityV2(authority!);
+    expect(new TextDecoder().decode(bytes)).toContain(
+      '"purpose":"agent-host-supervision"',
+    );
+    expect(await hashAgentHostSupervisionAuthorityV2(authority!)).toMatch(
+      /^sha256:[a-f0-9]{64}$/,
+    );
+    expect(
+      decodeAgentHostSupervisionAuthorityV2({ ...authority, credential: "no" }),
+    ).toBeUndefined();
+    expect(
+      decodeAgentHostSupervisionAuthorityV2({
+        ...authority,
+        expiresAtMs: now + MAX_AGENT_TURN_DURATION_MS,
+      }),
+    ).toBeUndefined();
+  });
+
+  test("validates image MIME, canonical base64, and aggregate bytes", () => {
+    const image = { mediaType: "image/png", data: btoa("image") };
+    expect(
+      decodeAgentTurnSpec(
+        {
+          ...spec,
+          input: { ...spec.input, images: [image] },
+        },
+        now,
+      ),
+    ).toBeDefined();
+    expect(
+      decodeAgentTurnSpec(
+        {
+          ...spec,
+          input: {
+            ...spec.input,
+            images: [{ ...image, mediaType: "text/plain" }],
+          },
+        },
+        now,
+      ),
+    ).toBeUndefined();
+    expect(
+      decodeAgentTurnSpec(
+        {
+          ...spec,
+          input: { ...spec.input, images: [{ ...image, data: "aGVsbG8" }] },
+        },
+        now,
+      ),
+    ).toBeUndefined();
+  });
+
   test("rejects credential and provider nesting outside named policies", () => {
     expect(
       decodeAgentTurnSpec(
@@ -187,7 +268,7 @@ describe("Agent Host protocol", () => {
       decodeAgentTurnSpec(
         {
           ...spec,
-          workspacePolicy: { executionRoot: "/work/session-1\u0000escape" },
+          workspacePolicy: { rootId: "root-1\u0000escape" },
         },
         now,
       ),

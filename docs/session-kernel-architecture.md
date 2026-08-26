@@ -305,6 +305,34 @@ never enter actor payloads. Removing the remaining create-plan compatibility
 authority is the next creation cutover; the presence or absence of a plan file
 is not actor lifecycle evidence.
 
+## Detached Agent Host supervision
+
+Schema 24 adds an additive v2 Agent Host supervision authority alongside the
+existing Host implementation. A short typed SessionKernel claim validates the
+exact current session/run/turn/generation fence and nonterminal run state, pins
+the plan hash, consumes a Host challenge and nonce once, and monotonically
+advances a per-session supervisor epoch. It binds the Host generation and
+incarnation to the current kernel service epoch. Exact retries return the same
+canonical immutable payload and bytes; takeovers require a fresh challenge and
+old epochs, incarnations, generations, and service epochs are stale.
+
+The actor stores only bounded supervision metadata. It does not store prompts,
+transcripts, provider/model configuration, MCP payloads, or credentials, and it
+performs no provider, executor, model, socket, or signing work. Superseded
+receipts are retained at a fixed capacity and are not purged without a future
+actor-owned settlement protocol. The returned payload is deliberately unsigned
+and provides no Host authentication. Service-side Ed25519 signing and a keyring
+are the mandatory next slice before this authority can be used.
+
+The hardened detached-host target keeps provider and MCP access gateway-proxied;
+ambiguous proxy outcomes are visible `indeterminate` failures rather than
+silent retries. Host workers use blue/green replacement with a 24-hour maximum
+worker lifetime. Kernel and Host services run as separate service users. Host
+budgets are 32 MiB per turn, 512 MiB globally plus a 64 MiB emergency reserve,
+with 14 worker slots reserved for control and recovery. An encrypted Host
+ledger is deferred. Signed challenge leases are required before use, and
+same-UID processes are explicitly not treated as a security boundary.
+
 ## Run ownership
 
 Run state is durable and explicit. Run events are typed actor messages. The

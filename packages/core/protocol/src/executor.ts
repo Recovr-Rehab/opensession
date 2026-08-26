@@ -31,6 +31,8 @@ export interface ExecutorFence {
 }
 
 const MAX_GRANT_BYTES = 16 * 1024;
+export const EXECUTOR_GRANT_PREFIX = "osexec_operation_v1." as const;
+const CAPABILITY_BODY_RE = /^[A-Za-z0-9_-]{32,512}$/;
 export const MAX_EXECUTOR_FILE_WRITE_BYTES = 4 * 1024 * 1024;
 export const MAX_EXECUTOR_TERMINAL_WRITE_BYTES = 1024 * 1024;
 export const MAX_EXECUTOR_STREAM_EVENT_BYTES = 256 * 1024;
@@ -44,15 +46,21 @@ export function decodeExecutorId(value: unknown): string | undefined {
   return typeof value === "string" && ID_RE.test(value) ? value : undefined;
 }
 
-/** Validate an opaque grant without inspecting or depending on its format. */
+/** Runtime domain separation is part of the wire format, not only a TS brand. */
+export function encodeExecutorGrant(entropy: string): ExecutorGrant {
+  if (!CAPABILITY_BODY_RE.test(entropy))
+    throw new Error("Invalid Executor grant entropy");
+  return `${EXECUTOR_GRANT_PREFIX}${entropy}` as ExecutorGrant;
+}
+
 export function decodeExecutorGrant(value: unknown): ExecutorGrant | undefined {
   if (
     typeof value !== "string" ||
-    value.length === 0 ||
-    textEncoder.encode(value).byteLength > MAX_GRANT_BYTES
-  ) {
+    textEncoder.encode(value).byteLength > MAX_GRANT_BYTES ||
+    !value.startsWith(EXECUTOR_GRANT_PREFIX) ||
+    !CAPABILITY_BODY_RE.test(value.slice(EXECUTOR_GRANT_PREFIX.length))
+  )
     return undefined;
-  }
   return value as ExecutorGrant;
 }
 

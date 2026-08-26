@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   EXECUTOR_PROTOCOL_VERSION,
   decodeExecutorGrant,
+  encodeExecutorGrant,
   type ExecutorGrant,
 } from "@tellahq/opensession-protocol/executor";
 import type {
@@ -57,7 +58,7 @@ function pair(macrotask = false): [FakeEnd, FakeEnd] {
   b.peer = a;
   return [a, b];
 }
-const grant = decodeExecutorGrant("opaque") as ExecutorGrant;
+const grant = encodeExecutorGrant("e".repeat(32));
 const identity = {
   executorId: "executor-1",
   instanceId: "instance-1",

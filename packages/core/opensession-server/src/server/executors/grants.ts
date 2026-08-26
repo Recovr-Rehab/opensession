@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
-import type {
-  ExecutorGrant,
-  ExecutorOperation,
+import {
+  encodeExecutorGrant,
+  type ExecutorGrant,
+  type ExecutorOperation,
 } from "@tellahq/opensession-protocol/executor";
 import { ExecutorFailure } from "./contract";
 
@@ -80,7 +81,7 @@ export class ExecutorGrantAuthority {
       throw new ExecutorFailure("executor_busy", "grant capacity is exhausted");
     let grant: ExecutorGrant;
     do {
-      grant = randomBytes(32).toString("base64url") as ExecutorGrant;
+      grant = encodeExecutorGrant(randomBytes(32).toString("base64url"));
     } while (this.#grants.has(grant));
     this.#grants.set(grant, structuredClone(scope));
     return grant;

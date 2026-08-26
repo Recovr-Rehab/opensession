@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   EXECUTOR_PROTOCOL_VERSION,
   decodeExecutorGrant,
+  encodeExecutorGrant,
   type ExecutorGrant,
 } from "@tellahq/opensession-protocol/executor";
 import type { DuplexJsonTransport } from "../../runner-executor/agent";
@@ -53,7 +54,7 @@ const identity = {
   generation: 3,
   capabilities: ["fs"] as const,
 };
-const grant = decodeExecutorGrant("opaque") as ExecutorGrant;
+const grant = encodeExecutorGrant("e".repeat(32));
 const context = {
   rootId: "root-1",
   sessionId: "session-1",
@@ -463,7 +464,7 @@ describe("remote Executor connection", () => {
       cleanupGrant: (input) => {
         cleanupInputs.push(input);
         cleanupGrants++;
-        return decodeExecutorGrant(`cleanup-${cleanupGrants}`) as ExecutorGrant;
+        return encodeExecutorGrant(`cleanup-${cleanupGrants}`.padEnd(32, "x"));
       },
     });
     transport.receive(hello);
@@ -498,8 +499,8 @@ describe("remote Executor connection", () => {
     const cleanups = transport.sent.filter((message) => message.t === "cancel");
     expect(cleanups).toHaveLength(2);
     expect(cleanups.map((message) => message.grant as string)).toEqual([
-      "cleanup-1",
-      "cleanup-2",
+      encodeExecutorGrant("cleanup-1".padEnd(32, "x")),
+      encodeExecutorGrant("cleanup-2".padEnd(32, "x")),
     ]);
     expect(cleanupInputs).toHaveLength(2);
     for (const [index, input] of cleanupInputs.entries()) {
