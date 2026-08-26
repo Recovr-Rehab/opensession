@@ -110,6 +110,17 @@ missing, reordered or malformed referenced output fails closed. Receipt
 queries do not write, publish, invoke hooks or change access timestamps. This
 layer remains production-unwired.
 
+The import-inert gateway dispatch registry stores only domain-separated grant
+hashes and bounded exact bindings in memory. A grant binds one operation to the
+complete run fence, signed-authority identity, Host incarnation, descriptor and
+payload digests, transcript anchor, adapter version, deadline and opaque gateway
+policy handle. Runtime-domain crossover, expiry, capacity overflow and every
+identity mismatch fail closed. A backwards clock jump clears the registry and
+fails closed. Raw bearer grants and provider or MCP policy values are never
+retained, persisted or exposed as doctor evidence. Expiry is pruned
+synchronously on registry access, so importing the module starts no timer. This
+registry is not composed into production routing yet.
+
 The only durable state progression is `prepared -> executing -> settled |
 indeterminate`. A recovered `prepared` operation may be reauthorized later.
 A recovered `executing` operation is never retried by default. Initial
