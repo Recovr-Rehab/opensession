@@ -71,76 +71,97 @@ export function DownloadAppsDialog({
 					/>
 				</header>
 
-				{showInstallHelp ? (
-					<div className="grid min-h-0 flex-1 gap-3 desktop:grid-cols-3">
-						<InstallStep number="1" title="Open in your browser">
-							Use Safari on iPhone or iPad, or Chrome on Android and desktop.
-						</InstallStep>
-						<InstallStep number="2" title="Open the browser menu">
-							On iPhone or iPad, tap Share. Elsewhere, open the browser menu.
-						</InstallStep>
-						<InstallStep number="3" title="Add Open Session">
-							Choose Add to Home Screen, Install app, or Add to Dock.
-						</InstallStep>
-					</div>
-				) : (
-					<div className="grid min-h-0 flex-1 gap-4 desktop:grid-cols-[3fr_2fr]">
-						<AppCard
-							preview={
-								<div className="relative h-full overflow-hidden bg-blue-soft bg-gradient-to-br from-blue-soft via-transparent to-green-soft pl-5 pt-5">
-									<img
-										src={`${BASE_PATH}/download-mac.webp`}
-										alt="Open Session running on Mac"
-										className="h-full w-full rounded-tl-lg object-cover object-left-top outline outline-1 -outline-offset-1 outline-black/10"
-									/>
-									<div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-b from-transparent to-panel" />
-								</div>
-							}
-							title="Open Session for Mac"
-							subtitle="Apple silicon"
-						>
-							<Button
-								variant="primary"
-								size="lg"
-								icon={<IconApple size={20} />}
-								className="min-h-10 w-full"
-								render={
-									<a
-										href={`${BASE_PATH}/api/packages/clients/mac/download/latest.dmg`}
-									/>
-								}
-							>
-								Download
-							</Button>
-						</AppCard>
-
-						<AppCard
-							preview={
-								<div className="relative flex h-full justify-center overflow-hidden bg-green-soft bg-gradient-to-br from-green-soft via-transparent to-blue-soft px-3 pt-6">
-									<img
-										src={`${BASE_PATH}/download-phone.webp`}
-										alt="Open Session installed as a phone web app"
-										className="h-[115%] w-auto max-w-none origin-top object-contain object-top smooth-shadow-lg"
-									/>
-									<div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-b from-transparent to-panel" />
-								</div>
-							}
-							title="Web"
-							subtitle="Install as a PWA"
-						>
-							<Button
-								variant="soft"
-								size="lg"
-								className="min-h-10 w-full"
-								onClick={() => setShowInstallHelp(true)}
-							>
-								How to install
-							</Button>
-						</AppCard>
-					</div>
-				)}
+				<DownloadAppsBody
+					showInstallHelp={showInstallHelp}
+					onShowInstallHelp={() => setShowInstallHelp(true)}
+				/>
 			</div>
 		</ResponsiveDialog>
+	);
+}
+
+/**
+ * The two app cards, or the three PWA steps once the web card is picked. Split
+ * out of the dialog so Settings › Downloads can host the same thing inline —
+ * one description of what you can install, two places to reach it.
+ */
+export function DownloadAppsBody({
+	showInstallHelp,
+	onShowInstallHelp,
+}: {
+	showInstallHelp: boolean;
+	onShowInstallHelp: () => void;
+}) {
+	if (showInstallHelp)
+		return (
+			<div className="grid min-h-0 flex-1 gap-3 desktop:grid-cols-3">
+				<InstallStep number="1" title="Open in your browser">
+					Use Safari on iPhone or iPad, or Chrome on Android and desktop.
+				</InstallStep>
+				<InstallStep number="2" title="Open the browser menu">
+					On iPhone or iPad, tap Share. Elsewhere, open the browser menu.
+				</InstallStep>
+				<InstallStep number="3" title="Add Open Session">
+					Choose Add to Home Screen, Install app, or Add to Dock.
+				</InstallStep>
+			</div>
+		);
+
+	return (
+		<div className="grid min-h-0 flex-1 gap-4 desktop:grid-cols-[3fr_2fr]">
+			<AppCard
+				preview={
+					<div className="relative h-full overflow-hidden bg-blue-soft bg-gradient-to-br from-blue-soft via-transparent to-green-soft pl-5 pt-5">
+						<img
+							src={`${BASE_PATH}/download-mac.webp`}
+							alt="Open Session running on Mac"
+							className="h-full w-full rounded-tl-lg object-cover object-left-top outline outline-1 -outline-offset-1 outline-black/10"
+						/>
+						<div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-b from-transparent to-panel" />
+					</div>
+				}
+				title="Open Session for Mac"
+				subtitle="Apple silicon"
+			>
+				<Button
+					variant="primary"
+					size="lg"
+					icon={<IconApple size={20} />}
+					className="min-h-10 w-full"
+					render={
+						<a
+							href={`${BASE_PATH}/api/packages/clients/mac/download/latest.dmg`}
+						/>
+					}
+				>
+					Download
+				</Button>
+			</AppCard>
+
+			<AppCard
+				preview={
+					<div className="relative flex h-full justify-center overflow-hidden bg-green-soft bg-gradient-to-br from-green-soft via-transparent to-blue-soft px-3 pt-6">
+						<img
+							src={`${BASE_PATH}/download-phone.webp`}
+							alt="Open Session installed as a phone web app"
+							className="h-[115%] w-auto max-w-none origin-top object-contain object-top smooth-shadow-lg"
+						/>
+						<div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-b from-transparent to-panel" />
+					</div>
+				}
+				title="Web"
+				subtitle="Install as a PWA"
+			>
+				<Button
+					variant="soft"
+					size="lg"
+					className="min-h-10 w-full"
+					onClick={onShowInstallHelp}
+				>
+					How to install
+				</Button>
+			</AppCard>
+		</div>
 	);
 }
 
