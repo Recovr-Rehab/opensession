@@ -256,7 +256,7 @@ setBusy(false);
 						{onboarding ? (
 							<div className="p-6 pb-7 phone:p-5 phone:pb-6">
 								<div className="flex justify-center">{iconEditor}</div>
-								<div className="mx-auto mt-5 grid w-full max-w-[480px] grid-cols-2 gap-3 phone:gap-2.5">
+								<div className="mx-auto mt-5 grid w-full max-w-[320px] grid-cols-1 gap-3">
 									<Field label="Organization name">
 										{organizationNameInput}
 									</Field>
