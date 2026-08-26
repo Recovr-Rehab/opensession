@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { AnnouncementArticle } from "../../AnnouncementArticle";
-import { ProductDemo } from "../../ProductDemo";
 import "./announcement.css";
 
 const title = "Introducing Open Session";
@@ -37,12 +36,7 @@ export default function AnnouncementPage() {
 					Back to home
 				</a>
 			</nav>
-			<div className="announcement-page-hero">
-				<div className="stage">
-					<ProductDemo />
-				</div>
-			</div>
-			<AnnouncementArticle />
+			<AnnouncementArticle showDemo />
 		</main>
 	);
 }

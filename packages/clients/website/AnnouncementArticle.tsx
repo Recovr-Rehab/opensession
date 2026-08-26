@@ -1,4 +1,12 @@
-export function AnnouncementArticle({ showMark = false }: { showMark?: boolean }) {
+import { ProductDemo } from "./ProductDemo";
+
+export function AnnouncementArticle({
+	showMark = false,
+	showDemo = false,
+}: {
+	showMark?: boolean;
+	showDemo?: boolean;
+}) {
 	return (
 		<article className="announcement-article">
 			{showMark && (
@@ -11,6 +19,12 @@ export function AnnouncementArticle({ showMark = false }: { showMark?: boolean }
 				everything your team needs to ship, analyze, and talk to customers. It
 				runs in your browser, on Mac, and on Windows. iOS is coming soon.
 			</p>
+
+			{showDemo && (
+				<div className="stage announcement-article-demo">
+					<ProductDemo />
+				</div>
+			)}
 
 			<p>
 				Open Session was built by{" "}
