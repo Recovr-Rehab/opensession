@@ -72,6 +72,7 @@ body::before {
 /* Keep the product shot on its own supplied scene rather than borrowing the
    page artwork through the transparent stage. */
 .stage {
+	border: 1px solid var(--glass-line);
 	background-image: url("./demo-background.webp");
 	background-position: center;
 	background-size: cover;
