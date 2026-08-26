@@ -983,8 +983,8 @@ summary:focus-visible {
 	scrollbar-gutter: stable;
 }
 
-/* The same close button the download and setup modals use, with its colors
-   pinned because this panel stays light in dark mode. */
+/* The same close button the download and setup modals use. Its announcement
+   colors follow the panel in both system themes. */
 .announcement-dialog .pwa-guide-close {
 	z-index: 1;
 	color: #666;
@@ -1425,6 +1425,63 @@ summary:focus-visible {
 	}
 }
 
+@media (prefers-color-scheme: dark) {
+	.announcement-page {
+		background: var(--page);
+		color: var(--ink);
+	}
+
+	.announcement-dialog {
+		background: var(--card);
+		box-shadow:
+			0 4px 12px -4px oklch(0 0 0 / 0.35),
+			0 18px 48px -14px oklch(0 0 0 / 0.65),
+			0 0 0 1px oklch(1 0 0 / 0.1);
+		color: var(--ink);
+	}
+
+	@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+		.announcement-dialog {
+			background: oklch(0.19 0.004 286 / 0.78);
+		}
+	}
+
+	.announcement-dialog::backdrop {
+		background: oklch(0 0 0 / 0.72);
+	}
+
+	.announcement-dialog .pwa-guide-close {
+		color: var(--muted);
+	}
+
+	.announcement-dialog .pwa-guide-close:hover {
+		background: oklch(1 0 0 / 0.08);
+		color: var(--ink);
+	}
+
+	.announcement-home {
+		border-color: oklch(1 0 0 / 0.12);
+		background: var(--card);
+		color: var(--ink);
+	}
+
+	.announcement-home:hover {
+		background: oklch(1 0 0 / 0.08);
+	}
+
+	.announcement-article {
+		color: var(--muted);
+	}
+
+	.announcement-article h1 {
+		color: var(--ink);
+	}
+
+	.announcement-article h2 {
+		color: oklch(0.84 0 0);
+	}
+}
+
 /* ── The download dialog's two cards ─────────────────────────────────────
    What you are installing, shown rather than listed: a Mac screenshot and a
    phone, each on a soft wash that fades into the card so the image has no
@@ -1640,5 +1697,11 @@ summary:focus-visible {
 
 	.download-steps li::before {
 		margin-bottom: 14px;
+	}
+}
+
+@media (prefers-color-scheme: dark) and (prefers-reduced-transparency: reduce) {
+	.announcement-dialog {
+		background: var(--card);
 	}
 }
