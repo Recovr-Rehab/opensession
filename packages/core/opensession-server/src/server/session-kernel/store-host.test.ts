@@ -913,4 +913,31 @@ describe("per-session session kernel storage", () => {
       .toContain("zzz-overdue-effect");
     host.close();
   }, 30_000);
+
+  test("rotates the priority slice past already-active due actors", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const dueAt = Date.now() - 1;
+    for (let index = 0; index < 6; index += 1) {
+      const sessionId = `due-priority-${index.toString().padStart(2, "0")}`;
+      host.call("scheduleTimer", [{
+        sessionId,
+        timerId: "wake",
+        kind: "known_timer",
+        dueAt,
+        payload: null,
+      }]);
+      host.central.settleIsolatedSessionWake(sessionId, dueAt);
+    }
+
+    const first = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
+    const second = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
+    const third = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
+    expect(new Set([
+      ...first.timers.map((timer) => timer.sessionId),
+      ...second.timers.map((timer) => timer.sessionId),
+      ...third.timers.map((timer) => timer.sessionId),
+    ]).size).toBe(6);
+    host.close();
+  }, 30_000);
 });

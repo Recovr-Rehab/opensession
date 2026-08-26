@@ -95,6 +95,7 @@ export class SessionKernelStoreHost {
   private readonly isolated = new Map<string, SessionKernelStore>();
   private readonly transcripts = new Map<string, TranscriptStore>();
   private runtimeCursor = "";
+  private runtimeDueCursor = "";
   private maintenanceSessionCursor = "";
   private outboxRouteMaintenanceCursor = 0;
   constructor(
@@ -485,10 +486,23 @@ export class SessionKernelStoreHost {
     const candidates = this.central.isolatedRecentDirtyWakeCandidates(recentLimit);
     const seen = new Set(candidates);
     if (dueLimit > 0) {
-      for (const sessionId of this.central.isolatedDueWakeCandidates(now, dueLimit)) {
+      let due = this.central.isolatedDueWakeCandidates(
+        now,
+        dueLimit,
+        this.runtimeDueCursor,
+      );
+      if (due.length < dueLimit && this.runtimeDueCursor) {
+        const wrapped = this.central.isolatedDueWakeCandidates(
+          now,
+          dueLimit - due.length,
+        );
+        due = [...due, ...wrapped];
+      }
+      for (const sessionId of due) {
         if (seen.has(sessionId)) continue;
         seen.add(sessionId);
         candidates.push(sessionId);
+        this.runtimeDueCursor = sessionId;
       }
     }
     const appendFairCandidates = (afterSessionId = "") => {
