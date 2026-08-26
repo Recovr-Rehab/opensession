@@ -379,7 +379,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 			id: "entry-14",
 			type: "assistant",
 			content:
-				"Presence now appears in every shared workspace, and the pull request is up.\n\n- **Sidebar** rolls each session's viewers into the workspace row, deduplicated\n- **Faces overlap** with a ring in the row's colour, so a stack stays legible on hover and selection\n- **Tests** cover the roll-up and the self-suppression rule\n\nPull request #1842 is ready for review.",
+				"Presence now appears in every shared workspace, and the pull request is up.\n\n- **Sidebar** rolls each session's viewers into the workspace row, deduplicated\n- **Faces overlap** with a ring in the row's colour, so a stack stays legible on hover and selection\n- **Tests** cover the roll-up and the self-suppression rule\n\nThe phone layout uses the same facepile, with a separate touch target so every teammate stays easy to open.\n\nPull request #1842 is ready for review.",
 			timestamp: minutesAgo(4),
 			model: "anthropic/claude-fable-5",
 			seq: 14,
