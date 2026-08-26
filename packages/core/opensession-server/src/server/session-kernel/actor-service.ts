@@ -25,11 +25,13 @@ const DEFAULT_PORT = 3849;
 // quarantine/restart bookkeeping after an ambiguous lane turn.
 const ACTOR_RESPONSE_TIMEOUT_MS = 5_000;
 const DEFAULT_SESSION_WORKERS = 4;
-// Reads have small request bodies and bounded response budgets, so absorb a
-// viewer's hydration burst without also allowing mutation payloads to pile up.
-const MAX_MUTATION_SESSION_TURNS = 8;
-const MAX_READ_SESSION_TURNS = 128;
-const MAX_PRIORITY_SESSION_TURNS = 8;
+// Mailboxes absorb short ingress bursts; actor turns must still remain bounded
+// and fast. Control traffic has its own reserved class so stop/steer cannot be
+// stranded behind ordinary projections. Operators may tune these independently
+// without rebuilding the service.
+const DEFAULT_MUTATION_SESSION_TURNS = 64;
+const DEFAULT_READ_SESSION_TURNS = 128;
+const DEFAULT_PRIORITY_SESSION_TURNS = 32;
 const MAX_PRIORITY_BURST = 4;
 const MAX_GLOBAL_TURNS = 64;
 const GLOBAL_BARRIER_TIMEOUT_MS = 100;
@@ -102,7 +104,21 @@ export type SessionKernelServiceOptions = {
   responseTimeoutMs?: number;
   /** Explicit isolated/dev database path inherited by Worker isolates. */
   databasePath?: string;
+  mutationMailboxLimit?: number;
+  readMailboxLimit?: number;
+  priorityMailboxLimit?: number;
 };
+
+function mailboxLimit(
+  explicit: number | undefined,
+  envName: string,
+  fallback: number,
+): number {
+  const value = explicit ?? Number(process.env[envName] ?? fallback);
+  if (!Number.isInteger(value) || value < 1 || value > 4_096)
+    throw new Error(`${envName} must be an integer between 1 and 4096`);
+  return value;
+}
 
 export function sessionKernelServiceUrl(): string {
   const value =
@@ -171,6 +187,21 @@ export async function startSessionKernelService(
   const responseTimeoutMs = options.responseTimeoutMs ?? ACTOR_RESPONSE_TIMEOUT_MS;
   if (!Number.isFinite(responseTimeoutMs) || responseTimeoutMs < 100)
     throw new Error("Invalid session kernel worker timeout");
+  const mutationMailboxLimit = mailboxLimit(
+    options.mutationMailboxLimit,
+    "OPENSESSION_SESSION_KERNEL_MUTATION_MAILBOX",
+    DEFAULT_MUTATION_SESSION_TURNS,
+  );
+  const readMailboxLimit = mailboxLimit(
+    options.readMailboxLimit,
+    "OPENSESSION_SESSION_KERNEL_READ_MAILBOX",
+    DEFAULT_READ_SESSION_TURNS,
+  );
+  const priorityMailboxLimit = mailboxLimit(
+    options.priorityMailboxLimit,
+    "OPENSESSION_SESSION_KERNEL_PRIORITY_MAILBOX",
+    DEFAULT_PRIORITY_SESSION_TURNS,
+  );
 
   // Worker isolates in this independently supervised process share one writer
   // incarnation. The service mailbox scheduler, not a thread-local token, is
@@ -563,10 +594,10 @@ export async function startSessionKernelService(
           0,
         );
     const classLimit = priority
-      ? MAX_PRIORITY_SESSION_TURNS
+      ? priorityMailboxLimit
       : readOnly
-        ? MAX_READ_SESSION_TURNS
-        : MAX_MUTATION_SESSION_TURNS;
+        ? readMailboxLimit
+        : mutationMailboxLimit;
     if (queuedForClass >= classLimit) {
       return Promise.reject(new RetryableActorHostError(
         priority

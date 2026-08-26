@@ -82,6 +82,7 @@ describe("session kernel actor service", () => {
       token,
       workerCount: 1,
       responseTimeoutMs: 700,
+      mutationMailboxLimit: 8,
       workerUrl: new URL("./testing/mailbox-worker.ts", import.meta.url),
     });
     const call = async (
