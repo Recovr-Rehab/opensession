@@ -330,6 +330,14 @@ export class AgentHostClient {
               )
                 throw new Error("Agent Host attach acknowledgement mismatch");
               this.receipt = receipt;
+              if (attached.mode === "recovery_required") {
+                const recoveryBaseline = attached.replayFromHostSeq - 1;
+                if (recoveryBaseline < this.lastHostSeq)
+                  throw new Error("Agent Host recovery baseline regressed");
+                this.consumedHostSeq.clear();
+                this.lastHostSeq = recoveryBaseline;
+                this.highestHostSeq = recoveryBaseline;
+              }
               this.ready = true;
               finish();
               if (attached.mode === "recovery_required")
@@ -426,24 +434,29 @@ export class AgentHostClient {
         );
       return;
     }
-    if (pending && pending.expected === message.t) {
-      clearTimeout(pending.timer);
-      this.pending.delete(message.requestId);
-      pending.resolve(message);
+    if (message.t === "hello" || message.t === "attached") {
+      if (pending && pending.expected === message.t) {
+        clearTimeout(pending.timer);
+        this.pending.delete(message.requestId);
+        pending.resolve(message);
+      }
       return;
     }
-    if (
-      message.t === "hello" ||
-      message.t === "attached" ||
-      message.t === "turn_started"
-    )
-      return;
     if (!this.fence || !sameFence(this.fence, message.fence))
       throw new Error("Stale Agent Host fence");
     if (message.hostSeq <= this.highestHostSeq) return;
     if (message.hostSeq !== this.highestHostSeq + 1)
       throw new Error("Agent Host stream gap requires recovery");
     this.highestHostSeq = message.hostSeq;
+    if (message.t === "turn_started") {
+      this.markConsumed(message.hostSeq);
+      if (pending && pending.expected === message.t) {
+        clearTimeout(pending.timer);
+        this.pending.delete(message.requestId);
+        pending.resolve(message);
+      }
+      return;
+    }
     if (message.t === "operation_stream_ack") {
       this.consumeStreamAck(message);
       this.markConsumed(message.hostSeq);
@@ -628,8 +641,28 @@ export class AgentHostClient {
     this.acceptReceipt(op, result.receipt);
     if (result.fromStreamSeq < 1 || result.fromStreamSeq > op.sentStreamSeq + 1)
       throw new Error("Invalid operation replay cursor");
+    this.markConsumed(hostSeq);
+    const common = {
+      version: 4 as const,
+      requestId: this.nextRequestId(),
+      fence: this.fence!,
+      ackHostSeq: this.lastHostSeq,
+      operationId: op.operationId,
+      receipt: result.receipt,
+    };
+    await this.writeReceipt(
+      type === "operation_receipt"
+        ? { ...common, t: type }
+        : { ...common, t: type, fromStreamSeq: result.fromStreamSeq },
+      generation,
+    );
     let seq = result.fromStreamSeq;
     for await (const raw of result.chunks ?? []) {
+      if (
+        result.receipt.state === "settled" ||
+        result.receipt.state === "indeterminate"
+      )
+        throw new Error("Terminal operation receipt cannot precede stream data");
       const bytes = raw instanceof Uint8Array ? raw.slice() : undefined;
       if (!bytes?.byteLength)
         throw new Error("Invalid empty operation stream chunk");
@@ -650,21 +683,6 @@ export class AgentHostClient {
       seq++;
       await this.options.failpoint?.("after_stream_chunk");
     }
-    this.markConsumed(hostSeq);
-    const common = {
-      version: 4 as const,
-      requestId: this.nextRequestId(),
-      fence: this.fence!,
-      ackHostSeq: this.lastHostSeq,
-      operationId: op.operationId,
-      receipt: result.receipt,
-    };
-    await this.writeReceipt(
-      type === "operation_receipt"
-        ? { ...common, t: type }
-        : { ...common, t: type, fromStreamSeq: result.fromStreamSeq },
-      generation,
-    );
   }
 
   private acceptReceipt(

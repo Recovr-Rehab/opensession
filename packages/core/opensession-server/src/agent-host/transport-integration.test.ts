@@ -1,0 +1,526 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { generateKeyPairSync } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  AGENT_HOST_SUPERVISION_AUDIENCE,
+  AGENT_HOST_SUPERVISION_PURPOSE,
+  AGENT_HOST_SUPERVISION_SIGNATURE_ALGORITHM,
+  AGENT_HOST_SUPERVISION_SIGNATURE_DOMAIN,
+  MAX_AGENT_HOST_REPLAY_BYTES,
+  MAX_AGENT_HOST_REPLAY_FRAMES,
+  hashAgentOperationDescriptorV1,
+  hashAgentTurnSpecV2,
+  serializeAgentHostSupervisionAuthorityV2,
+  type AgentHostChallengeDescriptorV4,
+  type AgentHostSupervisionPublicKeyringV2,
+  type AgentOperationReceiptV1,
+  type AgentTurnFence,
+  type AgentTurnSpec,
+} from "@tellahq/opensession-protocol";
+import { AgentHostClient } from "../server/agent-host-client";
+import { createAgentHostSupervisionSigner } from "../server/session-kernel/agent-host-supervision-signer";
+import type {
+  AgentHostOperationQuery,
+  AgentHostOperationTransport,
+  AgentTurnDriver,
+  AgentTurnResult,
+} from "./driver";
+import { createAgentHost, type AgentHost } from "./host";
+
+const digest = (character: string) => `sha256:${character.repeat(64)}` as const;
+const fence: AgentTurnFence = {
+  sessionId: "session-transport-1",
+  runId: "run-transport-1",
+  turnId: "turn-transport-1",
+  generation: 1,
+};
+const descriptor = {
+  version: 1 as const,
+  kind: "model" as const,
+  stepId: "step-transport-1",
+  transcript: {
+    throughChangeSeq: 4,
+    entryIds: ["entry-transport-1"],
+    digest: digest("a"),
+  },
+  modelPolicyHash: digest("b"),
+  adapterRequestVersion: "model.v1",
+};
+const descriptorDigest = await hashAgentOperationDescriptorV1(descriptor);
+const startedAt = Date.now();
+const spec: AgentTurnSpec = {
+  fence,
+  initialOperation: {
+    operationId: "operation-transport-1",
+    descriptor,
+    descriptorDigest,
+    deadlineMs: startedAt + 120_000,
+  },
+  transcript: { afterChangeSeq: 4, maxAppendBytes: 4096, requireAck: true },
+  limits: {
+    turnDeadlineMs: startedAt + 180_000,
+    maxInFlightOperations: 2,
+    maxBufferedStreamBytes: 512 * 1024,
+    maxBufferedStreamChunks: 32,
+  },
+};
+const planHash = await hashAgentTurnSpecV2(spec);
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
+async function eventually(check: () => boolean, message: string) {
+  const deadline = Date.now() + 2_000;
+  while (!check()) {
+    if (Date.now() >= deadline) throw new Error(message);
+    await new Promise<void>((resolve) => setTimeout(resolve, 1));
+  }
+}
+
+class FakeDriver implements AgentTurnDriver {
+  transport?: AgentHostOperationTransport;
+  readonly delivered: { seq: number; bytes: string }[] = [];
+  readonly deliveryStarted: number[] = [];
+  readonly deliveryGates = new Map<
+    number,
+    ReturnType<typeof deferred<void>>
+  >();
+  cancelCalls = 0;
+  shutdownCalls = 0;
+  private readonly result = deferred<AgentTurnResult>();
+
+  async run(_spec: AgentTurnSpec, transport: AgentHostOperationTransport) {
+    this.transport = transport;
+    await transport.requestOperation(spec.initialOperation);
+    return this.result.promise;
+  }
+  async deliverOperationStream(stream: {
+    streamSeq: number;
+    bytes: string;
+  }) {
+    this.deliveryStarted.push(stream.streamSeq);
+    await this.deliveryGates.get(stream.streamSeq)?.promise;
+    this.delivered.push({
+      seq: stream.streamSeq,
+      bytes: Buffer.from(stream.bytes, "base64url").toString(),
+    });
+  }
+  async query(afterStreamSeq: number) {
+    const query: AgentHostOperationQuery = {
+      operationId: spec.initialOperation.operationId,
+      kind: descriptor.kind,
+      descriptorDigest,
+      payloadDigest: digest("d"),
+      afterStreamSeq,
+    };
+    await this.transport!.queryOperation(query);
+  }
+  async cancelOperation() {
+    await this.transport!.cancelOperation({
+      operationId: spec.initialOperation.operationId,
+      cancelId: "cancel-transport-1",
+      reason: "user",
+    });
+  }
+  finish(status: AgentTurnResult = { status: "completed" }) {
+    this.result.resolve(status);
+  }
+  async cancel() {
+    this.cancelCalls++;
+  }
+  async shutdown() {
+    this.shutdownCalls++;
+  }
+}
+
+function signing() {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const keyId = "transport-supervision-key-1";
+  const signer = createAgentHostSupervisionSigner({
+    keyId,
+    privateKeyPkcs8: Uint8Array.from(
+      privateKey.export({ type: "pkcs8", format: "der" }) as Buffer,
+    ),
+    publicKeySpki: Uint8Array.from(
+      publicKey.export({ type: "spki", format: "der" }) as Buffer,
+    ),
+    signingNotBeforeMs: startedAt - 60_000,
+    signingNotAfterMs: startedAt + 3_600_000,
+    verifyUntilMs: startedAt + 7_200_000,
+    status: "active",
+  });
+  const keyring: AgentHostSupervisionPublicKeyringV2 = {
+    version: 2,
+    algorithm: AGENT_HOST_SUPERVISION_SIGNATURE_ALGORITHM,
+    domain: AGENT_HOST_SUPERVISION_SIGNATURE_DOMAIN,
+    keys: [
+      {
+        keyId,
+        status: "active",
+        publicKeySpki: (
+          publicKey.export({ type: "spki", format: "der" }) as Buffer
+        ).toString("base64url"),
+        signingNotBeforeMs: startedAt - 60_000,
+        signingNotAfterMs: startedAt + 3_600_000,
+        verifyUntilMs: startedAt + 7_200_000,
+      },
+    ],
+  };
+  let epoch = 0;
+  return {
+    keyring,
+    obtainSignedAttach: async (challenge: AgentHostChallengeDescriptorV4) => {
+      const issuedAtMs = Date.now();
+      const expected = {
+        fence,
+        planHash,
+        ...challenge,
+        supervisorEpoch: ++epoch,
+        kernelServiceEpoch: `transport-kernel-${epoch}`,
+        nonce: `transport-${crypto.randomUUID()}`,
+        audience: AGENT_HOST_SUPERVISION_AUDIENCE,
+        purpose: AGENT_HOST_SUPERVISION_PURPOSE,
+        keyId,
+        issuedAtMs,
+        expiresAtMs: issuedAtMs + 60_000,
+      };
+      return {
+        expected,
+        envelope: signer.sign(
+          serializeAgentHostSupervisionAuthorityV2({ version: 2, ...expected }),
+          issuedAtMs,
+        ),
+      };
+    },
+  };
+}
+
+function operationReceipt(
+  state: AgentOperationReceiptV1["state"],
+): AgentOperationReceiptV1 {
+  const terminal = state === "settled";
+  const terminalRef = {
+    appendId: "append-transport-1",
+    entryIds: ["entry-output-transport-1"],
+    firstSeq: 5,
+    lastSeq: 5,
+    throughChangeSeq: 5,
+    requestDigest: digest("9"),
+  };
+  return {
+    version: 1,
+    operationId: spec.initialOperation.operationId,
+    kind: descriptor.kind,
+    fence,
+    planHash,
+    authorityHash: digest("c"),
+    descriptorDigest,
+    payloadDigest: digest("d"),
+    actorIdentity: {
+      supervisorEpoch: 1,
+      hostId: "agent-host-transport-1",
+      hostGeneration: 1,
+      hostIncarnation: "transport-incarnation-1",
+      transcriptAnchor: descriptor.transcript,
+    },
+    state,
+    acceptedAtMs: startedAt,
+    ...(state === "prepared" ? {} : { executingAtMs: startedAt + 1 }),
+    ...(terminal
+      ? {
+          completedAtMs: startedAt + 2,
+          outcome: { status: "succeeded" as const, code: "ok" as const },
+          transcriptRefs: [terminalRef],
+          kernelTerminal: {
+            outputDigest: digest("e"),
+            outcomeCode: "ok",
+            transcriptRefs: [terminalRef],
+            pendingToolUseEntryIds: [],
+          },
+        }
+      : {}),
+    providerRef: { adapterId: "opaque-test", adapterVersion: "1" },
+  };
+}
+
+const resources: { host: AgentHost; root: string; clients: AgentHostClient[] }[] = [];
+afterEach(async () => {
+  for (const resource of resources.splice(0)) {
+    for (const client of resource.clients) client.close();
+    await resource.host.stop();
+    await rm(resource.root, { recursive: true, force: true });
+  }
+});
+
+type SetupOptions = {
+  chunks?: string[];
+  settleQueries?: boolean;
+  failpoint?: ConstructorParameters<typeof AgentHostClient>[0]["failpoint"];
+};
+async function setup(options: SetupOptions = {}) {
+  const root = await mkdtemp(join(tmpdir(), "agent-host-transport-"));
+  const socketPath = join(root, "host.sock");
+  const driver = new FakeDriver();
+  const signature = signing();
+  const host = createAgentHost({
+    socketPath,
+    createDriver: () => driver,
+    hostId: "agent-host-transport-1",
+    hostGeneration: 1,
+    hostIncarnation: "transport-incarnation-1",
+    supervisionKeyring: signature.keyring,
+    reconnectGraceMs: 2_000,
+  });
+  const dispatchIntents: unknown[] = [];
+  const queryIntents: any[] = [];
+  const cancelIntents: unknown[] = [];
+  const errors: Error[] = [];
+  let dispatches = 0;
+  const clients: AgentHostClient[] = [];
+  const client = new AgentHostClient({
+    socketPath,
+    obtainSignedAttach: signature.obtainSignedAttach,
+    dispatchOperation: async (intent) => {
+      dispatches++;
+      dispatchIntents.push(intent);
+      return {
+        receipt: operationReceipt("executing"),
+        chunks: (options.chunks ?? ["one", "two"]).map((value) =>
+          Buffer.from(value),
+        ),
+      };
+    },
+    queryOperation: async (intent) => {
+      queryIntents.push(intent);
+      return {
+        receipt: operationReceipt(
+          intent.recovery || options.settleQueries === false
+            ? "executing"
+            : "settled",
+        ),
+        fromStreamSeq: intent.afterStreamSeq + 1,
+        chunks: intent.recovery
+          ? (options.chunks ?? ["one", "two"])
+              .slice(intent.afterStreamSeq)
+              .map((value) => Buffer.from(value))
+          : [],
+      };
+    },
+    cancelOperation: async (intent) => {
+      cancelIntents.push(intent);
+      return {
+        disposition: "indeterminate",
+        receipt: {
+          ...operationReceipt("executing"),
+          state: "indeterminate",
+          completedAtMs: Date.now(),
+          kernelTerminal: {
+            outputDigest: digest("f"),
+            outcomeCode: "cancellation_ambiguous",
+            transcriptRefs: [
+              {
+                appendId: "append-transport-1",
+                entryIds: ["entry-output-transport-1"],
+                firstSeq: 5,
+                lastSeq: 5,
+                throughChangeSeq: 5,
+                requestDigest: digest("9"),
+              },
+            ],
+            pendingToolUseEntryIds: [],
+          },
+          transcriptRefs: [
+            {
+              appendId: "append-transport-1",
+              entryIds: ["entry-output-transport-1"],
+              firstSeq: 5,
+              lastSeq: 5,
+              throughChangeSeq: 5,
+              requestDigest: digest("9"),
+            },
+          ],
+          errorCode: "cancellation_ambiguous",
+        } as AgentOperationReceiptV1,
+      };
+    },
+    failpoint: options.failpoint,
+    onError: (error) => errors.push(error),
+  });
+  clients.push(client);
+  resources.push({ host, root, clients });
+  await host.start();
+  return {
+    client,
+    host,
+    driver,
+    dispatchIntents,
+    queryIntents,
+    cancelIntents,
+    errors,
+    clients,
+    get dispatches() {
+      return dispatches;
+    },
+  };
+}
+
+function assertNoForbiddenAuthority(value: unknown) {
+  const serialized = JSON.stringify(value).toLowerCase();
+  for (const forbidden of [
+    "prompt",
+    "providerconfig",
+    "mcp",
+    "credential",
+    "https://",
+    "authorization",
+    "cookie",
+    "process.env",
+    "executorgrant",
+  ])
+    expect(serialized).not.toContain(forbidden);
+}
+
+describe("Agent Host v4 end-to-end transport", () => {
+  test("fresh attach dispatches once, streams in order under consumption credit, and terminal waits for drain", async () => {
+    const harness = await setup({ chunks: ["first", "second"] });
+    const secondGate = deferred();
+    harness.driver.deliveryGates.set(2, secondGate);
+
+    await harness.client.connect(fence, planHash);
+    await harness.client.startTurn(spec);
+    await eventually(
+      () =>
+        harness.driver.deliveryStarted.includes(2) || harness.errors.length > 0,
+      "second stream chunk was not offered to the Driver",
+    );
+    expect(harness.errors).toEqual([]);
+    expect(harness.dispatches).toBe(1);
+    expect(harness.driver.delivered).toEqual([{ seq: 1, bytes: "first" }]);
+
+    await harness.driver.query(2);
+    harness.driver.finish();
+    await Promise.resolve();
+    expect(harness.errors).toEqual([]);
+
+    secondGate.resolve();
+    await eventually(
+      () => harness.driver.delivered.length === 2,
+      "stream did not drain",
+    );
+    await eventually(
+      () =>
+        harness.errors.some((error) => error.message.includes("disconnected")) ||
+        !(harness.host as any).active,
+      "terminal receipt did not complete the drained turn",
+    );
+    expect((harness.host as any).active).toBeUndefined();
+    expect(harness.driver.delivered).toEqual([
+      { seq: 1, bytes: "first" },
+      { seq: 2, bytes: "second" },
+    ]);
+    expect(harness.queryIntents).toHaveLength(1);
+    expect(harness.queryIntents[0].afterStreamSeq).toBe(2);
+    assertNoForbiddenAuthority({
+      spec,
+      dispatchIntents: harness.dispatchIntents,
+      queryIntents: harness.queryIntents,
+    });
+  });
+
+  test.each([
+    "after_host_message",
+    "after_coordinator_result",
+    "before_receipt_write",
+    "after_receipt_write",
+    "after_stream_chunk",
+  ] as const)("client crash at %s resumes by query without physical relaunch", async (point) => {
+    let crashed = false;
+    let hostMessages = 0;
+    const harness = await setup({
+      chunks: ["only"],
+      failpoint: (candidate) => {
+        if (candidate === "after_host_message") hostMessages++;
+        const armed =
+          candidate === point &&
+          (candidate !== "after_host_message" || hostMessages > 3);
+        if (!crashed && armed) {
+          crashed = true;
+          throw new Error(`crash:${point}`);
+        }
+      },
+    });
+    await harness.client.connect(fence, planHash);
+    await harness.client.startTurn(spec).catch(() => {});
+    await eventually(
+      () => harness.errors.some((error) => error.message.includes(`crash:${point}`)),
+      `failpoint ${point} did not disconnect the gateway client`,
+    );
+
+    await harness.client.connect(fence, planHash);
+    await eventually(
+      () => harness.driver.delivered.length === 1 || harness.queryIntents.length > 0,
+      `failpoint ${point} did not recover the operation`,
+    );
+    expect(harness.dispatches).toBe(1);
+    expect(harness.queryIntents.every((intent) => intent.recovery)).toBe(true);
+  });
+
+  test("bounds replay while repeated real queries preserve one physical dispatch", async () => {
+    const harness = await setup({ chunks: [], settleQueries: false });
+    await harness.client.connect(fence, planHash);
+    await harness.client.startTurn(spec);
+    await eventually(
+      () =>
+        (harness.host as any).active?.ops.get(spec.initialOperation.operationId)
+          ?.receipt?.state === "executing",
+      "initial executing receipt was not accepted",
+    );
+
+    for (let index = 0; index < MAX_AGENT_HOST_REPLAY_FRAMES + 32; index++)
+      await harness.driver.query(0);
+    await eventually(
+      () => harness.queryIntents.length === MAX_AGENT_HOST_REPLAY_FRAMES + 32,
+      "repeated queries did not traverse the real transport",
+    );
+
+    const active = (harness.host as any).active;
+    expect(active.replay.length).toBeLessThanOrEqual(
+      MAX_AGENT_HOST_REPLAY_FRAMES,
+    );
+    expect(active.replayBytes).toBeLessThanOrEqual(MAX_AGENT_HOST_REPLAY_BYTES);
+    expect(harness.dispatches).toBe(1);
+  });
+
+  test("query and cancellation receipts stay monotonic and cancellation remains uncertain", async () => {
+    const harness = await setup({ chunks: [], settleQueries: false });
+    await harness.client.connect(fence, planHash);
+    await harness.client.startTurn(spec);
+    await eventually(() => harness.dispatches === 1, "operation was not dispatched");
+
+    await harness.driver.query(0);
+    await eventually(
+      () => harness.queryIntents.length === 1,
+      "operation query was not dispatched",
+    );
+    await harness.driver.cancelOperation();
+    await eventually(
+      () => harness.cancelIntents.length === 1,
+      "operation cancellation was not dispatched",
+    );
+    harness.driver.finish();
+
+    expect(harness.dispatches).toBe(1);
+    expect(harness.cancelIntents).toHaveLength(1);
+    expect(JSON.stringify(harness.cancelIntents[0])).not.toContain("cancelled");
+    expect(harness.driver.cancelCalls).toBe(0);
+  });
+});

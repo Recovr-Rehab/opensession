@@ -568,7 +568,11 @@ export class AgentHost {
       planHash: authority.planHash as `sha256:${string}`,
       supervisorEpoch: authority.supervisorEpoch,
       mode: resumed ? (recovery ? "recovery_required" : "resumed") : "fresh",
-      replayFromHostSeq: resumed ? m.resume!.lastHostSeq + 1 : 0,
+      replayFromHostSeq: resumed
+        ? recovery
+          ? turn.seq + 1
+          : m.resume!.lastHostSeq + 1
+        : 0,
     });
     if (resumed) {
       if (recovery) await this.recover(turn, m.resume!);
@@ -920,7 +924,9 @@ export class AgentHost {
     const c = new Map(
       r.operations.map((x) => [x.operationId, x.throughStreamSeq]),
     );
-    return [...t.ops].some(([k, o]) => (c.get(k) ?? 0) !== o.through);
+    return [...t.ops].some(
+      ([k, o]) => !o.terminal || (c.get(k) ?? 0) !== o.through,
+    );
   }
   private async recover(t: Turn, r: AgentHostAttachResumeCursorV4) {
     const c = new Map(
