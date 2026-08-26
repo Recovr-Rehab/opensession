@@ -967,10 +967,18 @@ summary:focus-visible {
    get the article as a normal, server-rendered page below. */
 .announcement-dialog {
 	position: relative;
-	width: min(720px, calc(100% - 32px));
-	height: min(760px, calc(100dvh - 48px));
+	width: min(760px, calc(100% - 32px));
+	height: min(800px, calc(100dvh - 48px));
 	max-height: none;
 	margin: auto;
+}
+
+/* Larger screens get a roomier reading viewport. */
+@media (min-width: 1440px) and (min-height: 900px) {
+	.announcement-dialog {
+		width: min(860px, calc(100% - 32px));
+		height: min(880px, calc(100dvh - 48px));
+	}
 }
 
 .announcement-dialog .website-modal-panel {
