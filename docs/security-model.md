@@ -20,9 +20,13 @@ SessionKernel schema 26 may issue canonical **unsigned** supervision payloads
 that bind the exact turn fence, plan hash, Host generation/incarnation, kernel
 service epoch, fresh challenge, nonce, audience, purpose, validity window, and
 future key id. They contain no credentials, prompt, transcript, model, provider,
-or MCP payload. Unsigned payloads do not authenticate a Host. Service-side
-Ed25519 signing, signed challenge leases, and keyring verification are mandatory
-before use and are the next slice. An encrypted Host ledger is deferred.
+or MCP payload. Unsigned payloads do not authenticate a Host. The import-inert Ed25519 signing
+and public-key verification primitives now exist, but signed envelopes are not
+accepted by production composition. They remain non-authorizing until the kernel
+and Host run under separate service identities, credentials provision private
+keys only to the kernel, and signed receipts are integrated atomically. The
+current shared Ubuntu identity is explicitly not that boundary. An encrypted
+Host ledger is deferred.
 Processes sharing a UID can inspect or interfere with each other and are not a
 security boundary.
 

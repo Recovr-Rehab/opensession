@@ -18,7 +18,8 @@
     "./identity": "./src/identity.ts",
     "./workspace-group": "./src/workspace-group.ts",
     "./executor": "./src/executor.ts",
-    "./agent-host": "./src/agent-host.ts"
+    "./agent-host": "./src/agent-host.ts",
+    "./agent-host-supervision": "./src/agent-host-supervision.ts"
   },
   "repository": {
     "type": "git",

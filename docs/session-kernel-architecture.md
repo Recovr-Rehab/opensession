@@ -330,9 +330,12 @@ performs no provider, executor, model, socket, or signing work. Superseded and s
 skew. The actor prunes only expired non-active receipts before enforcing its
 fixed capacity; active and unexpired receipts are never pruned, and the separate
 supervisor and Host-generation high-water marks survive terminal runs, pruning,
-and restart. The returned payload is deliberately unsigned
-and provides no Host authentication. Service-side Ed25519 signing and a keyring
-are the mandatory next slice before this authority can be used.
+and restart. The returned payload is deliberately unsigned and provides no Host
+authentication. Import-inert Ed25519 signing and strict rotating public-key
+verification primitives exist, but production does not accept their envelopes.
+They remain non-authorizing until separate kernel and Host service identities,
+private credential provisioning, and atomic signed-receipt integration land.
+The current shared Ubuntu identity is not a security boundary.
 
 The hardened detached-host target keeps provider and MCP access gateway-proxied;
 ambiguous proxy outcomes are visible `indeterminate` failures rather than
