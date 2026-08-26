@@ -489,13 +489,13 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 												? "max-w-[1120px]"
 												: step.id === "ready"
 													? "max-w-[960px]"
-													: "max-w-[820px]",
+													: "max-w-[780px]",
 											// Match opensession.com's card glass: translucent paper, a quiet
 											// hairline, and the same 14px blur with restrained saturation.
 											"[&_.bg-settings-plate]:rounded-3xl [&_.bg-settings-plate]:border-divider-soft [&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--popup-surface)_90%,transparent)] [&_.bg-settings-plate]:shadow-[0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:[backdrop-filter:blur(14px)_saturate(1.08)]",
 											// First-run fields use the large field step. Organization and agent
 											// names share one width so the rows align as a single form.
-											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9 [&_input[data-setup-field='identity']]:w-[320px] [&_input[data-setup-field='org-name']]:w-[320px]",
+											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9 [&_input[data-setup-field='identity']]:w-[320px] [&_input[data-setup-field='identity']]:phone:w-[120px] [&_input[data-setup-field='org-name']]:w-[320px] [&_input[data-setup-field='org-name']]:phone:w-[120px]",
 										)}
 									>
 										{step.id === "ingress" && (
