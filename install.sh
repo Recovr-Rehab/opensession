@@ -48,6 +48,8 @@
 #
 # OPENSESSION_CLAUDE_TOKEN  a `claude setup-token` value; staged for the server
 #                           to import into its account pool at first start
+# OPENSESSION_ARTIFACT_SHA256 expected SHA-256 for a local/custom artifact;
+#                           otherwise <artifact>.sha256 is required
 #
 # With --tailscale the client is installed but not joined to a network, since
 # joining needs your account. Set TS_AUTHKEY to have the installer do that too.
@@ -128,6 +130,34 @@ muted() { printf '  %s%s%s\n' "$D" "$1" "$N"; }
 good() { printf '  %sok%s      %s\n' "$G" "$N" "$1"; }
 warn() { printf '  %swarn%s    %s\n' "$Y" "$N" "$1"; }
 die() { printf '  %serror%s   %s\n' "$R" "$N" "$1" >&2; exit 1; }
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    die "SHA-256 verification requires sha256sum or shasum"
+  fi
+}
+
+verify_release_archive() {
+  archive="$1" checksum_file="${2:-}" checksum_label="${3:-checksum}"
+  expected="${OPENSESSION_ARTIFACT_SHA256:-}"
+  if [ -z "$expected" ]; then
+    [ -n "$checksum_file" ] && [ -s "$checksum_file" ] ||
+      die "missing SHA-256 checksum for $archive ($checksum_label)"
+    expected="$(awk 'NF {print $1; exit}' "$checksum_file")"
+  fi
+  if [ "${#expected}" -ne 64 ]; then
+    die "invalid SHA-256 checksum from $checksum_label (expected 64 hex characters)"
+  fi
+  case "$expected" in *[!0-9a-fA-F]*) die "invalid SHA-256 checksum from $checksum_label" ;; esac
+  actual="$(sha256_file "$archive")"
+  [ "$(printf '%s' "$actual" | tr 'A-F' 'a-f')" = "$(printf '%s' "$expected" | tr 'A-F' 'a-f')" ] ||
+    die "SHA-256 mismatch for $archive (expected $expected, got $actual)"
+  good "verified SHA-256 for $(basename "$archive")"
+}
 
 # ── uninstall ───────────────────────────────────────────────────────────────
 
@@ -440,7 +470,12 @@ if [ "$FROM_SOURCE" != "1" ] && [ -z "$ARTIFACT" ] && ! { [ -e "$DIR/.git" ] && 
     muted "downloading $rel_url ..."
     art_tmp="$(mktemp -d)"
     if curl -fsSL --retry 3 "$rel_url" -o "$art_tmp/release.tar.gz" 2>/dev/null; then
+      checksum_url="$rel_url.sha256"
+      curl -fsSL --retry 3 "$checksum_url" -o "$art_tmp/release.tar.gz.sha256" 2>/dev/null ||
+        die "release downloaded but its checksum is unavailable at $checksum_url"
       ARTIFACT="$art_tmp/release.tar.gz"
+      art_checksum="$art_tmp/release.tar.gz.sha256"
+      art_checksum_label="$checksum_url"
     else
       rm -rf "$art_tmp"
       warn "no published release for $rel_os/$rel_arch at $rel_url"
@@ -454,11 +489,22 @@ if [ -n "$ARTIFACT" ]; then
   mkdir -p "$RELEASES"
   case "$ARTIFACT" in
     http://*|https://*)
+      artifact_url="$ARTIFACT"
       art_tmp="$(mktemp -d)"
-      curl -fsSL "$ARTIFACT" -o "$art_tmp/release.tar.gz" || die "could not download $ARTIFACT"
-      art_file="$art_tmp/release.tar.gz" ;;
-    *) art_file="$ARTIFACT"; [ -f "$art_file" ] || die "no such file: $art_file" ;;
+      curl -fsSL --retry 3 "$artifact_url" -o "$art_tmp/release.tar.gz" || die "could not download $artifact_url"
+      art_file="$art_tmp/release.tar.gz"
+      art_checksum="$art_tmp/release.tar.gz.sha256"
+      art_checksum_label="$artifact_url.sha256"
+      if [ -z "${OPENSESSION_ARTIFACT_SHA256:-}" ]; then
+        curl -fsSL --retry 3 "$artifact_url.sha256" -o "$art_checksum" ||
+          die "artifact downloaded but its checksum is unavailable at $artifact_url.sha256"
+      fi ;;
+    *)
+      art_file="$ARTIFACT"; [ -f "$art_file" ] || die "no such file: $art_file"
+      art_checksum="$art_file.sha256"
+      art_checksum_label="$art_checksum" ;;
   esac
+  verify_release_archive "$art_file" "${art_checksum:-}" "${art_checksum_label:-provided checksum}"
   # awk reads the whole listing so tar never sees a closed pipe (pipefail).
   rel_name="$(tar -tzf "$art_file" 2>/dev/null | awk -F/ 'NR==1{print $1}')"
   [ -n "$rel_name" ] || die "could not read the release tarball"

@@ -39,7 +39,7 @@ const markUrl = assetUrl(markAsset);
 const downloadMacUrl = assetUrl(downloadMacAsset);
 const downloadPhoneUrl = assetUrl(downloadPhoneAsset);
 const macDownloadUrl =
-	"https://github.com/tellahq/opensession/releases/download/v0.4.22/OpenSession-0.4.22-arm64.dmg";
+	"https://github.com/tellahq/opensession/releases/latest/download/OpenSession-arm64.dmg";
 const installCommandLines = [
 	"curl -fsSL https://raw.githubusercontent.com",
 	"/tellahq/opensession/main/install.sh | bash",
