@@ -31,6 +31,7 @@ describe("session actor priority routing", () => {
   test("reserves capacity for every interactive run-control command", () => {
     for (const command of [
       "cancel",
+      "steer",
       "interrupt_prompt",
       "steer_queued_prompt",
       "interrupt_queued_prompt",

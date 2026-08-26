@@ -142,6 +142,7 @@ export function isPrioritySessionActorRequest(
       (("priority" in identity && identity.priority === true) ||
         ("command" in identity && [
           "cancel",
+          "steer",
           "interrupt_prompt",
           "steer_queued_prompt",
           "interrupt_queued_prompt",
