@@ -2008,7 +2008,13 @@ export function resumeInterruptedRuns(
   return resumed;
 }
 
-export const BOOT_RECOVERY_CONCURRENCY = 4;
+// Recovery admission performs several synchronous compatibility calls before
+// the detached engine yields its first event. More than one admission at once
+// can therefore monopolize the gateway even though the turns themselves run
+// out of process. Serialize only this short startup phase; each task releases
+// its slot as soon as its engine is live.
+export const BOOT_RECOVERY_CONCURRENCY = 1;
+export const BOOT_RECOVERY_ADMISSION_DELAY_MS = 100;
 // How long a recovery may wait for a queue slot before it is started anyway,
 // outside the queue. Long enough that a busy restart drains its legitimate
 // work first; bounded because the alternative — waiting forever — leaves a
@@ -2153,7 +2159,10 @@ function recoveryQuarantineMessage(entry: QuarantinedRun): string {
 export async function runRecoveryQueue(tasks: Array<() => Promise<void>>): Promise<void> {
   let next = 0;
   const worker = async () => {
+    let admitted = false;
     while (next < tasks.length) {
+      if (admitted) await Bun.sleep(BOOT_RECOVERY_ADMISSION_DELAY_MS);
+      admitted = true;
       const task = tasks[next++];
       try {
         await task();

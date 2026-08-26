@@ -957,6 +957,25 @@ describe("run journal", () => {
 		expect(active).toBe(0);
 	});
 
+	it("yields the gateway between boot recovery admissions", async () => {
+		const order: string[] = [];
+		let timerFired = false;
+		setTimeout(() => {
+			timerFired = true;
+			order.push("timer");
+		}, 0);
+		await agent.runRecoveryQueue([
+			async () => {
+				order.push("first");
+			},
+			async () => {
+				expect(timerFired).toBe(true);
+				order.push("second");
+			},
+		]);
+		expect(order).toEqual(["first", "timer", "second"]);
+	});
+
 	it("continues draining recoveries after one worker task throws", async () => {
 		let completed = false;
 		const errorLog = spyOn(console, "error").mockImplementation(() => {});
