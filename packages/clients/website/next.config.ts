@@ -2,6 +2,7 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
+  allowedDevOrigins: ["os.tella.dev"],
   turbopack: {
     // The preview imports the production web client from this monorepo.
     root: path.resolve(__dirname, "../../.."),
