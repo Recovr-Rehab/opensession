@@ -25,8 +25,12 @@ body {
 	backdrop-filter: blur(14px) saturate(1.08);
 }
 
+/* Keep the product shot on its own supplied scene rather than borrowing the
+   page artwork through the transparent stage. */
 .stage {
-	background: transparent;
+	background-image: url("./demo-background.webp");
+	background-position: center;
+	background-size: cover;
 }
 
 .button-secondary {
