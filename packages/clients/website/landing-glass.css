@@ -16,6 +16,10 @@
 	--primary-pop: oklch(0.965 0.179 112.029);
 	--primary-pop-deep: oklch(0.939 0.182 111.784);
 	--primary-pop-ink: oklch(0.192 0.041 105.17);
+	/* The colour Safari paints wherever the artwork itself cannot reach (the
+	   safe-area bands and rubber-band overscroll). Sampled from the artwork's
+	   edges so those regions read as more sky instead of a white bar. */
+	--page-under: #aed1d7;
 }
 
 /* Safari paints exposed safe-area and rubber-band regions from the root
@@ -23,7 +27,7 @@
    canvas so those regions cannot fall back to the body's white background. */
 html {
 	min-height: 100%;
-	background-color: var(--page);
+	background-color: var(--page-under);
 	background-image: var(--page-art);
 	background-position: center;
 	background-repeat: no-repeat;
@@ -116,6 +120,7 @@ body::before {
 @media (prefers-color-scheme: dark) {
 	:root {
 		--page-art: url("./landing-background-dark.webp");
+		--page-under: #16323f;
 		--card-glass: oklch(0.245 0.025 190 / 0.7);
 		--modal-surface: oklch(0.22 0.025 190 / 0.8);
 		--glass-line: oklch(1 0 0 / 0.08);
