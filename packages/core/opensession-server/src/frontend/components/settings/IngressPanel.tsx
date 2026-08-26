@@ -430,7 +430,11 @@ export function IngressPanel({
 	const [publicAddress, setPublicAddress] = useState("");
 	const [busy, setBusy] = useState<"app" | "apply" | "test" | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [tailscaleApprovalUrl, setTailscaleApprovalUrl] = useState<string | null>(null);
+	const [tailscaleAction, setTailscaleAction] = useState<
+		| { url: string; kind: "approval" | "plans" }
+		| { command: string; kind: "operator" }
+		| null
+	>(null);
 	const loaded = useRef(false);
 	const customDraftTouched = useRef(false);
 	const url = drafts[method];
@@ -490,7 +494,7 @@ export function IngressPanel({
 		if (busy) return;
 		setBusy(kind);
 		setError(null);
-		if (kind === "apply") setTailscaleApprovalUrl(null);
+		if (kind === "apply") setTailscaleAction(null);
 		await work()
 			.then((next) => {
 				apply(next);
@@ -503,8 +507,16 @@ export function IngressPanel({
 				void onChanged?.();
 			})
 			.catch((cause: unknown) => {
-				if (cause instanceof ApiError && cause.actionUrl) {
-					setTailscaleApprovalUrl(cause.actionUrl);
+				if (cause instanceof ApiError && cause.actionKind === "operator" && cause.actionCommand) {
+					setTailscaleAction({ command: cause.actionCommand, kind: "operator" });
+					return;
+				}
+				if (
+					cause instanceof ApiError &&
+					cause.actionUrl &&
+					(cause.actionKind === "approval" || cause.actionKind === "plans")
+				) {
+					setTailscaleAction({ url: cause.actionUrl, kind: cause.actionKind });
 					return;
 				}
 				setError(cause instanceof Error ? cause.message : "Public callbacks could not be updated");
@@ -821,10 +833,28 @@ export function IngressPanel({
 							{settings.exposure === method && (
 								<IngressWaitingState method={method} health={settings.health} />
 							)}
-							{method === "tailscale" && tailscaleApprovalUrl && (
-								<InlineAlert variant="info" title="Approve Funnel in Tailscale">
-									Approve public access, return here, then start Funnel again.
-									{" "}<a className="font-medium underline underline-offset-2" href={tailscaleApprovalUrl} target="_blank" rel="noreferrer">Open Tailscale approval</a>
+							{method === "tailscale" && tailscaleAction && (
+								<InlineAlert
+									variant="info"
+									title={tailscaleAction.kind === "plans"
+										? "Choose a Tailscale plan"
+										: tailscaleAction.kind === "operator"
+											? "Allow Open Session to manage Tailscale"
+											: "Approve Funnel in Tailscale"}
+								>
+									{tailscaleAction.kind === "operator" ? (
+										<>
+											Run this once on the server, then start Funnel again.
+											<div className="mt-2"><CodeBlock>{tailscaleAction.command}</CodeBlock></div>
+										</>
+									) : (
+										<>
+											{tailscaleAction.kind === "plans"
+												? "Tailscale requires this tailnet to select a current plan. Funnel is available on all current plans."
+												: "Approve public access, return here, then start Funnel again."}
+											{" "}<a className="font-medium underline underline-offset-2" href={tailscaleAction.url} target="_blank" rel="noreferrer">{tailscaleAction.kind === "plans" ? "Review Tailscale plans" : "Open Tailscale approval"}</a>
+										</>
+									)}
 								</InlineAlert>
 							)}
 							{settings.health === "unreachable" && settings.exposure === method && (

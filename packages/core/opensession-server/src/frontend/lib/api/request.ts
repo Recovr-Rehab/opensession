@@ -19,11 +19,21 @@ const inflightGets = new Map<string, Promise<unknown>>();
 export class ApiError extends Error {
 	status: number;
 	actionUrl?: string;
-	constructor(message: string, status: number, actionUrl?: string) {
+	actionCommand?: string;
+	actionKind?: string;
+	constructor(
+		message: string,
+		status: number,
+		actionUrl?: string,
+		actionCommand?: string,
+		actionKind?: string,
+	) {
 		super(message);
 		this.name = "ApiError";
 		this.status = status;
 		this.actionUrl = actionUrl;
+		this.actionCommand = actionCommand;
+		this.actionKind = actionKind;
 	}
 }
 
@@ -73,11 +83,15 @@ export function request<T>(
 			const body = (await res.json().catch(() => null)) as {
 				error?: string;
 				actionUrl?: string;
+				actionCommand?: string;
+				actionKind?: string;
 			} | null;
 			throw new ApiError(
 				body?.error || `${opts.label || "Failed"}: ${res.status}`,
 				res.status,
 				body?.actionUrl,
+				body?.actionCommand,
+				body?.actionKind,
 			);
 		}
 		return (await res.json().catch(() => null)) as T;

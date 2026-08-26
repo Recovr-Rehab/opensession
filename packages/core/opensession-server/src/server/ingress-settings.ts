@@ -2,10 +2,9 @@
 import { randomBytes } from "crypto";
 import { createSocket } from "dgram";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
-import { networkInterfaces } from "os";
+import { networkInterfaces, tmpdir, userInfo } from "os";
 import { isIP } from "net";
 import { join } from "path";
-import { tmpdir } from "os";
 import { resolve4, resolve6 } from "dns/promises";
 import {
   configuredIngress,
@@ -226,22 +225,56 @@ async function tailscaleFunnelStatus(binary = Bun.which("tailscale")): Promise<u
   }
 }
 
-export function tailscaleApprovalUrl(output: string): string {
+export function tailscaleFunnelAction(output: string): {
+  url: string;
+  kind: "approval" | "plans";
+} | null {
+  let plansUrl = "";
   for (const match of output.matchAll(/https:\/\/[^\s<>"']+/g)) {
     try {
       const url = new URL(match[0]);
-      if (url.hostname === "tailscale.com" || url.hostname.endsWith(".tailscale.com")) {
-        return url.href;
+      if (url.hostname === "login.tailscale.com" && url.pathname === "/f/funnel") {
+        return { url: url.href, kind: "approval" };
+      }
+      if (
+        url.hostname === "console.tailscale.com" &&
+        url.pathname === "/admin/settings/billing/plans"
+      ) {
+        plansUrl = url.href;
       }
     } catch {}
   }
-  return "";
+  return plansUrl ? { url: plansUrl, kind: "plans" } : null;
 }
 
-export class TailscaleFunnelApprovalRequired extends Error {
-  constructor(readonly approvalUrl: string) {
-    super("Approve Funnel in Tailscale, then start Funnel again.");
-    this.name = "TailscaleFunnelApprovalRequired";
+export function tailscaleFunnelOperatorDenied(output: string): boolean {
+  return /serve config denied/i.test(output);
+}
+
+export function tailscaleFunnelOperatorCommand(username = userInfo().username): string {
+  const operator = /^[a-z_][a-z0-9_-]*[$]?$/i.test(username) ? username : "$(id -un)";
+  return `sudo tailscale set --operator=${operator}`;
+}
+
+type TailscaleFunnelAction =
+  | { kind: "approval" | "plans"; url: string }
+  | { kind: "operator"; command: string };
+
+export class TailscaleFunnelActionRequired extends Error {
+  readonly actionKind: TailscaleFunnelAction["kind"];
+  readonly actionUrl?: string;
+  readonly actionCommand?: string;
+
+  constructor(action: TailscaleFunnelAction) {
+    super(action.kind === "plans"
+      ? "Tailscale requires this tailnet to select a current plan before Funnel can be enabled."
+      : action.kind === "operator"
+        ? "Allow the Open Session service account to manage Tailscale, then start Funnel again."
+        : "Approve Funnel in Tailscale, then start Funnel again.");
+    this.name = "TailscaleFunnelActionRequired";
+    this.actionKind = action.kind;
+    if ("url" in action) this.actionUrl = action.url;
+    if ("command" in action) this.actionCommand = action.command;
   }
 }
 
@@ -249,7 +282,8 @@ export async function startTailscaleFunnelCommand(binary: string): Promise<{
   code: number;
   stdout: string;
   stderr: string;
-  approvalUrl: string;
+  actionUrl: string;
+  actionKind: "approval" | "plans" | null;
 }> {
   const child = Bun.spawn([
     binary,
@@ -268,7 +302,8 @@ export async function startTailscaleFunnelCommand(binary: string): Promise<{
       const { done, value } = await reader.read();
       if (done) break;
       stdout += decoder.decode(value, { stream: true });
-      approvalUrl ||= tailscaleApprovalUrl(stdout);
+      const action = tailscaleFunnelAction(stdout);
+      if (action?.kind === "approval") approvalUrl = action.url;
       // Some Tailscale control-plane configurations keep the CLI open while
       // waiting for browser approval. The Settings request cannot complete the
       // approval itself, so stop the hidden waiter once its action is visible.
@@ -281,7 +316,14 @@ export async function startTailscaleFunnelCommand(binary: string): Promise<{
     child.exited,
     readStdout,
   ]);
-  return { code, stdout, stderr, approvalUrl };
+  const action = tailscaleFunnelAction(stdout);
+  return {
+    code,
+    stdout,
+    stderr,
+    actionUrl: action?.url || "",
+    actionKind: action?.kind || null,
+  };
 }
 
 /** A zero exit from `tailscale funnel --bg` only says the CLI request
@@ -610,8 +652,17 @@ export async function enableTailscaleFunnel(): Promise<string> {
   const dnsName = await tailscaleDnsName();
   if (!dnsName) throw new Error("Tailscale is not connected or has no HTTPS hostname");
   const result = await startTailscaleFunnelCommand(binary);
-  if (result.approvalUrl) {
-    throw new TailscaleFunnelApprovalRequired(result.approvalUrl);
+  if (result.actionUrl && result.actionKind) {
+    throw new TailscaleFunnelActionRequired({
+      url: result.actionUrl,
+      kind: result.actionKind,
+    });
+  }
+  if (tailscaleFunnelOperatorDenied(`${result.stdout}\n${result.stderr}`)) {
+    throw new TailscaleFunnelActionRequired({
+      kind: "operator",
+      command: tailscaleFunnelOperatorCommand(),
+    });
   }
   if (result.code !== 0) throw new Error(result.stderr.trim() || "Could not enable Tailscale Funnel");
   const funnelStatus = await tailscaleFunnelStatus(binary);

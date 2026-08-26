@@ -12,8 +12,10 @@ import {
   savePrivateAppOrigin,
   savePublicIngress,
   startTailscaleFunnelCommand,
-  tailscaleApprovalUrl,
+  tailscaleFunnelAction,
   tailscaleFunnelConfigured,
+  tailscaleFunnelOperatorCommand,
+  tailscaleFunnelOperatorDenied,
 } from "./ingress-settings";
 
 const previous = process.env.OPENSESSION_CONFIG;
@@ -131,12 +133,36 @@ describe("public ingress settings", () => {
     }, "server.example.ts.net")).toBe(false);
   });
 
-  test("extracts only Tailscale approval links from CLI output", () => {
-    expect(tailscaleApprovalUrl(
-      "Enable Funnel at:\n\nhttps://login.tailscale.com/admin/funnel?node=example\n",
-    )).toBe("https://login.tailscale.com/admin/funnel?node=example");
-    expect(tailscaleApprovalUrl("Continue at https://example.test/not-tailscale"))
-      .toBe("");
+  test("classifies Tailscale Funnel actions from CLI output", () => {
+    expect(tailscaleFunnelAction(
+      [
+        "Manage your plan at https://login.tailscale.com/admin/billing",
+        "Enable Funnel at https://login.tailscale.com/f/funnel?node=example",
+      ].join("\n"),
+    )).toEqual({
+      url: "https://login.tailscale.com/f/funnel?node=example",
+      kind: "approval",
+    });
+    expect(tailscaleFunnelAction(
+      "Manage at https://console.tailscale.com/admin/settings/billing/plans",
+    )).toEqual({
+      url: "https://console.tailscale.com/admin/settings/billing/plans",
+      kind: "plans",
+    });
+    expect(tailscaleFunnelAction("Continue at https://example.test/not-tailscale"))
+      .toBeNull();
+  });
+
+  test("recognizes a missing local Tailscale operator", () => {
+    const output = [
+      "sending serve config: Access denied: serve config denied",
+      "Use 'sudo tailscale funnel --bg --yes --https=443 http://127.0.0.1:3860'.",
+      "To not require root, use 'sudo tailscale set --operator=$USER' once.",
+    ].join("\n");
+    expect(tailscaleFunnelOperatorDenied(output)).toBe(true);
+    expect(tailscaleFunnelOperatorDenied("Funnel is unavailable")).toBe(false);
+    expect(tailscaleFunnelOperatorCommand("ubuntu"))
+      .toBe("sudo tailscale set --operator=ubuntu");
   });
 
   test("returns a Funnel approval link without leaving the CLI waiting", async () => {
@@ -144,12 +170,14 @@ describe("public ingress settings", () => {
     const binary = join(dirname(path), "fake-tailscale");
     writeFileSync(binary, [
       "#!/bin/sh",
-      "printf 'Approve at https://login.tailscale.com/admin/funnel?node=example\\n'",
+      "printf 'Billing: https://console.tailscale.com/admin/settings/billing/plans\\n'",
+      "printf 'Approve at https://login.tailscale.com/f/funnel?node=example\\n'",
       "exec sleep 30",
     ].join("\n"), { mode: 0o700 });
     const startedAt = Date.now();
     const result = await startTailscaleFunnelCommand(binary);
-    expect(result.approvalUrl).toBe("https://login.tailscale.com/admin/funnel?node=example");
+    expect(result.actionUrl).toBe("https://login.tailscale.com/f/funnel?node=example");
+    expect(result.actionKind).toBe("approval");
     expect(Date.now() - startedAt).toBeLessThan(3_000);
   });
 
