@@ -1,0 +1,31 @@
+.announcement-page {
+	height: 100dvh;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior-y: contain;
+}
+
+.announcement-page-hero {
+	width: min(100%, 1120px);
+	margin-inline: auto;
+	padding-top: clamp(96px, 9vw, 128px);
+}
+
+.announcement-home {
+	right: auto;
+	left: 22px;
+}
+
+.announcement-page .announcement-article {
+	padding-top: clamp(72px, 8vw, 104px);
+}
+
+@media (max-width: 720px) {
+	.announcement-home {
+		left: 12px;
+	}
+
+	.announcement-page-hero {
+		padding-top: 80px;
+	}
+}

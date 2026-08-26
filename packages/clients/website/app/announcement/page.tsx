@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { AnnouncementArticle } from "../../AnnouncementArticle";
+import { ProductDemo } from "../../ProductDemo";
+import "./announcement.css";
 
 const title = "Introducing Open Session";
 const description =
@@ -28,8 +30,13 @@ export default function AnnouncementPage() {
 	return (
 		<main className="announcement-page" aria-labelledby="announcement-title">
 			<a className="announcement-home" href="/">
-				Home
+				Back to home
 			</a>
+			<div className="announcement-page-hero">
+				<div className="stage">
+					<ProductDemo />
+				</div>
+			</div>
 			<AnnouncementArticle showMark />
 		</main>
 	);
