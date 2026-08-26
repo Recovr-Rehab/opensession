@@ -630,11 +630,15 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			>
 				<div className="mx-auto grid h-full w-full max-w-[820px] grid-cols-[1fr_auto_1fr] items-center phone:grid-cols-1 phone:items-start">
 					<Button
-						variant="ghost"
+						variant={footerSeparated ? "ghost" : "overlay"}
 						size="lg"
 						icon={<IconChevronLeft size={18} />}
 						onClick={() => goTo(index - 1)}
-						className={cn("justify-self-start phone:hidden", index === 0 && "invisible")}
+						className={cn(
+							"justify-self-start phone:hidden",
+							!footerSeparated && "text-white!",
+							index === 0 && "invisible",
+						)}
 					>
 						Back
 					</Button>
