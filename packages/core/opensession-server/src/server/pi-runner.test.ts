@@ -639,7 +639,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
             id: "k1",
             name: "org-key",
             kind: "api_key",
-            value: "sk-test-remote-runtime",
+            value: "test-remote-runtime-key",
             createdAt: new Date().toISOString(),
           },
         ],
@@ -715,7 +715,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         accountStrict: true,
         disableLocalWorkspaceTools: true,
       });
-      expect(runtimeKeys).toEqual([["openai", "sk-test-remote-runtime"]]);
+      expect(runtimeKeys).toEqual([["openai", "test-remote-runtime-key"]]);
       const errors = events.filter((event) => event.type === "error");
       expect(errors, JSON.stringify(errors)).toHaveLength(0);
       expect(events.find((event) => event.type === "done")).toMatchObject({ result: "ok" });
