@@ -287,10 +287,7 @@ export async function updateGithubAppWebhook(
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(
-      `GitHub rejected the webhook update (${response.status})${detail ? `: ${detail.slice(0, 160)}` : ""}`,
-    );
+    throw new Error(`GitHub rejected the webhook update (${response.status})`);
   }
 }
 
