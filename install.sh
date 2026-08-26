@@ -759,14 +759,16 @@ if [ "$WITH_CADDY" = "1" ]; then
 
   # Private custom domains cannot use HTTP-01 because they terminate on a
   # Tailscale address. lego handles Let's Encrypt DNS-01 and renewal while
-  # stock Caddy continues to serve the resulting certificate.
-  if command -v lego >/dev/null 2>&1; then
-    good "lego $(lego --version 2>/dev/null | head -1 || echo installed)"
-  elif install_package lego && command -v lego >/dev/null 2>&1; then
-    good "lego $(lego --version 2>/dev/null | head -1 || echo installed)"
-  elif [ "$OS" = "Darwin" ]; then
-    warn "could not install lego automatically"
-    muted "install it with: brew install lego"
+  # stock Caddy continues to serve the resulting certificate. On Linux, use
+  # lego's official build rather than a distro package: Ubuntu's older build
+  # advertises Cloudflare in `dnshelp` but rejects it when issuing a certificate.
+  if [ "$OS" = "Darwin" ]; then
+    if command -v lego >/dev/null 2>&1 || { install_package lego && command -v lego >/dev/null 2>&1; }; then
+      good "lego $(lego --version 2>/dev/null | head -1 || echo installed)"
+    else
+      warn "could not install lego automatically"
+      muted "install it with: brew install lego"
+    fi
   else
     case "$(uname -m)" in
       x86_64|amd64) lego_arch="amd64" ;;
@@ -783,7 +785,7 @@ if [ "$WITH_CADDY" = "1" ]; then
       export PATH="$HOME/.local/bin:$PATH"
       good "lego $(lego --version 2>/dev/null | head -1 || echo installed)"
     else
-      warn "could not install lego automatically"
+      warn "could not install the official lego build automatically"
       muted "install it from https://go-acme.github.io/lego/installation/"
     fi
     rm -rf "$lego_tmp"
