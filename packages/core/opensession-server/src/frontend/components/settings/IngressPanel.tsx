@@ -25,6 +25,7 @@ import {
 } from "../../lib/ingress-ui";
 import { useSetupStatus, type SetupController } from "../../hooks/useSetupStatus";
 import { Button } from "../../ui/button";
+import { cn } from "../../ui/cn";
 import { CopyCheck, useCopy } from "../../ui/copy";
 import { Input } from "../../ui/input";
 import { Radio, RadioGroup } from "../../ui/radio";
@@ -490,7 +491,7 @@ export function IngressPanel({
 	const selectedMethod = INGRESS_METHODS.find((option) => option.value === method)!;
 
 	return (
-		<SettingsPanel className={onboarding ? "mx-auto max-w-[820px]" : "relative"}>
+		<SettingsPanel className={onboarding ? "mx-auto max-w-[960px]" : "relative"}>
 			{!onboarding && (
 				<SettingsHeader
 					title="Domains and ingress"
@@ -576,8 +577,15 @@ export function IngressPanel({
 					{onboarding && (
 						<SettingsHint className="mt-2 mb-3">Optional. Skip this if you do not need webhooks, remote Sandbox callbacks, or public workload identity.</SettingsHint>
 					)}
-					<div className="grid grid-cols-[minmax(0,300px)_minmax(0,1fr)] items-start gap-3.5 phone:grid-cols-1">
-						<SettingsForm className="m-0 min-w-0 gap-2">
+					<div
+						className={cn(
+							"grid items-start gap-3.5 phone:grid-cols-1",
+							onboarding
+								? "grid-cols-2"
+								: "grid-cols-[minmax(0,300px)_minmax(0,1fr)]",
+						)}
+					>
+						<SettingsForm className={cn("m-0 min-w-0 gap-2", onboarding && "gap-2.5 p-6 phone:p-4")}>
 							<div className="px-1 text-label font-medium text-dim">Connection method</div>
 							<RadioGroup
 								aria-label="Public callback method"
@@ -587,19 +595,31 @@ export function IngressPanel({
 								className="grid gap-2"
 							>
 								{INGRESS_METHODS.map((option) => (
-									<label key={option.value} className="flex min-h-20 cursor-pointer items-center gap-3.5 rounded-xl px-4 py-3.5 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed">
+									<label
+										key={option.value}
+										className={cn(
+											"flex min-h-20 cursor-pointer items-center gap-3.5 rounded-xl px-4 py-3.5 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed",
+											onboarding && "bg-hover/50 hover:bg-hover",
+										)}
+									>
 										<MethodMark method={option.value} />
 										<span className="min-w-0 flex-1">
 											<span className="block text-item-title font-medium text-fg">{option.label}</span>
 											<span className="mt-1 block text-supporting text-dim">{option.description}</span>
 										</span>
-										<Radio value={option.value} className="shrink-0" />
+										<Radio
+											value={option.value}
+											className={cn(
+												"shrink-0",
+												onboarding && "size-5 border-0 bg-fg/15 data-[checked]:bg-fg data-[checked]:hover:border-fg [&>span]:hidden",
+											)}
+										/>
 									</label>
 								))}
 							</RadioGroup>
 						</SettingsForm>
 
-						<SettingsForm className="m-0 min-w-0">
+						<SettingsForm className={cn("m-0 min-w-0", onboarding && "p-6 phone:p-4")}>
 							<div className="flex items-center gap-3">
 								<MethodMark method={method} size={40} />
 								<div className="min-w-0">
