@@ -49,6 +49,30 @@ function Value({ value }: { value: string }) {
 	);
 }
 
+function ConfigurationSection({
+	title,
+	description,
+	children,
+}: {
+	title: string;
+	description?: string;
+	children: ReactNode;
+}) {
+	return (
+		<section className="flex flex-col gap-2">
+			<header className="px-1">
+				<h3 className="m-0 text-item-title font-semibold text-fg">{title}</h3>
+				{description && (
+					<p className="m-0 mt-0.5 text-supporting leading-relaxed text-dim">
+						{description}
+					</p>
+				)}
+			</header>
+			<SettingsSection className="p-4">{children}</SettingsSection>
+		</section>
+	);
+}
+
 type Guide = {
 	description: string;
 	/** Rendered above the numbered steps, for a provider that can be set up
@@ -439,9 +463,9 @@ export function IntegrationSetupDialog({
 				/>
 
 				{(canToggle || integration.env.length > 0) && (
-					<SettingsSection className="p-4">
+					<div className="flex flex-col gap-4">
 						{canToggle && (
-							<div className="flex items-center gap-4">
+							<SettingsSection className="flex items-center gap-4 p-4">
 								<div className="min-w-0 flex-1">
 									<div className="text-item-title font-medium text-fg">
 										Enable {integration.label}
@@ -456,16 +480,13 @@ export function IntegrationSetupDialog({
 									disabled={saving}
 									aria-label={`Enable ${integration.label}`}
 								/>
-							</div>
+							</SettingsSection>
 						)}
 						{github && (
-							<div className={canToggle ? "mt-4 border-t border-line pt-4" : undefined}>
-								<div className="mb-4">
-									<div className="text-item-title font-medium text-fg">App credentials</div>
-									<div className="mt-0.5 text-supporting text-dim">
-										Used for bot work and teammate GitHub connections.
-									</div>
-								</div>
+							<ConfigurationSection
+								title="App credentials"
+								description="Used for bot work and teammate GitHub connections."
+							>
 								<GithubAppFields
 									github={github}
 									saving={saving}
@@ -496,18 +517,15 @@ export function IntegrationSetupDialog({
 									}}
 									onPrivateKeyChange={setPrivateKey}
 								/>
-							</div>
+							</ConfigurationSection>
 						)}
 						{integration.id === "slack" && (
-							<div className={canToggle ? "mt-4 border-t border-line pt-4" : undefined}>
+							<ConfigurationSection title="Event delivery">
 								<div className="flex flex-wrap items-center gap-4">
-									<div className="min-w-[12rem] flex-1">
-										<div className="text-item-title font-medium text-fg">Event delivery</div>
-										<div className="mt-0.5 text-supporting text-dim">
-											{transport === "socket"
-												? "Uses an outbound connection and needs no public webhook URL."
-												: "Slack posts events to this instance's public webhook URL."}
-										</div>
+									<div className="min-w-[12rem] flex-1 text-supporting text-dim">
+										{transport === "socket"
+											? "Uses an outbound connection and needs no public webhook URL."
+											: "Slack posts events to this instance's public webhook URL."}
 									</div>
 									<Segmented
 										label="Slack event delivery"
@@ -528,56 +546,56 @@ export function IntegrationSetupDialog({
 										This instance has no public webhook URL. Choose Socket Mode or configure a public URL first.
 									</InlineAlert>
 								)}
-							</div>
+							</ConfigurationSection>
 						)}
 						{visibleEnv.length > 0 && (
-							<div
-								className={
-									canToggle
-										? "mt-4 flex flex-col gap-4 border-t border-line pt-4"
-										: "flex flex-col gap-4"
+							<ConfigurationSection
+								title={integration.id === "github" ? "Webhooks and mentions" : "Credentials"}
+								description={
+									integration.id === "github"
+										? "Verify inbound events and choose extra handles that wake the PR agent."
+										: "Credentials stay on this server and are never shown back."
 								}
 							>
-								{visibleEnv.map((envVar) => (
-									<SecretField
-										key={envVar.name}
-										name={envVar.name}
-										label={<Code>{envVar.name}</Code>}
-										description={envVar.description}
-										present={envVar.present}
-										required={
-											integration.id === "slack"
-												? slackCredentialRequired(envVar.name, envVar.required, transport)
-												: envVar.required
-										}
-										disabled={saving}
-										cleared={Boolean(
-											envVar.present &&
-												cleared[envVar.name] &&
-												!(typed[envVar.name] ?? "").trim(),
-										)}
-										value={typed[envVar.name] ?? ""}
-										onChange={(value) => {
-											setTyped((current) => ({ ...current, [envVar.name]: value }));
-											if (value.trim() && cleared[envVar.name]) {
-												setCleared((current) => ({ ...current, [envVar.name]: false }));
+								<div className="flex flex-col gap-4">
+									{visibleEnv.map((envVar) => (
+										<SecretField
+											key={envVar.name}
+											name={envVar.name}
+											label={<Code>{envVar.name}</Code>}
+											description={envVar.description}
+											present={envVar.present}
+											required={
+												integration.id === "slack"
+													? slackCredentialRequired(envVar.name, envVar.required, transport)
+													: envVar.required
 											}
-										}}
-										onToggleClear={() => {
-											setCleared((current) => ({
-												...current,
-												[envVar.name]: !current[envVar.name],
-											}));
-											setTyped((current) => ({ ...current, [envVar.name]: "" }));
-										}}
-									/>
-								))}
-								<p className="m-0 text-supporting text-faint">
-									Credentials stay on this server and are never shown back.
-								</p>
-							</div>
+											disabled={saving}
+											cleared={Boolean(
+												envVar.present &&
+													cleared[envVar.name] &&
+													!(typed[envVar.name] ?? "").trim(),
+											)}
+											value={typed[envVar.name] ?? ""}
+											onChange={(value) => {
+												setTyped((current) => ({ ...current, [envVar.name]: value }));
+												if (value.trim() && cleared[envVar.name]) {
+													setCleared((current) => ({ ...current, [envVar.name]: false }));
+												}
+											}}
+											onToggleClear={() => {
+												setCleared((current) => ({
+													...current,
+													[envVar.name]: !current[envVar.name],
+												}));
+												setTyped((current) => ({ ...current, [envVar.name]: "" }));
+											}}
+										/>
+									))}
+								</div>
+							</ConfigurationSection>
 						)}
-					</SettingsSection>
+					</div>
 				)}
 
 				{integration.id === "codestorage" && (

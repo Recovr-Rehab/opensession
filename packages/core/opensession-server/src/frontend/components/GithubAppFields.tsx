@@ -1,3 +1,4 @@
+import { Field, Input } from "../ui/input";
 import { GithubPrivateKeyField } from "./GithubPrivateKeyField";
 import { SecretField, type SetupGithub } from "./setup-shared";
 
@@ -52,11 +53,10 @@ export function GithubAppFields({
 				onChange={onClientIdChange}
 				onToggleClear={onToggleClientIdClear}
 			/>
-			<label className="flex flex-col gap-1">
-				<span className="text-supporting text-fg">App slug</span>
-				<input
+			<Field label="App slug">
+				<Input
 					type="text"
-					className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 font-mono text-supporting text-fg outline-none focus-ring phone:min-h-11 phone:text-input-phone"
+					className="font-mono phone:min-h-11 phone:text-input-phone"
 					value={appSlug}
 					onChange={(event) => onAppSlugChange(event.target.value)}
 					placeholder="open-session-example"
@@ -69,13 +69,12 @@ export function GithubAppFields({
 				<span className="text-meta leading-snug text-faint">
 					From github.com/apps/&lt;slug&gt;. Identifies App-authored activity.
 				</span>
-			</label>
+			</Field>
 			{showInstallationOwner && (
-				<label className="flex flex-col gap-1">
-					<span className="text-supporting text-fg">Installation owner</span>
-					<input
+				<Field label="Installation owner">
+					<Input
 						type="text"
-						className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 font-mono text-supporting text-fg outline-none focus-ring phone:min-h-11 phone:text-input-phone"
+						className="font-mono phone:min-h-11 phone:text-input-phone"
 						value={installationOwner}
 						onChange={(event) => onInstallationOwnerChange(event.target.value)}
 						placeholder="my-organization"
@@ -88,7 +87,7 @@ export function GithubAppFields({
 					<span className="text-meta leading-snug text-faint">
 						Required. Enter the GitHub login for the account or organization where the App is installed. Open Session uses it to select the installation that mints repository tokens.
 					</span>
-				</label>
+				</Field>
 			)}
 			<SecretField
 				name="Client secret"
