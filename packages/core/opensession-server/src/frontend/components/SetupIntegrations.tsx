@@ -189,26 +189,20 @@ export function GithubAuthCard({
 	onboarding?: boolean;
 }) {
 	const state = githubAuthState(github);
-	const active = github.userPrAuth && github.clientIdConfigured;
 
 	return (
 		<div className="grid px-4 phone:px-0">
-			<SettingCard className={!active ? "hidden" : undefined}>
-				<div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-5 py-4 phone:px-3 phone:py-2">
-					<IconTile name="github" size={40} />
-					<div className="flex min-w-0 flex-wrap items-center gap-2">
-						<div className="text-dialog-title font-semibold text-fg">GitHub</div>
-						<StateChip tone={state.tone} label={state.label} />
-					</div>
-				</div>
-			</SettingCard>
 			<div
 				className={
-					onboarding ? "mt-3 w-full" : "mx-auto mt-3 w-full max-w-[34rem]"
+					onboarding ? "w-full" : "mx-auto mt-3 w-full max-w-[34rem]"
 				}
 			>
 				<SettingsSection className="flex flex-col gap-4">
-					<GithubManifestSetup github={github} returnTo="welcome" />
+					<GithubManifestSetup
+						github={github}
+						returnTo="welcome"
+						connectionStatus={onboarding ? state : undefined}
+					/>
 				</SettingsSection>
 				{onboarding && github.clientIdConfigured && (
 					<div className="mt-6">
@@ -216,7 +210,7 @@ export function GithubAuthCard({
 							Optional. Sign in now so sessions can use your GitHub account. You can
 							skip this and connect later under Account.
 						</SettingsHint>
-						<GithubAccounts personal />
+						<GithubAccounts personal showHeading={false} />
 					</div>
 				)}
 			</div>

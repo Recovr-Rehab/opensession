@@ -4,6 +4,7 @@ import { Input } from "../ui/input";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SettingsHint } from "../ui/settings";
 import { InlineAlert } from "../ui/state";
+import { IconTile } from "./BrandTile";
 import {
 	githubAppCreateOwner,
 	githubAppInstallUrlForSlug,
@@ -12,7 +13,13 @@ import {
 	githubManifestAction,
 	type GithubAppOwnerType,
 } from "../lib/github-app-setup";
-import { SetupSteps, setupRequest, type SetupGithub } from "./setup-shared";
+import {
+	SetupSteps,
+	StateChip,
+	setupRequest,
+	type ChipTone,
+	type SetupGithub,
+} from "./setup-shared";
 
 function githubManifestSteps(owner: GithubAppOwnerType) {
 	const account = owner === "organization" ? "organization" : "personal account";
@@ -32,9 +39,11 @@ function githubManifestSteps(owner: GithubAppOwnerType) {
 export function GithubManifestSetup({
 	github,
 	returnTo,
+	connectionStatus,
 }: {
 	github: SetupGithub;
 	returnTo: "welcome" | "settings";
+	connectionStatus?: { tone: ChipTone; label: string };
 }) {
 	const initialOwner = githubAppCreateOwner(github.appCreateUrl);
 	const [owner, setOwner] = useState<GithubAppOwnerType>(
@@ -110,35 +119,41 @@ export function GithubManifestSetup({
 
 	return (
 		<>
-			<div className="text-dialog-title font-semibold text-fg">How to connect</div>
-			<div className="flex flex-col gap-2">
-				<div className="flex items-center justify-between gap-3 phone:flex-col phone:items-stretch">
-					<div>
-						<div className="text-label font-medium text-dim">Create for</div>
-						<div className="mt-0.5 text-supporting text-faint">
-							Choose who owns and installs the GitHub App.
+			{connectionStatus ? (
+				<div className="flex items-start justify-between gap-4">
+					<div className="min-w-0">
+						<IconTile name="github" size={40} />
+						<div className="mt-4 text-dialog-title font-semibold text-fg">
+							How to connect
 						</div>
 					</div>
-					<Segmented
-						label="GitHub App owner"
-						value={owner}
-						onValueChange={(value) => setOwner(value as GithubAppOwnerType)}
-						className="phone:w-full"
-					>
-						<SegmentedOption
-							value="personal"
-							className="phone:min-h-11 phone:flex-1 phone:justify-center"
-						>
-							Personal account
-						</SegmentedOption>
-						<SegmentedOption
-							value="organization"
-							className="phone:min-h-11 phone:flex-1 phone:justify-center"
-						>
-							Organization
-						</SegmentedOption>
-					</Segmented>
+					<div className="pt-1">
+						<StateChip tone={connectionStatus.tone} label={connectionStatus.label} />
+					</div>
 				</div>
+			) : (
+				<div className="text-dialog-title font-semibold text-fg">How to connect</div>
+			)}
+			<div className="flex flex-col gap-2">
+				<Segmented
+					label="GitHub App owner"
+					value={owner}
+					onValueChange={(value) => setOwner(value as GithubAppOwnerType)}
+					className="w-full"
+				>
+					<SegmentedOption
+						value="personal"
+						className="flex-1 justify-center phone:min-h-11"
+					>
+						Personal account
+					</SegmentedOption>
+					<SegmentedOption
+						value="organization"
+						className="flex-1 justify-center phone:min-h-11"
+					>
+						Organization
+					</SegmentedOption>
+				</Segmented>
 				{owner === "organization" && (
 					<label className="flex flex-col gap-1">
 						<span className="text-label font-medium text-dim">Organization login</span>
@@ -157,7 +172,7 @@ export function GithubManifestSetup({
 							autoComplete="off"
 							spellCheck={false}
 						/>
-						<span className="text-meta leading-snug text-faint">
+						<span data-onboarding-caption="" className="text-meta text-faint">
 							The organization that will own and install the App.
 						</span>
 					</label>

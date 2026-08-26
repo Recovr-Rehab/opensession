@@ -989,7 +989,10 @@ function GithubAppWizard({
 
 /** `personal`: only the signed-in user's own row (the Account page);
  *  default shows the whole team roster (admin overview). */
-export function GithubAccounts({ personal = false }: { personal?: boolean } = {}) {
+export function GithubAccounts({
+  personal = false,
+  showHeading = true,
+}: { personal?: boolean; showHeading?: boolean } = {}) {
   const [data, setData] = useState<GithubAuthData | null>(null);
   const [flow, setFlow] = useState<DeviceFlow | null>(null);
   const [flowState, setFlowState] = useState<"idle" | "starting" | "waiting">("idle");
@@ -1235,7 +1238,7 @@ setError(e.message);
     const connected = !!account;
     return (
       <>
-        <SectionHeading>GitHub</SectionHeading>
+        {showHeading && <SectionHeading>GitHub</SectionHeading>}
         {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
         <SettingCard>
           <SettingRow className="items-start gap-x-3">
@@ -1457,7 +1460,9 @@ setError(e.message);
 
   return (
     <>
-      <SectionHeading>{personal ? "GitHub" : "GitHub accounts"}</SectionHeading>
+      {showHeading && (
+        <SectionHeading>{personal ? "GitHub" : "GitHub accounts"}</SectionHeading>
+      )}
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
