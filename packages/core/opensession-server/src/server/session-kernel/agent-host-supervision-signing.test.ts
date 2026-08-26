@@ -115,6 +115,24 @@ describe("synchronous Agent Host signer", () => {
         now,
       ),
     ).toBeUndefined();
+    const shortRetention = {
+      ...keyring,
+      keys: [
+        {
+          ...keyring.keys[0]!,
+          signingNotAfterMs: now + 1,
+          verifyUntilMs: authority.expiresAtMs + 30_000 - 1,
+        },
+      ],
+    };
+    expect(
+      await verifySignedAgentHostSupervisionEnvelopeV2(
+        first,
+        shortRetention,
+        expected,
+        now,
+      ),
+    ).toBeUndefined();
   });
 
   test("rejects algorithm/key/window/public mismatch and multiple active keys", () => {

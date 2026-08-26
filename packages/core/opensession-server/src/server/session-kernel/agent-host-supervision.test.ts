@@ -268,6 +268,50 @@ describe("schema 27 signed Agent Host receipts", () => {
       ).some((column) => column.name === "receipt_format"),
     ).toBe(false);
     corruptDb.close();
+
+    function expectV26Rollback(
+      name: string,
+      mutate: (db: Database) => void,
+      message?: string,
+    ) {
+      const path = join(dir, `${name}.sqlite`);
+      makeV26(path);
+      const db = new Database(path);
+      mutate(db);
+      db.close();
+      expect(() => new SessionKernelStore(path)).toThrow(message);
+      const after = new Database(path, { readonly: true });
+      expect(
+        (after.query("PRAGMA user_version").get() as { user_version: number })
+          .user_version,
+      ).toBe(26);
+      expect(
+        (
+          after
+            .query("PRAGMA table_info(session_kernel_agent_host_supervision)")
+            .all() as Array<{ name: string }>
+        ).some((column) => column.name === "receipt_format"),
+      ).toBe(false);
+      after.close();
+    }
+    expectV26Rollback("rebuild-index-collision", (db) =>
+      db.exec(
+        "CREATE INDEX idx_skahs_prune ON session_kernel_agent_host_plan(session_id)",
+      ),
+    );
+    expectV26Rollback(
+      "null-plan-host",
+      (db) => db.run("UPDATE session_kernel_agent_host_plan SET host_id=NULL"),
+      "Agent Host plan high-water regression",
+    );
+    expectV26Rollback(
+      "active-plan-mismatch",
+      (db) =>
+        db.run("UPDATE session_kernel_agent_host_plan SET plan_hash=?", [
+          `sha256:${"b".repeat(64)}`,
+        ]),
+      "Agent Host plan high-water regression",
+    );
     rmSync(dir, { recursive: true, force: true });
   });
 });
