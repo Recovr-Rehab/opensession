@@ -2,12 +2,18 @@ import React, { useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Disclosure } from "../ui/disclosure";
+import { Input } from "../ui/input";
 import { Modal } from "../ui/modal";
 import { SettingCard, SettingsHint, SettingsSection } from "../ui/settings";
 import { InlineAlert } from "../ui/state";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
+import {
+	githubAppCreateOwner,
+	githubAppCreateUrlForOwner,
+	type GithubAppOwnerType,
+} from "../lib/github-app-setup";
 import {
 	GuideBlock,
 	LinkChips,
@@ -255,20 +261,23 @@ function githubSetupSteps(): React.ReactNode[] {
 /** The same job at a glance, for onboarding. A first-run screen is read, not
  *  worked through, so each step is the action alone and the reasons wait for
  *  the setup dialog. */
-const GITHUB_ONBOARDING_STEPS: React.ReactNode[] = [
-	<>Create a GitHub App in your organization.</>,
-	<>
-		Open the prefilled form. The Homepage and webhook URLs are already filled in;
-		change the app name if you want.
-	</>,
-	<>
-		Confirm <strong>Device Flow</strong> is on.
-	</>,
-	<>Grant the full permission set shown in the setup guide.</>,
-	<>Install it on your organization.</>,
-	<>Paste the client id, slug, owner, secret, and private key below.</>,
-	<>Save, then restart.</>,
-];
+function githubOnboardingSteps(owner: GithubAppOwnerType): React.ReactNode[] {
+	const account = owner === "organization" ? "organization" : "personal account";
+	return [
+		<>Create a GitHub App for your {account}.</>,
+		<>
+			Open the prefilled form. The Homepage and webhook URLs are already filled in;
+			change the app name if you want.
+		</>,
+		<>
+			Confirm <strong>Device Flow</strong> is on.
+		</>,
+		<>Grant the full permission set shown in the setup guide.</>,
+		<>Install it on the {account} entered above.</>,
+		<>Paste the client id, slug, secret, and private key. The installation owner is already filled in.</>,
+		<>Save, then restart.</>,
+	];
+}
 
 export function GithubAuthCard({
 	github,
@@ -286,9 +295,22 @@ export function GithubAuthCard({
 	const [userPrAuth, setUserPrAuth] = useState(github.userPrAuth);
 	const [clientId, setClientId] = useState("");
 	const [appSlug, setAppSlug] = useState(github.appSlug ?? "");
-	const [installationOwner, setInstallationOwner] = useState(
-		github.installationOwner ?? github.appOrg ?? "",
+	const initialCreateOwner = githubAppCreateOwner(github.appCreateUrl);
+	const [appOwner, setAppOwner] = useState<GithubAppOwnerType>(
+		github.appOrg ? "organization" : initialCreateOwner.type,
 	);
+	const [ownerDrafts, setOwnerDrafts] = useState<Record<GithubAppOwnerType, string>>({
+		personal: initialCreateOwner.type === "personal" ? github.installationOwner ?? "" : "",
+		organization:
+			github.appOrg ??
+			(initialCreateOwner.type === "organization"
+				? github.installationOwner ?? initialCreateOwner.login
+				: ""),
+	});
+	const installationOwner = ownerDrafts[appOwner];
+	const setInstallationOwner = (value: string) => {
+		setOwnerDrafts((current) => ({ ...current, [appOwner]: value }));
+	};
 	const [clientSecret, setClientSecret] = useState("");
 	const [mentionHandle, setMentionHandle] = useState(github.mentionHandle);
 	const [privateKey, setPrivateKey] = useState("");
@@ -301,17 +323,20 @@ export function GithubAuthCard({
 	useEffect(() => {
 		setUserPrAuth(github.userPrAuth);
 		setAppSlug(github.appSlug ?? "");
-		setInstallationOwner(github.installationOwner ?? github.appOrg ?? "");
 		setMentionHandle(github.mentionHandle);
 	}, [
 		github.userPrAuth,
 		github.appSlug,
-		github.installationOwner,
-		github.appOrg,
 		github.mentionHandle,
 	]);
 
 	const normalizedMentionHandle = mentionHandle.trim().replace(/^@/, "");
+	const appCreateUrl = githubAppCreateUrlForOwner(
+		github.appCreateUrl,
+		appOwner,
+		installationOwner,
+	);
+	const installationOwnerReady = !!installationOwner.trim();
 	const idCleared = github.clientIdConfigured && clearId && !clientId.trim();
 	const secretCleared = secretConfigured && clearSecret && !clientSecret.trim();
 	const dirty =
@@ -444,6 +469,7 @@ setSaving(false);
 					}}
 					onAppSlugChange={setAppSlug}
 					onInstallationOwnerChange={setInstallationOwner}
+					showInstallationOwner={!onboarding}
 					onClientSecretChange={(value) => {
 						setClientSecret(value);
 						if (value.trim()) setClearSecret(false);
@@ -560,19 +586,58 @@ setSaving(false);
 				    person should be able to read before opening a credentials form. */}
 				{onboarding && (
 					<div className="mt-3 grid grid-cols-2 items-start gap-3 phone:grid-cols-1">
-						<SettingsSection className="flex flex-col gap-3">
+						<SettingsSection className="flex flex-col gap-4">
 							<div className="text-dialog-title font-semibold text-fg">How to connect</div>
-							<SetupSteps steps={GITHUB_ONBOARDING_STEPS} />
-							<Button
-								variant="primary"
-								size="lg"
-								className="mt-auto min-h-11 w-full justify-center"
-								render={
-									<a href={github.appCreateUrl} target="_blank" rel="noreferrer" />
-								}
-							>
-								Create GitHub App
-							</Button>
+							<div className="flex flex-col gap-2">
+								<div className="flex items-center justify-between gap-3 phone:flex-col phone:items-stretch">
+									<div>
+										<div className="text-label font-medium text-dim">Create for</div>
+										<div className="mt-0.5 text-supporting text-faint">Choose who owns and installs the GitHub App.</div>
+									</div>
+									<Segmented
+										label="GitHub App owner"
+										value={appOwner}
+										onValueChange={(value) => setAppOwner(value as GithubAppOwnerType)}
+										className="phone:w-full"
+									>
+										<SegmentedOption value="personal" className="phone:min-h-11 phone:flex-1 phone:justify-center">Personal account</SegmentedOption>
+										<SegmentedOption value="organization" className="phone:min-h-11 phone:flex-1 phone:justify-center">Organization</SegmentedOption>
+									</Segmented>
+								</div>
+								<label className="flex flex-col gap-1">
+									<span className="text-label font-medium text-dim">
+										{appOwner === "organization" ? "Organization login" : "GitHub username"}
+									</span>
+									<Input
+										value={installationOwner}
+										onChange={(event) => setInstallationOwner(event.target.value)}
+										placeholder={appOwner === "organization" ? "my-organization" : "octocat"}
+										className="font-mono phone:min-h-11 phone:text-input-phone"
+										disabled={saving}
+										autoCapitalize="none"
+										autoComplete="off"
+										spellCheck={false}
+									/>
+									<span className="text-meta leading-snug text-faint">
+										Required. This is where you install the App. Open Session uses it to select the installation that mints repository tokens.
+									</span>
+								</label>
+							</div>
+							<SetupSteps steps={githubOnboardingSteps(appOwner)} />
+							{installationOwnerReady ? (
+								<Button
+									variant="primary"
+									size="lg"
+									className="mt-auto min-h-11 w-full justify-center"
+									render={<a href={appCreateUrl} target="_blank" rel="noreferrer" />}
+								>
+									Create GitHub App
+								</Button>
+							) : (
+								<Button variant="primary" size="lg" className="mt-auto min-h-11 w-full justify-center" disabled>
+									Create GitHub App
+								</Button>
+							)}
 						</SettingsSection>
 						<SettingsSection className="p-4">
 							{configuration}
@@ -581,7 +646,7 @@ setSaving(false);
 								<Button
 									variant="primary"
 									className="phone:min-h-11 phone:w-full phone:justify-center"
-									disabled={!dirty || saving}
+									disabled={!dirty || saving || !installationOwnerReady}
 									onClick={() => void handleSave()}
 								>
 									{saving ? "Saving…" : "Save"}
