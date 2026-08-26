@@ -189,6 +189,35 @@ describe("uncertain host reconciliation", () => {
 });
 
 describe("local run-host capability", () => {
+  test("busy checks consume an offline terminal host receipt", async () => {
+    const root = mkdtempSync(join(tmpdir(), "host-terminal-test-"));
+    roots.push(root);
+    const hostId = `rh-${crypto.randomUUID()}`;
+    const dir = join(root, hostId);
+    mkdirSync(dir);
+    const spec: RunHostSpec = {
+      hostId,
+      osSessionId: `os-${crypto.randomUUID()}`,
+      prompt: "run once",
+      cwd: "/tmp",
+    };
+    const handle = new HostHandle(dir, spec, {}, {
+      alive: () => true,
+      newRunDir: (id) => join(root, id),
+      launch: async () => {},
+    });
+    writeFileSync(join(dir, "meta.json"), JSON.stringify({
+      done: { type: "done", result: "completed while disconnected" },
+    } satisfies RunHostMeta));
+
+    expect(hostRunBusy(hostId)).toBe(false);
+    expect((await handle.events().next()).value).toMatchObject({
+      type: "done",
+      result: "completed while disconnected",
+    });
+    expect(handle.ended).toBe(true);
+  });
+
   test("requires Linux, a booted systemd, systemctl, and sudo", () => {
     const commands = (command: string) =>
       ["systemctl", "sudo"].includes(command) ? `/usr/bin/${command}` : null;

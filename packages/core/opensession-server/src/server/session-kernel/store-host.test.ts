@@ -327,7 +327,7 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
-  test("caches sparse global projections and invalidates them after mutations", () => {
+  test("keeps sparse global projections current after mutations", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
     host.call("setAskRecord", ["cache-session", {
@@ -381,6 +381,75 @@ describe("per-session session kernel storage", () => {
     expect(host.allDeliveryEntries("queued")[0]![1]).toMatchObject([
       { id: "queue-two", content: "Second" },
     ]);
+    host.close();
+  });
+
+  test("persists sparse projections across a catalog actor restart", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    host.call("setAskRecord", ["durable-projection", {
+      questionId: "ask-durable",
+      questions: [{ question: "Still there?" }],
+    }]);
+    host.call("setDeliverySlot", [
+      "durable-projection",
+      "queued",
+      [{ id: "queue-durable", content: "Keep me" }],
+    ]);
+    expect(host.allAskEntries()).toHaveLength(1);
+    host.close();
+
+    const recovered = new SessionKernelStoreHost(path.central, path.isolated);
+    Object.defineProperty(
+      recovered.storeForSession("durable-projection"),
+      "askEntries",
+      {
+        configurable: true,
+        value: () => {
+          throw new Error("restart must not scan isolated ask tables");
+        },
+      },
+    );
+    Object.defineProperty(
+      recovered.storeForSession("durable-projection"),
+      "deliveryEntries",
+      {
+        configurable: true,
+        value: () => {
+          throw new Error("restart must not scan isolated delivery tables");
+        },
+      },
+    );
+    expect(recovered.allAskEntries()[0]).toMatchObject([
+      "durable-projection",
+      { questionId: "ask-durable" },
+    ]);
+    expect(recovered.allDeliveryEntries("queued")[0]).toMatchObject([
+      "durable-projection",
+      [{ id: "queue-durable", content: "Keep me" }],
+    ]);
+    recovered.close();
+  });
+
+  test("backfills old sparse projections in bounded retryable batches", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    for (let index = 0; index < 17; index += 1)
+      host.call("setRunState", [{
+        sessionId: `projection-backfill-${String(index).padStart(2, "0")}`,
+        state: "idle",
+        event: "seed",
+      }]);
+
+    let firstError: unknown;
+    try {
+      host.allAskEntries();
+    } catch (error) {
+      firstError = error;
+    }
+    expect(firstError).toMatchObject({ retryable: true });
+    expect(host.allAskEntries()).toEqual([]);
+    expect(host.central.sparseProjectionMigrationComplete()).toBe(true);
     host.close();
   });
 

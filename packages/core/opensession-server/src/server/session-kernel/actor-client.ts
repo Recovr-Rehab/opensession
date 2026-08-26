@@ -279,7 +279,10 @@ export class SessionKernelActorClient {
           const message = body.error || `Session kernel ${label} failed`;
           if (body.code === "session_quarantined" && body.sessionId)
             throw new SessionKernelQuarantinedError(body.sessionId, message);
-          const error = new SessionKernelActorError(message, false);
+          const error = new SessionKernelActorError(
+            message,
+            body.code === "retryable",
+          );
           if (body.code === "actor_fatal") this.markDead(error);
           throw error;
         }

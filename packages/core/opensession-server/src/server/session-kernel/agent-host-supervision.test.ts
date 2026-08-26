@@ -249,7 +249,7 @@ describe("schema 27 signed Agent Host receipts", () => {
     expect(
       (validDb.query("PRAGMA user_version").get() as { user_version: number })
         .user_version,
-    ).toBe(28);
+    ).toBe(29);
     validDb.close();
 
     const corruptPath = join(dir, "corrupt.sqlite");

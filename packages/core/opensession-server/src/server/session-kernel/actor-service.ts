@@ -12,9 +12,11 @@ import {
   type KernelActorTransportEnvelope,
 } from "./actor-protocol";
 import {
+  isReadReducer,
   isPrioritySessionActorRequest,
   sessionActorServiceRoute,
 } from "./actor-routing";
+import { READ_METHODS } from "./store-routing";
 import { workerEntry } from "../../runner-host/exe";
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -42,6 +44,7 @@ type Pending = {
   timer: ReturnType<typeof setTimeout>;
   originalRpcId: string;
   request: KernelActorTransportEnvelope["request"];
+  readOnly: boolean;
   criticalSessionId?: string;
 };
 
@@ -217,6 +220,16 @@ export async function startSessionKernelService(
     return route.scope === "session" ? route.sessionId : undefined;
   }
 
+  function isReadOnlyRequest(
+    request: KernelActorTransportEnvelope["request"],
+  ): boolean {
+    if (request.t === "hello" || request.t === "stats") return true;
+    if (request.t !== "call") return false;
+    return request.request.t === "store"
+      ? READ_METHODS.has(request.request.method)
+      : isReadReducer(request.request.command);
+  }
+
   function stopSlot(slot: WorkerSlot, error: Error, retainQueue = false): Pending[] {
     slot.ready = false;
     const worker = slot.worker;
@@ -235,6 +248,7 @@ export async function startSessionKernelService(
   function failService(error: Error): void {
     if (serviceError) return;
     serviceError = error;
+    console.error("Session kernel actor service failed", error);
     for (const slot of slots) stopSlot(slot, error);
     server?.stop(true);
   }
@@ -286,15 +300,23 @@ export async function startSessionKernelService(
   ): void {
     if (stopping || serviceError || generation !== slot.generation || slot.restarting)
       return;
-    // The catalog lane owns placement authority. Losing it can make routing
-    // settlement ambiguous, so unlike a session lane it must fail-stop the
-    // service rather than reconnect behind the gateway's negotiated epoch.
-    if (slot.index === 0) {
+    const active = [...slot.pending.values()];
+    const safeCatalogReadRestart =
+      slot.index === 0 &&
+      active.length > 0 &&
+      active.every((entry) => entry.readOnly);
+    // The catalog lane owns placement authority. An interrupted mutation can
+    // make routing settlement ambiguous, so it must still fail-stop the
+    // service. A timed-out read has no commit ambiguity and can be retried on a
+    // fresh worker without changing the service epoch.
+    if (slot.index === 0 && !safeCatalogReadRestart) {
       failService(error);
       return;
     }
+    if (safeCatalogReadRestart)
+      console.warn("Restarting session kernel catalog lane after read failure", error);
     slot.restarting = true;
-    const active = stopSlot(slot, error, true);
+    stopSlot(slot, error, true);
     void (async () => {
       const critical = active.filter((entry) => entry.criticalSessionId);
       const ordinary = active.filter((entry) => !entry.criticalSessionId);
@@ -355,6 +377,7 @@ export async function startSessionKernelService(
       timer,
       originalRpcId,
       request: turn.request,
+      readOnly: isReadOnlyRequest(turn.request),
       criticalSessionId: criticalSessionId(turn.request),
     });
     try {

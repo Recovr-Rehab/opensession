@@ -39,6 +39,15 @@ function reducerSessionId(
   return undefined;
 }
 
+function reducerMutatesSparseProjection(
+  command: SessionActorReducerCommand,
+): boolean {
+  if (command.kind === "ask") return !isReadReducer(command);
+  if (command.kind === "delivery") return !isDeliveryReadRequest(command.request);
+  return command.kind === "core" &&
+    (command.request.op === "clear" || command.request.op === "tombstone");
+}
+
 function routedStoreCall(
   method: string,
   args: unknown[],
@@ -75,7 +84,11 @@ export function startSessionKernelActorWorker(): void {
           if (quarantine) throw new SessionQuarantinedError(sessionId, quarantine.reason);
         }
         if (sessionId)
-          store = host.storeForSession(sessionId, !isReadReducer(command));
+          store = host.storeForSession(
+            sessionId,
+            !isReadReducer(command),
+            reducerMutatesSparseProjection(command),
+          );
         if (command.kind === "agent_operation")
           result = store.decideAgentOperation(command.request);
         else if (command.kind === "agent_host_supervision")
@@ -161,7 +174,7 @@ export function startSessionKernelActorWorker(): void {
               delivery.promptEntryId,
             );
           if (!isDeliveryReadRequest(delivery) && "sessionId" in delivery)
-            host.refreshCachedDeliveryEntries(delivery.sessionId);
+            host.refreshSessionProjections(delivery.sessionId);
           if (!isDeliveryReadRequest(delivery))
             result = {
               result,
@@ -204,6 +217,8 @@ export function startSessionKernelActorWorker(): void {
           } else if (core.op === "clear")
             result = store.clearSession(core.sessionId);
           else result = store.tombstoneSession(core.sessionId);
+          if (core.op === "clear" || core.op === "tombstone")
+            host.refreshSessionProjections(core.sessionId);
         } else if (command.kind === "turn") {
           const turn = command.request;
           if (turn.op === "snapshot") result = store.turnSnapshot(turn.sessionId);
@@ -272,7 +287,11 @@ export function startSessionKernelActorWorker(): void {
       return { status: length > outputBytes ? 2 : 1, length, body };
     } catch (error) {
       let failStop = false;
-      let responseCode: "actor_fatal" | "session_quarantined" | undefined;
+      let responseCode:
+        | "actor_fatal"
+        | "session_quarantined"
+        | "retryable"
+        | undefined;
       let responseSessionId: string | undefined;
       const sessionId = requestSessionId;
       const infrastructure = isSessionKernelInfrastructureFailure(error);
@@ -307,6 +326,13 @@ export function startSessionKernelActorWorker(): void {
       } else if (error instanceof SessionQuarantinedError) {
         responseCode = error.code;
         responseSessionId = error.sessionId;
+      } else if (
+        error &&
+        typeof error === "object" &&
+        "retryable" in error &&
+        error.retryable === true
+      ) {
+        responseCode = "retryable";
       }
       const body = JSON.stringify({
         ok: false,
