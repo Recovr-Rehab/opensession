@@ -186,13 +186,15 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
               : `A new update is available${by ? ` (${by})` : ""}. Tap to refresh.`
         }
       >
-        {refreshing
-          ? restart
-            ? "Restarting…"
-            : "Refreshing…"
-          : forced
-            ? `Update ${secondsLeft}s`
-            : "Update"}
+        <span className="[text-box:trim-both_cap_alphabetic]">
+          {refreshing
+            ? restart
+              ? "Restarting…"
+              : "Refreshing…"
+            : forced
+              ? `Update ${secondsLeft}s`
+              : "Update"}
+        </span>
       </button>
     );
   }
@@ -223,7 +225,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
           onClick={refresh}
           disabled={refreshing}
         >
-          {action}
+          <span className="[text-box:trim-both_cap_alphabetic]">{action}</span>
         </button>
       </div>
     </div>
