@@ -143,7 +143,11 @@ import {
 } from "../lib/slack-share-dismiss";
 import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { useBackSwipe } from "../hooks/useBackSwipe";
-import { dedupeViewers, otherViewers } from "../lib/presence";
+import {
+	dedupeViewers,
+	facepileAvatarStyle,
+	otherViewers,
+} from "../lib/presence";
 import { otherTypingUsers } from "../lib/typing";
 import { personKey, prReviewCompletion } from "../lib/review-queue";
 import { Composer } from "./Composer";
@@ -6533,12 +6537,13 @@ export function SessionViewer({
 					    filtered its own name out — this matches it.) */}
 					{!isPhone && others.length > 0 && (
 						<div className={VIEWER_PRESENCE} title={`Viewing: ${others.join(", ")}`}>
-							{dedupeViewers(others).map((v) => (
+							{dedupeViewers(others).map((v, index, viewers) => (
 								<UserAvatar
 									key={v.name}
 									name={v.name}
 									size={24}
 									className={VIEWER_PRESENCE_AVATAR}
+									style={facepileAvatarStyle(index, viewers.length, "var(--bg)")}
 								/>
 							))}
 						</div>

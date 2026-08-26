@@ -133,15 +133,9 @@ export const VIEWER_HEADER_ACTIONS =
 export const VIEWER_PRESENCE = "mx-1.5 flex items-center";
 
 /**
- * One face in it. They overlap by 8px so the pile reads as a stack, and the
- * first one keeps the row's own left edge.
- *
- * No ring here: `.presence-avatar` carried a `box-shadow` meant to separate the
- * faces with the header's colour, but UserAvatar's own `shadow-[var(--avatar-edge)]`
- * is a utility and so already won that tie — the ring has not been drawn for as
- * long as the avatar has been Tailwind-styled. Left as it renders today rather
- * than reintroduced here, which would be a visual change dressed up as a
- * migration.
+ * One face in it. They overlap by 8px, while the call site matches Feed's
+ * front-to-back order and full squircle ring. The first face keeps the row's
+ * own left edge.
  */
 export const VIEWER_PRESENCE_AVATAR = "-ml-2 first:ml-0";
 
