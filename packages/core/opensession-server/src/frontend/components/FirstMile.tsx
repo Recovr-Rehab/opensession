@@ -521,7 +521,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										<h1
 											ref={headingRef}
 											tabIndex={-1}
-											className="m-0 text-balance text-[clamp(1.6rem,2.5vw,2.25rem)] font-title leading-[1.08] tracking-[-0.035em] text-fg outline-none"
+											className="m-0 text-balance text-[clamp(1.6rem,2.5vw,2.25rem)] font-title leading-[1.08] tracking-[-0.035em] text-fg outline-none phone:text-[1.5rem]"
 										>
 											{step.title}
 										</h1>
@@ -535,7 +535,9 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 									    above these groups. */}
 									<div
 										className={cn(
-											"w-full max-w-[820px] pb-8 [&_[data-setting-title]]:text-dialog-title",
+											// Slightly narrower than the settings page so the stepper reads
+											// as its own focused flow.
+											"w-full max-w-[760px] pb-8 [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body",
 											// First-run fields use the large field step, with extra room
 											// for the fixed-width organization and product names.
 											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9 [&_input[data-setup-field='identity']]:w-[240px] [&_input[data-setup-field='org-name']]:w-[320px]",
