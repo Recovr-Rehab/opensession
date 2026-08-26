@@ -113,10 +113,11 @@ export class AgentOperationStreamJournal implements AgentGatewayLiveEventSink {
       await new Promise<void>((resolve) => this.#drainers.add(resolve));
     return Object.freeze({ throughStreamSeq: this.#acked });
   }
-  async fail(reason: unknown): Promise<void> {
+  async fail(_reason?: unknown): Promise<void> {
     this.#closed = true;
-    this.#failure =
-      reason instanceof Error ? reason : new Error("operation stream failed");
+    // The journal is transport-facing. Never retain or replay caller/provider
+    // diagnostics, which may contain payload or credential material.
+    this.#failure = new AgentOperationStreamClosedError();
     for (const w of this.#waiters.splice(0)) w.reject(this.#failure);
     for (const drain of this.#drainers) drain();
     this.#drainers.clear();

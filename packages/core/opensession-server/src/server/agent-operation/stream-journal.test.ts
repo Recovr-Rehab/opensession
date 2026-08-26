@@ -41,13 +41,48 @@ describe("AgentOperationStreamJournal", () => {
       JSON.stringify({ bytes: journal.bytes, frames: journal.frameCount }),
     ).not.toContain("secret");
   });
-  test("failure rejects blocked publications and closes replay", async () => {
+  test("enforces bounded capacity until real consumption ACK retires frames", async () => {
+    const journal = new AgentOperationStreamJournal();
+    const blocked = Array.from({ length: 128 }, (_, index) =>
+      journal.publish({ index }),
+    );
+    expect(journal.frameCount).toBe(128);
+    await expect(journal.publish({ overflow: true })).rejects.toThrow(
+      "journal is full",
+    );
+    const iterator = journal.replay(0)[Symbol.asyncIterator]();
+    for (let index = 0; index < 128; index++)
+      expect((await iterator.next()).done).toBe(false);
+    journal.acknowledge(128);
+    await Promise.all(blocked);
+    expect(journal.frameCount).toBe(0);
+    await journal.close();
+    expect((await iterator.next()).done).toBe(true);
+  });
+
+  test("close waits for consumption ACK while failure is bounded and redacts diagnostics", async () => {
     const journal = new AgentOperationStreamJournal();
     const publishing = journal.publish({ delta: "x" });
-    await journal.fail(new Error("closed"));
-    await expect(publishing).rejects.toThrow("closed");
-    const iterator = journal.replay(0)[Symbol.asyncIterator]();
+    let closed = false;
+    const closing = journal.close().then(() => { closed = true; });
+    await Promise.resolve();
+    expect(closed).toBe(false);
+    journal.acknowledge(1);
+    await Promise.all([publishing, closing]);
+    expect(closed).toBe(true);
+
+    const failed = new AgentOperationStreamJournal();
+    const blocked = failed.publish({ secret: "payload-secret" });
+    await failed.fail(new Error("credential-secret"));
+    await expect(blocked).rejects.toThrow("operation stream is closed");
+    const iterator = failed.replay(0)[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toMatchObject({ done: false });
-    await expect(iterator.next()).rejects.toThrow("closed");
+    try {
+      await iterator.next();
+      throw new Error("expected replay failure");
+    } catch (error) {
+      expect(String(error)).not.toContain("credential-secret");
+      expect(String(error)).not.toContain("payload-secret");
+    }
   });
 });
