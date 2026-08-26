@@ -341,7 +341,9 @@ export function GithubAuthCard({
 		appOwner,
 		installationOwner,
 	);
-	const appInstallUrl = githubAppInstallUrlForSlug(appSlug || github.appSlug);
+	// The draft starts with the saved slug, so clearing it must disable install
+	// rather than silently falling back to the old App.
+	const appInstallUrl = githubAppInstallUrlForSlug(appSlug);
 	const installationOwnerReady = !!installationOwner.trim();
 	const idCleared = github.clientIdConfigured && clearId && !clientId.trim();
 	const secretCleared = secretConfigured && clearSecret && !clientSecret.trim();
@@ -644,20 +646,24 @@ setSaving(false);
 										className="min-h-11 w-full justify-center"
 										render={<a href={appCreateUrl} target="_blank" rel="noreferrer" />}
 									>
-										Create GitHub App
+										1. Create GitHub App
 									</Button>
 								) : (
 									<Button variant="primary" size="lg" className="min-h-11 w-full justify-center" disabled>
-										Create GitHub App
+										1. Create GitHub App
 									</Button>
 								)}
-								{appInstallUrl && (
+								{appInstallUrl ? (
 									<Button
 										size="lg"
 										className="min-h-11 w-full justify-center"
 										render={<a href={appInstallUrl} target="_blank" rel="noreferrer" />}
 									>
-										Install GitHub App
+										2. Install GitHub App
+									</Button>
+								) : (
+									<Button size="lg" className="min-h-11 w-full justify-center" disabled>
+										2. Install GitHub App
 									</Button>
 								)}
 							</div>
