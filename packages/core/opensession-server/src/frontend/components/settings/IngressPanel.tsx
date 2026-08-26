@@ -196,7 +196,7 @@ function PrivateAppSetup({
 				<SettingRow>
 					<SettingRowText>
 						<SettingRowTitle>Current address</SettingRowTitle>
-						<div className="mt-1 break-all font-mono text-supporting text-dim">{settings.app.publicBaseUrl}</div>
+						<div className="selectable mt-1 break-all font-mono text-supporting text-dim">{settings.app.publicBaseUrl}</div>
 					</SettingRowText>
 				</SettingRow>
 				{settings.app.domain.certificateExpiresAt && (
@@ -557,7 +557,7 @@ export function IngressPanel({
 								<SettingRow>
 									<SettingRowText>
 										<SettingRowTitle>Public URL</SettingRowTitle>
-										<SettingRowDescription className="break-all font-mono">
+										<SettingRowDescription className="selectable break-all font-mono">
 											{settings.publicBaseUrl || "No public origin configured"}
 										</SettingRowDescription>
 									</SettingRowText>
