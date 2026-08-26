@@ -170,10 +170,11 @@ summary:focus-visible {
 
 /* The qualifier, in the same sentence and a lighter voice: it is the half of
    the claim that is context rather than news. Its own line, so the sentence
-   breaks where the thought does instead of wherever the column runs out. */
+   breaks where the thought does instead of wherever the column runs out. Keep
+   the ink translucent so the page background comes through in either theme. */
 .rail h1 span {
 	display: block;
-	color: var(--muted);
+	opacity: 0.45;
 }
 
 .rail-foot {
