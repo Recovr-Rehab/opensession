@@ -139,7 +139,7 @@ import {
 	setRepoOrder,
 } from "../lib/repo-order";
 import { UserAvatar, githubLoginFor } from "./UserAvatar";
-import { otherViewers } from "../lib/presence";
+import { facepileAvatarStyle, otherViewers } from "../lib/presence";
 import { shortTime } from "../lib/time";
 import {
 	IconChevronDown,
@@ -3373,12 +3373,17 @@ setClosingPrUrls((current) => {
 								className={SIDEBAR_WS_FACES}
 								aria-label={`Viewing: ${viewers.join(", ")}`}
 							>
-								{viewers.slice(0, 3).map((viewer) => (
+								{viewers.slice(0, 3).map((viewer, index, shown) => (
 									<UserAvatar
 										key={viewer}
 										name={viewer}
 										size={16}
 										className={SIDEBAR_WS_FACE}
+										style={facepileAvatarStyle(
+											index,
+											shown.length,
+											"var(--sidebar-bg)",
+										)}
 										title={`${viewer} is here`}
 									/>
 								))}
