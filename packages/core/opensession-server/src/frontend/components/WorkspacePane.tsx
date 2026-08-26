@@ -26,6 +26,7 @@ import {
 import { Composer } from "./Composer";
 import { ConversationPane } from "./ConversationPane";
 import { SpinOffMenu } from "./SpinOffMenu";
+import { DeleteSessionDialog } from "./DeleteSessionDialog";
 import { FeedWebPane, refWebPanel } from "./FeedWebPane";
 import { SlackChannelPane } from "./SlackChannelPane";
 import { MarkdownRepoProvider } from "./MarkdownBody";
@@ -70,7 +71,6 @@ import {
 	VIEWER_BRANCH_EDITABLE,
 	VIEWER_BRANCH_RENAME,
 	VIEWER_HEADER,
-	VIEWER_DELETE_CONFIRM,
 	VIEWER_HEADER_ACTIONS,
 	VIEWER_OVERFLOW,
 	VIEWER_TITLE,
@@ -790,50 +790,15 @@ setDeleting(false);
 							</span>
 						</Menu.Item>
 					)}
-					{presentationSession && onDeleteSession &&
-						(!showDeleteConfirm ? (
-							<Menu.Item
-								closeOnClick={false}
-								className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
-								onClick={() => setShowDeleteConfirm(true)}
-							>
-								<IconTrash size={20} />
-								<span className="grow">Delete session</span>
-							</Menu.Item>
-						) : (
-							<div className={VIEWER_DELETE_CONFIRM}>
-								{presentationSession.worktreeDir &&
-									presentationSession.mode !== "ask" && (
-										<Button
-											variant="danger"
-											size="sm"
-											className="min-h-0 px-3 py-[5px] text-label"
-											onClick={() => void deletePresentationSession(true)}
-											disabled={deleting}
-										>
-											{deleting ? "…" : "+ Worktree"}
-										</Button>
-									)}
-								<Button
-									variant="warning"
-									size="sm"
-									className="min-h-0 px-3 py-[5px] text-label"
-									onClick={() => void deletePresentationSession(false)}
-									disabled={deleting}
-								>
-									{deleting ? "…" : "Session"}
-								</Button>
-								<Button
-									variant="soft"
-									size="sm"
-									className="min-h-0 px-3 py-[5px] text-label"
-									onClick={() => setShowDeleteConfirm(false)}
-									disabled={deleting}
-								>
-									Cancel
-								</Button>
-							</div>
-						))}
+					{presentationSession && onDeleteSession && (
+						<Menu.Item
+							className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+							onClick={() => setShowDeleteConfirm(true)}
+						>
+							<IconTrash size={20} />
+							<span className="grow">Delete session</span>
+						</Menu.Item>
+					)}
 				</Menu.Popup>
 			</div>
 		</Menu.Root>
@@ -969,6 +934,20 @@ setDeleting(false);
 				<div className="flex-1 min-w-0 min-h-0">{main}</div>
 			</div>
 			{rightPanelEl && infoPanel ? createPortal(infoPanel, rightPanelEl) : null}
+			{presentationSession && (
+				<DeleteSessionDialog
+					open={showDeleteConfirm}
+					onOpenChange={setShowDeleteConfirm}
+					hasWorktree={Boolean(
+						presentationSession.worktreeDir &&
+						presentationSession.mode !== "ask"
+					)}
+					deleting={deleting}
+					onDelete={(cleanWorktree) =>
+						void deletePresentationSession(cleanWorktree)
+					}
+				/>
+			)}
 		</MarkdownRepoProvider>
 	);
 

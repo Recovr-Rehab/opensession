@@ -268,6 +268,7 @@ import {
 	WorkspaceSummaryBody,
 } from "./WorkspaceSummary";
 import { SpinOffMenu } from "./SpinOffMenu";
+import { DeleteSessionDialog } from "./DeleteSessionDialog";
 import {
 	IconSidebarRight,
 	IconTrash,
@@ -399,7 +400,6 @@ import {
 	VIEWER_BRANCH_EDITABLE,
 	VIEWER_BRANCH_RENAME,
 	VIEWER_CRUMB_UP,
-	VIEWER_DELETE_CONFIRM,
 	VIEWER_HEADER,
 	VIEWER_HEADER_ACTIONS,
 	VIEWER_INPUT,
@@ -5499,11 +5499,6 @@ export function SessionViewer({
 		return () =>
 			window.removeEventListener("opensession:toggle-session-settings", toggle);
 	}, [session.id]);
-	// Closing the menu disarms a half-finished delete confirm — reopening it
-	// later shouldn't present the destructive choices without a fresh click.
-	useEffect(() => {
-		if (!overflowOpen && !infoPageOpen) setShowDeleteConfirm(false);
-	}, [overflowOpen, infoPageOpen]);
 	// The menu's contents change across the breakpoint — don't leave it stuck open.
 	useEffect(() => {
 		setOverflowOpen(false);
@@ -5901,6 +5896,13 @@ export function SessionViewer({
 					</div>
 				</div>
 			)}
+			<DeleteSessionDialog
+				open={showDeleteConfirm}
+				onOpenChange={setShowDeleteConfirm}
+				hasWorktree={Boolean(session.worktreeDir && !isAsk)}
+				deleting={deleting}
+				onDelete={(cleanWorktree) => void handleDelete(cleanWorktree)}
+			/>
 			<Modal.Root
 				open={branchConfirmOpen}
 				onOpenChange={(open) => {
@@ -6235,9 +6237,8 @@ export function SessionViewer({
 				);
 				// Delete is destructive, so it never rides in the visible action bar —
 				// it always lives inside the ⋯ menu, one deliberate hop away.
-				const deleteAction = !showDeleteConfirm ? (
+				const deleteAction = (
 					<Menu.Item
-						closeOnClick={false}
 						// Red at rest, not only under the cursor. This is the one row in
 						// the menu that cannot be undone, and a row that looks ordinary
 						// until you are already on it announces that too late.
@@ -6248,38 +6249,6 @@ export function SessionViewer({
 						<IconTrash size={20} />
 						<span className="grow">Delete session</span>
 					</Menu.Item>
-				) : (
-					<div className={VIEWER_DELETE_CONFIRM}>
-						{session.worktreeDir && !isAsk && (
-							<Button
-								variant="danger"
-								size="sm"
-								className="min-h-0 px-3 py-[5px] text-label"
-								onClick={() => handleDelete(true)}
-								disabled={deleting}
-							>
-								{deleting ? "…" : "+ Worktree"}
-							</Button>
-						)}
-						<Button
-							variant="warning"
-							size="sm"
-							className="min-h-0 px-3 py-[5px] text-label"
-							onClick={() => handleDelete(false)}
-							disabled={deleting}
-						>
-							{deleting ? "…" : "Session"}
-						</Button>
-						<Button
-							variant="soft"
-							size="sm"
-							className="min-h-0 px-3 py-[5px] text-label"
-							onClick={() => setShowDeleteConfirm(false)}
-							disabled={deleting}
-						>
-							Cancel
-						</Button>
-					</div>
 				);
 				// Secondary header controls (Linear/Plain links). Inline on desktop;
 				// on phones they fold into the ⋯ menu so the single top bar holds only
