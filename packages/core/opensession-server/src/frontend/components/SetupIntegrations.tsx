@@ -489,7 +489,7 @@ setSaving(false);
 						<span className="pl-2.5 text-sm text-faint" aria-hidden="true">@</span>
 						<input
 							type="text"
-							className="h-full min-w-0 flex-1 bg-transparent px-1.5 pr-2.5 text-sm text-fg outline-none placeholder:text-faint phone:text-input-phone"
+							className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent px-1.5 pr-2.5 text-sm text-fg outline-none placeholder:text-faint phone:text-input-phone"
 							value={mentionHandle}
 							onChange={(event) => setMentionHandle(event.target.value)}
 							placeholder="opensession"
