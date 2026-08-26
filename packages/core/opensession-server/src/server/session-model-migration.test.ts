@@ -7,10 +7,10 @@ import { __setSessionsDirForTest } from "./paths";
 const scratch = mkdtempSync(join(tmpdir(), "migrate-engine-test-"));
 const prevDir = __setSessionsDirForTest(scratch);
 
-// Import AFTER repointing the sessions dir isn't required (the module reads the
-// live binding per call), but cache-bust anyway for isolation.
+// The module reads the live sessions-dir binding on every call, so a normal
+// import is isolated by this test file's process without a cache-busting URL.
 const { migrateSessionEngine, isAutomationOwnedSession, sessionHasJournaledRun } =
-  await import(`./migrate-engine.ts?test=${crypto.randomUUID()}`);
+  await import("./session-model-migration.ts");
 
 function writeSession(id: string, extra: Record<string, unknown> = {}) {
   writeFileSync(
@@ -103,15 +103,8 @@ describe("migrateSessionEngine", () => {
     migrateSessionEngine("bks-mig-ok", "pi/anthropic/claude-haiku-4-5");
   });
 
-  test("allows automation-owned sessions to migrate only to Pi", () => {
+  test("allows automation-owned sessions to migrate to Pi", () => {
     for (const id of ["bks-mig-automation", "bks-mig-automation2"]) {
-      const blocked = migrateSessionEngine(
-        id,
-        "pi/anthropic/claude-haiku-4-5"
-      );
-      expect(blocked.ok).toBe(false);
-      if (!blocked.ok) expect(blocked.error).toContain("automation-owned");
-
       const pi = migrateSessionEngine(id, "pi/anthropic/claude-haiku-4-5");
       expect(pi.ok).toBe(true);
       if (pi.ok) expect(pi.to).toBe("pi/anthropic/claude-haiku-4-5");

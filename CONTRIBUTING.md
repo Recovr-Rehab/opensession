@@ -61,22 +61,22 @@ anywhere but loopback.
 ```sh
 bun run typecheck
 bun run lint
-bun run test
-bun run test:snapshots # the run-pipeline fixtures, which only work run alone
+scripts/test-unit-isolated.sh # the broad opensession-server/src and scripts sweep
+bun run test:snapshots       # the run-pipeline fixtures
 ```
 
-`bun run test` is the broad `opensession-server/src` and `scripts` sweep. It is
-currently order-dependent, so CI reports it with `continue-on-error` rather than
-treating green as a reliable gate. Run focused tests for the area changed.
+The broad unit suite runs each test file in its own process, four at a time, so
+fixtures that replace environment variables, globals, or module-level stores do
+not leak into later files. Run focused tests for the area changed as well.
 Deployment tests live under `deploy/`, and shared protocol tests under
 `packages/core/protocol/src/`.
 
-The snapshot suite needs its own command because it redirects module state that
-an earlier file in a sweep may already have frozen, in which case it skips
-itself. See [transcript snapshots](docs/transcript-snapshots.md).
+The snapshot suite keeps its own command because it exercises the run-pipeline
+fixtures as end-to-end transcript scenarios with a dedicated harness. See
+[transcript snapshots](docs/transcript-snapshots.md).
 
-CI gates type-checking, lint, the focused session-ownership and executor suite in
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml), transcript snapshots,
+CI gates type-checking, lint, the broad unit suite, the focused session-ownership
+and executor suite in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), transcript snapshots,
 Linux and macOS installer jobs, and Windows runner checks. If you touched
 `install.sh`, the CLI or the service definitions, the installer jobs matter:
 they catch things unit tests cannot, like a `PATH` that works interactively and

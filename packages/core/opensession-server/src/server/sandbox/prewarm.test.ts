@@ -383,7 +383,10 @@ describe("keep-ready prewarms", () => {
     expect(claimPrewarm("daytona", "tella-fusion", "bks-first")?.sandboxId).toBe(first);
 
     await until(
-      () => fake.created.length === 2 && readyEntry()?.sandboxId === fake.created[1],
+      () =>
+        fake.created.length === 2 &&
+        readyEntry()?.sandboxId === fake.created[1] &&
+        readyEntry()?.state === "ready",
     );
     await sweepPrewarms(Date.now() + 11 * 60_000);
     expect(readyEntry()?.sandboxId).toBe(fake.created[1]);

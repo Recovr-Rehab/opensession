@@ -47,6 +47,7 @@ function writeSessionFile(id: string, extra: Record<string, unknown> = {}) {
 		`${tmp}/${id}.json`,
 		JSON.stringify({
 			id,
+			source: "opensession",
 			title: `Fake run ${id}`,
 			model: "claude-sonnet-5",
 			createdBy: "Test",
@@ -374,7 +375,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 		expect(retried.autoFallbackModel).toBeUndefined();
 	});
 
-	test("an explicit model choice cancels the automatic retry", () => {
+	test("an explicit model choice cancels the automatic retry", async () => {
 		if (!redirected) return;
 		const sid = "bks-zz-cancel-model-retry";
 		writeSessionFile(sid, {
@@ -385,10 +386,15 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 		const session = sessionCache.findSession(sid);
 		expect(session).toBeDefined();
 
-		slashCommands.handleSlashCommand(session!, "/model gpt-5.6-terra", "Test");
+		const notice = slashCommands.handleSlashCommand(session!, "/model dial/high", "Test");
+		expect(notice).toContain("Model set to");
 
-		const data = sessionJson(sid);
-		expect(data.model).toBe("gpt-5.6-terra");
+		let data = sessionJson(sid);
+		for (let attempt = 0; data.model !== "dial/high" && attempt < 50; attempt++) {
+			await Bun.sleep(10);
+			data = sessionJson(sid);
+		}
+		expect(data.model).toBe("dial/high");
 		expect(data.autoFallbackModel).toBeUndefined();
 	});
 
