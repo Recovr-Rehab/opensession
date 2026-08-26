@@ -101,6 +101,7 @@ export function buildGithubAppManifest(input: {
 	ingressUrl?: string;
 }): Record<string, unknown> {
 	const ingressUrl = input.ingressUrl?.trim().replace(/\/+$/, "") || "";
+	const hookBaseUrl = ingressUrl || `${input.origin}${input.publicPrefix}`;
 	return {
 		name:
 			input.appName ||
@@ -110,14 +111,13 @@ export function buildGithubAppManifest(input: {
 		public: false,
 		default_permissions: GITHUB_APP_GRANT_PERMISSIONS,
 		default_events: GITHUB_APP_MANIFEST_EVENTS,
-		...(ingressUrl
-			? {
-					hook_attributes: {
-						url: `${ingressUrl}/github/webhook`,
-						active: true,
-					},
-			}
-			: {}),
+		// GitHub rejects a manifest with subscribed events and no hook URL. A
+		// private instance still supplies its own valid URL, but leaves delivery
+		// inactive until public ingress is configured in Settings.
+		hook_attributes: {
+			url: `${hookBaseUrl}/github/webhook`,
+			active: Boolean(ingressUrl),
+		},
 	};
 }
 
