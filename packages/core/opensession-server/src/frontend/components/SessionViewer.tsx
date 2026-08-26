@@ -52,6 +52,7 @@ import {
 	mergeTranscriptEntries,
 	orderTranscriptEntries,
 	queueAttribution,
+	summarizeInFlightContent,
 } from "../lib/transcript-state";
 import {
 	HISTORY_PAGE_ENTRIES,
@@ -272,6 +273,7 @@ import {
 	IconArrowUp,
 	IconArrowUpToLine,
 	IconCrosshair,
+	IconClock,
 	IconDesk,
 	IconDotsHorizontal,
 	IconEye,
@@ -4579,51 +4581,43 @@ export function SessionViewer({
 	const queuedClassified = shownQueued.map((item) =>
 		classifyQueuedContent(item.content, item.user),
 	);
-	const queuedReviewCount = queuedClassified.filter(
-		(c) => c.notice?.kind === "review-handoff",
-	).length;
-	// A worker's report to this session is one agent handing work back to
-	// another, not something a person sent. Counting it as a queued message
-	// made the chip claim the human had written something they never did.
-	const queuedWorkerCount = queuedClassified.filter(
-		(c) => c.notice?.kind === "worker-report",
-	).length;
-	const queuedSessionMessageCount = queuedClassified.filter(
-		(c) => c.notice?.kind === "session-notice",
-	).length;
-
+	const steeredClassified = visibleSteered.map((item) =>
+		classifyQueuedContent(item.content, item.user),
+	);
+	const queuedSummary = summarizeInFlightContent(queuedClassified);
+	const steeredSummary = summarizeInFlightContent(steeredClassified);
+	// Transport ownership must not rename agent-to-agent traffic as a human
+	// steer. Reports and session notices keep their own waiting counts even once
+	// the running engine has accepted them for its next step.
+	const reviewCount = queuedSummary.reviews + steeredSummary.reviews;
+	const workerCount =
+		queuedSummary.workerReports + steeredSummary.workerReports;
+	const sessionMessageCount =
+		queuedSummary.sessionMessages + steeredSummary.sessionMessages;
 	const queueCount =
 		shownQueued.length + visibleSteered.length + pendingQueue.length + durableOutbox.length;
-	// Steered receipts are NOT queued — they have been ACCEPTED by the running
-	// turn and are waiting for it to reach its next step. Calling them "queued"
-	// read as "my message didn't go through" (three times, 2026-07-19); calling
-	// them delivered was the opposite lie, since the receipt is reconciled away
-	// the moment delivery actually happens, so "delivered" was on screen only
-	// while it hadn't happened yet.
+	// Ordinary steered receipts have been accepted by the running turn and wait
+	// for its next step. Agent traffic uses its own waiting labels above instead.
 	const queuedMessageCount =
-		shownQueued.length -
-		queuedReviewCount -
-		queuedWorkerCount -
-		queuedSessionMessageCount +
-		pendingQueue.length +
-		durableOutbox.length;
+		queuedSummary.messages + pendingQueue.length + durableOutbox.length;
+	const steeringMessageCount = steeredSummary.messages;
 	const queueTitle = settingUpWorkspace
 		? `Setting up workspace · ${queueCount} queued`
 		: [
 				queuedMessageCount
 					? `${queuedMessageCount} ${queuedMessageCount === 1 ? "message" : "messages"} queued`
 					: null,
-				queuedReviewCount
-					? `${queuedReviewCount} PR ${queuedReviewCount === 1 ? "review" : "reviews"} waiting`
+				reviewCount
+					? `${reviewCount} PR ${reviewCount === 1 ? "review" : "reviews"} waiting`
 					: null,
-				queuedWorkerCount
-					? `${queuedWorkerCount} worker ${queuedWorkerCount === 1 ? "report" : "reports"} waiting`
+				workerCount
+					? `${workerCount} worker ${workerCount === 1 ? "report" : "reports"} waiting`
 					: null,
-				queuedSessionMessageCount
-					? `${queuedSessionMessageCount} session ${queuedSessionMessageCount === 1 ? "message" : "messages"} waiting`
+				sessionMessageCount
+					? `${sessionMessageCount} session ${sessionMessageCount === 1 ? "message" : "messages"} waiting`
 					: null,
-				visibleSteered.length
-					? `${visibleSteered.length} steering into the current turn`
+				steeringMessageCount
+					? `${steeringMessageCount} steering into the current turn`
 					: null,
 			]
 				.filter(Boolean)
@@ -4639,8 +4633,13 @@ export function SessionViewer({
 			>
 				<div className={composerQueueTitle}>{queueTitle}</div>
 				{visibleSteered.map((s, i) => {
-					const c = classifyQueuedContent(s.content, s.user);
+					const c = steeredClassified[i];
+					const isReview = c.notice?.kind === "review-handoff";
+					const isWorker = c.notice?.kind === "worker-report";
+					const isSessionMessage = c.notice?.kind === "session-notice";
+					const isAgentTraffic = isReview || isWorker || isSessionMessage;
 					const canEdit =
+						!isAgentTraffic &&
 						s.editable === true &&
 						personKey(s.user || "") === personKey(currentUser);
 					return (
@@ -4656,10 +4655,20 @@ export function SessionViewer({
 							)}
 						>
 							<div className={composerQueueActions}>
-								<Tooltip label="The run has this message and folds it in when the current step finishes. A long tool call, like a test run, can hold it for a few minutes.">
+								<Tooltip
+									label={
+										isAgentTraffic
+											? "The run has this update and reads it when the current step finishes. A long tool call, like a test run, can hold it for a few minutes."
+											: "The run has this message and folds it in when the current step finishes. A long tool call, like a test run, can hold it for a few minutes."
+									}
+								>
 									<span className={composerQueuePill}>
-										<IconCrosshair size={20} />
-										Steering
+										{isAgentTraffic ? (
+											<IconClock size={20} />
+										) : (
+											<IconCrosshair size={20} />
+										)}
+										{isAgentTraffic ? "Waiting" : "Steering"}
 										<SteerWaiting since={s.steeredAt} />
 									</span>
 								</Tooltip>
@@ -4702,7 +4711,11 @@ export function SessionViewer({
 									<Tooltip label="Dismiss. The run keeps going and this message won't be re-sent.">
 										<button
 											type="button"
-											aria-label="Dismiss steering message"
+											aria-label={
+												isAgentTraffic
+													? queueDeleteLabel(isReview, isWorker, isSessionMessage)
+													: "Dismiss steering message"
+											}
 											className={cn(
 												composerQueueAction,
 												composerQueueActionDanger,
