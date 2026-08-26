@@ -1487,6 +1487,8 @@ dialog::backdrop {
 .setup-guide:has(.download-steps) .pwa-guide-close {
 	top: 18px;
 	right: 18px;
+	border-radius: 50%;
+	corner-shape: round;
 	background: rgba(var(--ink-rgb), 0.055);
 }
 
