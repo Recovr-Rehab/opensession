@@ -1,317 +1,128 @@
 import { describe, expect, test } from "bun:test";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
-  MAX_AGENT_TRANSCRIPT_APPEND_BYTES,
-  MAX_AGENT_TURN_DURATION_MS,
-  decodeAgentExecutorAccessGrant,
-  encodeAgentExecutorAccessGrant,
-  hashAgentHostSupervisionAuthorityV2,
-  hashAgentTurnSpecV1,
+  MAX_AGENT_HOST_STREAM_BYTES,
+  MAX_AGENT_HOST_STREAM_CHUNK_BYTES,
+  decodeAgentHostAttachResumeCursorV4,
   decodeAgentHostHello,
-  decodeAgentHostSupervisionAuthorityV2,
+  decodeAgentHostOperationCancel,
+  decodeAgentHostOperationCancelReceipt,
+  decodeAgentHostOperationQuery,
+  decodeAgentHostOperationQueryReceipt,
+  decodeAgentHostOperationReceipt,
+  decodeAgentHostOperationRequest,
+  decodeAgentHostOperationRequestExact,
+  decodeAgentHostOperationStream,
+  decodeAgentHostOperationStreamAck,
   decodeAgentHostStartTurn,
   decodeAgentTurnSpec,
-  isAgentTurnFence,
-  serializeAgentHostSupervisionAuthorityV2,
+  hashAgentTurnSpecV2,
   type AgentTurnSpec,
 } from "./agent-host";
-import { decodeExecutorGrant, encodeExecutorGrant } from "./executor";
+import { hashAgentOperationDescriptorV1, type AgentOperationReceiptV1 } from "./agent-operation";
 
 const now = 1_000;
-const accessGrant = encodeAgentExecutorAccessGrant("a".repeat(32));
-const spec: AgentTurnSpec = {
-  fence: {
-    sessionId: "session-1",
-    runId: "run-1",
-    turnId: "turn-1",
-    generation: 1,
-  },
-  input: { prompt: "Run the tests" },
-  mode: "code",
-  modelPolicy: { model: "example-model" },
-  enginePolicy: { engineSessionId: "engine-session-1" },
-  mcpPolicy: { servers: [] },
-  transcriptPolicy: { maxAppendBytes: 64_000, requireAck: true },
-  runPolicy: { classification: "interactive_prompt" },
-  identityPolicy: { user: "Ada", mcpGrantUser: "Ada" },
-  environmentPolicy: {
-    author: { name: "Ada", email: "ada@example.test" },
-  },
-  workspacePolicy: {
-    rootId: "root-1",
-    repositoriesNote: "Primary repository: opensession",
-  },
-  executorPolicy: {
-    executorId: "executor-1",
-    rootId: "root-1",
-    generation: 1,
-    accessGrant,
-    deadlineMs: now + 60_000,
-  },
+const d = (char: string) => `sha256:${char.repeat(64)}` as const;
+const fence = { sessionId: "session-1", runId: "run-1", turnId: "turn-1", generation: 1 };
+const descriptor = {
+  version: 1 as const,
+  kind: "model" as const,
+  stepId: "step-1",
+  transcript: { throughChangeSeq: 2, entryIds: ["entry-1"], digest: d("a") },
+  modelPolicyHash: d("b"),
+  adapterRequestVersion: "model.v1",
 };
+const receipt: AgentOperationReceiptV1 = {
+  version: 1, operationId: "operation-1", kind: "model", fence,
+  planHash: d("c"), authorityHash: d("d"), descriptorDigest: d("e"), payloadDigest: d("f"),
+  actorIdentity: { supervisorEpoch: 1, hostId: "host-1", hostGeneration: 1, hostIncarnation: "incarnation-1", transcriptAnchor: descriptor.transcript },
+  state: "prepared", acceptedAtMs: 1, providerRef: { adapterId: "adapter-1", adapterVersion: "1" },
+};
+const common = { version: 4 as const, requestId: "request-1", fence };
 
-describe("Agent Host protocol", () => {
-  test("uses an exact-version handshake", () => {
-    const hello = {
-      t: "hello" as const,
-      version: AGENT_HOST_PROTOCOL_VERSION,
-      requestId: "request-1",
-    };
-    expect(decodeAgentHostHello(hello)).toEqual(hello);
-    expect(decodeAgentHostHello({ ...hello, version: 1 })).toBeUndefined();
-    expect(decodeAgentHostHello({ ...hello, extra: true })).toBeUndefined();
+async function makeSpec(): Promise<AgentTurnSpec> {
+  return {
+    fence,
+    initialOperation: { operationId: "operation-1", descriptor, descriptorDigest: await hashAgentOperationDescriptorV1(descriptor), deadlineMs: now + 60_000 },
+    transcript: { afterChangeSeq: 2, maxAppendBytes: 64_000, requireAck: true },
+    limits: { turnDeadlineMs: now + 120_000, maxInFlightOperations: 8, maxBufferedStreamBytes: 512 * 1024, maxBufferedStreamChunks: 32 },
+  };
+}
+
+describe("Agent Host protocol v4", () => {
+  test("hard cuts v3 and exact hello keys", () => {
+    expect(AGENT_HOST_PROTOCOL_VERSION).toBe(4);
+    expect(decodeAgentHostHello({ t: "hello", version: 4, requestId: "request-1" })).toBeDefined();
+    expect(decodeAgentHostHello({ t: "hello", version: 3, requestId: "request-1" })).toBeUndefined();
+    expect(decodeAgentHostHello({ t: "hello", version: 4, requestId: "request-1", extra: true })).toBeUndefined();
   });
 
-  test("fences a turn by exact session, run, turn, and generation", () => {
-    const fence = spec.fence;
-    expect(isAgentTurnFence(fence)).toBe(true);
-    expect(isAgentTurnFence({ ...fence, turnId: "" })).toBe(false);
-    expect(isAgentTurnFence({ ...fence, generation: -1 })).toBe(false);
-    expect(isAgentTurnFence({ ...fence, model: "forbidden" })).toBe(false);
+  test("decodes only the frozen descriptor-only turn spec and hashes domain v2", async () => {
+    const spec = await makeSpec();
+    const decoded = decodeAgentTurnSpec(spec, now)!;
+    expect(decoded).toEqual(spec);
+    expect(Object.isFrozen(decoded)).toBe(true);
+    expect(Object.isFrozen(decoded.initialOperation.descriptor)).toBe(true);
+    const hash = await hashAgentTurnSpecV2(spec, now);
+    expect(hash).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(await hashAgentTurnSpecV2({ ...spec, transcript: { ...spec.transcript, afterChangeSeq: 3 } }, now)).not.toBe(hash);
+    for (const key of ["input", "prompt", "images", "mode", "modelPolicy", "enginePolicy", "mcpPolicy", "runPolicy", "identityPolicy", "environmentPolicy", "workspacePolicy", "executorPolicy", "accessGrant"])
+      expect(decodeAgentTurnSpec({ ...spec, [key]: "forbidden" }, now)).toBeUndefined();
+    expect(decodeAgentTurnSpec({ ...spec, limits: { ...spec.limits, maxInFlightOperations: 9 } }, now)).toBeUndefined();
+    expect(decodeAgentTurnSpec({ ...spec, initialOperation: { ...spec.initialOperation, deadlineMs: now + 5 * 60_000 + 1 } }, now)).toBeUndefined();
+    expect(decodeAgentHostStartTurn({ t: "start_turn", version: 4, requestId: "request-1", planHash: d("1"), spec }, now)).toBeDefined();
   });
 
-  test("brands a bounded Agent Host access grant separately", () => {
-    const executorGrant = encodeExecutorGrant("e".repeat(32));
-    expect(decodeAgentExecutorAccessGrant(accessGrant)).toBe(accessGrant);
-    expect(decodeAgentExecutorAccessGrant(executorGrant)).toBeUndefined();
-    expect(decodeExecutorGrant(accessGrant)).toBeUndefined();
-    expect(decodeExecutorGrant(executorGrant)).toBe(executorGrant);
-    expect(decodeAgentExecutorAccessGrant("")).toBeUndefined();
-    expect(
-      decodeAgentExecutorAccessGrant("x".repeat(16 * 1024 + 1)),
-    ).toBeUndefined();
+  test("strictly decodes sorted immutable attach resume cursors", () => {
+    const cursor = { lastHostSeq: 7, operations: [{ operationId: "operation-1", throughStreamSeq: 2 }, { operationId: "operation-2", throughStreamSeq: 0 }] };
+    const decoded = decodeAgentHostAttachResumeCursorV4(cursor)!;
+    expect(decoded).toEqual(cursor);
+    expect(Object.isFrozen(decoded.operations)).toBe(true);
+    expect(decodeAgentHostAttachResumeCursorV4(null)).toBeNull();
+    expect(decodeAgentHostAttachResumeCursorV4({ ...cursor, extra: true })).toBeUndefined();
+    expect(decodeAgentHostAttachResumeCursorV4({ ...cursor, operations: [...cursor.operations].reverse() })).toBeUndefined();
+    expect(decodeAgentHostAttachResumeCursorV4({ ...cursor, operations: Array(9).fill(cursor.operations[0]) })).toBeUndefined();
   });
 
-  test("strictly decodes a complete start_turn", () => {
-    const message = {
-      t: "start_turn" as const,
-      version: AGENT_HOST_PROTOCOL_VERSION,
-      requestId: "request-1",
-      planHash: `sha256:${"b".repeat(64)}`,
-      spec,
-    };
-    expect(decodeAgentTurnSpec(spec, now)).toEqual(spec);
-    expect(decodeAgentHostStartTurn(message, now)).toEqual(message);
-    expect(
-      decodeAgentHostStartTurn({ ...message, prompt: "forbidden" }, now),
-    ).toBeUndefined();
-    expect(
-      decodeAgentHostStartTurn(
-        { ...message, spec: { ...spec, model: "forbidden" } },
-        now,
-      ),
-    ).toBeUndefined();
+  test("decodes exact operation intents and verifies request digests", async () => {
+    const descriptorDigest = await hashAgentOperationDescriptorV1(descriptor);
+    const request = { t: "operation_request", ...common, hostSeq: 1, operationId: "operation-1", descriptor, descriptorDigest, deadlineMs: now + 60_000 };
+    expect(await decodeAgentHostOperationRequest(request, now)).toBeDefined();
+    expect(await decodeAgentHostOperationRequestExact(request, now)).toBeDefined();
+    expect(await decodeAgentHostOperationRequestExact({ ...request, descriptorDigest: d("0") }, now)).toBeUndefined();
+    const query = { t: "operation_query", ...common, hostSeq: 2, operationId: "operation-1", kind: "model", descriptorDigest, payloadDigest: d("2"), afterStreamSeq: 0 };
+    expect(decodeAgentHostOperationQuery(query)).toBeDefined();
+    expect(decodeAgentHostOperationQuery({ ...query, prompt: "forbidden" })).toBeUndefined();
+    const cancel = { t: "operation_cancel", ...common, hostSeq: 3, operationId: "operation-1", cancelId: "cancel-1", reason: "reconnect_deadline" };
+    expect(decodeAgentHostOperationCancel(cancel)).toBeDefined();
+    expect(decodeAgentHostOperationCancel({ ...cancel, reason: "timeout" })).toBeUndefined();
   });
 
-  test("canonically hashes every execution-relevant turn field", async () => {
-    const hash = await hashAgentTurnSpecV1(spec, now);
-    expect(await hashAgentTurnSpecV1({ ...spec }, now)).toBe(hash);
-    const variants: AgentTurnSpec[] = [
-      { ...spec, input: { ...spec.input, prompt: "changed" } },
-      { ...spec, modelPolicy: { ...spec.modelPolicy, model: "other-model" } },
-      { ...spec, mcpPolicy: { servers: ["other-server"] } },
-      {
-        ...spec,
-        runPolicy: { ...spec.runPolicy, deniedTools: { bash: "no" } },
-      },
-      { ...spec, environmentPolicy: { ...spec.environmentPolicy, aws: true } },
-      {
-        ...spec,
-        workspacePolicy: { ...spec.workspacePolicy, rootId: "root-2" },
-        executorPolicy: { ...spec.executorPolicy, rootId: "root-2" },
-      },
-      {
-        ...spec,
-        executorPolicy: {
-          ...spec.executorPolicy,
-          accessGrant: encodeAgentExecutorAccessGrant("z".repeat(32)),
-        },
-      },
-    ];
-    for (const variant of variants)
-      expect(await hashAgentTurnSpecV1(variant, now)).not.toBe(hash);
+  test("decodes bound receipt wrappers and rejects crossover", () => {
+    const wrapper = { t: "operation_receipt", ...common, ackHostSeq: 1, operationId: "operation-1", receipt };
+    expect(decodeAgentHostOperationReceipt(wrapper)).toBeDefined();
+    expect(decodeAgentHostOperationReceipt({ ...wrapper, operationId: "operation-2" })).toBeUndefined();
+    expect(decodeAgentHostOperationQueryReceipt({ t: "operation_query_receipt", ...common, ackHostSeq: 2, operationId: "operation-1", fromStreamSeq: 1, receipt })).toBeDefined();
+    expect(decodeAgentHostOperationCancelReceipt({ t: "operation_cancel_receipt", ...common, ackHostSeq: 3, operationId: "operation-1", cancelId: "cancel-1", disposition: "indeterminate", receipt })).toBeDefined();
   });
 
-  test("rejects stale, mismatched, malformed, and operation-grant-shaped bindings", () => {
-    const replaceExecutorPolicy = (
-      executorPolicy: Record<string, unknown>,
-    ) => ({
-      ...spec,
-      executorPolicy,
-    });
-    expect(
-      decodeAgentTurnSpec(
-        replaceExecutorPolicy({ ...spec.executorPolicy, deadlineMs: now }),
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec(
-        replaceExecutorPolicy({
-          ...spec.executorPolicy,
-          deadlineMs: now + MAX_AGENT_TURN_DURATION_MS + 1,
-        }),
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec(
-        replaceExecutorPolicy({ ...spec.executorPolicy, generation: 2 }),
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec(
-        replaceExecutorPolicy({ ...spec.executorPolicy, executorId: "bad id" }),
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec(
-        replaceExecutorPolicy({
-          ...spec.executorPolicy,
-          grant: accessGrant,
-          fence: spec.fence,
-        }),
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec({ ...spec, executorGrant: accessGrant }, now),
-    ).toBeUndefined();
+  test("enforces canonical bounded opaque stream chunks and exact ACK credits", () => {
+    const stream = { t: "operation_stream", ...common, operationId: "operation-1", streamSeq: 1, encoding: "base64url+opensession-operation-v1", bytes: "aGVsbG8" };
+    expect(decodeAgentHostOperationStream(stream)).toBeDefined();
+    for (const bytes of ["aGVsbG8=", "aGVsbG8+", "", "A".repeat(Math.ceil((MAX_AGENT_HOST_STREAM_CHUNK_BYTES + 1) * 4 / 3))])
+      expect(decodeAgentHostOperationStream({ ...stream, bytes })).toBeUndefined();
+    const ack = { t: "operation_stream_ack", ...common, hostSeq: 4, operationId: "operation-1", throughStreamSeq: 1, creditBytes: MAX_AGENT_HOST_STREAM_BYTES, creditChunks: 32 };
+    expect(decodeAgentHostOperationStreamAck(ack)).toBeDefined();
+    expect(decodeAgentHostOperationStreamAck({ ...ack, creditBytes: MAX_AGENT_HOST_STREAM_BYTES + 1 })).toBeUndefined();
+    expect(decodeAgentHostOperationStreamAck({ ...ack, creditChunks: 33 })).toBeUndefined();
   });
 
-  test("strictly canonicalizes the bounded supervision v2 payload", async () => {
-    const authority = decodeAgentHostSupervisionAuthorityV2(
-      {
-        version: 2,
-        fence: spec.fence,
-        planHash: `sha256:${"a".repeat(64)}`,
-        hostId: "host-1",
-        hostGeneration: 1,
-        hostIncarnation: "incarnation-00000001",
-        supervisorEpoch: 1,
-        kernelServiceEpoch: "kernel-service-epoch-1",
-        hostChallenge: "challenge-000000000001",
-        audience: "opensession-agent-host",
-        purpose: "agent-host-supervision",
-        issuedAtMs: now,
-        expiresAtMs: now + 60_000,
-        nonce: "nonce-000000000000001",
-        keyId: "future-ed25519-key-1",
-      },
-      now,
-    );
-    expect(authority).toBeDefined();
-    const bytes = serializeAgentHostSupervisionAuthorityV2(authority!);
-    expect(new TextDecoder().decode(bytes)).toContain(
-      '"purpose":"agent-host-supervision"',
-    );
-    expect(await hashAgentHostSupervisionAuthorityV2(authority!)).toMatch(
-      /^sha256:[a-f0-9]{64}$/,
-    );
-    expect(
-      decodeAgentHostSupervisionAuthorityV2({ ...authority, credential: "no" }),
-    ).toBeUndefined();
-    expect(
-      decodeAgentHostSupervisionAuthorityV2({
-        ...authority,
-        expiresAtMs: now + MAX_AGENT_TURN_DURATION_MS,
-      }),
-    ).toBeUndefined();
-  });
-
-  test("validates image MIME, canonical base64, and aggregate bytes", () => {
-    const image = { mediaType: "image/png", data: btoa("image") };
-    expect(
-      decodeAgentTurnSpec(
-        {
-          ...spec,
-          input: { ...spec.input, images: [image] },
-        },
-        now,
-      ),
-    ).toBeDefined();
-    expect(
-      decodeAgentTurnSpec(
-        {
-          ...spec,
-          input: {
-            ...spec.input,
-            images: [{ ...image, mediaType: "text/plain" }],
-          },
-        },
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec(
-        {
-          ...spec,
-          input: { ...spec.input, images: [{ ...image, data: "aGVsbG8" }] },
-        },
-        now,
-      ),
-    ).toBeUndefined();
-  });
-
-  test("rejects credential and provider nesting outside named policies", () => {
-    expect(
-      decodeAgentTurnSpec(
-        {
-          ...spec,
-          input: { ...spec.input, providerConfig: { apiKey: "secret" } },
-        },
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec(
-        {
-          ...spec,
-          modelPolicy: { ...spec.modelPolicy, accessGrant: "persist-me" },
-        },
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec(
-        {
-          ...spec,
-          mcpPolicy: { ...spec.mcpPolicy, credentials: { token: "secret" } },
-        },
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec(
-        {
-          ...spec,
-          transcriptPolicy: {
-            ...spec.transcriptPolicy,
-            maxAppendBytes: MAX_AGENT_TRANSCRIPT_APPEND_BYTES + 1,
-          },
-        },
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec(
-        {
-          ...spec,
-          workspacePolicy: { rootId: "root-1\u0000escape" },
-        },
-        now,
-      ),
-    ).toBeUndefined();
-    expect(
-      decodeAgentTurnSpec(
-        {
-          ...spec,
-          fence: { ...spec.fence, runId: "run-1\nforged" },
-        },
-        now,
-      ),
-    ).toBeUndefined();
+  test("rejects accessors and non-plain objects", async () => {
+    const spec = await makeSpec();
+    const accessor = { ...spec } as Record<string, unknown>;
+    Object.defineProperty(accessor, "fence", { enumerable: true, get: () => fence });
+    expect(decodeAgentTurnSpec(accessor, now)).toBeUndefined();
+    expect(decodeAgentTurnSpec(Object.assign(Object.create({ inherited: true }), spec), now)).toBeUndefined();
+    expect(decodeAgentTurnSpec(new Proxy(spec, {}), now)).toBeUndefined();
   });
 });

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { encodeExecutorGrant } from "./executor";
-import { encodeAgentExecutorAccessGrant } from "./agent-host";
 import {
   AGENT_GATEWAY_DISPATCH_GRANT_PREFIX,
   AGENT_MCP_ARGUMENTS_DIGEST_DOMAIN,
@@ -88,11 +87,6 @@ describe("Agent operation protocol v1", () => {
   test("brands a gateway grant in a domain separate from Agent Host and Executor grants", () => {
     expect(decodeAgentGatewayDispatchGrant(grant)).toBe(grant);
     expect(grant.startsWith(AGENT_GATEWAY_DISPATCH_GRANT_PREFIX)).toBe(true);
-    expect(
-      decodeAgentGatewayDispatchGrant(
-        encodeAgentExecutorAccessGrant("a".repeat(32)),
-      ),
-    ).toBeUndefined();
     expect(
       decodeAgentGatewayDispatchGrant(encodeExecutorGrant("e".repeat(32))),
     ).toBeUndefined();

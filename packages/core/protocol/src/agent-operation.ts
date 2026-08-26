@@ -1,8 +1,5 @@
-import {
-  decodeSignedAgentHostSupervisionEnvelopeV1,
-  type SignedAgentHostSupervisionEnvelopeV1,
-} from "./agent-host-supervision";
-import { isAgentTurnFence, type AgentTurnFence } from "./agent-host";
+import type { SignedAgentHostSupervisionEnvelopeV1 } from "./agent-host-supervision";
+import { isAgentTurnFence, type AgentTurnFence } from "./agent-host-fence";
 
 export const AGENT_OPERATION_VERSION = 1 as const;
 export const AGENT_GATEWAY_DISPATCH_GRANT_PREFIX = "osag_dispatch_v1." as const;
@@ -80,6 +77,18 @@ const validDigest = (v: unknown): v is AgentOperationDigest =>
   typeof v === "string" && DIGEST.test(v);
 const time = (v: unknown): v is number =>
   Number.isSafeInteger(v) && (v as number) >= 0;
+function canonicalBase64Url(value: unknown, exactBytes: number | undefined, maxBytes: number): value is string {
+  if (typeof value !== "string" || value.length < 2 || value.length % 4 === 1 || value.includes("=") || !/^[A-Za-z0-9_-]+$/.test(value)) return false;
+  try {
+    const binary = atob(value.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(value.length / 4) * 4, "="));
+    if (binary.length > maxBytes || (exactBytes !== undefined && binary.length !== exactBytes)) return false;
+    return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "") === value;
+  } catch { return false; }
+}
+function decodeSignedAgentHostSupervisionEnvelopeV1(value: unknown): SignedAgentHostSupervisionEnvelopeV1 | undefined {
+  if (!record(value) || !exact(value, ["version", "algorithm", "domain", "authorityBytes", "signature"]) || value.version !== 1 || value.algorithm !== "Ed25519" || value.domain !== "opensession.agent-host.supervision.v2" || !canonicalBase64Url(value.authorityBytes, undefined, 4096) || !canonicalBase64Url(value.signature, 64, 64)) return undefined;
+  return Object.freeze({ version: 1, algorithm: "Ed25519", domain: "opensession.agent-host.supervision.v2", authorityBytes: value.authorityBytes, signature: value.signature });
+}
 
 export type AgentOperationDigest = `sha256:${string}`;
 declare const grantBrand: unique symbol;

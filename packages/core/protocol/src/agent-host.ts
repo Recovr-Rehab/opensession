@@ -1,288 +1,195 @@
-/**
- * Local Unix-socket contract between the control plane and an Agent Host.
- *
- * The Agent Host owns one model turn loop. It receives bounded, serializable
- * policy and a turn-scoped control-plane dispatch capability, but never an
- * Executor operation grant and never provisions or destroys an Executor.
- */
-
-import type { ImageInput, StreamEvent } from "./events";
-import type { GitIdentity } from "./identity";
-import { decodeExecutorGrant, decodeExecutorId } from "./executor";
-import type { AskResult } from "./runner";
-import type { TranscriptEntry } from "./session";
+import {
+  decodeAgentOperationDescriptorV1,
+  decodeAgentOperationReceiptV1,
+  hashAgentOperationDescriptorV1,
+  type AgentOperationDescriptorV1,
+  type AgentOperationDigest,
+  type AgentOperationKind,
+  type AgentOperationReceiptV1,
+} from "./agent-operation";
+import { decodeExecutorId } from "./executor";
+import { decodeAgentTurnFence, isAgentTurnFence, type AgentTurnFence } from "./agent-host-fence";
 import type {
   ExpectedAgentHostSupervisionBindingsV3,
   SignedAgentHostSupervisionEnvelopeV1,
 } from "./agent-host-supervision";
+export { decodeAgentTurnFence, isAgentTurnFence, type AgentTurnFence } from "./agent-host-fence";
 
-export const AGENT_HOST_PROTOCOL_VERSION = 3 as const;
-/** Durable authority payload version consumed by the exact v3 attach wire. */
+export const AGENT_HOST_PROTOCOL_VERSION = 4 as const;
 export const AGENT_HOST_SUPERVISION_VERSION = 2 as const;
-export const AGENT_HOST_SUPERVISION_AUDIENCE =
-  "opensession-agent-host" as const;
+export const AGENT_HOST_SUPERVISION_AUDIENCE = "opensession-agent-host" as const;
 export const AGENT_HOST_SUPERVISION_PURPOSE = "agent-host-supervision" as const;
 export const MAX_AGENT_HOST_SUPERVISION_LEASE_MS = 5 * 60_000;
 export const MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS = 30_000;
-
-const MAX_CAPABILITY_BYTES = 16 * 1024;
-const MAX_SHORT_TEXT_BYTES = 16 * 1024;
-const MAX_PROMPT_BYTES = 768 * 1024;
-const MAX_REPOSITORIES_NOTE_BYTES = 256 * 1024;
-const MAX_IMAGE_BYTES = 128 * 1024;
-const MAX_IMAGES_BYTES = 128 * 1024;
-const MAX_IMAGES = 32;
-const MAX_MCP_SERVERS = 1_024;
-const MAX_TOOL_RULES = 4_096;
 export const MAX_AGENT_TRANSCRIPT_APPEND_BYTES = 768 * 1024;
+export const MAX_AGENT_OPERATION_DURATION_MS = 5 * 60_000;
 export const MAX_AGENT_TURN_DURATION_MS = 24 * 60 * 60_000;
-const CONTROL_CHARACTER_RE = /[\u0000-\u001f\u007f]/;
-const NUL_RE = /\u0000/;
+export const MAX_AGENT_HOST_IN_FLIGHT_OPERATIONS = 8;
+export const MAX_AGENT_HOST_STREAM_CHUNK_BYTES = 48 * 1024;
+export const INITIAL_AGENT_HOST_STREAM_CHUNKS = 16;
+export const INITIAL_AGENT_HOST_STREAM_BYTES = 256 * 1024;
+export const MAX_AGENT_HOST_STREAM_CHUNKS = 32;
+export const MAX_AGENT_HOST_STREAM_BYTES = 512 * 1024;
+export const MAX_AGENT_HOST_REPLAY_FRAMES = 128;
+export const MAX_AGENT_HOST_REPLAY_BYTES = 1024 * 1024;
+export const MAX_AGENT_HOST_WRITABLE_BYTES = 512 * 1024;
+
 const textEncoder = new TextEncoder();
-const record = (value: unknown): value is Record<string, unknown> =>
-  !!value && typeof value === "object" && !Array.isArray(value);
-const exact = (value: Record<string, unknown>, keys: readonly string[]) =>
-  Object.keys(value).every((key) => keys.includes(key));
-const boundedString = (
-  value: unknown,
-  maxBytes: number,
-  allowEmpty = false,
-): value is string =>
-  typeof value === "string" &&
-  (allowEmpty || value.length > 0) &&
-  textEncoder.encode(value).byteLength <= maxBytes;
-const boundedName = (
-  value: unknown,
-  maxBytes = MAX_SHORT_TEXT_BYTES,
-): value is string =>
-  boundedString(value, maxBytes) && !CONTROL_CHARACTER_RE.test(value);
-
-/**
- * Opaque Agent Host capability for bounded control-plane dispatch requests.
- * It is branded separately from ExecutorGrant on purpose: it is never valid at
- * ExecutorBroker or an Executor daemon and cannot authorize an operation.
- * A future durable v2 contract must persist a descriptor and reacquire this
- * short-lived IPC capability instead of persisting the token.
- */
-export const AGENT_EXECUTOR_ACCESS_GRANT_PREFIX = "osah_dispatch_v1." as const;
-const CAPABILITY_BODY_RE = /^[A-Za-z0-9_-]{32,512}$/;
-declare const agentExecutorAccessGrantBrand: unique symbol;
-export type AgentExecutorAccessGrant = string & {
-  readonly [agentExecutorAccessGrantBrand]: "AgentExecutorAccessGrant";
+const SHA256_RE = /^sha256:[a-f0-9]{64}$/;
+const CONTROL_CHARACTER_RE = /[\u0000-\u001f\u007f]/;
+const SUPERVISION_TOKEN_RE = /^[A-Za-z0-9_-]{16,256}$/;
+const STREAM_ENCODING = "base64url+opensession-operation-v1" as const;
+const record = (value: unknown): value is Record<string, unknown> => {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return false;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Reflect.ownKeys(descriptors);
+  return keys.every((key) => typeof key === "string" && "value" in descriptors[key]! && descriptors[key]!.enumerable);
 };
-
-export function encodeAgentExecutorAccessGrant(
-  entropy: string,
-): AgentExecutorAccessGrant {
-  if (!CAPABILITY_BODY_RE.test(entropy))
-    throw new Error("Invalid Agent Host dispatch grant entropy");
-  return `${AGENT_EXECUTOR_ACCESS_GRANT_PREFIX}${entropy}` as AgentExecutorAccessGrant;
+const exact = (value: Record<string, unknown>, keys: readonly string[]) => {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && actual.every((key) => keys.includes(key));
+};
+const boundedString = (value: unknown, maxBytes: number, allowEmpty = false): value is string =>
+  typeof value === "string" && (allowEmpty || value.length > 0) && textEncoder.encode(value).byteLength <= maxBytes;
+const boundedName = (value: unknown, maxBytes = 16 * 1024): value is string => boundedString(value, maxBytes) && !CONTROL_CHARACTER_RE.test(value);
+const id = (value: unknown): value is string => typeof value === "string" && !!decodeExecutorId(value);
+const digest = (value: unknown): value is AgentOperationDigest => typeof value === "string" && SHA256_RE.test(value);
+const uint = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+const positive = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+  }
+  return value;
+}
+function immutable<T>(value: T): T | undefined {
+  try {
+    const clone = structuredClone(value);
+    if (JSON.stringify(clone) !== JSON.stringify(value)) return undefined;
+    return deepFreeze(clone);
+  } catch { return undefined; }
 }
 
-export function decodeAgentExecutorAccessGrant(
-  value: unknown,
-): AgentExecutorAccessGrant | undefined {
-  if (
-    !boundedString(value, MAX_CAPABILITY_BYTES) ||
-    !value.startsWith(AGENT_EXECUTOR_ACCESS_GRANT_PREFIX) ||
-    !CAPABILITY_BODY_RE.test(
-      value.slice(AGENT_EXECUTOR_ACCESS_GRANT_PREFIX.length),
-    ) ||
-    decodeExecutorGrant(value)
-  )
-    return undefined;
-  return value as AgentExecutorAccessGrant;
-}
-
-export interface AgentTurnFence {
-  sessionId: string;
-  runId: string;
-  turnId: string;
-  generation: number;
-}
-
-/** Non-secret model selection. Access is reacquired through supervised gateway RPC. */
-export interface AgentModelPolicy {
-  model: string;
-  effort?: string;
-  fastMode?: boolean;
-  fallbackModel?: string;
-}
-
-/** Non-secret MCP selection. Access is reacquired through supervised gateway RPC. */
-export interface AgentMcpPolicy {
-  /** Explicitly broad or explicitly enumerated. An empty list means none. */
-  servers: "all" | string[];
-}
-
-export interface AgentTranscriptPolicy {
-  /** Last durable mutation observed before this turn starts. */
-  afterChangeSeq?: number;
-  /** Maximum bytes an individual proposed append may contain. */
-  maxAppendBytes: number;
-  /** Host proposals require a control-plane acknowledgement before advancing. */
-  requireAck: true;
-}
-
-/** Engine lineage that Pi can resume without carrying provider configuration. */
-export interface AgentEnginePolicy {
-  engineSessionId?: string;
-}
-
-/** Trust and tool registration policy, using the existing runner semantics. */
-export interface AgentRunPolicy {
-  /** Exact control-plane classification. It cannot contradict a second kind. */
-  classification: "interactive_prompt" | "automation_prompt";
-  deniedTools?: Record<string, string>;
-  confirmTools?: Record<string, string>;
-}
-
-/** Prompt and MCP grant identities are separate existing runner identities. */
-export interface AgentIdentityPolicy {
-  user?: string;
-  mcpGrantUser?: string;
-}
-
-/** Serializable environment choices only. No credential values belong here. */
-export interface AgentEnvironmentPolicy {
-  author?: GitIdentity | null;
-  aws?: boolean;
-  claudeCliEnv?: boolean;
-  codexCliEnv?: boolean;
-}
-
-export interface AgentWorkspacePolicy {
-  /** Canonical descriptor only. The Host never receives a gateway filesystem path. */
-  rootId: string;
-  /** Existing model-visible note for the primary and attached repositories. */
-  repositoriesNote?: string;
-}
-
-/** Immutable binding for dispatch through one selected Executor incarnation. */
-export interface AgentExecutorPolicy {
-  readonly executorId: string;
-  readonly rootId: string;
-  readonly generation: number;
-  /** Turn-scoped authority to request exact per-operation grants. */
-  readonly accessGrant: AgentExecutorAccessGrant;
-  /** Absolute epoch-ms ceiling for this turn's execution authority. */
+export interface AgentHostInitialOperationV4 {
+  readonly operationId: string;
+  readonly descriptor: AgentOperationDescriptorV1;
+  readonly descriptorDigest: AgentOperationDigest;
   readonly deadlineMs: number;
 }
-
-/** Everything the local Agent Host needs for one model turn. */
 export interface AgentTurnSpec {
-  fence: AgentTurnFence;
-  input: {
-    prompt: string;
-    promptEntryId?: string;
-    images?: ImageInput[];
-  };
-  mode: "ask" | "code" | "scratch";
-  modelPolicy: AgentModelPolicy;
-  enginePolicy: AgentEnginePolicy;
-  mcpPolicy: AgentMcpPolicy;
-  transcriptPolicy: AgentTranscriptPolicy;
-  runPolicy: AgentRunPolicy;
-  identityPolicy: AgentIdentityPolicy;
-  environmentPolicy: AgentEnvironmentPolicy;
-  workspacePolicy: AgentWorkspacePolicy;
-  executorPolicy: AgentExecutorPolicy;
+  readonly fence: Readonly<AgentTurnFence>;
+  readonly initialOperation: Readonly<AgentHostInitialOperationV4>;
+  readonly transcript: Readonly<{ afterChangeSeq: number; maxAppendBytes: number; requireAck: true }>;
+  readonly limits: Readonly<{ turnDeadlineMs: number; maxInFlightOperations: number; maxBufferedStreamBytes: number; maxBufferedStreamChunks: number }>;
+}
+export function decodeAgentTurnSpec(value: unknown, nowMs = Date.now()): AgentTurnSpec | undefined {
+  if (!record(value) || !exact(value, ["fence", "initialOperation", "transcript", "limits"])) return undefined;
+  const snapshot = immutable(value);
+  if (!snapshot || !record(snapshot)) return undefined;
+  const fence = decodeAgentTurnFence(snapshot.fence), initial = snapshot.initialOperation, transcript = snapshot.transcript, limits = snapshot.limits;
+  if (!fence || !record(initial) || !exact(initial, ["operationId", "descriptor", "descriptorDigest", "deadlineMs"]) || !id(initial.operationId) || !digest(initial.descriptorDigest) || !positive(initial.deadlineMs) ||
+      !record(transcript) || !exact(transcript, ["afterChangeSeq", "maxAppendBytes", "requireAck"]) || !uint(transcript.afterChangeSeq) || !positive(transcript.maxAppendBytes) || transcript.maxAppendBytes > MAX_AGENT_TRANSCRIPT_APPEND_BYTES || transcript.requireAck !== true ||
+      !record(limits) || !exact(limits, ["turnDeadlineMs", "maxInFlightOperations", "maxBufferedStreamBytes", "maxBufferedStreamChunks"]) || !positive(limits.turnDeadlineMs) || limits.turnDeadlineMs <= nowMs || limits.turnDeadlineMs > nowMs + MAX_AGENT_TURN_DURATION_MS ||
+      initial.deadlineMs <= nowMs || initial.deadlineMs > nowMs + MAX_AGENT_OPERATION_DURATION_MS || initial.deadlineMs > limits.turnDeadlineMs ||
+      !positive(limits.maxInFlightOperations) || limits.maxInFlightOperations > MAX_AGENT_HOST_IN_FLIGHT_OPERATIONS || !positive(limits.maxBufferedStreamBytes) || limits.maxBufferedStreamBytes > MAX_AGENT_HOST_STREAM_BYTES || !positive(limits.maxBufferedStreamChunks) || limits.maxBufferedStreamChunks > MAX_AGENT_HOST_STREAM_CHUNKS) return undefined;
+  const descriptor = decodeAgentOperationDescriptorV1(initial.descriptor);
+  if (!descriptor) return undefined;
+  return deepFreeze({ fence, initialOperation: { operationId: initial.operationId, descriptor, descriptorDigest: initial.descriptorDigest, deadlineMs: initial.deadlineMs }, transcript: { afterChangeSeq: transcript.afterChangeSeq, maxAppendBytes: transcript.maxAppendBytes, requireAck: true }, limits: { turnDeadlineMs: limits.turnDeadlineMs, maxInFlightOperations: limits.maxInFlightOperations, maxBufferedStreamBytes: limits.maxBufferedStreamBytes, maxBufferedStreamChunks: limits.maxBufferedStreamChunks } });
+}
+const AGENT_TURN_PLAN_HASH_DOMAIN = "OpenSession-Agent-Turn-Plan-v2\0";
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (record(value)) return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+  return value;
+}
+export async function hashAgentTurnSpecV2(spec: AgentTurnSpec, nowMs = Date.now()): Promise<AgentOperationDigest> {
+  const decoded = decodeAgentTurnSpec(spec, nowMs);
+  if (!decoded) throw new TypeError("Invalid Agent Host turn specification");
+  if (await hashAgentOperationDescriptorV1(decoded.initialOperation.descriptor) !== decoded.initialOperation.descriptorDigest) throw new TypeError("Agent Host descriptor digest mismatch");
+  const bytes = textEncoder.encode(`${AGENT_TURN_PLAN_HASH_DOMAIN}${JSON.stringify(canonical(decoded))}`);
+  const result = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return `sha256:${[...result].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
-interface AgentHostMessageBase {
-  version: typeof AGENT_HOST_PROTOCOL_VERSION;
-  requestId: string;
+interface Base { readonly t: string; readonly version: 4; readonly requestId: string }
+interface Fenced extends Base { readonly fence: Readonly<AgentTurnFence> }
+export interface AgentHostAttachResumeCursorV4 { readonly lastHostSeq: number; readonly operations: readonly Readonly<{ operationId: string; throughStreamSeq: number }>[] }
+export interface AgentHostChallengeDescriptorV4 { readonly hostId: string; readonly hostGeneration: number; readonly hostIncarnation: string; readonly hostChallenge: string }
+export type AgentHostChallengeDescriptorV3 = AgentHostChallengeDescriptorV4;
+export interface AgentHostSignedAttachReceiptV4 { readonly expected: ExpectedAgentHostSupervisionBindingsV3; readonly envelope: SignedAgentHostSupervisionEnvelopeV1 }
+export type AgentHostSignedAttachReceiptV3 = AgentHostSignedAttachReceiptV4;
+export type AgentHostAttachV4 = Fenced & { readonly t: "attach"; readonly planHash: AgentOperationDigest; readonly receipt: AgentHostSignedAttachReceiptV4; readonly resume: AgentHostAttachResumeCursorV4 | null };
+export type AgentHostAttachedV4 = Fenced & { readonly t: "attached"; readonly planHash: AgentOperationDigest; readonly supervisorEpoch: number; readonly mode: "fresh" | "resumed" | "recovery_required"; readonly replayFromHostSeq: number };
+export type AgentHostStartTurnV4 = Base & { readonly t: "start_turn"; readonly planHash: AgentOperationDigest; readonly spec: AgentTurnSpec };
+type HostAsync = Fenced & { readonly hostSeq: number; readonly operationId: string };
+type GatewayResult = Fenced & { readonly ackHostSeq: number; readonly operationId: string };
+export type AgentHostOperationRequestV4 = HostAsync & { readonly t: "operation_request"; readonly descriptor: AgentOperationDescriptorV1; readonly descriptorDigest: AgentOperationDigest; readonly deadlineMs: number };
+export type AgentHostOperationQueryV4 = HostAsync & { readonly t: "operation_query"; readonly kind: AgentOperationKind; readonly descriptorDigest: AgentOperationDigest; readonly payloadDigest: AgentOperationDigest; readonly afterStreamSeq: number };
+export type AgentHostOperationCancelV4 = HostAsync & { readonly t: "operation_cancel"; readonly cancelId: string; readonly reason: "user" | "turn_deadline" | "shutdown" | "reconnect_deadline" };
+export type AgentHostOperationReceiptV4 = GatewayResult & { readonly t: "operation_receipt"; readonly receipt: AgentOperationReceiptV1 };
+export type AgentHostOperationQueryReceiptV4 = GatewayResult & { readonly t: "operation_query_receipt"; readonly fromStreamSeq: number; readonly receipt: AgentOperationReceiptV1 };
+export type AgentHostOperationCancelReceiptV4 = GatewayResult & { readonly t: "operation_cancel_receipt"; readonly cancelId: string; readonly disposition: "not_started" | "cancelled" | "too_late" | "indeterminate"; readonly receipt: AgentOperationReceiptV1 };
+export type AgentHostOperationStreamV4 = Fenced & { readonly t: "operation_stream"; readonly operationId: string; readonly streamSeq: number; readonly encoding: typeof STREAM_ENCODING; readonly bytes: string };
+export type AgentHostOperationStreamAckV4 = HostAsync & { readonly t: "operation_stream_ack"; readonly throughStreamSeq: number; readonly creditBytes: number; readonly creditChunks: number };
+export type AgentHostClientMessage = (Base & { readonly t: "hello" }) | AgentHostAttachV4 | AgentHostStartTurnV4 | AgentHostOperationReceiptV4 | AgentHostOperationQueryReceiptV4 | AgentHostOperationCancelReceiptV4 | AgentHostOperationStreamV4;
+export type AgentHostServerMessage = (Base & { readonly t: "hello"; readonly accepted: true; readonly hostId: string; readonly hostGeneration: number; readonly hostIncarnation: string; readonly hostChallenge: string }) | AgentHostAttachedV4 | (Fenced & { readonly t: "turn_started"; readonly hostSeq: number }) | AgentHostOperationRequestV4 | AgentHostOperationQueryV4 | AgentHostOperationCancelV4 | AgentHostOperationStreamAckV4 | (Base & { readonly t: "error"; readonly code: "unsupported_version" | "invalid_request" | "stale_generation" | "host_busy" | "turn_failed"; readonly message: string; readonly fence?: Readonly<AgentTurnFence> });
+
+function base(value: unknown, t: string, keys: readonly string[]): value is Record<string, unknown> { return record(value) && exact(value, keys) && value.t === t && value.version === 4 && id(value.requestId); }
+function fenced(value: unknown, t: string, tail: readonly string[]): value is Record<string, unknown> { return base(value, t, ["t", "version", "requestId", "fence", ...tail]) && isAgentTurnFence(value.fence); }
+function hostAsync(value: unknown, t: string, tail: readonly string[]): value is Record<string, unknown> { return fenced(value, t, ["hostSeq", "operationId", ...tail]) && positive(value.hostSeq) && id(value.operationId); }
+function gateway(value: unknown, t: string, tail: readonly string[]): value is Record<string, unknown> { return fenced(value, t, ["ackHostSeq", "operationId", ...tail]) && uint(value.ackHostSeq) && id(value.operationId); }
+function decodeResume(value: unknown): AgentHostAttachResumeCursorV4 | null | undefined {
+  if (value === null) return null;
+  if (!record(value) || !exact(value, ["lastHostSeq", "operations"]) || !uint(value.lastHostSeq) || !Array.isArray(value.operations) || value.operations.length > 8) return undefined;
+  const operations: { operationId: string; throughStreamSeq: number }[] = [];
+  for (const item of value.operations) { if (!record(item) || !exact(item, ["operationId", "throughStreamSeq"]) || !id(item.operationId) || !uint(item.throughStreamSeq)) return undefined; operations.push({ operationId: item.operationId, throughStreamSeq: item.throughStreamSeq }); }
+  if (operations.some((item, index) => index > 0 && operations[index - 1]!.operationId >= item.operationId)) return undefined;
+  return deepFreeze({ lastHostSeq: value.lastHostSeq, operations });
 }
-
-interface FencedAgentHostMessage extends AgentHostMessageBase {
-  fence: AgentTurnFence;
+export const decodeAgentHostAttachResumeCursorV4 = decodeResume;
+function decodeExpected(value: unknown): ExpectedAgentHostSupervisionBindingsV3 | undefined {
+  const keys = ["fence", "planHash", "hostId", "hostGeneration", "hostIncarnation", "supervisorEpoch", "kernelServiceEpoch", "hostChallenge", "nonce", "audience", "purpose", "keyId", "issuedAtMs", "expiresAtMs"];
+  if (!record(value) || !exact(value, keys) || !isAgentTurnFence(value.fence) || !digest(value.planHash) || !id(value.hostId) || !positive(value.hostGeneration) || !boundedName(value.hostIncarnation, 256) || !positive(value.supervisorEpoch) || !boundedName(value.kernelServiceEpoch, 256) || typeof value.hostChallenge !== "string" || !SUPERVISION_TOKEN_RE.test(value.hostChallenge) || typeof value.nonce !== "string" || !SUPERVISION_TOKEN_RE.test(value.nonce) || value.audience !== AGENT_HOST_SUPERVISION_AUDIENCE || value.purpose !== AGENT_HOST_SUPERVISION_PURPOSE || !boundedName(value.keyId, 256) || !uint(value.issuedAtMs) || !positive(value.expiresAtMs) || value.expiresAtMs <= value.issuedAtMs) return undefined;
+  return immutable(value) as ExpectedAgentHostSupervisionBindingsV3 | undefined;
 }
-
-export interface AgentHostChallengeDescriptorV3 {
-  readonly hostId: string;
-  readonly hostGeneration: number;
-  readonly hostIncarnation: string;
-  readonly hostChallenge: string;
+function decodeCanonicalBase64Url(value: unknown, exactBytes: number | undefined, maxBytes: number): value is string {
+  if (typeof value !== "string" || value.length < 2 || value.length % 4 === 1 || value.includes("=") || !/^[A-Za-z0-9_-]+$/.test(value)) return false;
+  try {
+    const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "="));
+    if (binary.length > maxBytes || (exactBytes !== undefined && binary.length !== exactBytes)) return false;
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") === value;
+  } catch { return false; }
 }
-
-/** Exact actor-issued receipt. The envelope alone is never attach authority. */
-export interface AgentHostSignedAttachReceiptV3 {
-  readonly expected: ExpectedAgentHostSupervisionBindingsV3;
-  readonly envelope: SignedAgentHostSupervisionEnvelopeV1;
+function decodeEnvelope(value: unknown): SignedAgentHostSupervisionEnvelopeV1 | undefined {
+  if (!record(value) || !exact(value, ["version", "algorithm", "domain", "authorityBytes", "signature"]) || value.version !== 1 || value.algorithm !== "Ed25519" || value.domain !== "opensession.agent-host.supervision.v2" || !decodeCanonicalBase64Url(value.authorityBytes, undefined, 4096) || !decodeCanonicalBase64Url(value.signature, 64, 64)) return undefined;
+  return immutable(value) as SignedAgentHostSupervisionEnvelopeV1 | undefined;
 }
-
-/** Control plane → Agent Host. */
-export type AgentHostClientMessage =
-  | (AgentHostMessageBase & { t: "hello" })
-  | (FencedAgentHostMessage & {
-      t: "attach";
-      planHash: string;
-      receipt: AgentHostSignedAttachReceiptV3;
-    })
-  | (AgentHostMessageBase & {
-      t: "start_turn";
-      planHash: string;
-      spec: AgentTurnSpec;
-    })
-  | (FencedAgentHostMessage & {
-      t: "steer";
-      text: string;
-      images?: ImageInput[];
-      steerId: string;
-    })
-  | (FencedAgentHostMessage & { t: "answer"; askId: string; result: AskResult })
-  | (FencedAgentHostMessage & { t: "cancel" })
-  | (FencedAgentHostMessage & {
-      t: "transcript_ack";
-      appendId: string;
-      changeSeq: number;
-    })
-  | (FencedAgentHostMessage & { t: "shutdown" });
-
-/** Agent Host → control plane. Transcript entries are proposals; authority to
- * persist, order, rewrite, and compact them remains in the control plane. */
-export type AgentHostServerMessage =
-  | (AgentHostMessageBase & {
-      t: "hello";
-      accepted: true;
-      hostId: string;
-      hostGeneration: number;
-      hostIncarnation: string;
-      hostChallenge: string;
-    })
-  | (FencedAgentHostMessage & {
-      t: "attached";
-      planHash: string;
-      supervisorEpoch: number;
-    })
-  | (FencedAgentHostMessage & { t: "turn_started" })
-  | (FencedAgentHostMessage & { t: "event"; event: StreamEvent })
-  | (FencedAgentHostMessage & {
-      t: "transcript_proposal";
-      appendId: string;
-      entries: TranscriptEntry[];
-    })
-  | (FencedAgentHostMessage & {
-      t: "ask";
-      askId: string;
-      input: Record<string, unknown>;
-    })
-  | (FencedAgentHostMessage & {
-      t: "turn_finished";
-      status: "completed" | "cancelled" | "failed";
-      error?: string;
-    })
-  | (AgentHostMessageBase & {
-      t: "error";
-      code:
-        | "unsupported_version"
-        | "invalid_request"
-        | "stale_generation"
-        | "host_busy"
-        | "turn_failed";
-      message: string;
-      fence?: AgentTurnFence;
-    });
+function decodeAttachReceipt(value: unknown): AgentHostSignedAttachReceiptV4 | undefined {
+  if (!record(value) || !exact(value, ["expected", "envelope"])) return undefined;
+  const expected = decodeExpected(value.expected), envelope = decodeEnvelope(value.envelope);
+  return expected && envelope ? deepFreeze({ expected, envelope }) : undefined;
+}
+function boundReceipt(value: unknown, operationId: string, fence: unknown): AgentOperationReceiptV1 | undefined {
+  const receipt = decodeAgentOperationReceiptV1(value);
+  return receipt && receipt.operationId === operationId && JSON.stringify(receipt.fence) === JSON.stringify(fence) ? receipt : undefined;
+}
+export function decodeAgentHostHello(value: unknown) { return base(value, "hello", ["t", "version", "requestId"]) ? immutable(value) as unknown as Extract<AgentHostClientMessage, { t: "hello" }> : undefined; }
+export function decodeAgentHostAttach(value: unknown): AgentHostAttachV4 | undefined { if (!fenced(value, "attach", ["planHash", "receipt", "resume"]) || !digest(value.planHash)) return; const receipt = decodeAttachReceipt(value.receipt), resume = decodeResume(value.resume); return receipt && resume !== undefined ? deepFreeze({ ...value, fence: decodeAgentTurnFence(value.fence)!, receipt, resume }) as AgentHostAttachV4 : undefined; }
+export function decodeAgentHostAttached(value: unknown): AgentHostAttachedV4 | undefined { return fenced(value, "attached", ["planHash", "supervisorEpoch", "mode", "replayFromHostSeq"]) && digest(value.planHash) && positive(value.supervisorEpoch) && ["fresh", "resumed", "recovery_required"].includes(value.mode as string) && uint(value.replayFromHostSeq) ? immutable(value) as unknown as AgentHostAttachedV4 : undefined; }
+export function decodeAgentHostTurnStarted(value: unknown): Extract<AgentHostServerMessage, { t: "turn_started" }> | undefined { return fenced(value, "turn_started", ["hostSeq"]) && positive(value.hostSeq) ? immutable(value) as unknown as Extract<AgentHostServerMessage, { t: "turn_started" }> : undefined; }
+export function decodeAgentHostStartTurn(value: unknown, nowMs = Date.now()): AgentHostStartTurnV4 | undefined { if (!base(value, "start_turn", ["t", "version", "requestId", "planHash", "spec"]) || !digest(value.planHash)) return; const spec = decodeAgentTurnSpec(value.spec, nowMs); return spec ? deepFreeze({ ...value, spec }) as AgentHostStartTurnV4 : undefined; }
+function decodeAgentHostOperationRequestStructure(value: unknown, nowMs: number, turnDeadlineMs: number): AgentHostOperationRequestV4 | undefined { if (!hostAsync(value, "operation_request", ["descriptor", "descriptorDigest", "deadlineMs"]) || !digest(value.descriptorDigest) || !positive(value.deadlineMs) || value.deadlineMs <= nowMs || value.deadlineMs > nowMs + MAX_AGENT_OPERATION_DURATION_MS || value.deadlineMs > turnDeadlineMs) return; const descriptor = decodeAgentOperationDescriptorV1(value.descriptor); return descriptor ? deepFreeze({ ...value, descriptor }) as AgentHostOperationRequestV4 : undefined; }
+export async function decodeAgentHostOperationRequest(value: unknown, nowMs = Date.now(), turnDeadlineMs = nowMs + MAX_AGENT_TURN_DURATION_MS): Promise<AgentHostOperationRequestV4 | undefined> { const decoded = decodeAgentHostOperationRequestStructure(value, nowMs, turnDeadlineMs); return decoded && await hashAgentOperationDescriptorV1(decoded.descriptor) === decoded.descriptorDigest ? decoded : undefined; }
+export const decodeAgentHostOperationRequestExact = decodeAgentHostOperationRequest;
+export function decodeAgentHostOperationQuery(value: unknown): AgentHostOperationQueryV4 | undefined { return hostAsync(value, "operation_query", ["kind", "descriptorDigest", "payloadDigest", "afterStreamSeq"]) && (value.kind === "model" || value.kind === "mcp") && digest(value.descriptorDigest) && digest(value.payloadDigest) && uint(value.afterStreamSeq) ? immutable(value) as unknown as AgentHostOperationQueryV4 : undefined; }
+export function decodeAgentHostOperationCancel(value: unknown): AgentHostOperationCancelV4 | undefined { return hostAsync(value, "operation_cancel", ["cancelId", "reason"]) && id(value.cancelId) && ["user", "turn_deadline", "shutdown", "reconnect_deadline"].includes(value.reason as string) ? immutable(value) as unknown as AgentHostOperationCancelV4 : undefined; }
+export function decodeAgentHostOperationReceipt(value: unknown): AgentHostOperationReceiptV4 | undefined { if (!gateway(value, "operation_receipt", ["receipt"])) return; const receipt = boundReceipt(value.receipt, value.operationId as string, value.fence); return receipt ? deepFreeze({ ...value, receipt }) as AgentHostOperationReceiptV4 : undefined; }
+export function decodeAgentHostOperationQueryReceipt(value: unknown): AgentHostOperationQueryReceiptV4 | undefined { if (!gateway(value, "operation_query_receipt", ["fromStreamSeq", "receipt"]) || !positive(value.fromStreamSeq)) return; const receipt = boundReceipt(value.receipt, value.operationId as string, value.fence); return receipt ? deepFreeze({ ...value, receipt }) as AgentHostOperationQueryReceiptV4 : undefined; }
+export function decodeAgentHostOperationCancelReceipt(value: unknown): AgentHostOperationCancelReceiptV4 | undefined { if (!gateway(value, "operation_cancel_receipt", ["cancelId", "disposition", "receipt"]) || !id(value.cancelId) || !["not_started", "cancelled", "too_late", "indeterminate"].includes(value.disposition as string)) return; const receipt = boundReceipt(value.receipt, value.operationId as string, value.fence); return receipt ? deepFreeze({ ...value, receipt }) as AgentHostOperationCancelReceiptV4 : undefined; }
+function canonicalStreamBytes(value: unknown): value is string { if (typeof value !== "string" || value.length < 2 || value.length > 65_536 || !/^[A-Za-z0-9_-]+$/.test(value)) return false; try { const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4); const binary = atob(padded); if (binary.length < 1 || binary.length > MAX_AGENT_HOST_STREAM_CHUNK_BYTES) return false; return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") === value; } catch { return false; } }
+export function decodeAgentHostOperationStream(value: unknown): AgentHostOperationStreamV4 | undefined { return fenced(value, "operation_stream", ["operationId", "streamSeq", "encoding", "bytes"]) && id(value.operationId) && positive(value.streamSeq) && value.encoding === STREAM_ENCODING && canonicalStreamBytes(value.bytes) ? immutable(value) as unknown as AgentHostOperationStreamV4 : undefined; }
+export function decodeAgentHostOperationStreamAck(value: unknown): AgentHostOperationStreamAckV4 | undefined { return hostAsync(value, "operation_stream_ack", ["throughStreamSeq", "creditBytes", "creditChunks"]) && uint(value.throughStreamSeq) && uint(value.creditBytes) && value.creditBytes <= MAX_AGENT_HOST_STREAM_BYTES && uint(value.creditChunks) && value.creditChunks <= MAX_AGENT_HOST_STREAM_CHUNKS ? immutable(value) as unknown as AgentHostOperationStreamAckV4 : undefined; }
 
 export interface AgentHostSupervisionAuthorityV2 {
   readonly version: typeof AGENT_HOST_SUPERVISION_VERSION;
@@ -319,8 +226,6 @@ const SUPERVISION_KEYS = [
   "nonce",
   "keyId",
 ] as const;
-const SUPERVISION_TOKEN_RE = /^[A-Za-z0-9_-]{16,256}$/;
-const SHA256_RE = /^sha256:[a-f0-9]{64}$/;
 
 /** Strict structural decode. Time admission is optional so persisted receipts
  * remain decodable after expiry. Unknown fields fail closed. */
@@ -431,346 +336,4 @@ export async function hashAgentHostSupervisionAuthorityV2(
   ) as ArrayBuffer;
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", source));
   return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-}
-
-export function isAgentTurnFence(value: unknown): value is AgentTurnFence {
-  if (
-    !record(value) ||
-    !exact(value, ["sessionId", "runId", "turnId", "generation"])
-  )
-    return false;
-  return (
-    !!decodeExecutorId(value.sessionId) &&
-    !!decodeExecutorId(value.runId) &&
-    !!decodeExecutorId(value.turnId) &&
-    Number.isSafeInteger(value.generation) &&
-    (value.generation as number) >= 0
-  );
-}
-
-function base64FromBytes(bytes: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 8_192)
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 8_192));
-  return btoa(binary);
-}
-
-export function decodeAgentImages(value: unknown): ImageInput[] | undefined {
-  if (!Array.isArray(value) || value.length > MAX_IMAGES) return undefined;
-  const images: ImageInput[] = [];
-  let totalBytes = 0;
-  for (const candidate of value) {
-    const image = decodeImage(candidate);
-    if (!image) return undefined;
-    totalBytes += atob(image.data).length;
-    if (totalBytes > MAX_IMAGES_BYTES) return undefined;
-    images.push(image);
-  }
-  return images;
-}
-
-function decodeImage(value: unknown): ImageInput | undefined {
-  if (!record(value) || !exact(value, ["mediaType", "data"])) return undefined;
-  if (
-    typeof value.mediaType !== "string" ||
-    !/^image\/[a-z0-9][a-z0-9.+-]{0,63}$/.test(value.mediaType) ||
-    typeof value.data !== "string" ||
-    value.data.length === 0 ||
-    value.data.length % 4 !== 0 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-      value.data,
-    )
-  )
-    return undefined;
-  const bytes = Uint8Array.from(atob(value.data), (character) =>
-    character.charCodeAt(0),
-  );
-  return bytes.byteLength <= MAX_IMAGE_BYTES &&
-    base64FromBytes(bytes) === value.data
-    ? { mediaType: value.mediaType, data: value.data }
-    : undefined;
-}
-
-function decodeToolRules(value: unknown): Record<string, string> | undefined {
-  if (!record(value) || Object.keys(value).length > MAX_TOOL_RULES)
-    return undefined;
-  for (const [key, reason] of Object.entries(value)) {
-    if (
-      !boundedName(key) ||
-      !boundedString(reason, MAX_SHORT_TEXT_BYTES, true) ||
-      NUL_RE.test(reason)
-    )
-      return undefined;
-  }
-  return value as Record<string, string>;
-}
-
-function decodeGitIdentity(value: unknown): GitIdentity | null | undefined {
-  if (value === null) return null;
-  if (!record(value) || !exact(value, ["name", "email"])) return undefined;
-  return boundedName(value.name) && boundedName(value.email)
-    ? { name: value.name, email: value.email }
-    : undefined;
-}
-
-export function decodeAgentTurnSpec(
-  value: unknown,
-  nowMs = Date.now(),
-): AgentTurnSpec | undefined {
-  if (
-    !record(value) ||
-    !exact(value, [
-      "fence",
-      "input",
-      "mode",
-      "modelPolicy",
-      "enginePolicy",
-      "mcpPolicy",
-      "transcriptPolicy",
-      "runPolicy",
-      "identityPolicy",
-      "environmentPolicy",
-      "workspacePolicy",
-      "executorPolicy",
-    ]) ||
-    !isAgentTurnFence(value.fence)
-  )
-    return undefined;
-
-  const input = value.input;
-  if (!record(input) || !exact(input, ["prompt", "promptEntryId", "images"]))
-    return undefined;
-  const images = input.images;
-  if (
-    !boundedString(input.prompt, MAX_PROMPT_BYTES, true) ||
-    (input.promptEntryId !== undefined &&
-      !decodeExecutorId(input.promptEntryId)) ||
-    (images !== undefined && !decodeAgentImages(images))
-  )
-    return undefined;
-
-  if (!(
-    value.mode === "ask" ||
-    value.mode === "code" ||
-    value.mode === "scratch"
-  ))
-    return undefined;
-
-  const modelPolicy = value.modelPolicy;
-  if (
-    !record(modelPolicy) ||
-    !exact(modelPolicy, ["model", "effort", "fastMode", "fallbackModel"]) ||
-    !boundedName(modelPolicy.model) ||
-    (modelPolicy.effort !== undefined && !boundedName(modelPolicy.effort)) ||
-    (modelPolicy.fastMode !== undefined &&
-      typeof modelPolicy.fastMode !== "boolean") ||
-    (modelPolicy.fallbackModel !== undefined &&
-      !boundedName(modelPolicy.fallbackModel))
-  )
-    return undefined;
-
-  const enginePolicy = value.enginePolicy;
-  if (
-    !record(enginePolicy) ||
-    !exact(enginePolicy, ["engineSessionId"]) ||
-    (enginePolicy.engineSessionId !== undefined &&
-      !boundedName(enginePolicy.engineSessionId))
-  )
-    return undefined;
-
-  const mcpPolicy = value.mcpPolicy;
-  if (!record(mcpPolicy) || !exact(mcpPolicy, ["servers"])) return undefined;
-  const servers = mcpPolicy.servers;
-  if (!(
-    servers === "all" ||
-    (Array.isArray(servers) &&
-      servers.length <= MAX_MCP_SERVERS &&
-      servers.every((server) => boundedName(server)))
-  ))
-    return undefined;
-
-  const transcriptPolicy = value.transcriptPolicy;
-  if (
-    !record(transcriptPolicy) ||
-    !exact(transcriptPolicy, [
-      "afterChangeSeq",
-      "maxAppendBytes",
-      "requireAck",
-    ]) ||
-    (transcriptPolicy.afterChangeSeq !== undefined &&
-      (!Number.isSafeInteger(transcriptPolicy.afterChangeSeq) ||
-        (transcriptPolicy.afterChangeSeq as number) < 0)) ||
-    !Number.isSafeInteger(transcriptPolicy.maxAppendBytes) ||
-    (transcriptPolicy.maxAppendBytes as number) < 1 ||
-    (transcriptPolicy.maxAppendBytes as number) >
-      MAX_AGENT_TRANSCRIPT_APPEND_BYTES ||
-    transcriptPolicy.requireAck !== true
-  )
-    return undefined;
-
-  const runPolicy = value.runPolicy;
-  if (
-    !record(runPolicy) ||
-    !exact(runPolicy, ["classification", "deniedTools", "confirmTools"]) ||
-    !["interactive_prompt", "automation_prompt"].includes(
-      String(runPolicy.classification),
-    )
-  )
-    return undefined;
-  const deniedTools =
-    runPolicy.deniedTools === undefined
-      ? undefined
-      : decodeToolRules(runPolicy.deniedTools);
-  const confirmTools =
-    runPolicy.confirmTools === undefined
-      ? undefined
-      : decodeToolRules(runPolicy.confirmTools);
-  if (
-    (runPolicy.deniedTools !== undefined && deniedTools === undefined) ||
-    (runPolicy.confirmTools !== undefined && confirmTools === undefined)
-  )
-    return undefined;
-
-  const identityPolicy = value.identityPolicy;
-  if (
-    !record(identityPolicy) ||
-    !exact(identityPolicy, ["user", "mcpGrantUser"]) ||
-    (identityPolicy.user !== undefined && !boundedName(identityPolicy.user)) ||
-    (identityPolicy.mcpGrantUser !== undefined &&
-      !boundedName(identityPolicy.mcpGrantUser))
-  )
-    return undefined;
-
-  const environmentPolicy = value.environmentPolicy;
-  if (
-    !record(environmentPolicy) ||
-    !exact(environmentPolicy, [
-      "author",
-      "aws",
-      "claudeCliEnv",
-      "codexCliEnv",
-    ]) ||
-    (environmentPolicy.author !== undefined &&
-      decodeGitIdentity(environmentPolicy.author) === undefined) ||
-    [
-      environmentPolicy.aws,
-      environmentPolicy.claudeCliEnv,
-      environmentPolicy.codexCliEnv,
-    ].some((flag) => flag !== undefined && typeof flag !== "boolean")
-  )
-    return undefined;
-
-  const workspacePolicy = value.workspacePolicy;
-  if (
-    !record(workspacePolicy) ||
-    !exact(workspacePolicy, ["rootId", "repositoriesNote"]) ||
-    !decodeExecutorId(workspacePolicy.rootId) ||
-    (workspacePolicy.repositoriesNote !== undefined &&
-      (!boundedString(
-        workspacePolicy.repositoriesNote,
-        MAX_REPOSITORIES_NOTE_BYTES,
-        true,
-      ) ||
-        NUL_RE.test(workspacePolicy.repositoriesNote)))
-  )
-    return undefined;
-
-  const executorPolicy = value.executorPolicy;
-  if (
-    !record(executorPolicy) ||
-    !exact(executorPolicy, [
-      "executorId",
-      "rootId",
-      "generation",
-      "accessGrant",
-      "deadlineMs",
-    ]) ||
-    !decodeExecutorId(executorPolicy.executorId) ||
-    !decodeExecutorId(executorPolicy.rootId) ||
-    executorPolicy.generation !== value.fence.generation ||
-    executorPolicy.rootId !== workspacePolicy.rootId ||
-    !decodeAgentExecutorAccessGrant(executorPolicy.accessGrant) ||
-    !Number.isSafeInteger(executorPolicy.deadlineMs) ||
-    (executorPolicy.deadlineMs as number) <= nowMs ||
-    (executorPolicy.deadlineMs as number) > nowMs + MAX_AGENT_TURN_DURATION_MS
-  )
-    return undefined;
-
-  return value as unknown as AgentTurnSpec;
-}
-
-const AGENT_TURN_PLAN_HASH_DOMAIN = "OpenSession-Agent-Turn-Plan-v1\0";
-
-function canonicalJsonValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalJsonValue);
-  if (record(value)) {
-    const canonical: Record<string, unknown> = {};
-    for (const key of Object.keys(value).sort()) {
-      if (value[key] !== undefined)
-        canonical[key] = canonicalJsonValue(value[key]);
-    }
-    return canonical;
-  }
-  return value;
-}
-
-/** Canonical digest of every execution-relevant turn field. This exact digest
- * is registered with SessionKernel and signed into the attach authority. */
-export async function hashAgentTurnSpecV1(
-  spec: AgentTurnSpec,
-  nowMs = Date.now(),
-): Promise<string> {
-  const decoded = decodeAgentTurnSpec(spec, nowMs);
-  if (!decoded) throw new Error("Invalid Agent Host turn specification");
-  const bytes = textEncoder.encode(
-    `${AGENT_TURN_PLAN_HASH_DOMAIN}${JSON.stringify(canonicalJsonValue(decoded))}`,
-  );
-  const source = bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength,
-  ) as ArrayBuffer;
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", source));
-  return `sha256:${[...digest]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")}`;
-}
-
-export function decodeAgentHostStartTurn(
-  value: unknown,
-  nowMs = Date.now(),
-): Extract<AgentHostClientMessage, { t: "start_turn" }> | undefined {
-  if (
-    !record(value) ||
-    !exact(value, ["t", "version", "requestId", "planHash", "spec"]) ||
-    value.t !== "start_turn" ||
-    value.version !== AGENT_HOST_PROTOCOL_VERSION ||
-    !decodeExecutorId(value.requestId) ||
-    typeof value.planHash !== "string" ||
-    !SHA256_RE.test(value.planHash) ||
-    !decodeAgentTurnSpec(value.spec, nowMs)
-  )
-    return undefined;
-  return value as unknown as Extract<
-    AgentHostClientMessage,
-    { t: "start_turn" }
-  >;
-}
-
-export function decodeAgentHostHello(
-  value: unknown,
-): Extract<AgentHostClientMessage, { t: "hello" }> | undefined {
-  if (!record(value)) return undefined;
-  const requestId = decodeExecutorId(value.requestId);
-  if (
-    !exact(value, ["t", "version", "requestId"]) ||
-    value.t !== "hello" ||
-    value.version !== AGENT_HOST_PROTOCOL_VERSION ||
-    !requestId
-  )
-    return undefined;
-  return {
-    t: "hello",
-    version: AGENT_HOST_PROTOCOL_VERSION,
-    requestId,
-  };
 }

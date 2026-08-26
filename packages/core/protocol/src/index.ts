@@ -29,6 +29,7 @@ export * from "./todo-plan";
 export * from "./tool-presentation";
 export * from "./identity";
 export * from "./executor";
+export * from "./agent-host-fence";
 export * from "./agent-host";
 export * from "./agent-host-supervision";
 export * from "./agent-operation";
