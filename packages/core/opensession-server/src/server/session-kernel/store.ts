@@ -1827,7 +1827,7 @@ export class SessionKernelStore {
 	private recoverableGatewaySettlementCommands(
 		sessionId: string,
 		commandKind: string,
-	): Array<{ requestId: string; retryable: false }> | undefined {
+	): Array<{ requestId: string; retryable: boolean }> | undefined {
 		if (commandKind !== "gateway:complete" && commandKind !== "gateway:fail")
 			return;
 		const rows = this.db.query(
@@ -1835,16 +1835,20 @@ export class SessionKernelStore {
 			 FROM session_kernel_commands
 			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate')`,
 		).all(sessionId) as Array<Record<string, unknown>>;
-		if (!rows.every((row) =>
-			row.status === "indeterminate" &&
-			Number(row.replay_safe) === 0 &&
-			GATEWAY_COMMAND_OPERATIONS.includes(
-				String(row.type) as (typeof GATEWAY_COMMAND_OPERATIONS)[number],
-			)
-		)) return;
+		if (!rows.every((row) => {
+			const replaySafeSubmit =
+				row.type === "submit_prompt" && Number(row.replay_safe) === 1;
+			const strandedGatewaySettlement =
+				row.status === "indeterminate" &&
+				Number(row.replay_safe) === 0 &&
+				GATEWAY_COMMAND_OPERATIONS.includes(
+					String(row.type) as (typeof GATEWAY_COMMAND_OPERATIONS)[number],
+				);
+			return replaySafeSubmit || strandedGatewaySettlement;
+		})) return;
 		return rows.map((row) => ({
 			requestId: String(row.request_id),
-			retryable: false as const,
+			retryable: row.type === "submit_prompt",
 		}));
 	}
 
@@ -1908,14 +1912,20 @@ export class SessionKernelStore {
 			`SELECT kind FROM session_kernel_outbox
 			 WHERE session_id = ? AND dead_lettered_at IS NULL`,
 		).all(sessionId) as Array<{ kind: string }>;
-		// A terminal turn projection is the durable owner of its exact gateway
-		// commands. Keep that outbox item available to finish after releasing a
-		// proven gateway-restart fence; unrelated effects remain fail-closed.
-		const recoverableTurnOutcomeEffects =
+		// Turn outcome and cancellation effects are actor-owned state machines with
+		// immutable run/dispatch identities. Keep them available to finish after
+		// releasing a proven gateway-restart fence; externally delivered effects
+		// and creation work remain fail-closed.
+		const recoverableLifecycleEffects = new Set([
+			"turn_outcome_project",
+			"turn_cancel",
+			"delivery_interrupt_cancel",
+		]);
+		const onlyRecoverableLifecycleEffects =
 			!!recoverableSettlement &&
 			pendingEffects.length > 0 &&
-			pendingEffects.every((effect) => effect.kind === "turn_outcome_project");
-		if (pendingEffects.length > 0 && !recoverableTurnOutcomeEffects) return false;
+			pendingEffects.every((effect) => recoverableLifecycleEffects.has(effect.kind));
+		if (pendingEffects.length > 0 && !onlyRecoverableLifecycleEffects) return false;
 		if (commandKind === "agent_operation") {
 			try {
 				assertAgentOperationRows28(this.db, sessionId);

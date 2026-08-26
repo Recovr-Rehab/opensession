@@ -256,6 +256,11 @@ describe("SessionKernel", () => {
 			})).toEqual({ status: "execute" });
 			durableStore.close();
 			durableStore = new SessionKernelStore(path);
+			expect(durableStore.requestSubmitPromptCommand({
+				sessionId: "projection-repair",
+				requestId: "delivery-recovery",
+				identity: { content: "follow up", attachmentsHash: "none" },
+			})).toEqual({ status: "execute" });
 			durableStore.setRunState({
 				sessionId: "projection-repair",
 				state: "running",
@@ -267,6 +272,12 @@ describe("SessionKernel", () => {
 				"turn_outcome_project",
 				{ projectionId: "outcome:live-run" },
 				"outcome:live-run",
+			);
+			durableStore.enqueueOutbox(
+				"projection-repair",
+				"turn_cancel",
+				{ cancelId: "cancel:live-run", dispatchId: "live-run", runGeneration: 1 },
+				"cancel:live-run",
 			);
 			const oldDeadEffect = durableStore.enqueueOutbox(
 				"projection-repair",
@@ -290,6 +301,11 @@ describe("SessionKernel", () => {
 			expect(durableStore.command("projection-repair", "write-one")).toMatchObject({
 				status: "failed",
 				retryable: false,
+			});
+			expect(durableStore.command("projection-repair", "delivery-recovery")).toMatchObject({
+				status: "failed",
+				replaySafe: true,
+				retryable: true,
 			});
 			expect(durableStore.pendingOutbox(Date.now(), 10)).toContainEqual(
 				expect.objectContaining({ id: outcomeEffect, kind: "turn_outcome_project" }),
