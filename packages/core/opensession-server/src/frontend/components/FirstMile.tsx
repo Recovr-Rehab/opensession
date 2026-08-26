@@ -382,12 +382,15 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 		};
 	}, [index, status]);
 
-	function goTo(next: number) {
+	async function goTo(next: number) {
 		const nextIndex = Math.min(Math.max(next, 0), steps.length - 1);
 		if (nextIndex === index) return;
+		// The GitHub creation link carries the public callback URL. Refresh it
+		// after the preceding ingress step before rendering a clickable link.
+		if (steps[nextIndex]?.id === "github") await refetch();
 		setDirection(nextIndex > index ? 1 : -1);
 		setIndex(nextIndex);
-		void refetch();
+		if (steps[nextIndex]?.id !== "github") void refetch();
 	}
 
 	async function finish() {
