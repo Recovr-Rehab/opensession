@@ -501,7 +501,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 									>
 										{step.title}
 									</h1>
-									<p className="mt-3 max-w-[440px] text-pretty text-body leading-relaxed text-dim">
+									<p className="mt-3 max-w-[440px] text-pretty text-body font-normal leading-relaxed text-dim">
 										{step.description}
 									</p>
 									<div className="mt-7 w-full max-w-[300px]">
@@ -525,7 +525,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										>
 											{step.title}
 										</h1>
-										<p className="mt-3 text-pretty text-body leading-relaxed text-dim">
+										<p className="mt-3 text-pretty text-body font-normal leading-relaxed text-dim">
 											{step.description}
 										</p>
 									</div>
