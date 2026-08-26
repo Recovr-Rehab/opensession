@@ -26,9 +26,11 @@ process.env.OPENSESSION_STATE_DIR = scratch;
 process.env.OPENSESSION_CONFIG = configPath;
 
 const { createWorkspace, getWorkspace } = await import("./workspaces");
-const { resolvePrWorkspace, workspaceBacksOpenPr } = await import(
-  "./workspace-resolve"
-);
+const {
+  ensureOpenPrWorkspaces,
+  resolvePrWorkspace,
+  workspaceBacksOpenPr,
+} = await import("./workspace-resolve");
 
 beforeEach(() => {
   process.env.OPENSESSION_STATE_DIR = scratch;
@@ -77,6 +79,31 @@ describe("workspaceBacksOpenPr", () => {
         "fallback",
       ),
     ).toBe(false);
+  });
+});
+
+describe("ensureOpenPrWorkspaces", () => {
+  test("attaches a stable workspace before exposing an open PR", async () => {
+    const pr = {
+      repo: repoId,
+      number: 9130,
+      branch: "always-attach-pr-workspaces",
+      title: "Always attach PR workspaces",
+      author: "kentdebruin",
+      person: "kent",
+    };
+
+    const first = await ensureOpenPrWorkspaces([pr]);
+    const second = await ensureOpenPrWorkspaces([pr]);
+
+    expect(first[0].workspaceId).toBe(second[0].workspaceId);
+    expect(getWorkspace(first[0].workspaceId)).toMatchObject({
+      name: "#9130 Always attach PR workspaces",
+      repo: repoId,
+      branch: pr.branch,
+      prNumber: pr.number,
+      createdBy: "kent",
+    });
   });
 });
 

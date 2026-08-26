@@ -254,6 +254,39 @@ export async function resolvePrWorkspace(input: {
 }
 
 /**
+ * Attach a workspace before an open PR crosses an API boundary. This keeps the
+ * sidebar from ever rendering a PR whose destination still has to be minted on
+ * click. Sequential resolution avoids spawning one `git worktree list` process
+ * per PR on a cold instance; after the first pass every lookup hits its key.
+ */
+export async function ensureOpenPrWorkspaces<
+  T extends {
+    repo: string;
+    number: number;
+    branch: string;
+    title: string;
+    author: string;
+    person: string | null;
+  },
+>(prs: T[]): Promise<Array<T & { workspaceId: string }>> {
+  const attached: Array<T & { workspaceId: string }> = [];
+  for (const pr of prs) {
+    const resolved = await resolvePrWorkspace({
+      repoId: pr.repo,
+      number: pr.number,
+      branch: pr.branch,
+      title: pr.title,
+      createdBy: pr.person || pr.author || "GitHub",
+    });
+    if (!resolved) {
+      throw new Error(`Could not resolve workspace for ${pr.repo}#${pr.number}`);
+    }
+    attached.push({ ...pr, workspaceId: resolved.workspace.id });
+  }
+  return attached;
+}
+
+/**
  * Resolve the one workspace for a Plain support thread. No Plain API
  * round-trip — the title comes from the clicked sidebar row / automation
  * event. Synchronous so automation filing can use it inline.
