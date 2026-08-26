@@ -301,38 +301,31 @@ export class SessionKernelActorClient {
   async decideCoreAsync<T extends CoreActorRequest>(
     request: T,
   ): Promise<CoreActorResult<T>> {
-    const response = await this.request({
-      t: "reduce",
-      rpcId: crypto.randomUUID(),
-      command: { kind: "core", commandId: crypto.randomUUID(), request },
-    });
-    if (response.t !== "call_result" || !response.body)
-      throw new SessionKernelActorError(
-        `Invalid async core ${request.op} response`,
-        true,
-      );
-    const body = JSON.parse(response.body) as {
-      ok: boolean;
-      result?: CoreActorResult<T>;
-      error?: string;
-      code?: string;
-      sessionId?: string;
-    };
-    if (!body.ok) {
-      const message = body.error || `Session kernel core ${request.op} failed`;
-      if (body.code === "session_quarantined" && body.sessionId)
-        throw new SessionKernelQuarantinedError(body.sessionId, message);
-      const error = new SessionKernelActorError(message, false);
-      if (body.code === "actor_fatal") this.markDead(error);
-      throw error;
-    }
-    return body.result as CoreActorResult<T>;
+    return this.callAsync<CoreActorResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "core", commandId: crypto.randomUUID(), request },
+      },
+      `core ${request.op}`,
+    );
   }
 
   decideGateway<T extends GatewayCommandRequest>(
     request: T,
   ): GatewayCommandResult<T> {
     return this.callSync<GatewayCommandResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "gateway", commandId: crypto.randomUUID(), request },
+      },
+      `gateway ${request.operation} ${request.op}`,
+    );
+  }
+
+  decideGatewayAsync<T extends GatewayCommandRequest>(
+    request: T,
+  ): Promise<GatewayCommandResult<T>> {
+    return this.callAsync<GatewayCommandResult<T>>(
       {
         t: "reduce",
         command: { kind: "gateway", commandId: crypto.randomUUID(), request },
@@ -533,6 +526,37 @@ export class SessionKernelActorClient {
       throw error;
     }
     return response.result as TResult;
+  }
+
+  private async callAsync<TResult>(
+    request: SyncRequest,
+    label: string,
+  ): Promise<TResult> {
+    const response = await this.request({
+      ...request,
+      rpcId: crypto.randomUUID(),
+    });
+    if (response.t !== "call_result" || !response.body)
+      throw new SessionKernelActorError(
+        `Invalid async ${label} response`,
+        true,
+      );
+    const body = JSON.parse(response.body) as {
+      ok: boolean;
+      result?: TResult;
+      error?: string;
+      code?: string;
+      sessionId?: string;
+    };
+    if (!body.ok) {
+      const message = body.error || `Session kernel ${label} failed`;
+      if (body.code === "session_quarantined" && body.sessionId)
+        throw new SessionKernelQuarantinedError(body.sessionId, message);
+      const error = new SessionKernelActorError(message, false);
+      if (body.code === "actor_fatal") this.markDead(error);
+      throw error;
+    }
+    return body.result as TResult;
   }
 
   terminate(): void {

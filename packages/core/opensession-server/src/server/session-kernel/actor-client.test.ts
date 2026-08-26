@@ -594,6 +594,62 @@ describe("session kernel actor boundary", () => {
     expect(() => host.decideGateway(input)).toThrow("not allowed");
   });
 
+  test("admits gateway commands without blocking the gateway thread", async () => {
+    const messageListeners: Array<(event: MessageEvent) => void> = [];
+    const worker = {
+      addEventListener(type: string, listener: (event: MessageEvent) => void) {
+        if (type === "message") messageListeners.push(listener);
+      },
+      postMessage(request: {
+        t: string;
+        rpcId?: string;
+        command?: { request?: { op?: string } };
+      }) {
+        const result = request.command?.request?.op === "request"
+          ? { status: "execute" }
+          : { status: "completed" };
+        setTimeout(() => {
+          const body = JSON.stringify({ ok: true, result });
+          for (const listener of messageListeners)
+            listener({
+              data: {
+                t: "call_result",
+                rpcId: request.rpcId,
+                status: 1,
+                length: body.length,
+                body,
+              },
+            } as MessageEvent);
+        }, 0);
+      },
+      terminate() {},
+    };
+    const host = new SessionKernelActorClient(worker as unknown as Worker);
+    client = host;
+    const input = {
+      op: "request" as const,
+      sessionId: "async-gateway",
+      requestId: "one",
+      operation: "session_file_updated" as const,
+    };
+    let timerFired = false;
+    const admission = host.decideGatewayAsync(input);
+    setTimeout(() => {
+      timerFired = true;
+    }, 0);
+
+    expect(await admission).toEqual({ status: "execute" });
+    await Bun.sleep(0);
+    expect(timerFired).toBe(true);
+    expect(await host.decideGatewayAsync({
+      op: "complete",
+      sessionId: input.sessionId,
+      requestId: input.requestId,
+      operation: input.operation,
+      result: null,
+    })).toEqual({ status: "completed" });
+  });
+
   test("acknowledges replay results through async IPC", async () => {
     const host = await actor();
     host.decideGateway({

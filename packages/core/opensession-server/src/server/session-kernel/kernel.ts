@@ -220,6 +220,13 @@ export function sessionGatewayCommand<T extends GatewayCommandRequest>(
   return store.failGatewayCommand(request) as GatewayCommandResult<T>;
 }
 
+export async function sessionGatewayCommandAsync<T extends GatewayCommandRequest>(
+  request: T,
+): Promise<GatewayCommandResult<T>> {
+  if (state.actor) return state.actor.decideGatewayAsync(request);
+  return sessionGatewayCommand(request);
+}
+
 export function sessionDelivery<T extends DeliveryActorRequest>(
   request: T,
 ): DeliveryActorResult<T> {

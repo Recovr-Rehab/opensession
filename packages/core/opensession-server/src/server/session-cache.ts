@@ -40,7 +40,7 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 import type { UnifiedSession, NativeSessionFile } from "./types";
 import {
   sessionDeliveryProjection,
-  sessionGatewayCommand,
+  sessionGatewayCommandAsync,
   sessionKernel,
   sessionKernelActorActive,
   sessionKernelStore,
@@ -460,9 +460,9 @@ export function updateSessionFile(
 	sessionId: string,
 	mutator: SessionFileMutator,
 ): Promise<void> {
-  return withSessionMutationLock(sessionId, () => {
+  return withSessionMutationLock(sessionId, async () => {
     const requestId = `session-file:${crypto.randomUUID()}`;
-    const plan = sessionGatewayCommand({
+    const plan = await sessionGatewayCommandAsync({
       op: "request",
       sessionId,
       requestId,
@@ -487,7 +487,7 @@ export function updateSessionFile(
 		}
 		invalidateSessionsCache();
       physicalFinished = true;
-      sessionGatewayCommand({
+      await sessionGatewayCommandAsync({
         op: "complete",
         sessionId,
         requestId,
@@ -495,14 +495,15 @@ export function updateSessionFile(
         result: null,
       });
     } catch (error) {
-      if (!physicalFinished) sessionGatewayCommand({
-        op: "fail",
-        sessionId,
-        requestId,
-        operation: "session_file_updated",
-        error: error instanceof Error ? error.message : String(error),
-        retryable: false,
-      });
+      if (!physicalFinished)
+        await sessionGatewayCommandAsync({
+          op: "fail",
+          sessionId,
+          requestId,
+          operation: "session_file_updated",
+          error: error instanceof Error ? error.message : String(error),
+          retryable: false,
+        });
       throw error;
     }
 	});
