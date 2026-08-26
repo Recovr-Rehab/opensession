@@ -1,6 +1,7 @@
 /* The supplied artwork fills the viewport and stays pinned while the content
    scrolls. Translucent sections let it read through without allowing its
-   colour to disturb the copy. */
+   colour to disturb the copy. The fixed layer is an element rather than
+   `background-attachment: fixed`, which iOS Safari does not reliably paint. */
 :root {
 	--page-art: url("./landing-background.webp");
 	--card-glass: oklch(1 0 0 / 0.8);
@@ -13,12 +14,22 @@
 }
 
 body {
+	position: relative;
+	isolation: isolate;
 	min-height: 100vh;
 	background-color: var(--page);
+}
+
+body::before {
+	position: fixed;
+	z-index: -1;
+	inset: 0;
 	background-image: var(--page-art);
-	background-attachment: fixed;
 	background-position: center;
+	background-repeat: no-repeat;
 	background-size: cover;
+	content: "";
+	pointer-events: none;
 }
 
 .card {

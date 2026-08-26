@@ -42,15 +42,13 @@
 	/* Corner treatment. A superellipse hugs the corner tighter than a circular
 	   arc, so a browser that can draw one carries a larger radius: every corner
 	   here is authored at its circular value and multiplied by --rf, and the
-	   pair below is flipped in one @supports block. WebKit ships no
-	   `corner-shape` at all (measured on Safari 26.5: squircle, superellipse()
-	   and even `round` all fail CSS.supports), so Safari draws a circular
-	   corner and has to reach the squircle's shape with radius alone. The
-	   closest it gets is the radius that cuts the same amount off the corner,
-	   which is 1.75x smaller: an arc removes 0.215r² of its corner square
-	   against a squircle's 0.073r². Same mechanism, same numbers, as the app's
-	   base.css. */
-	--rf: 0.771;
+	   pair below is flipped in one @supports block. WebKit does not ship
+	   `corner-shape`, so Safari keeps the full authored radius and draws a
+	   conventional round corner. It cannot reproduce the squircle exactly, but
+	   retaining the radius gives the fallback a smooth curve instead of the
+	   visibly tight corners produced by shrinking it to match the squircle's
+	   cutout area. */
+	--rf: 1;
 	--cs: round;
 	/* The ink channel behind every hairline, wash and dimmed glyph. Flipping
 	   this one token is most of what dark mode is. */
