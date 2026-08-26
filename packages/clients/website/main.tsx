@@ -245,7 +245,7 @@ function SetupGuide({
 						aria-label="Close"
 						onClick={() => dialogRef.current?.close()}
 					>
-						<IconX size={20} />
+						<IconX size={22} />
 					</button>
 					<h2 id={titleId}>{title}</h2>
 					<p>{description}</p>
@@ -436,7 +436,7 @@ function AnnouncementDialog({
 				autoFocus
 				onClick={onRequestClose}
 			>
-				<IconX size={20} />
+				<IconX size={22} />
 			</button>
 			<div className="announcement-scroll">
 				<AnnouncementArticle />

@@ -504,15 +504,20 @@ summary:focus-visible {
 	overflow: visible;
 }
 
-.pwa-guide::backdrop {
+/* Every modal dims the page with the same dark scrim, regardless of the
+   visitor's color scheme. Individual dialogs may choose their own blur. */
+dialog::backdrop {
 	background: var(--scrim);
+}
+
+.pwa-guide::backdrop {
 	backdrop-filter: blur(8px);
 }
 
 .pwa-guide-panel {
 	position: relative;
 	padding: 30px;
-	border-radius: calc(24px * var(--rf));
+	border-radius: calc(26px * var(--rf));
 	corner-shape: var(--cs);
 	background: var(--surface);
 	box-shadow: 0 24px 70px var(--surface-shadow);
@@ -933,7 +938,7 @@ summary:focus-visible {
 	margin: auto;
 	padding: 0;
 	border: 0;
-	border-radius: calc(24px * var(--rf));
+	border-radius: calc(26px * var(--rf));
 	corner-shape: var(--cs);
 	background: #fff;
 	box-shadow:
@@ -961,7 +966,6 @@ summary:focus-visible {
 }
 
 .announcement-dialog::backdrop {
-	background: rgba(255, 255, 255, 0.72);
 	-webkit-backdrop-filter: blur(12px);
 	backdrop-filter: blur(12px);
 }
@@ -1257,7 +1261,7 @@ summary:focus-visible {
 	.announcement-dialog {
 		width: calc(100% - 16px);
 		height: calc(100dvh - 16px);
-		border-radius: calc(18px * var(--rf));
+		border-radius: calc(20px * var(--rf));
 	}
 
 	.announcement-home {
@@ -1280,7 +1284,7 @@ summary:focus-visible {
 
 	.pwa-guide-panel {
 		padding: 24px;
-		border-radius: calc(22px * var(--rf));
+		border-radius: calc(24px * var(--rf));
 	}
 
 	.pwa-guide-close {
