@@ -265,7 +265,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 28;
+export const SESSION_KERNEL_SCHEMA_VERSION = 29;
 export const SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS = 64;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
@@ -591,6 +591,28 @@ function assertAgentOperationSchema28(db: Database): void {
   if(JSON.stringify(indexes.map(({name,sql})=>[name,normalize(sql)]))!==JSON.stringify(wantedIndexes)) throw new Error("Agent operation schema indexes do not match exact schema 28");
   const integrity=db.query("PRAGMA quick_check").get() as Record<string,unknown>;
   if(!Object.values(integrity).includes("ok")) throw new Error("Agent operation schema integrity check failed");
+}
+
+function migrateSparseProjectionSchema29(
+  db: Database,
+  schemaVersion: number,
+): void {
+  if (schemaVersion >= 29) return;
+  const tx = db.transaction(() => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS session_kernel_sparse_projections (
+        session_id TEXT PRIMARY KEY,
+        ask_record TEXT,
+        delivery_state TEXT,
+        dirty INTEGER NOT NULL DEFAULT 1 CHECK(dirty IN (0, 1)),
+        updated_at INTEGER NOT NULL CHECK(updated_at >= 0)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_sksp_dirty
+        ON session_kernel_sparse_projections(dirty, session_id);
+      PRAGMA user_version = 29;
+    `);
+  });
+  tx.immediate();
 }
 
 type DurableAgentOperationRow = {
@@ -1016,6 +1038,8 @@ export type RunEventDecisionResult = {
 
 export type SessionKernelStoreOptions = {
 	readonly?: boolean;
+	/** Internal migration reader for additive schemas with unchanged session tables. */
+	compatibleReadSchemaFloor?: number;
 	allocateOutboxId?: (sessionId: string) => number;
   busyTimeoutMs?: number;
   hydrateRunStateCache?: boolean;
@@ -1077,7 +1101,15 @@ export class SessionKernelStore {
 				(this.db.query("PRAGMA user_version").get() as { user_version: number })
 					.user_version,
 			);
-			if (schemaVersion !== SESSION_KERNEL_SCHEMA_VERSION)
+			const compatibleFloor = options.compatibleReadSchemaFloor;
+			if (
+				schemaVersion !== SESSION_KERNEL_SCHEMA_VERSION &&
+				(
+					compatibleFloor === undefined ||
+					schemaVersion < compatibleFloor ||
+					schemaVersion > SESSION_KERNEL_SCHEMA_VERSION
+				)
+			)
 				throw new Error(
 					`Session kernel read mirror schema ${schemaVersion} does not match supported ${SESSION_KERNEL_SCHEMA_VERSION}`,
 				);
@@ -1530,6 +1562,7 @@ export class SessionKernelStore {
     // Additive migrations write user_version last inside IMMEDIATE transactions.
     migrateAgentHostSupervisionSchema27(this.db, schemaVersion);
     migrateAgentOperationSchema28(this.db, schemaVersion);
+    migrateSparseProjectionSchema29(this.db, schemaVersion);
     assertAgentOperationSchema28(this.db);
     assertAgentOperationRows28(this.db);
 		if (path !== ":memory:") {
@@ -5936,7 +5969,120 @@ export class SessionKernelStore {
 		`, [sessionId, Date.now()]);
 		const placement = this.sessionPlacement(sessionId);
 		if (!placement) throw new Error("Session placement was not persisted");
+		if (this.sparseProjectionMigrationComplete())
+			this.settleIsolatedSessionProjection(sessionId, undefined, undefined);
 		return placement;
+	}
+
+	sparseProjectionMigrationComplete(): boolean {
+		return !!this.db.query(
+			"SELECT 1 FROM session_kernel_migrations WHERE name = 'sparse_projection_v1'",
+		).get();
+	}
+
+	markSparseProjectionMigrationComplete(): void {
+		if (this.isolatedProjectionPendingSessionIds(1).length > 0)
+			throw new Error("Sparse session projection backfill is incomplete");
+		this.db.run(
+			"INSERT OR IGNORE INTO session_kernel_migrations (name, completed_at) VALUES ('sparse_projection_v1', ?)",
+			[Date.now()],
+		);
+	}
+
+	isolatedProjectionPendingSessionIds(limit = 16): string[] {
+		return (this.db.query(`
+			SELECT placement.session_id
+			FROM session_kernel_placements placement
+			LEFT JOIN session_kernel_sparse_projections projection
+			  ON projection.session_id = placement.session_id
+			WHERE placement.placement = 'isolated'
+			  AND (projection.session_id IS NULL OR projection.dirty = 1)
+			ORDER BY placement.session_id
+			LIMIT ?
+		`).all(Math.max(1, limit)) as Array<{ session_id: string }>)
+			.map((row) => row.session_id);
+	}
+
+	markIsolatedSessionProjectionDirty(sessionId: string): void {
+		if (!this.sessionPlacement(sessionId))
+			throw new Error(`Session ${sessionId} has no isolated placement`);
+		this.db.run(`
+			INSERT INTO session_kernel_sparse_projections
+			  (session_id, dirty, updated_at) VALUES (?, 1, ?)
+			ON CONFLICT(session_id) DO UPDATE SET
+			  dirty = 1, updated_at = excluded.updated_at
+		`, [sessionId, Date.now()]);
+	}
+
+	settleIsolatedSessionProjection(
+		sessionId: string,
+		askRecord: unknown | undefined,
+		deliveryState: DurableDeliveryState | undefined,
+	): void {
+		if (!this.sessionPlacement(sessionId))
+			throw new Error(`Session ${sessionId} has no isolated placement`);
+		this.db.run(`
+			INSERT INTO session_kernel_sparse_projections
+			  (session_id, ask_record, delivery_state, dirty, updated_at)
+			VALUES (?, ?, ?, 0, ?)
+			ON CONFLICT(session_id) DO UPDATE SET
+			  ask_record = excluded.ask_record,
+			  delivery_state = excluded.delivery_state,
+			  dirty = 0,
+			  updated_at = excluded.updated_at
+		`, [
+			sessionId,
+			askRecord === undefined ? null : json(askRecord),
+			deliveryState === undefined ? null : json(deliveryState),
+			Date.now(),
+		]);
+	}
+
+	isolatedAskProjectionEntries(): Array<[string, unknown]> {
+		return (this.db.query(`
+			SELECT session_id, ask_record
+			FROM session_kernel_sparse_projections
+			WHERE dirty = 0 AND ask_record IS NOT NULL
+			ORDER BY session_id
+		`).all() as Array<{ session_id: string; ask_record: string }>)
+			.map((row) => [row.session_id, parsed(row.ask_record)]);
+	}
+
+	isolatedDeliveryProjectionEntries(slot: DeliverySlot): Array<[string, unknown]> {
+		const states = this.db.query(`
+			SELECT session_id, delivery_state
+			FROM session_kernel_sparse_projections
+			WHERE dirty = 0 AND delivery_state IS NOT NULL
+			ORDER BY session_id
+		`).all() as Array<{ session_id: string; delivery_state: string }>;
+		const entries: Array<[string, unknown]> = [];
+		for (const row of states) {
+			const state = parsed(row.delivery_state) as DurableDeliveryState;
+			const value = slot === "queued"
+				? state.queued
+				: slot === "steered"
+					? state.steered
+					: state.dispatch;
+			if (value === undefined || (Array.isArray(value) && value.length === 0))
+				continue;
+			entries.push([row.session_id, value]);
+		}
+		return entries;
+	}
+
+	isolatedPendingSteerProjectionSessionIds(): string[] {
+		const rows = this.db.query(`
+			SELECT session_id, delivery_state
+			FROM session_kernel_sparse_projections
+			WHERE dirty = 0 AND delivery_state IS NOT NULL
+			ORDER BY session_id
+		`).all() as Array<{ session_id: string; delivery_state: string }>;
+		return rows
+			.filter((row) => {
+				const state = parsed(row.delivery_state) as DurableDeliveryState;
+				return state.pendingSteers.length > 0;
+			})
+			.map((row) => row.session_id);
 	}
 
 	markIsolatedSessionDirty(sessionId: string): void {

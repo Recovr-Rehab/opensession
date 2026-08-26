@@ -378,8 +378,12 @@ export async function hydratePersistedQueueState(storePath = QUEUE_STORE): Promi
   const actorAuthority =
 		migrateToKernel && await sessionDeliveryMigrationComplete();
 	if (migrateToKernel) queueMigrationState.complete = actorAuthority;
-  if (actorAuthority) {
+	if (actorAuthority) {
     removeLegacyQueueStore(storePath);
+		// The first schema-29 boot rebuilds the durable sparse projection in
+		// bounded retryable read turns. Finish that before the one mutating
+		// pending-steer reconciliation so no isolated store is skipped.
+		await sessionDelivery({ op: "entries", slot: "queued" });
     await sessionDelivery({ op: "settle_pending_steers" });
 		const [queued, steered, dispatching] = await Promise.all([
 			sessionDelivery({ op: "entries", slot: "queued" }),

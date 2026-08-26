@@ -51,26 +51,16 @@ function callResult(rpcId: unknown, result: unknown) {
 }
 
 describe("asynchronous session kernel actor boundary", () => {
-  test("hydrates run projections without exposing a synchronous store", async () => {
+  test("maintains run projections without a global boot scan", async () => {
     const host = await actor();
-    await host.callAsync(
-      {
-        t: "store",
-        method: "setRunState",
-        args: [{
-          sessionId: "persisted",
-          state: "running",
-          event: "run_registered",
-          generation: 4,
-          currentRunId: "run-4",
-        }],
-      },
-      "setRunState",
-    );
-    await host.hello();
+    await host.decideRunEventAsync({
+      sessionId: "persisted",
+      event: "prompt",
+      runKey: "run-4",
+    });
     expect(host.runStateProjection("persisted")).toMatchObject({
-      state: "running",
-      generation: 4,
+      state: "starting",
+      generation: 1,
       currentRunId: "run-4",
     });
   });
