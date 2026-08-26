@@ -766,9 +766,12 @@ export function clientVisibleQueuedCount(sessionId: string): number {
 }
 
 /** One actor snapshot for list rendering, instead of one RPC per session. */
-export function clientVisibleQueuedCounts(): Map<string, number> {
+export async function clientVisibleQueuedCounts(): Promise<Map<string, number>> {
 	const counts = new Map<string, number>();
-	for (const [sessionId, value] of sessionKernelStore().deliveryEntries("queued")) {
+	for (const [sessionId, value] of await sessionDelivery({
+		op: "entries",
+		slot: "queued",
+	})) {
 		const items = value as QueueItem[];
 		const visible = items.filter(isClientVisibleQueueItem).length;
 		if (visible) counts.set(sessionId, visible);

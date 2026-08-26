@@ -360,9 +360,13 @@ type SessionListRuntimeSignals = {
 };
 
 async function sessionListRuntimeSignals(): Promise<SessionListRuntimeSignals> {
+	const [waitingForInput, queuedCounts] = await Promise.all([
+		pendingAskIdsAwaitingAnswer(),
+		clientVisibleQueuedCounts(),
+	]);
 	return {
-		waitingForInput: await pendingAskIdsAwaitingAnswer(),
-		queuedCounts: clientVisibleQueuedCounts(),
+		waitingForInput,
+		queuedCounts,
 		runtime: sessionRuntimeSnapshot(),
 	};
 }
