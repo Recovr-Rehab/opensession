@@ -305,6 +305,27 @@ never enter actor payloads. Removing the remaining create-plan compatibility
 authority is the next creation cutover; the presence or absence of a plan file
 is not actor lifecycle evidence.
 
+## Agent operation receipts (unwired foundation)
+
+The repository contains an additive Agent operation v1 protocol and an
+import-inert, gateway-owned SQLite receipt ledger for future model and MCP
+proxying. This smallest foundation is deliberately not composed at boot and has
+no Host transport, provider/MCP adapter, credential resolution, live key,
+transcript-store, or SessionKernel actor/schema wiring. It therefore creates no
+new production authority and performs no work on import.
+
+The shared gateway ledger requires an exact session/operation primary key plus
+kind, full turn fence, plan and authority hashes, descriptor and physical
+payload digests, and adapter ID/version. A mismatch is atomically quarantined
+without replacing the original identity. Exact terminal replay returns the
+canonical durable receipt. `prepared` means no physical invocation was allowed
+to start and may be reauthorized after recovery. Once `executing` commits,
+recovery requires explicit adapter proof; the default and initial adapter
+contract is reconciliation unsupported and settles the row visibly as
+`indeterminate`, never as a retry. The SessionKernel does not yet admit or
+settle these operations. A later integration must add short actor barriers
+without holding an actor mailbox across provider or MCP I/O.
+
 ## Detached Agent Host supervision
 
 Schema 26 is an additive migration from live schemas 24 and 25 and raises the

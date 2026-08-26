@@ -121,13 +121,19 @@ generation, deadline, and an opaque Agent Host access capability. That access
 capability authorizes only bounded control-plane dispatch requests. It is
 branded separately from an `ExecutorGrant` and is never valid at an
 `ExecutorBroker` or Executor daemon. The control plane must issue a fresh,
-exact operation-scoped `ExecutorGrant` for each eventual dispatch. The v1 token
-is short-lived IPC authority; a future durable v2 contract must persist a
-non-secret descriptor and reacquire the token after recovery. Model and MCP
-access are likewise reacquired through supervised gateway RPC rather than
-persisted in the turn contract.
+exact operation-scoped `ExecutorGrant` for each eventual dispatch.
 
-The Agent Host contract defines this boundary but does not route production
+A separate additive Agent operation v1 foundation now defines a distinctly
+branded `AgentGatewayDispatchGrant`, non-secret model and MCP descriptors, and a
+gateway receipt ledger. It remains production-unwired: the gateway does not
+issue the grant, route Host operation messages, resolve provider/MCP access, or
+open the ledger at boot. The grant is never persisted. Recovery must reacquire
+short-lived authority while durable identity remains bound to the exact turn
+fence and domain-separated descriptor/payload digests. This foundation does
+not make an Agent operation an Executor operation and never accepts an
+`ExecutorGrant` in its place.
+
+The Agent Host contracts define these boundaries but do not route production
 turns or wire boot.
 
 ## Rollback compatibility

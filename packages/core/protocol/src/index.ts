@@ -31,3 +31,4 @@ export * from "./identity";
 export * from "./executor";
 export * from "./agent-host";
 export * from "./agent-host-supervision";
+export * from "./agent-operation";

@@ -30,6 +30,35 @@ Host ledger is deferred.
 Processes sharing a UID can inspect or interfere with each other and are not a
 security boundary.
 
+### Agent operation receipt foundation
+
+The additive Agent operation v1 protocol and gateway SQLite ledger are a
+production-unwired receipt foundation. They do not authorize model or MCP work,
+open a route, verify a Host, resolve credentials, or alter the SessionKernel.
+No boot composition references the ledger. A caller must eventually verify the
+signed supervision envelope and the separately branded
+`AgentGatewayDispatchGrant`, recompute every domain-separated digest, and pass
+kind-specific policy before physical work can begin.
+
+Requests and status queries bind the operation ID to the exact turn fence,
+descriptor and payload digests. An operation ID alone is never authority. Model
+descriptors carry only a transcript anchor and policy hash. MCP descriptors
+carry only a durable tool-use reference and arguments digest. Strict decoders
+reject bodies, prompts, arguments, credentials, URLs, headers, environment and
+provider/account configuration recursively. Durable receipts contain bounded
+identity, timestamps, normalized outcome/usage/error codes, transcript receipt
+references and allowlisted opaque provider references only. The operation
+ledger has no body or arbitrary metadata column.
+
+The only durable state progression is `prepared -> executing -> settled |
+indeterminate`. A recovered `prepared` operation may be reauthorized later.
+A recovered `executing` operation is never retried by default. Initial
+production model and MCP adapters must use unsupported reconciliation, which
+produces a durable visible `indeterminate` receipt unless a later adapter
+supplies exact, tested reconciliation proof. Provider request or response IDs
+alone are not idempotency proof. Abort, timeout, cancellation and disconnect
+also do not prove settlement.
+
 The Agent Host turn socket uses exact protocol v2. Agent-to-gateway dispatch
 capabilities and Executor operation grants have distinct canonical wire domains
 and are cross-rejected at runtime, not merely separated with TypeScript brands.
