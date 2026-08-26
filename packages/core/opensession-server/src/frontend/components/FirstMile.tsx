@@ -107,18 +107,21 @@ function connectedGithubOrganization(status: SetupStatus): string {
 }
 
 /**
- * The first-run backdrop: the landing page's own artwork, taken down to a tint.
+ * The first-run backdrop: the landing page's own artwork, at the strength the
+ * marketing page runs it.
  *
- * The marketing page runs this at full strength because nothing sits on it but
- * a headline. Onboarding is a form, so the art goes behind a heavy veil of the
- * page's own surface — enough colour to feel like the same product, not enough
- * to compete with a column of white panels. Served from our own origin
- * (routes/static-assets.ts), never the site's CDN: first run happens on a
- * private server before anything is configured.
+ * It is deliberately not veiled down. A whitened copy reads as a page that
+ * failed to load its background rather than as the product's own scene, and
+ * the arrangement the site already proves is this one: full artwork, with
+ * every panel above it opaque paper. The panels carry the contrast, so the
+ * backdrop does not have to give any up.
+ *
+ * Served from our own origin (routes/static-assets.ts), never the site's CDN:
+ * first run happens on a private server before anything is configured.
  *
  * Each theme gets its own cut for the reason the sign-in loop does (see
  * UserPicker): a dimmed light image is still the brightest thing on a dark
- * display.
+ * display, so dark takes the separately graded frame instead of a scrim.
  */
 function OnboardingBackdrop() {
 	const [theme, setTheme] = useState(effectiveTheme);
@@ -129,12 +132,7 @@ function OnboardingBackdrop() {
 			aria-hidden="true"
 			className="pointer-events-none absolute inset-0 select-none bg-surface bg-cover bg-center"
 			style={{ backgroundImage: `url(${BASE_PATH}/${art}.webp)` }}
-		>
-			{/* The veil. `bg-surface` is white in light and charcoal in dark, so one
-			    opacity gives a whitened wash on one side and a darkened one on the
-			    other without a second image or a second rule. */}
-			<div className="absolute inset-0 bg-surface/82" />
-		</div>
+		/>
 	);
 }
 
