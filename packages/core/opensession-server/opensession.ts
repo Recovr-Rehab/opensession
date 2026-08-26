@@ -596,6 +596,17 @@ if (!g.__opensessionBooted) {
 			console.log(`[engine] claude CLI ${claudeBin}`);
 		}
 	}
+
+	// Pi's SDK can take over a minute to load cold. Keep the loader import-inert,
+	// then warm it explicitly from the process boot owner when Pi is enabled.
+	void import("./src/server/pi-config")
+		.then(async ({ piEngineEnabled }) => {
+			if (!piEngineEnabled()) return;
+			const { prewarmPiSdk } = await import("./src/server/pi-runner");
+			await prewarmPiSdk();
+		})
+		.catch((error) => console.warn("[pi-runner] Pi SDK prewarm failed:", error));
+
 	// Dev instances (src/server/dev-mode.ts) skip background work here:
 	// no agents, no webhook intake, no schedulers/sweeps, no detached-server
 	// adoption — a second instance next to production must never double-send
