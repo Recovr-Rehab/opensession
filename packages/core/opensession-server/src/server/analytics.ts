@@ -30,7 +30,7 @@ import { PI_USAGE_CUTOVER_MS, piUsageForDates } from "./pi-usage";
 const AUDIT_DIR = stateDir("audit");
 const CACHE_DIR = stateDir("analytics-cache");
 // Bump when the rollup shape changes — stale disk caches recompute.
-const ROLLUP_VERSION = 9;
+const ROLLUP_VERSION = 10;
 
 interface TokenTotals {
 	input: number;
@@ -1484,7 +1484,7 @@ const SUMMARY_FRESH_MS = 5 * 60 * 1000;
 const SUMMARY_STALE_SERVE_MS = 24 * 60 * 60 * 1000;
 // Bump when composition semantics change so a restart cannot serve a fresh but
 // obsolete disk summary before the background prewarm replaces it.
-const SUMMARY_VERSION = 9;
+const SUMMARY_VERSION = 10;
 const summaryCache = new Map<string, { at: number; summary: AnalyticsSummary }>();
 const summaryInflight = new Map<string, Promise<AnalyticsSummary>>();
 
