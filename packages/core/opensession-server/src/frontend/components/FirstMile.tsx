@@ -54,7 +54,7 @@ const STEPS: FirstMileStep[] = [
 		id: "github",
 		label: "GitHub",
 		title: "Connect GitHub",
-		description: "GitHub signs you in and lets sessions access repositories, push changes, and create and review pull requests.",
+		description: "Connect a GitHub App so sessions can access repositories, push changes, and create and review pull requests.",
 	},
 	{
 		id: "repos",
