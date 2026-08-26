@@ -131,8 +131,8 @@ export function AnnouncementArticle({ showMark = false }: { showMark?: boolean }
 			<h2>More ideas</h2>
 
 			<p>
-				Open Session has some more experimental features that our team likes and
-				yours might too.
+				There's lots more interesting ideas and features in the product. Here's a
+				few that our team likes:
 			</p>
 
 			<p>
