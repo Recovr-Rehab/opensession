@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { githubLoginFromInput } from "../lib/github-login";
+import { refreshPeople } from "../lib/people";
 import { Button } from "../ui/button";
 import { Field, FieldGrid, Input } from "../ui/input";
 import { MENU_ICON, Menu } from "../ui/menu";
@@ -31,8 +32,8 @@ export function TeamSection({
 	onChanged,
 	title,
 	addLabel = "Add member",
-	githubOnly = false,
 	onboarding = false,
+	syncGithubOrganization = false,
 	compact = false,
 	showCount = false,
 }: {
@@ -41,10 +42,10 @@ export function TeamSection({
 	title?: React.ReactNode;
 	/** Action copy for the add flow. */
 	addLabel?: string;
-	/** Keep the roster focused on the GitHub identity used for sign-in. */
-	githubOnly?: boolean;
 	/** Use the roomier, quiet action treatment in first-run onboarding. */
 	onboarding?: boolean;
+	/** Import an organization roster before showing the editable identity table. */
+	syncGithubOrganization?: boolean;
 	compact?: boolean;
 	/** Append the loaded roster size to an explicit title. */
 	showCount?: boolean;
@@ -88,12 +89,13 @@ await load();
 	}, [load]);
 
 	useEffect(() => {
-		if (githubOnly) void syncGithubMembers();
+		if (syncGithubOrganization) void syncGithubMembers();
 		else void load();
-	}, [githubOnly, load, syncGithubMembers]);
+	}, [syncGithubOrganization, load, syncGithubMembers]);
 
 	async function handleMutated() {
 		await load();
+		await refreshPeople();
 		await onChanged();
 	}
 
@@ -160,33 +162,20 @@ await load();
 				</SettingCard>
 			)}
 			<SettingsHint>
-				{githubOnly
-					? githubOrganization
-						? `Members were imported from the ${githubOrganization} GitHub organization. You can add profile details later in Settings.`
-						: "Members sign in with their GitHub account. You can add profile details later in Settings."
-					: "Names, emails, GitHub logins and Slack ids all resolve through the same identity table, so a session user given as any of them matches the member."}
+				{githubOrganization
+					? `Members were imported from the ${githubOrganization} GitHub organization. Only a name is required when you add someone manually.`
+					: "Only a name is required. Add a GitHub login or other identities when sign-in and attribution should resolve to this member."}
 			</SettingsHint>
-			{githubOnly && !editing ? (
-				<GithubMemberDialog
-					open={dialogOpen}
-					onOpenChange={setDialogOpen}
-					onSaved={async () => {
-						setDialogOpen(false);
-						await handleMutated();
-					}}
-				/>
-			) : (
-				<MemberDialog
-					open={dialogOpen}
-					member={editing}
-					addLabel={addLabel}
-					onOpenChange={setDialogOpen}
-					onSaved={async () => {
-						setDialogOpen(false);
-						await handleMutated();
-					}}
-				/>
-			)}
+			<MemberDialog
+				open={dialogOpen}
+				member={editing}
+				addLabel={addLabel}
+				onOpenChange={setDialogOpen}
+				onSaved={async () => {
+					setDialogOpen(false);
+					await handleMutated();
+				}}
+			/>
 		</>
 	);
 }

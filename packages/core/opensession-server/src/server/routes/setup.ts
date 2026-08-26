@@ -248,6 +248,33 @@ export async function handleSetupRoutes(
     return withConfigMutationLock(async () => {
       const config = rawConfig();
       if (config.onboardingCompleted !== true) {
+        const { parseTeamMember } = await import("../config");
+        const { connectedGithubAccounts, soleGithubLogin } = await import(
+          "../github-auth"
+        );
+        const { rawTeam } = await import("./setup-team");
+        const team = rawTeam(config);
+        if (!team.some((member) => parseTeamMember(member))) {
+          const connectedLogin = ctx.authUser?.login || soleGithubLogin() || "";
+          const connectedAccount = connectedLogin
+            ? connectedGithubAccounts().find(
+                (account) =>
+                  account.login.toLowerCase() === connectedLogin.toLowerCase(),
+              )
+            : undefined;
+          const name =
+            ctx.authUser?.name?.trim() ||
+            connectedAccount?.name?.trim() ||
+            connectedLogin ||
+            "Local User";
+          team.push({
+            name,
+            ...(connectedLogin
+              ? { github: connectedLogin, admin: true }
+              : {}),
+          });
+          (config.identity as Record<string, unknown>).team = team;
+        }
         config.onboardingCompleted = true;
         persistRawConfig(config);
         audit({ kind: "setup_onboarding_complete", by: ctx.authUser?.login || null });

@@ -102,6 +102,18 @@ describe("GitHub App onboarding actions", () => {
 		expect(markup).not.toContain("Client secret");
 	});
 
+	test("offers optional GitHub account sign-in after the App is created", () => {
+		const markup = renderToStaticMarkup(
+			<GithubAuthCard
+				github={{ ...github, appSlug: "open-session-acme", clientIdConfigured: true }}
+				onSaved={() => {}}
+				onboarding
+			/>,
+		);
+		expect(markup).toContain("Optional. Sign in now");
+		expect(markup).toContain("connect later under Account");
+	});
+
 	test("uses the same manifest-only setup in Settings", () => {
 		const markup = renderToStaticMarkup(
 			<GithubManifestSetup github={github} returnTo="settings" />,

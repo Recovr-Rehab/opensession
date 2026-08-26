@@ -29,8 +29,8 @@ interface FirstMileStep {
 // Organization and model setup come first. GitHub App creation no longer
 // depends on a public callback origin: the manifest returns its credentials to
 // the private app, while Domains and public callbacks stay in Settings. Members
-// sit after repositories, since an invite is worth more once there is something
-// to join. The members step is removed when GitHub sign-in is not connected.
+// sit after repositories, since an identity is worth more once there is something
+// to act on. Members remain independent from the optional GitHub sign-in gate.
 const STEPS: FirstMileStep[] = [
 	{
 		id: "welcome",
@@ -65,8 +65,8 @@ const STEPS: FirstMileStep[] = [
 	{
 		id: "team",
 		label: "Members",
-		title: "Invite your team",
-		description: "Invite teammates from your GitHub organization to work with you.",
+		title: "Add members",
+		description: "Add yourself and anyone else sessions can act as. GitHub usernames are optional.",
 	},
 	{
 		id: "ready",
@@ -76,8 +76,12 @@ const STEPS: FirstMileStep[] = [
 	},
 ];
 
-function githubTeamOnboardingEnabled(status: SetupStatus | null): boolean {
-	return Boolean(status?.github.userPrAuth && status.github.clientIdConfigured);
+function githubOrganizationImportEnabled(status: SetupStatus | null): boolean {
+	return Boolean(
+		status?.github.userPrAuth &&
+			status.github.clientIdConfigured &&
+			status.github.appOrg,
+	);
 }
 
 function initialFirstMileIndex(): number {
@@ -87,8 +91,7 @@ function initialFirstMileIndex(): number {
 	const requested =
 		new URLSearchParams(window.location.search).get("step") || stored;
 	if (!requested) return 0;
-	const initialSteps = STEPS.filter((item) => item.id !== "team");
-	const index = initialSteps.findIndex((item) => item.id === requested);
+	const index = STEPS.findIndex((item) => item.id === requested);
 	return index < 0 ? 0 : index;
 }
 
@@ -135,7 +138,6 @@ function FirstMileSummary({
 	onSelect: (step: FirstMileStep["id"]) => void;
 }) {
 	const github = githubAuthState(status.github);
-	const showTeam = githubTeamOnboardingEnabled(status);
 	let serverHost = status.publicBaseUrl;
 	try {
 		serverHost = new URL(status.publicBaseUrl).host;
@@ -258,13 +260,13 @@ function FirstMileSummary({
 				</div>
 			),
 		},
-	].filter((tile) => tile.step !== "team" || showTeam);
+	];
 
 	return (
 		<div
 			className={cn(
 				"grid gap-3 phone:grid-cols-2",
-				showTeam ? "grid-cols-5" : "mx-auto max-w-[760px] grid-cols-4",
+				"grid-cols-5",
 			)}
 		>
 			{tiles.map((tile) => {
@@ -331,9 +333,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const headingRef = useRef<HTMLHeadingElement>(null);
 	const mainRef = useRef<HTMLElement>(null);
 	const reducedMotion = useReducedMotion();
-	const steps = githubTeamOnboardingEnabled(status)
-		? STEPS
-		: STEPS.filter((item) => item.id !== "team");
+	const steps = STEPS;
 	const step = steps[index]!;
 
 	useEffect(() => {
@@ -549,8 +549,8 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 												onChanged={refetch}
 												title="Members"
 												showCount
-												githubOnly
 												onboarding
+												syncGithubOrganization={githubOrganizationImportEnabled(status)}
 												compact
 											/>
 										)}
