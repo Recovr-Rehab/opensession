@@ -1,9 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useIsPhone } from "../hooks/useIsPhone";
 import { BASE_PATH } from "../lib/base";
 import { Button } from "../ui/button";
-import { ResponsiveDialog } from "../ui/sheet";
-import { IconChevronLeft, IconX } from "./icons";
+import { Modal } from "../ui/modal";
+import { IconChevronLeft } from "./icons";
 
 /** Apple's mark, for the Mac download. A solid glyph, not part of the stroke set. */
 function IconApple({ size = 20 }: { size?: number }) {
@@ -27,7 +26,6 @@ export function DownloadAppsDialog({
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }) {
-	const phone = useIsPhone();
 	const [showInstallHelp, setShowInstallHelp] = useState(false);
 
 	useEffect(() => {
@@ -35,48 +33,33 @@ export function DownloadAppsDialog({
 	}, [open]);
 
 	return (
-		<ResponsiveDialog
-			open={open}
-			onClose={() => onOpenChange(false)}
-			phone={phone}
-			label="Download apps"
-			backdropClassName="bg-black/25 backdrop-blur-[1px]"
-			modalClassName="w-[calc(100vw-3rem)] max-w-[48rem] max-h-[calc(100dvh-3rem)] rounded-[calc(30px*var(--rf))] bg-raised p-10"
-			sheetClassName="max-h-[92dvh] bg-raised"
-		>
-			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-5 pt-2 desktop:overflow-visible desktop:p-0">
-				<header className="mb-5 flex shrink-0 items-center justify-between gap-4">
-					<div className="flex min-w-0 items-center gap-1">
-						{showInstallHelp && (
-							<Button
-								variant="ghost"
-								size="lg"
-								icon={<IconChevronLeft size={22} />}
-								className="size-11 shrink-0 desktop:size-9"
-								onClick={() => setShowInstallHelp(false)}
-								aria-label="Back to apps"
-							/>
-						)}
-						<h2 className="m-0 truncate text-page-title font-semibold leading-tight tracking-[-0.02em] text-fg">
-							{showInstallHelp ? "Install the web app" : "Download apps"}
-						</h2>
-					</div>
-					<Button
-						variant="soft"
-						size="lg"
-						icon={<IconX size={22} />}
-						className="size-11 shrink-0 rounded-full text-faint desktop:size-9"
-						onClick={() => onOpenChange(false)}
-						aria-label="Close"
-					/>
-				</header>
-
+		<Modal.Root open={open} onOpenChange={onOpenChange}>
+			<Modal.Content widthClassName="max-w-[48rem]">
+				<Modal.Header
+					title={
+						showInstallHelp ? (
+							<span className="flex min-w-0 items-center gap-1">
+								<Button
+									variant="ghost"
+									size="sm"
+									icon={<IconChevronLeft size={18} />}
+									className="-ml-1 size-7 shrink-0"
+									onClick={() => setShowInstallHelp(false)}
+									aria-label="Back to apps"
+								/>
+								<span className="truncate">Install the web app</span>
+							</span>
+						) : (
+							"Download apps"
+						)
+					}
+				/>
 				<DownloadAppsBody
 					showInstallHelp={showInstallHelp}
 					onShowInstallHelp={() => setShowInstallHelp(true)}
 				/>
-			</div>
-		</ResponsiveDialog>
+			</Modal.Content>
+		</Modal.Root>
 	);
 }
 
