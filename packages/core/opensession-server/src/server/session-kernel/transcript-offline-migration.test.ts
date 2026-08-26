@@ -195,6 +195,43 @@ describe("offline actor transcript migration", () => {
     target.close();
   });
 
+  test("allows legacy sparse sequences and events before the reset cursor", async () => {
+    const paths = await fixture();
+    const source = new Database(paths.sourceTranscriptPath);
+    const last = source.query(`
+      SELECT seq, change_seq FROM transcript_events
+      WHERE session_id = ? ORDER BY seq DESC LIMIT 1
+    `).get(paths.sessionId) as { seq: number; change_seq: number };
+    const sourceCount = Number((source.query(
+      "SELECT COUNT(*) AS value FROM transcript_events WHERE session_id = ?",
+    ).get(paths.sessionId) as { value: number }).value);
+    const minChangeSeq = Number((source.query(
+      "SELECT MIN(change_seq) AS value FROM transcript_events WHERE session_id = ?",
+    ).get(paths.sessionId) as { value: number }).value);
+    source.run(
+      "UPDATE transcript_events SET seq = ? WHERE session_id = ? AND seq = ?",
+      [last.seq + 1, paths.sessionId, last.seq],
+    );
+    source.run(
+      "UPDATE transcript_outline SET seq = ? WHERE session_id = ? AND seq = ?",
+      [last.seq + 1, paths.sessionId, last.seq],
+    );
+    source.run(`
+      UPDATE transcript_sessions
+      SET next_seq = ?, reset_change_seq = ?
+      WHERE session_id = ?
+    `, [last.seq + 2, minChangeSeq, paths.sessionId]);
+    source.close();
+
+    expect(migrateActorTranscriptsOffline(paths).migrated).toBe(2);
+    const target = new TranscriptStore(
+      sessionKernelSessionDbPath(paths.sessionId, paths.isolatedRoot),
+    );
+    expect(target.countEvents(paths.sessionId)).toBe(sourceCount);
+    expect(target.getLastSeq(paths.sessionId)).toBe(last.seq + 1);
+    target.close();
+  });
+
   test("rollback fails closed after post-cutover append, import, or replace", async () => {
     for (const operation of ["append", "import", "replace"] as const) {
       const paths = await fixture();

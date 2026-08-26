@@ -137,15 +137,14 @@ function verifySourceCoherence(
     max_change_seq: number | null;
   };
   const row = metadata[0]!;
-  const expectedSeq = dense.count === 0 ? 1 : dense.count + 1;
+  const expectedSeq = (dense.max_seq ?? 0) + 1;
   const expectedChange = Math.max(dense.max_change_seq ?? 0, row.reset_change_seq) + 1;
   if (
     dense.distinct_seq !== dense.count ||
     dense.distinct_change_seq !== dense.count ||
     (dense.count > 0 && (
-      dense.min_seq !== 1 ||
-      dense.max_seq !== dense.count ||
-      dense.min_change_seq! <= row.reset_change_seq ||
+      dense.min_seq! < 1 ||
+      dense.min_change_seq! < 1 ||
       dense.max_change_seq! >= row.next_change_seq
     )) ||
     row.next_seq !== expectedSeq ||
