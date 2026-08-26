@@ -516,9 +516,7 @@ function LandingPage() {
 							Announcement
 						</a>
 					</div>
-					<p className="rail-note">
-						Open source. Self-hosted. Any model provider.
-					</p>
+					<p className="rail-note">The open-source cloud agent orchestrator</p>
 				</div>
 			</aside>
 
