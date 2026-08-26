@@ -508,7 +508,7 @@ export function IngressPanel({
 	const privateDomain = settings ? configuredAppDomain(settings) : "";
 
 	return (
-		<SettingsPanel className={onboarding ? "mx-auto max-w-[960px]" : "relative"}>
+		<SettingsPanel className={onboarding ? "mx-auto max-w-[1120px]" : "relative"}>
 			{!onboarding && (
 				<SettingsHeader
 					title="Domains and ingress"

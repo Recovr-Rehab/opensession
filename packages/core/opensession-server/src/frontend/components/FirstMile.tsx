@@ -106,23 +106,6 @@ function connectedGithubOrganization(status: SetupStatus): string {
 	}
 }
 
-/**
- * The exact fixed artwork behind opensession.com. It is vendored beside the
- * app so first run never depends on the marketing site or a public CDN.
- */
-function OnboardingBackdrop() {
-	const [theme, setTheme] = useState(effectiveTheme);
-	useEffect(() => onThemeChanged(() => setTheme(effectiveTheme())), []);
-	const name = theme === "dark" ? "onboarding-bg-dark" : "onboarding-bg";
-	return (
-		<div
-			aria-hidden="true"
-			className="pointer-events-none absolute inset-0 select-none bg-surface bg-cover bg-center"
-			style={{ backgroundImage: `url(${BASE_PATH}/${name}.webp)` }}
-		/>
-	);
-}
-
 function PreviewOverflow({
 	count,
 	transparent = false,
@@ -280,7 +263,7 @@ function FirstMileSummary({
 		<div
 			className={cn(
 				"grid gap-3 phone:grid-cols-2",
-				showTeam ? "grid-cols-5" : "grid-cols-4",
+				showTeam ? "grid-cols-5" : "mx-auto max-w-[760px] grid-cols-4",
 			)}
 		>
 			{tiles.map((tile) => {
@@ -343,6 +326,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const [footerSeparated, setFooterSeparated] = useState(false);
 	const [finishing, setFinishing] = useState(false);
 	const [ingressReady, setIngressReady] = useState(false);
+	const [theme, setTheme] = useState(effectiveTheme);
 	const headingRef = useRef<HTMLHeadingElement>(null);
 	const mainRef = useRef<HTMLElement>(null);
 	const reducedMotion = useReducedMotion();
@@ -357,6 +341,8 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			document.title = DEFAULT_DOC_TITLE;
 		};
 	}, []);
+
+	useEffect(() => onThemeChanged(() => setTheme(effectiveTheme())), []);
 
 	useEffect(() => {
 		if (index > 0) headingRef.current?.focus({ preventScroll: true });
@@ -412,13 +398,16 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 		}),
 	};
 
+	const backdropName = theme === "dark" ? "onboarding-bg-dark" : "onboarding-bg";
+
 	return (
 		<div
 			data-first-mile
-			className="relative grid h-[100dvh] w-full grid-rows-[76px_minmax(0,1fr)_84px] overflow-hidden bg-bg text-fg phone:grid-rows-[68px_minmax(0,1fr)_90px] phone:pb-[env(safe-area-inset-bottom)]"
+			className="relative grid h-[100dvh] w-full grid-rows-[76px_minmax(0,1fr)_84px] overflow-hidden bg-surface bg-cover bg-center text-fg phone:grid-rows-[68px_minmax(0,1fr)_90px] phone:pb-[env(safe-area-inset-bottom)]"
+			// The vendored marketing artwork keeps first run independent of a CDN.
+			// Painting it on the shell lets a transparent idle footer reveal it.
+			style={{ backgroundImage: `url(${BASE_PATH}/${backdropName}.webp)` }}
 		>
-			<OnboardingBackdrop />
-
 			<TopBar
 				as="header"
 				className="relative z-10 grid grid-cols-[1fr_auto_1fr] px-8 phone:px-4"
@@ -502,7 +491,8 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								ease,
 							}}
 							className={cn(
-								"mx-auto flex min-h-full w-full max-w-[960px] flex-col items-center py-8 phone:py-5",
+								"mx-auto flex min-h-full w-full flex-col items-center py-8 phone:py-5",
+								step.id === "ingress" ? "max-w-[1120px]" : "max-w-[960px]",
 								step.id === "welcome" && "justify-center pb-16 phone:pb-10",
 							)}
 						>
@@ -553,9 +543,13 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 									<div
 										className={cn(
 											"w-full pb-8 [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body",
-											// The split ingress step takes the server chooser's wider canvas;
-											// single-panel steps stay focused at the settings-page measure.
-											step.id === "ingress" ? "max-w-[960px]" : "max-w-[760px]",
+											// The split ingress step needs room for setup commands. The final
+											// review uses the full canvas for larger tiles; forms stay focused.
+											step.id === "ingress"
+												? "max-w-[1120px]"
+												: step.id === "ready"
+													? "max-w-[960px]"
+													: "max-w-[760px]",
 											// Match opensession.com's card glass: translucent paper, a quiet
 											// hairline, and the same 14px blur with restrained saturation.
 											"[&_.bg-settings-plate]:rounded-2xl [&_.bg-settings-plate]:border-divider-soft [&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--popup-surface)_80%,transparent)] [&_.bg-settings-plate]:shadow-[0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:[backdrop-filter:blur(14px)_saturate(1.08)]",
@@ -631,7 +625,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					"relative z-10 border-t px-8 pt-1 transition-[border-color,background-color] phone:px-5 phone:pt-3",
 					footerSeparated
 						? "border-line bg-bg/95 backdrop-blur-xl"
-						: "border-transparent bg-[linear-gradient(to_bottom,transparent,var(--bg)_30%)]",
+						: "border-transparent bg-transparent",
 					index === 0 && "invisible",
 				)}
 			>
