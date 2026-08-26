@@ -1035,6 +1035,8 @@ export type RunEventDecisionResult = {
 
 export type SessionKernelStoreOptions = {
 	readonly?: boolean;
+	/** Internal migration reader for additive schemas with unchanged session tables. */
+	compatibleReadSchemaFloor?: number;
 	allocateOutboxId?: (sessionId: string) => number;
   busyTimeoutMs?: number;
   hydrateRunStateCache?: boolean;
@@ -1096,7 +1098,15 @@ export class SessionKernelStore {
 				(this.db.query("PRAGMA user_version").get() as { user_version: number })
 					.user_version,
 			);
-			if (schemaVersion !== SESSION_KERNEL_SCHEMA_VERSION)
+			const compatibleFloor = options.compatibleReadSchemaFloor;
+			if (
+				schemaVersion !== SESSION_KERNEL_SCHEMA_VERSION &&
+				(
+					compatibleFloor === undefined ||
+					schemaVersion < compatibleFloor ||
+					schemaVersion > SESSION_KERNEL_SCHEMA_VERSION
+				)
+			)
 				throw new Error(
 					`Session kernel read mirror schema ${schemaVersion} does not match supported ${SESSION_KERNEL_SCHEMA_VERSION}`,
 				);

@@ -22,7 +22,7 @@ const CENTRAL_STORE_FAILURE = "SESSION_KERNEL_CENTRAL_STORE_FAILURE";
 // while a bounded slice prevents startup recovery from opening hundreds of
 // SQLite databases behind one global barrier.
 const RUNTIME_WAKE_CANDIDATE_BATCH = 16;
-const SPARSE_PROJECTION_BACKFILL_BATCH = 4;
+const SPARSE_PROJECTION_BACKFILL_BATCH = 128;
 const OUTBOX_ROUTE_MAINTENANCE_BATCH = 8;
 const SESSION_STORE_MAINTENANCE_BATCH = 1;
 
@@ -314,7 +314,47 @@ export class SessionKernelStoreHost {
       const repaired = this.containIsolated(
         sessionId,
         "maintenance:sparse-projection",
-        () => this.refreshSessionProjections(sessionId),
+        () => {
+          if (this.central.quarantinedSession(sessionId)) {
+            this.central.settleIsolatedSessionProjection(
+              sessionId,
+              undefined,
+              undefined,
+            );
+            return;
+          }
+          const store = this.centralPath === ":memory:"
+            ? this.openIsolated(sessionId)
+            : new SessionKernelStore(
+                sessionKernelSessionDbPath(sessionId, this.isolatedRoot),
+                {
+                  readonly: true,
+                  hydrateRunStateCache: false,
+                  // Schema 29 only adds this central projection table. Session
+                  // ask/delivery/quarantine tables are unchanged from 28.
+                  compatibleReadSchemaFloor: 28,
+                },
+              );
+          try {
+            const quarantined = store.quarantinedSession(sessionId);
+            const ask = quarantined ? undefined : store.askSnapshot(sessionId);
+            const delivery = quarantined ? undefined : store.deliverySnapshot(sessionId);
+            const sparseDelivery = delivery && (
+              delivery.queued.length > 0 ||
+              delivery.steered.length > 0 ||
+              delivery.pendingSteers.length > 0 ||
+              delivery.dispatch !== undefined ||
+              delivery.interrupt !== undefined
+            ) ? delivery : undefined;
+            this.central.settleIsolatedSessionProjection(
+              sessionId,
+              ask,
+              sparseDelivery,
+            );
+          } finally {
+            if (store !== this.isolated.get(sessionId)) store.close();
+          }
+        },
       );
       if (!repaired.ok)
         this.centralOperation(() => this.central.settleIsolatedSessionProjection(

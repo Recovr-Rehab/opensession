@@ -441,13 +441,7 @@ describe("per-session session kernel storage", () => {
         event: "seed",
       }]);
 
-    let firstError: unknown;
-    try {
-      host.allAskEntries();
-    } catch (error) {
-      firstError = error;
-    }
-    expect(firstError).toMatchObject({ retryable: true });
+    expect((host as any).repairSparseProjections(4)).toBe(true);
     expect(host.allAskEntries()).toEqual([]);
     expect(host.central.sparseProjectionMigrationComplete()).toBe(true);
     host.close();

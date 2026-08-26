@@ -133,7 +133,6 @@ export class SessionKernelActorClient {
       response.version !== SESSION_KERNEL_ACTOR_VERSION
     )
       throw new Error("Session kernel actor handshake failed");
-    await this.hydrateRunStates();
   }
 
   async acknowledgeCommand(
@@ -485,16 +484,6 @@ export class SessionKernelActorClient {
     if (result.accepted)
       this.noteRunState(decision.sessionId, result.state);
     return result;
-  }
-
-  private async hydrateRunStates(): Promise<void> {
-    this.runStateCache.clear();
-    const states = await this.callAsync<Array<DurableRunState & { sessionId: string }>>(
-      { t: "store", method: "runStates", args: [] },
-      "runStates",
-      true,
-    );
-    for (const state of states) this.runStateCache.set(state.sessionId, state);
   }
 
   private noteRunState(sessionId: string, state: DurableRunState): void {
