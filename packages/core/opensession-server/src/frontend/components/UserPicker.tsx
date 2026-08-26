@@ -230,7 +230,7 @@ function AuthCopy({ children }: { children: React.ReactNode }) {
 		// `last:mb-0` for the cards whose sentence IS the card (the expired
 		// notice): the margin is air before whatever follows, and with nothing
 		// following it just lands the card off-centre.
-		<p className="mx-auto mt-2 mb-6 max-w-[32ch] text-supporting leading-relaxed text-dim last:mb-0">
+		<p className="mx-auto mt-2 mb-6 max-w-[32ch] text-supporting leading-normal text-dim last:mb-0">
 			{children}
 		</p>
 	);
