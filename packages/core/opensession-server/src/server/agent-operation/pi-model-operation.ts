@@ -56,9 +56,16 @@ export interface PiModelInvocationLookup extends PiModelInvocationIdentity {
   readonly invocationDigest: AgentOperationDigest;
 }
 
+export interface PiModelPrivateAdapterPayloadV1 {
+  readonly version: 1;
+  readonly identity: Readonly<PiModelInvocationLookup>;
+  readonly invocation: unknown;
+}
+
 export interface PiModelInvocationSnapshot {
   readonly invocation: unknown;
   readonly canonicalBytes: Uint8Array;
+  readonly adapterPayload: Readonly<PiModelPrivateAdapterPayloadV1>;
 }
 
 interface Entry {
@@ -67,6 +74,7 @@ interface Entry {
   readonly canonicalBytes: Uint8Array;
   readonly deadlineMs: number;
   readonly identity: PiModelInvocationLookup;
+  readonly adapterPayload: Readonly<PiModelPrivateAdapterPayloadV1>;
 }
 
 function exactDataRecord(
@@ -231,6 +239,8 @@ export function decodePiModelOperationReferenceV1(
 /** Import-inert, bounded store for gateway-private full model invocations. */
 export class PiModelInvocationRegistry {
   readonly #active = new Map<string, Entry>();
+  /** Decode-only tombstones let the gateway authenticate settled duplicate replays. */
+  readonly #decodable = new Map<string, Entry>();
   readonly #used = new Set<string>();
   readonly #capacity: number;
   readonly #now: () => number;
@@ -270,15 +280,22 @@ export class PiModelInvocationRegistry {
       descriptorDigest: input.descriptorDigest,
       invocationDigest,
     });
+    const adapterPayload = Object.freeze({
+      version: 1 as const,
+      identity,
+      invocation: input.invocation,
+    });
     const entry: Entry = Object.freeze({
       key,
       invocation: input.invocation,
       canonicalBytes,
       deadlineMs: input.deadlineMs,
       identity,
+      adapterPayload,
     });
     this.#used.add(key);
     this.#active.set(key, entry);
+    this.#decodable.set(key, entry);
     const reference = Object.freeze({
       version: 1 as const,
       bindingRef: input.bindingRef,
@@ -291,7 +308,9 @@ export class PiModelInvocationRegistry {
       close: () => {
         if (closed) return false;
         closed = true;
-        return this.#active.get(key) === entry && this.#active.delete(key);
+        if (this.#active.get(key) !== entry) return false;
+        this.#decodable.delete(key);
+        return this.#active.delete(key);
       },
     });
   }
@@ -300,8 +319,11 @@ export class PiModelInvocationRegistry {
   deleteExpired(now = this.#now()): number {
     if (!Number.isSafeInteger(now) || now < 0) throw new TypeError("invalid expiry time");
     let deleted = 0;
-    for (const [key, entry] of this.#active) {
-      if (entry.deadlineMs <= now && this.#active.delete(key)) deleted++;
+    for (const [key, entry] of this.#decodable) {
+      if (entry.deadlineMs <= now) {
+        this.#decodable.delete(key);
+        if (this.#active.delete(key)) deleted++;
+      }
     }
     return deleted;
   }
@@ -314,16 +336,28 @@ export class PiModelInvocationRegistry {
     return this.#lookup(lookup, true);
   }
 
+  /** Consumes only the exact private object emitted by this registry's decoder. */
+  consumeAdapterPayloadExact(
+    lookup: PiModelInvocationLookup,
+    payload: Readonly<PiModelPrivateAdapterPayloadV1>,
+  ): PiModelInvocationSnapshot | undefined {
+    if (!validIdentity(lookup) || !validDigest(lookup.invocationDigest)) return undefined;
+    const entry = this.#active.get(identityKey(lookup));
+    if (!entry || entry.adapterPayload !== payload) return undefined;
+    return this.#lookup(lookup, true);
+  }
+
   #lookup(
     lookup: PiModelInvocationLookup,
     consume: boolean,
   ): PiModelInvocationSnapshot | undefined {
     if (!validIdentity(lookup) || !validDigest(lookup.invocationDigest)) return undefined;
     const key = identityKey(lookup);
-    const entry = this.#active.get(key);
+    const entry = consume ? this.#active.get(key) : this.#decodable.get(key);
     if (!entry) return undefined;
     if (entry.deadlineMs <= this.#now()) {
       this.#active.delete(key);
+      this.#decodable.delete(key);
       return undefined;
     }
     if (!sameIdentity(entry.identity, lookup)) return undefined;
@@ -331,6 +365,7 @@ export class PiModelInvocationRegistry {
     return Object.freeze({
       invocation: entry.invocation,
       canonicalBytes: Uint8Array.from(entry.canonicalBytes),
+      adapterPayload: entry.adapterPayload,
     });
   }
 }
@@ -364,8 +399,9 @@ export function decodePiModelGatewayPayload(
   if (!snapshot) return undefined;
   return Object.freeze({
     kind: "model" as const,
-    value: snapshot.invocation,
+    value: snapshot.adapterPayload,
     canonicalBytes: snapshot.canonicalBytes,
+    retainValueIdentity: true as const,
   });
 }
 

@@ -134,12 +134,14 @@ describe("Pi model invocation reference and registry", () => {
       fence, operationId: "operation-1", bindingRef: ref(1), descriptorDigest: digest("a"),
     }, owner.reference);
     expect(decoded?.kind).toBe("model");
-    expect(decoded?.value).toBe(invocation);
+    const adapterPayload = decoded!.value as any;
+    expect(adapterPayload.invocation).toBe(invocation);
+    expect((decoded as any).retainValueIdentity).toBe(true);
     expect(Buffer.from(decoded!.canonicalBytes)).toEqual(Buffer.from(input().canonicalBytes));
     expect(Buffer.from(decoded!.canonicalBytes).equals(Buffer.from(JSON.stringify(owner.reference)))).toBe(false);
     expect(decodePiModelGatewayPayload(registry, {
       fence, operationId: "operation-1", bindingRef: ref(1), descriptorDigest: digest("a"),
-    }, owner.reference)?.value).toBe(invocation);
+    }, owner.reference)?.value).toBe(adapterPayload);
     expect(registry.consumeExact(lookup(owner.reference))?.invocation).toBe(invocation);
     expect(registry.consumeExact(lookup(owner.reference))).toBeUndefined();
   });

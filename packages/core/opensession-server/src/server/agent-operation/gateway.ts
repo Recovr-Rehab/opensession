@@ -84,6 +84,8 @@ export type AgentGatewayDecodedPayload =
       kind: "model";
       value: unknown;
       canonicalBytes: Uint8Array;
+      /** Trusted decoders may retain an already-validated immutable private capability. */
+      retainValueIdentity?: true;
     }>
   | Readonly<{
       kind: "mcp";
@@ -240,7 +242,9 @@ export class AgentOperationGateway {
       throw new AgentGatewayRequestError("invalid payload decoding");
     let adapterPayload: unknown;
     try {
-      adapterPayload = snapshotDecodedValue(decoded.value);
+      adapterPayload = decoded.kind === "model" && decoded.retainValueIdentity
+        ? validateDecodedValue(decoded.value)
+        : snapshotDecodedValue(decoded.value);
     } catch {
       throw new AgentGatewayRequestError("invalid decoded payload");
     }
@@ -465,12 +469,17 @@ export class AgentOperationGateway {
   }
 }
 
-function snapshotDecodedValue(value: unknown): unknown {
-  const snapshot = immutableSnapshot(value);
+function validateDecodedValue(value: unknown): unknown {
+  immutableSnapshot(value);
   // structuredClone rejects Proxy objects. Run it only after the descriptor walk,
   // which rejects accessors without invoking them.
   structuredClone(value);
-  return snapshot;
+  return value;
+}
+
+function snapshotDecodedValue(value: unknown): unknown {
+  validateDecodedValue(value);
+  return immutableSnapshot(value);
 }
 
 function immutableSnapshot(value: unknown): unknown {
