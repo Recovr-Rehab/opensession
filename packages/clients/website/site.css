@@ -1423,6 +1423,7 @@ summary:focus-visible {
 	.hero-video {
 		filter: brightness(0.6) saturate(1.12);
 	}
+}
 
 /* ── The download dialog's two cards ─────────────────────────────────────
    What you are installing, shown rather than listed: a Mac screenshot and a
