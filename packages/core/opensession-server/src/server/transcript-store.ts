@@ -1,7 +1,7 @@
 /**
  * Transcript v2 store (docs/transcripts.md §1, §1a) — the owned
- * per-session sequence-numbered event log in ONE SQLite (WAL) DB:
- * `<OPENSESSION_SESSIONS_DIR>/transcripts.db`.
+ * per-session sequence-numbered event log co-located with that session's
+ * kernel tables in its actor-owned SQLite (WAL) database.
  *
  * Row unit is the parsed TranscriptEntry; `uuid` = `entry.id` (§1a — NOT the
  * mirror line uuid). seq is 1-based and dense per session, assigned ONLY to
@@ -38,12 +38,9 @@
  * can never throw back into the append path. Imports publish one reconciliation
  * wake only after all chunks commit; authoritative replacements publish reset.
  *
- * Live-safety: nothing here opens the DB at import time — the singleton
- * (`transcriptStore()`) is lazy, and handle + prepared statements park on
- * `globalThis.__osTranscriptStore` (pattern: session-index.ts:58) so hot
- * reloads reuse the open connection. transcripts.db has exactly ONE writer:
- * the live server process (invariant 8) — tests construct `new
- * TranscriptStore(tempPath)` directly and must never call transcriptStore().
+ * Live-safety: nothing here opens a DB at import time. Production constructs
+ * stores only inside the session actor worker. The legacy lazy singleton is a
+ * test compatibility seam; the gateway never calls it in production.
  */
 
 import {
@@ -62,6 +59,7 @@ import {
 } from "./transcript-bus";
 import type { TranscriptEntry } from "./types";
 import { sanitizeTranscriptMediaEntry } from "./transcript-media";
+import { v2SnapshotEntryWeight } from "./transcript-wire";
 import { classifyEntry, dropContextInjections } from "@tellahq/opensession-protocol/notices";
 import {
   decodeAgentTranscriptReceiptRefV1,
@@ -72,6 +70,13 @@ import type {
   TranscriptIndexEntry,
   TranscriptIndexRole,
 } from "@tellahq/opensession-protocol/session";
+import {
+  assertTranscriptActorRequest,
+  assertTranscriptActorResponse,
+  type TranscriptActorRequest,
+  type TranscriptMutationResult,
+  type TranscriptWake,
+} from "./session-kernel/transcript-protocol";
 
 export type { SeqEntry, TranscriptBusEvent };
 
@@ -90,6 +95,11 @@ export interface TranscriptOutline {
 
 export interface TranscriptRangePage extends TranscriptPage {
   /** Last raw seq covered, including a corrupt or hidden row. */
+  coveredThroughSeq: number;
+  complete: boolean;
+}
+
+export interface TranscriptHydratedPage extends TranscriptPage {
   coveredThroughSeq: number;
   complete: boolean;
 }
@@ -233,6 +243,12 @@ export interface TranscriptImportInfo {
  */
 const TAIL_WINDOW_MESSAGE_KINDS = new Set(["user", "assistant"]);
 
+export function handoffTranscriptEntryWeight(kind: string, bytes: number): number {
+  return kind === "user" || kind === "assistant" || kind === "system"
+    ? Math.min(bytes, 8_000)
+    : 0;
+}
+
 export interface TailWindowOpts {
   /** Never fewer than this many entries, whatever the byte ceiling says. */
   minEntries: number;
@@ -269,6 +285,18 @@ const g = globalThis as unknown as {
  */
 export function setAppendHook(fn: TranscriptAppendHook | null): void {
   g.__osTranscriptAppendHook = fn;
+}
+
+/** Gateway-side delivery for actor-returned, post-commit transcript changes. */
+export function notifyTranscriptAppendHook(
+  sessionId: string,
+  entries: SeqEntry[],
+): void {
+  try {
+    g.__osTranscriptAppendHook?.(sessionId, entries);
+  } catch (error) {
+    console.warn("[transcript-store] append hook threw:", error);
+  }
 }
 
 /** Default DB path, derived from the active sessions dir. */
@@ -367,7 +395,7 @@ interface DestinationWriteOutcome {
   affected: SeqEntry[];
 }
 
-interface DestinationReceiptRow {
+export interface TranscriptAppendReceiptRow {
   session_id: unknown;
   append_id: unknown;
   request_digest: unknown;
@@ -404,6 +432,13 @@ export class TranscriptStore {
     request: ValidatedDestinationAppend,
   ) => DestinationWriteOutcome) & {
     immediate: (request: ValidatedDestinationAppend) => DestinationWriteOutcome;
+  };
+  private txActorMutation: ((
+    request: Extract<TranscriptActorRequest, { requestId: string }>,
+  ) => TranscriptMutationResult<unknown>) & {
+    immediate: (
+      request: Extract<TranscriptActorRequest, { requestId: string }>,
+    ) => TranscriptMutationResult<unknown>;
   };
 
   constructor(
@@ -472,7 +507,25 @@ export class TranscriptStore {
         created_at INTEGER NOT NULL,
         PRIMARY KEY (session_id, append_id)
       );
+      CREATE TABLE IF NOT EXISTS session_kernel_transcript_wakes (
+        session_id TEXT PRIMARY KEY,
+        cursor INTEGER NOT NULL DEFAULT 0,
+        acked_cursor INTEGER NOT NULL DEFAULT 0,
+        first_change_seq INTEGER NOT NULL DEFAULT 0,
+        last_change_seq INTEGER NOT NULL DEFAULT 0,
+        reset_epoch INTEGER NOT NULL DEFAULT 0,
+        acked_reset_epoch INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
     `);
+    const wakeColumns = new Set(
+      (this.db.query("PRAGMA table_info(session_kernel_transcript_wakes)").all() as Array<{ name: string }>)
+        .map(({ name }) => name),
+    );
+    if (!wakeColumns.has("acked_reset_epoch"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_transcript_wakes ADD COLUMN acked_reset_epoch INTEGER NOT NULL DEFAULT 0",
+      );
     this.migrateChangeSequence();
     type Tx = typeof this.txWrite;
     this.txWrite = this.db.transaction(
@@ -503,6 +556,9 @@ export class TranscriptStore {
         return this.writeEntriesInTx(sessionId, entries);
       }
     ) as unknown as typeof this.txReplace;
+    this.txActorMutation = this.db.transaction((request) =>
+      this.applyActorMutationInTx(request)
+    ) as unknown as typeof this.txActorMutation;
     this.txDestinationAppend = this.db.transaction(
       (request: ValidatedDestinationAppend) => {
         const receiptRow = this.db
@@ -514,7 +570,7 @@ export class TranscriptStore {
           .get(
             request.sessionId,
             request.appendId,
-          ) as DestinationReceiptRow | null;
+          ) as TranscriptAppendReceiptRow | null;
         if (receiptRow) {
           const receipt = decodeDestinationReceiptRow(receiptRow);
           if (request.requireAgentReceipt) {
@@ -763,7 +819,7 @@ export class TranscriptStore {
          FROM transcript_append_receipts
          WHERE session_id = ? AND append_id = ?`,
       )
-      .get(query.sessionId, query.appendId) as DestinationReceiptRow | null;
+      .get(query.sessionId, query.appendId) as TranscriptAppendReceiptRow | null;
     if (!row) return null;
     const receipt = decodeDestinationReceiptRow(row);
     if (
@@ -948,6 +1004,253 @@ export class TranscriptStore {
       }
     }
     return outcome.result;
+  }
+
+  /** Actor-only request entrypoint. Mutations, immutable exact result receipts,
+   * and replayable wake cursors settle in one SQLite transaction. */
+  applyActorRequest(request: TranscriptActorRequest): unknown {
+    assertTranscriptActorRequest(request);
+    const result = this.applyActorRequestValidated(request);
+    assertTranscriptActorResponse(result);
+    return result;
+  }
+
+  private applyActorRequestValidated(request: TranscriptActorRequest): unknown {
+    if ("requestId" in request) return this.txActorMutation.immediate(request);
+    if (request.op === "needs_import") return this.needsImport(request.sessionId);
+    if (request.op === "import_info") return this.getImportInfo(request.sessionId);
+    if (request.op === "tail") return this.readTail(request.sessionId, request.limit ?? 50);
+    if (request.op === "tail_window")
+      return this.readTailWindow(request.sessionId, {
+        ...request.options,
+        ...(request.options.weightProfile === "v2_snapshot"
+          ? { weigh: v2SnapshotEntryWeight }
+          : request.options.weightProfile === "handoff"
+            ? { weigh: handoffTranscriptEntryWeight }
+            : {}),
+      });
+    if (request.op === "since")
+      return this.readSince(request.sessionId, request.sinceSeq, request.limit ?? 200);
+    if (request.op === "changes_since")
+      return this.readChangesSince(request.sessionId, request.changeSeq, request.limit ?? 200);
+    if (request.op === "hydrated_since")
+      return this.readHydratedSince(
+        request.sessionId,
+        request.sinceSeq,
+        request.limit ?? 100,
+        request.maxBytes,
+      );
+    if (request.op === "before")
+      return this.readBefore(request.sessionId, request.beforeSeq, request.limit ?? 40);
+    if (request.op === "range")
+      return this.readRange(
+        request.sessionId,
+        request.fromSeq,
+        request.toSeq,
+        request.afterSeq ?? request.fromSeq - 1,
+        request.limit ?? 200,
+      );
+    if (request.op === "outline")
+      return this.readTranscriptIndex(
+        request.sessionId,
+        request.afterSeq ?? 0,
+        request.limit ?? 2_000,
+      );
+    if (request.op === "full_entry") return this.getFullEntry(request.sessionId, request.entryId);
+    if (request.op === "last_seq") return this.getLastSeq(request.sessionId);
+    if (request.op === "last_change_seq") return this.getLastChangeSeq(request.sessionId);
+    if (request.op === "last_reset_change_seq")
+      return this.getLastResetChangeSeq(request.sessionId);
+    if (request.op === "count") return this.countEvents(request.sessionId);
+    if (request.op === "summary") {
+      const row = this.db.query(`
+        SELECT last_ts, next_seq FROM transcript_sessions WHERE session_id = ?
+      `).get(request.sessionId) as { last_ts: number | null; next_seq: number } | null;
+      return row
+        ? { lastTs: row.last_ts, seqHighWater: Math.max(0, row.next_seq - 1) }
+        : null;
+    }
+    if (request.op === "pending_wake") return this.pendingActorWake(request.sessionId);
+    return this.ackActorWake(request.sessionId, request.cursor);
+  }
+
+  private actorRequestDigest(
+    request: Extract<TranscriptActorRequest, { requestId: string }>,
+  ): string {
+    return new Bun.CryptoHasher("sha256")
+      .update("opensession.transcript-actor-command.v1\0")
+      .update(canonicalDestinationJson(request))
+      .digest("hex");
+  }
+
+  replayActorRequest(
+    request: Extract<TranscriptActorRequest, { requestId: string }>,
+  ): TranscriptMutationResult<unknown> | undefined {
+    const digest = this.actorRequestDigest(request);
+    const receipt = this.db.query(`
+      SELECT session_id, append_id, request_digest, fence_json, result_json, created_at
+      FROM transcript_append_receipts
+      WHERE session_id = ? AND append_id = ?
+    `).get(request.sessionId, request.requestId) as TranscriptAppendReceiptRow | null;
+    if (!receipt) return undefined;
+    validateTranscriptAppendReceiptRow(receipt);
+    if (receipt.request_digest !== digest)
+      throw new TranscriptAppendConflictError(request.sessionId, request.requestId);
+    const result = {
+      ...(JSON.parse(receipt.result_json as string) as TranscriptMutationResult<unknown>),
+      replay: true,
+    };
+    assertTranscriptActorResponse(result);
+    return result;
+  }
+
+  private applyActorMutationInTx(
+    request: Extract<TranscriptActorRequest, { requestId: string }>,
+  ): TranscriptMutationResult<unknown> {
+    const replay = this.replayActorRequest(request);
+    if (replay) return replay;
+    const digest = this.actorRequestDigest(request);
+
+    const currentEpoch = this.getLastResetChangeSeq(request.sessionId);
+    const beforeChangeSeq = this.getLastChangeSeq(request.sessionId);
+    if (request.expectedEpoch !== undefined && request.expectedEpoch !== currentEpoch)
+      throw new Error(
+        `Transcript epoch fence rejected ${request.sessionId}: expected ${request.expectedEpoch}, current ${currentEpoch}`,
+      );
+
+    let result: unknown;
+    if (request.op === "append" || request.op === "append_destination") {
+      const outcome = this.writeEntriesInTx(request.sessionId, request.entries);
+      this.db.run(`
+        UPDATE transcript_sessions SET
+          imported_at = COALESCE(imported_at, ?),
+          import_src = COALESCE(import_src, 'live-only')
+        WHERE session_id = ?
+      `, [Date.now(), request.sessionId]);
+      result = request.op === "append_destination"
+        ? destinationResult(outcome)
+        : appendResult(outcome);
+    } else if (request.op === "import") {
+      const outcome = this.writeEntriesInTx(request.sessionId, request.entries);
+      if (request.final !== false)
+        this.markImported(request.sessionId, request.src, request.watermark);
+      result = { inserted: outcome.inserted, updated: outcome.updated };
+    } else if (request.op === "replace") {
+      this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [request.sessionId]);
+      this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [request.sessionId]);
+      this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [request.sessionId]);
+      this.db.run(`
+        INSERT INTO transcript_sessions (session_id, next_seq, next_change_seq)
+        VALUES (?, 1, 1)
+        ON CONFLICT(session_id) DO UPDATE SET
+          next_seq = 1,
+          reset_change_seq = transcript_sessions.next_change_seq,
+          next_change_seq = transcript_sessions.next_change_seq + 1
+      `, [request.sessionId]);
+      const outcome = this.writeEntriesInTx(request.sessionId, request.entries);
+      result = { inserted: outcome.inserted, updated: outcome.updated };
+    } else {
+      this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [request.sessionId]);
+      this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [request.sessionId]);
+      this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [request.sessionId]);
+      this.db.run("DELETE FROM transcript_sessions WHERE session_id = ?", [request.sessionId]);
+      result = null;
+    }
+
+    const previousWake = this.pendingActorWake(request.sessionId, true);
+    const cursor = (previousWake?.cursor ?? 0) + 1;
+    const lastChangeSeq = this.getLastChangeSeq(request.sessionId);
+    const resetEpoch = request.op === "delete"
+      ? currentEpoch + 1
+      : this.getLastResetChangeSeq(request.sessionId);
+    const firstChangeSeq = previousWake && previousWake.cursor > previousWake.ackedCursor
+      ? previousWake.firstChangeSeq
+      : Math.min(lastChangeSeq, beforeChangeSeq + 1);
+    this.db.run(`
+      INSERT INTO session_kernel_transcript_wakes
+        (session_id, cursor, acked_cursor, first_change_seq, last_change_seq,
+         reset_epoch, updated_at)
+      VALUES (?, ?, 0, ?, ?, ?, ?)
+      ON CONFLICT(session_id) DO UPDATE SET
+        cursor = excluded.cursor,
+        first_change_seq = CASE
+          WHEN session_kernel_transcript_wakes.cursor > session_kernel_transcript_wakes.acked_cursor
+          THEN session_kernel_transcript_wakes.first_change_seq
+          ELSE excluded.first_change_seq
+        END,
+        last_change_seq = excluded.last_change_seq,
+        reset_epoch = CASE
+          WHEN session_kernel_transcript_wakes.cursor > session_kernel_transcript_wakes.acked_cursor
+          THEN MAX(session_kernel_transcript_wakes.reset_epoch, excluded.reset_epoch)
+          ELSE excluded.reset_epoch
+        END,
+        updated_at = excluded.updated_at
+    `, [
+      request.sessionId,
+      cursor,
+      firstChangeSeq,
+      lastChangeSeq,
+      resetEpoch,
+      Date.now(),
+    ]);
+    const commandResult: TranscriptMutationResult<unknown> = {
+      result,
+      wakeCursor: cursor,
+      replay: false,
+    };
+    const resultJson = canonicalDestinationJson(commandResult);
+    this.db.run(`
+      INSERT INTO transcript_append_receipts
+        (session_id, append_id, request_digest, fence_json, result_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [
+      request.sessionId,
+      request.requestId,
+      digest,
+      canonicalDestinationJson({
+        expectedEpoch: request.expectedEpoch ?? null,
+        generation: request.generation ?? null,
+        runId: request.runId ?? null,
+        turnId: request.turnId ?? null,
+      }),
+      resultJson,
+      Date.now(),
+    ]);
+    return commandResult;
+  }
+
+  pendingActorWake(sessionId: string, includeAcked = false): TranscriptWake | null {
+    const row = this.db.query(`
+      SELECT cursor, acked_cursor, first_change_seq, last_change_seq, reset_epoch,
+        acked_reset_epoch
+      FROM session_kernel_transcript_wakes WHERE session_id = ?
+    `).get(sessionId) as {
+      cursor: number;
+      acked_cursor: number;
+      first_change_seq: number;
+      last_change_seq: number;
+      reset_epoch: number;
+      acked_reset_epoch: number;
+    } | null;
+    if (!row || (!includeAcked && row.cursor <= row.acked_cursor)) return null;
+    return {
+      cursor: Number(row.cursor),
+      ackedCursor: Number(row.acked_cursor),
+      firstChangeSeq: Number(row.first_change_seq),
+      lastChangeSeq: Number(row.last_change_seq),
+      resetEpoch: Number(row.reset_epoch),
+      ackedResetEpoch: Number(row.acked_reset_epoch),
+    };
+  }
+
+  ackActorWake(sessionId: string, cursor: number): boolean {
+    if (!Number.isSafeInteger(cursor) || cursor < 0) return false;
+    const result = this.db.run(`
+      UPDATE session_kernel_transcript_wakes
+      SET acked_cursor = ?, acked_reset_epoch = reset_epoch, updated_at = ?
+      WHERE session_id = ? AND cursor = ? AND acked_cursor < ?
+    `, [cursor, Date.now(), sessionId, cursor, cursor]);
+    return result.changes === 1;
   }
 
   // ── Import (legacy history) ────────────────────────────────────────────────
@@ -1181,10 +1484,7 @@ export class TranscriptStore {
       minUserMessagesWithToolWork: 4,
       maxEntries: 512,
       maxEstimatedBytes: 180_000,
-      weigh: (kind, bytes) =>
-        kind === "user" || kind === "assistant" || kind === "system"
-          ? Math.min(bytes, 8_000)
-          : 0,
+      weigh: handoffTranscriptEntryWeight,
     });
   }
 
@@ -1241,16 +1541,75 @@ export class TranscriptStore {
     return page(rows);
   }
 
+  /** Full-content page for bounded server-side consumers. Blob hydration and
+   * byte accounting happen inside one actor read instead of one RPC per row. */
+  readHydratedSince(
+    sessionId: string,
+    sinceSeq: number,
+    limit = 100,
+    maxBytes = 12 * 1024 * 1024,
+  ): TranscriptHydratedPage {
+    const rows = this.db.query(`
+      SELECT event.seq, event.change_seq,
+        COALESCE(blob.data, event.data) AS data
+      FROM transcript_events event
+      LEFT JOIN transcript_blobs blob
+        ON blob.id = event.full_ref
+       AND blob.session_id = event.session_id
+       AND blob.uuid = event.uuid
+      WHERE event.session_id = ? AND event.seq > ?
+      ORDER BY event.seq LIMIT ?
+    `).all(sessionId, sinceSeq, limit + 1) as Array<{
+      seq: number;
+      change_seq: number;
+      data: string;
+    }>;
+    const entries: SeqEntry[] = [];
+    let bytes = 0;
+    let coveredThroughSeq = sinceSeq;
+    let complete = rows.length <= limit;
+    for (const row of rows.slice(0, limit)) {
+      let entry: TranscriptEntry;
+      try {
+        entry = sanitizeTranscriptMediaEntry(JSON.parse(row.data) as TranscriptEntry);
+      } catch {
+        coveredThroughSeq = row.seq;
+        continue;
+      }
+      const hydrated = { ...entry, seq: row.seq, changeSeq: row.change_seq };
+      const cost = Buffer.byteLength(JSON.stringify(hydrated));
+      if (entries.length > 0 && bytes + cost > maxBytes) {
+        complete = false;
+        break;
+      }
+      entries.push(hydrated);
+      bytes += cost;
+      coveredThroughSeq = row.seq;
+    }
+    return {
+      entries,
+      firstSeq: entries[0]?.seq ?? 0,
+      lastSeq: entries[entries.length - 1]?.seq ?? 0,
+      coveredThroughSeq,
+      complete,
+    };
+  }
+
   /** Complete content-free outline for virtual scrolling. Existing stores
    * backfill only the session being opened, then every write maintains the
    * projection in the same transaction as its canonical row. */
-  readTranscriptIndex(sessionId: string): TranscriptOutline {
+  readTranscriptIndex(
+    sessionId: string,
+    afterSeq = 0,
+    limit = 1_000_000_000,
+  ): TranscriptOutline {
     const rows = this.db
       .query(
         `SELECT uuid, seq, change_seq, ts, render_role, content_length, review_pr_number
-         FROM transcript_outline WHERE session_id = ? ORDER BY seq`
+         FROM transcript_outline WHERE session_id = ? AND seq > ?
+         ORDER BY seq LIMIT ?`
       )
-      .all(sessionId) as Array<{
+      .all(sessionId, afterSeq, limit) as Array<{
       uuid: string;
       seq: number;
       change_seq: number;
@@ -1990,8 +2349,90 @@ function parseDestinationReceiptJson(
   }
 }
 
+function validStoredMutationResult(value: unknown): boolean {
+  if (value === null) return true;
+  if (!isPlainRecord(value)) return false;
+  const nonnegative = (candidate: unknown) =>
+    Number.isSafeInteger(candidate) && (candidate as number) >= 0;
+  if (exactSortedKeys(value, ["inserted", "updated"]))
+    return nonnegative(value.inserted) && nonnegative(value.updated);
+  if (exactSortedKeys(value, ["firstSeq", "inserted", "lastSeq", "updated"]))
+    return nonnegative(value.inserted) && nonnegative(value.updated) &&
+      Number.isSafeInteger(value.firstSeq) && (value.firstSeq as number) >= 1 &&
+      Number.isSafeInteger(value.lastSeq) &&
+      (value.lastSeq as number) >= (value.firstSeq as number);
+  if (!exactSortedKeys(value, ["changes", "firstSeq", "inserted", "lastSeq", "updated"]) ||
+      !Array.isArray(value.changes) || value.changes.length === 0 ||
+      value.changes.length > TRANSCRIPT_DESTINATION_MAX_ENTRIES ||
+      !nonnegative(value.inserted) || !nonnegative(value.updated)) return false;
+  return value.changes.every((change, index) =>
+    isPlainRecord(change) &&
+    exactSortedKeys(change, ["changeSeq", "entryId", "seq"]) &&
+    typeof change.entryId === "string" && change.entryId.length > 0 &&
+    Buffer.byteLength(change.entryId, "utf8") <= 256 &&
+    Number.isSafeInteger(change.seq) && (change.seq as number) >= 1 &&
+    Number.isSafeInteger(change.changeSeq) && (change.changeSeq as number) >= 1 &&
+    (index === 0 ||
+      (change.changeSeq as number) ===
+        ((value.changes as Array<Record<string, unknown>>)[index - 1]!.changeSeq as number) + 1)
+  );
+}
+
+export function validateTranscriptAppendReceiptRow(
+  row: TranscriptAppendReceiptRow,
+): void {
+  try {
+    const sessionId = boundedId(row.session_id, "sessionId", 128);
+    boundedId(row.append_id, "appendId", 128);
+    if (
+      typeof row.request_digest !== "string" ||
+      !RAW_SHA256_DIGEST.test(row.request_digest) ||
+      !Number.isSafeInteger(row.created_at) ||
+      (row.created_at as number) < 0
+    ) throw new TypeError("Invalid durable transcript receipt metadata");
+    const fence = parseDestinationReceiptJson(
+      row.fence_json,
+      "durableFence",
+      DESTINATION_RECEIPT_FENCE_MAX_BYTES,
+    );
+    const result = parseDestinationReceiptJson(
+      row.result_json,
+      "durableResult",
+      TRANSCRIPT_DESTINATION_MAX_BYTES,
+    );
+    if (
+      canonicalDestinationJson(fence) !== row.fence_json ||
+      canonicalDestinationJson(result) !== row.result_json
+    ) throw new TypeError("Non-canonical durable transcript receipt");
+    if (isPlainRecord(fence) && Object.hasOwn(fence, "sessionId")) {
+      decodeDestinationReceiptRow(row);
+      return;
+    }
+    if (
+      !isPlainRecord(fence) ||
+      !exactSortedKeys(fence, ["expectedEpoch", "generation", "runId", "turnId"]) ||
+      (fence.expectedEpoch !== null &&
+        (!Number.isSafeInteger(fence.expectedEpoch) || (fence.expectedEpoch as number) < 0)) ||
+      (fence.generation !== null &&
+        (!Number.isSafeInteger(fence.generation) || (fence.generation as number) < 0)) ||
+      (fence.runId !== null && boundedId(fence.runId, "runId", 128) !== fence.runId) ||
+      (fence.turnId !== null && boundedId(fence.turnId, "turnId", 128) !== fence.turnId) ||
+      !isPlainRecord(result) ||
+      !exactSortedKeys(result, ["replay", "result", "wakeCursor"]) ||
+      result.replay !== false ||
+      !Number.isSafeInteger(result.wakeCursor) ||
+      (result.wakeCursor as number) < 1 ||
+      !validStoredMutationResult(result.result)
+    ) throw new TypeError(`Invalid actor transcript receipt for ${sessionId}`);
+    assertTranscriptActorResponse(result);
+  } catch (error) {
+    if (error instanceof TranscriptAppendReceiptCorruptError) throw error;
+    throw new TranscriptAppendReceiptCorruptError();
+  }
+}
+
 function decodeDestinationReceiptRow(
-  row: DestinationReceiptRow,
+  row: TranscriptAppendReceiptRow,
 ): DestinationTranscriptAppendReceipt {
   try {
     const sessionId = boundedId(row.session_id, "sessionId", 128);
@@ -2347,6 +2788,22 @@ function canonicalDestinationJson(value: unknown): string {
         `${JSON.stringify(key)}:${canonicalDestinationJson(record[key])}`,
     )
     .join(",")}}`;
+}
+
+function appendResult(outcome: WriteOutcome): AppendResult | null {
+  if (outcome.affected.length === 0) return null;
+  let firstSeq = outcome.affected[0].seq;
+  let lastSeq = firstSeq;
+  for (const entry of outcome.affected) {
+    firstSeq = Math.min(firstSeq, entry.seq);
+    lastSeq = Math.max(lastSeq, entry.seq);
+  }
+  return {
+    firstSeq,
+    lastSeq,
+    inserted: outcome.inserted,
+    updated: outcome.updated,
+  };
 }
 
 function destinationResult(

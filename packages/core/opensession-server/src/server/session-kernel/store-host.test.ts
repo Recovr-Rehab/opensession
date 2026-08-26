@@ -47,6 +47,7 @@ describe("per-session session kernel storage", () => {
     expect(host.central.hasSessionDurableState("new-session")).toBe(false);
     expect(host.central.sessionPlacement("new-session")).toMatchObject({
       placement: "isolated",
+      transcriptAuthority: "actor",
       needsScan: true,
     });
     expect(host.storeForSession("new-session").runState("new-session")).toMatchObject({
@@ -60,6 +61,160 @@ describe("per-session session kernel storage", () => {
     );
     expect(isolated.runState("new-session").state).toBe("running");
     isolated.close();
+  });
+
+  test("rejects an oversized transcript before claiming placement", () => {
+    const path = paths();
+    const sessionId = "oversized-transcript";
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    expect(() => host.transcript({
+      op: "append",
+      sessionId,
+      requestId: "oversized",
+      entries: Array.from({ length: 10_001 }, (_, index) => ({
+        id: String(index),
+        type: "user" as const,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        content: "x",
+      })),
+    })).toThrow("too many entries");
+    expect(host.central.sessionPlacement(sessionId)).toBeUndefined();
+    host.close();
+  });
+
+  test("publishes isolated placement before a new session's first transcript write", () => {
+    const path = paths();
+    const sessionId = "transcript-first-session";
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    expect(host.transcript({
+      op: "append",
+      sessionId,
+      requestId: "append-first",
+      entries: [{
+        id: "first",
+        type: "user",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        content: "hello",
+      }],
+    })).toMatchObject({ result: { inserted: 1 } });
+    expect(host.central.sessionPlacement(sessionId)).toMatchObject({
+      placement: "isolated",
+      transcriptAuthority: "actor",
+    });
+    expect(host.central.hasSessionDurableState(sessionId)).toBe(false);
+    host.close();
+  });
+
+  test("stores kernel and transcript tables in the same actor database", () => {
+    const path = paths();
+    const sessionId = "co-located-transcript";
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    host.call("setRunState", [{ sessionId, state: "idle", event: "seed" }]);
+
+    const appended = host.transcript({
+      op: "append",
+      sessionId,
+      requestId: "append-one",
+      entries: [{
+        id: "entry-one",
+        type: "user",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        content: "hello",
+      }],
+    });
+    expect(appended).toMatchObject({
+      replay: false,
+      result: { firstSeq: 1, lastSeq: 1, inserted: 1, updated: 0 },
+    });
+    expect(host.transcript({ op: "tail", sessionId, limit: 10 })).toMatchObject({
+      firstSeq: 1,
+      lastSeq: 1,
+      entries: [{ id: "entry-one", seq: 1 }],
+    });
+    expect(host.transcript({
+      op: "append",
+      sessionId,
+      requestId: "append-one",
+      entries: [{
+        id: "entry-one",
+        type: "user",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        content: "hello",
+      }],
+    })).toMatchObject({ replay: true });
+    host.close();
+
+    const actorDb = new Database(
+      sessionKernelSessionDbPath(sessionId, path.isolated),
+      { readonly: true },
+    );
+    const tables = (actorDb.query(
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+    ).all() as Array<{ name: string }>).map(({ name }) => name);
+    expect(tables).toContain("session_kernel_state");
+    expect(tables).toContain("transcript_events");
+    expect(actorDb.query(
+      "SELECT COUNT(*) AS count FROM transcript_events WHERE session_id = ?",
+    ).get(sessionId)).toEqual({ count: 1 });
+    actorDb.close();
+
+    const catalog = new Database(path.central, { readonly: true });
+    expect(catalog.query(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'transcript_events'",
+    ).get()).toBeNull();
+    catalog.close();
+  });
+
+  test("fences destination appends to the current run and Agent Host turn", () => {
+    const path = paths();
+    const sessionId = "destination-fence";
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const kernel = host.storeForSession(sessionId, true);
+    expect(kernel.applyRunEvent({
+      sessionId,
+      event: "prompt",
+      runKey: "run-current",
+    }).accepted).toBe(true);
+    expect(kernel.registerAgentHostPlan({
+      op: "register_plan",
+      registrationId: "registration-current",
+      sessionId,
+      runId: "run-current",
+      turnId: "turn-current",
+      generation: 1,
+      planHash: `sha256:${"a".repeat(64)}`,
+    }).accepted).toBe(true);
+    const request = {
+      op: "append_destination" as const,
+      sessionId,
+      requestId: "transcript-destination:append-current",
+      appendId: "append-current",
+      runId: "run-current",
+      turnId: "turn-current",
+      generation: 1,
+      entries: [{
+        id: "destination-entry",
+        type: "assistant" as const,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        content: "current",
+      }],
+    };
+    expect(host.transcript(request)).toMatchObject({
+      result: { firstSeq: 1, lastSeq: 1 },
+    });
+    expect(kernel.applyRunEvent({
+      sessionId,
+      event: "run_failed",
+      runKey: "run-current",
+    }).accepted).toBe(true);
+    expect(host.transcript(request)).toMatchObject({ replay: true });
+    for (const stale of [
+      { ...request, requestId: "stale-run", appendId: "stale-run", runId: "run-old" },
+      { ...request, requestId: "stale-turn", appendId: "stale-turn", turnId: "turn-old" },
+      { ...request, requestId: "stale-generation", appendId: "stale-generation", generation: 2 },
+    ]) expect(() => host.transcript(stale)).toThrow("fence rejected");
+    expect(host.transcript({ op: "count", sessionId })).toBe(1);
+    host.close();
   });
 
   test("keeps a legacy session on the central database without dual writing", () => {
@@ -118,8 +273,20 @@ describe("per-session session kernel storage", () => {
     expect(host.migrateLegacySessions(1)).toBe(1);
     expect(host.central.sessionPlacement(sessionId)).toMatchObject({
       placement: "isolated",
+      transcriptAuthority: "shared",
       needsScan: true,
     });
+    expect(() => host.transcript({
+      op: "append",
+      sessionId,
+      requestId: "not-authoritative",
+      entries: [{
+        id: "blocked",
+        type: "user",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        content: "blocked",
+      }],
+    })).toThrow("no isolated actor transcript placement");
     expect(host.central.hasSessionDurableState(sessionId)).toBe(false);
     expect(host.central.isolatedOutboxSessionId(outboxId)).toBe(sessionId);
     expect(host.storeForSession(sessionId).runState(sessionId)).toMatchObject({
@@ -138,6 +305,39 @@ describe("per-session session kernel storage", () => {
     expect(reopened.storeForSession(sessionId).runState(sessionId).state).toBe("running");
     expect(reopened.central.hasSessionDurableState(sessionId)).toBe(false);
     reopened.close();
+  });
+
+  test("publishes transcript authority last with an immutable migration receipt", () => {
+    const path = paths();
+    const sessionId = "transcript-cutover";
+    const seed = new SessionKernelStore(path.central);
+    seed.setRunState({ sessionId, state: "idle", event: "seed" });
+    seed.close();
+
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    expect(host.migrateLegacySessions(1)).toBe(1);
+    expect(host.central.sessionPlacement(sessionId)?.transcriptAuthority).toBe("shared");
+
+    const published = host.central.publishActorTranscriptAuthority(
+      sessionId,
+      "sha256:verified-target",
+    );
+    expect(published).toMatchObject({
+      transcriptAuthority: "actor",
+      transcriptMigrationReceipt: "sha256:verified-target",
+    });
+    expect(host.central.actorTranscriptSessionIds()).toEqual([sessionId]);
+    expect(() => host.central.publishActorTranscriptAuthority(
+      sessionId,
+      "sha256:other-target",
+    )).toThrow("receipt conflict");
+
+    expect(host.central.rollbackActorTranscriptAuthority(sessionId)).toMatchObject({
+      transcriptAuthority: "shared",
+      transcriptMigrationReceipt: "sha256:verified-target",
+    });
+    expect(host.central.actorTranscriptSessionIds()).toEqual([]);
+    host.close();
   });
 
   test("quarantines one unreadable session database without blocking global stats", () => {

@@ -88,7 +88,7 @@ import {
   transcriptLineUser,
   storeAppendUserLineEarly,
 } from "./transcript-persistence";
-import { transcriptStore } from "./transcript-store";
+import { transcript } from "./actor-transcript";
 import { transcriptForwarder } from "./transcript-forward";
 import { gitIdentityEnv } from "./shared/user-mappings";
 import { providerAccountUser } from "./session-actors";
@@ -1671,7 +1671,9 @@ async function* runPiAttempt(
           kind: journal.kind,
         })
       );
-      storeAppendUserLineEarly(journal.osSessionId, userLine);
+      await storeAppendUserLineEarly(journal.osSessionId, userLine, {
+        required: true,
+      });
     }
 
     const policy = runToolPolicy({
@@ -2011,7 +2013,7 @@ async function* runPiAttempt(
     // record is the only account of it (previous runner's equivalent can be read
     // back from its config file). Recorded once per session, then again only
     // when the content hash moves.
-    logStandingJson({
+    await logStandingJson({
       sessionId: unifiedSessionId,
       turnId: opts.promptEntryId || opts.startToken,
       source: "mcp-servers",
@@ -2035,7 +2037,7 @@ async function* runPiAttempt(
         ...(dialOracleAgent ? { oracleTool: dialOracleAgent } : {}),
       },
     });
-    logStandingContext({
+    await logStandingContext({
       sessionId: unifiedSessionId,
       turnId: opts.promptEntryId || opts.startToken,
       source: "instructions",
@@ -2108,7 +2110,7 @@ async function* runPiAttempt(
       try {
         const tail = (transcriptForwarder()
           ? opts.seedTranscriptEntries || []
-          : transcriptStore().readTail(unifiedSessionId, 200).entries)
+          : (await transcript.readTail(unifiedSessionId, 200)).entries)
           // This turn's own prompt was already early-persisted — the model
           // gets it as the actual prompt, not as history.
           .filter((e) => e.id !== String(userLine.uuid));
@@ -2167,7 +2169,7 @@ async function* runPiAttempt(
     // answers what preceded the session's initial message.
     if (!opts.sessionId) {
       const activeToolNames = new Set(session.getActiveToolNames());
-      logStandingContext({
+      await logStandingContext({
         sessionId: unifiedSessionId,
         turnId: opts.promptEntryId || opts.startToken,
         source: "session-start",
@@ -2909,9 +2911,9 @@ export async function runPiSmokeTurn(
   const enabled = piEngineEnabled();
   const sessionId = `os-test-pi-${Date.now().toString(36)}`;
   const started = Date.now();
-  const storeRowsFor = (id: string): number => {
+  const storeRowsFor = async (id: string): Promise<number> => {
     try {
-      return transcriptStore().getLastSeq(id);
+      return await transcript.getLastSeq(id);
     } catch {
       return 0;
     }
@@ -3001,6 +3003,6 @@ export async function runPiSmokeTurn(
     // Store rows prove the write path for REAL turns only; the disabled dry
     // path must not open the transcript store at all (a test/scratch process
     // would otherwise cold-open the live DB just to read a zero).
-    storeRows: enabled ? storeRowsFor(sessionId) : 0,
+    storeRows: enabled ? await storeRowsFor(sessionId) : 0,
   };
 }

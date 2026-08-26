@@ -268,7 +268,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 30;
+export const SESSION_KERNEL_SCHEMA_VERSION = 31;
 export const SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS = 64;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
@@ -624,12 +624,26 @@ function migrateQuarantineProjectionSchema30(
 ): void {
   if (schemaVersion >= 30) return;
   const tx = db.transaction(() => {
-    const columns = db.query(
-      "PRAGMA table_info(session_kernel_sparse_projections)",
-    ).all() as Array<{ name: string }>;
-    if (!columns.some((column) => column.name === "quarantine_state"))
-      db.exec(`ALTER TABLE session_kernel_sparse_projections
-        ADD COLUMN quarantine_state TEXT`);
+    const quarantine = (db
+      .query("PRAGMA table_info(session_kernel_sparse_projections)")
+      .all() as Array<{
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+      }>).find((column) => column.name === "quarantine_state");
+    if (!quarantine) {
+      db.exec(`
+        ALTER TABLE session_kernel_sparse_projections
+          ADD COLUMN quarantine_state TEXT;
+      `);
+    } else if (
+      quarantine.type !== "TEXT" ||
+      quarantine.notnull !== 0 ||
+      quarantine.dflt_value !== null
+    ) {
+      throw new Error("Schema 30 requires exact quarantine projection storage");
+    }
     db.exec(`
       UPDATE session_kernel_sparse_projections SET dirty = 1;
       PRAGMA user_version = 30;
@@ -858,6 +872,99 @@ function migrateAgentOperationSchema28(
       CREATE INDEX idx_skao_prune ON session_kernel_agent_operations(session_id,terminal_at) WHERE state='settled';
       PRAGMA user_version = 28;
     `);
+  });
+  tx.immediate();
+}
+
+function migrateTranscriptAuthoritySchema31(
+  db: Database,
+  schemaVersion: number,
+): void {
+  if (schemaVersion >= 31) return;
+  const tx = db.transaction(() => {
+    type Column = {
+      name: string;
+      type: string;
+      notnull: number;
+      dflt_value: string | null;
+    };
+    const columns = new Map(
+      (db.query("PRAGMA table_info(session_kernel_placements)").all() as Column[])
+        .map((column) => [column.name, column]),
+    );
+    const authority = columns.get("transcript_authority");
+    if (!authority) {
+      db.exec(`
+        ALTER TABLE session_kernel_placements
+          ADD COLUMN transcript_authority TEXT NOT NULL DEFAULT 'shared'
+          CHECK (transcript_authority IN ('shared', 'actor'));
+      `);
+    } else if (
+      authority.type !== "TEXT" ||
+      authority.notnull !== 1 ||
+      authority.dflt_value !== "'shared'"
+    ) {
+      throw new Error("Schema 31 requires exact transcript authority storage");
+    }
+
+    const receipt = columns.get("transcript_migration_receipt");
+    if (!receipt) {
+      db.exec(`
+        ALTER TABLE session_kernel_placements
+          ADD COLUMN transcript_migration_receipt TEXT;
+      `);
+    } else if (
+      receipt.type !== "TEXT" ||
+      receipt.notnull !== 0 ||
+      receipt.dflt_value !== null
+    ) {
+      throw new Error("Schema 31 requires exact transcript migration receipts");
+    }
+
+    const published = columns.get("transcript_published_at");
+    if (!published) {
+      db.exec(`
+        ALTER TABLE session_kernel_placements
+          ADD COLUMN transcript_published_at INTEGER;
+      `);
+    } else if (
+      published.type !== "INTEGER" ||
+      published.notnull !== 0 ||
+      published.dflt_value !== null
+    ) {
+      throw new Error("Schema 31 requires exact transcript publication storage");
+    }
+
+    const placementSql = (
+      db.query(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='session_kernel_placements'",
+      ).get() as { sql: string } | null
+    )?.sql;
+    if (
+      !placementSql ||
+      !/CHECK\s*\(\s*transcript_authority\s+IN\s*\(\s*'shared'\s*,\s*'actor'\s*\)\s*\)/i.test(
+        placementSql,
+      )
+    ) {
+      throw new Error("Schema 31 requires constrained transcript authority storage");
+    }
+
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_skp_transcript_authority
+        ON session_kernel_placements(transcript_authority, session_id);
+
+    `);
+    const indexColumns = db
+      .query("PRAGMA index_info(idx_skp_transcript_authority)")
+      .all() as Array<{ seqno: number; name: string }>;
+    if (
+      indexColumns.length !== 2 ||
+      indexColumns[0]?.name !== "transcript_authority" ||
+      indexColumns[1]?.name !== "session_id"
+    ) {
+      throw new Error("Schema 31 requires exact transcript authority index");
+    }
+    db.exec("PRAGMA user_version = 31");
   });
   tx.immediate();
 }
@@ -1092,6 +1199,9 @@ const SESSION_KERNEL_SESSION_TABLES = [
 export type DurableSessionPlacement = {
 	sessionId: string;
 	placement: "isolated";
+  transcriptAuthority: "shared" | "actor";
+  transcriptMigrationReceipt?: string;
+  transcriptPublishedAt?: number;
 	needsScan: boolean;
 	nextTimerAt?: number;
 	nextOutboxAt?: number;
@@ -1587,6 +1697,7 @@ export class SessionKernelStore {
     migrateAgentOperationSchema28(this.db, schemaVersion);
     migrateSparseProjectionSchema29(this.db, schemaVersion);
     migrateQuarantineProjectionSchema30(this.db, schemaVersion);
+    migrateTranscriptAuthoritySchema31(this.db, schemaVersion);
     assertAgentOperationSchema28(this.db);
     assertAgentOperationRows28(this.db);
 		if (path !== ":memory:") {
@@ -2409,6 +2520,31 @@ export class SessionKernelStore {
       this.dirtyChangeSessions.add(input.sessionId);
     }
     return result;
+  }
+
+  assertTranscriptDestinationFence(input: {
+    sessionId: string;
+    runId: string;
+    turnId: string;
+    generation: number;
+  }): void {
+    const run = this.runState(input.sessionId);
+    if (
+      run.currentRunId !== input.runId || run.generation !== input.generation ||
+      !["starting", "running", "ask_blocked", "interrupted", "reattaching"].includes(run.state)
+    ) throw new Error(`Transcript destination run fence rejected ${input.sessionId}`);
+    const plan = decodeDurableAgentHostPlan(
+      input.sessionId,
+      this.db.query(
+        `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
+                host_id, host_generation_high_water, supervisor_high_water
+         FROM session_kernel_agent_host_plan WHERE session_id = ?`,
+      ).get(input.sessionId) as Record<string, unknown> | null,
+    );
+    if (
+      !plan || plan.runId !== input.runId ||
+      plan.generation !== input.generation || plan.turnId !== input.turnId
+    ) throw new Error(`Transcript destination turn fence rejected ${input.sessionId}`);
   }
 
   registerAgentHostPlan(
@@ -6065,11 +6201,16 @@ export class SessionKernelStore {
 
 	sessionPlacement(sessionId: string): DurableSessionPlacement | undefined {
 		const row = this.db.query(`
-			SELECT session_id, placement, needs_scan, next_timer_at, next_outbox_at, updated_at
+			SELECT session_id, placement, transcript_authority,
+                   transcript_migration_receipt, transcript_published_at,
+                   needs_scan, next_timer_at, next_outbox_at, updated_at
 			FROM session_kernel_placements WHERE session_id = ?
 		`).get(sessionId) as {
 			session_id: string;
 			placement: "isolated";
+      transcript_authority: "shared" | "actor";
+      transcript_migration_receipt: string | null;
+      transcript_published_at: number | null;
 			needs_scan: number;
 			next_timer_at: number | null;
 			next_outbox_at: number | null;
@@ -6079,6 +6220,13 @@ export class SessionKernelStore {
 		return {
 			sessionId: row.session_id,
 			placement: row.placement,
+      transcriptAuthority: row.transcript_authority,
+      ...(row.transcript_migration_receipt === null
+        ? {}
+        : { transcriptMigrationReceipt: row.transcript_migration_receipt }),
+      ...(row.transcript_published_at === null
+        ? {}
+        : { transcriptPublishedAt: Number(row.transcript_published_at) }),
 			needsScan: row.needs_scan === 1,
 			...(row.next_timer_at === null ? {} : { nextTimerAt: Number(row.next_timer_at) }),
 			...(row.next_outbox_at === null ? {} : { nextOutboxAt: Number(row.next_outbox_at) }),
@@ -6099,13 +6247,160 @@ export class SessionKernelStore {
 			.filter(Boolean);
 	}
 
+  actorTranscriptSessionIds(
+    limit = 100,
+    afterSessionId = "",
+  ): string[] {
+    return (this.db.query(`
+      SELECT session_id FROM session_kernel_placements
+      WHERE placement = 'isolated'
+        AND transcript_authority = 'actor'
+        AND session_id > ?
+      ORDER BY session_id LIMIT ?
+    `).all(afterSessionId, Math.max(1, limit)) as Array<{ session_id: string }>)
+      .map((row) => row.session_id);
+  }
+
+  transcriptMigrationSessionIds(
+    limit = 1_000,
+    afterSessionId = "",
+  ): string[] {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
+      throw new Error("Invalid transcript migration session limit");
+    return (this.db.query(`
+      SELECT session_id FROM (
+        SELECT session_id FROM session_kernel_tombstones
+        UNION SELECT session_id FROM session_kernel_quarantine
+        UNION SELECT session_id FROM session_kernel_state
+        UNION SELECT session_id FROM session_kernel_creation
+        UNION SELECT session_id FROM session_kernel_asks
+        UNION SELECT session_id FROM session_kernel_delivery
+        UNION SELECT session_id FROM session_kernel_turn
+        UNION SELECT session_id FROM session_kernel_turn_projections
+        UNION SELECT session_id FROM session_kernel_commands
+        UNION SELECT session_id FROM session_kernel_changes
+        UNION SELECT session_id FROM session_kernel_timers
+        UNION SELECT session_id FROM session_kernel_outbox
+        UNION SELECT session_id FROM session_kernel_placements
+          WHERE placement = 'isolated' AND transcript_authority = 'shared'
+      ) candidates
+      WHERE session_id > ?
+      ORDER BY session_id LIMIT ?
+    `).all(afterSessionId, limit) as Array<{ session_id: string }>)
+      .map((row) => row.session_id);
+  }
+
+  publishActorTranscriptAuthorities(
+    entries: ReadonlyArray<{ sessionId: string; migrationReceipt: string }>,
+  ): void {
+    const publish = this.db.transaction(() => {
+      for (const { sessionId, migrationReceipt } of entries) {
+        if (!migrationReceipt || Buffer.byteLength(migrationReceipt) > 16 * 1024)
+          throw new Error("Invalid transcript migration receipt");
+        const existing = this.sessionPlacement(sessionId);
+        if (!existing || existing.placement !== "isolated")
+          throw new Error(`Session ${sessionId} has no isolated placement`);
+        if (
+          existing.transcriptAuthority === "actor" &&
+          existing.transcriptMigrationReceipt !== migrationReceipt
+        ) throw new Error(`Session ${sessionId} transcript authority receipt conflict`);
+      }
+      const now = Date.now();
+      for (const { sessionId, migrationReceipt } of entries) {
+        const existing = this.sessionPlacement(sessionId)!;
+        if (existing.transcriptAuthority === "actor") continue;
+        const result = this.db.run(`
+          UPDATE session_kernel_placements
+          SET transcript_authority = 'actor', transcript_migration_receipt = ?,
+              transcript_published_at = ?, needs_scan = 1, updated_at = ?
+          WHERE session_id = ? AND placement = 'isolated'
+            AND transcript_authority = 'shared'
+        `, [migrationReceipt, now, now, sessionId]);
+        if (result.changes !== 1)
+          throw new Error(`Session ${sessionId} transcript authority publication raced`);
+      }
+    });
+    publish.immediate();
+  }
+
+  publishActorTranscriptAuthority(
+    sessionId: string,
+    migrationReceipt: string,
+  ): DurableSessionPlacement {
+    if (!migrationReceipt || Buffer.byteLength(migrationReceipt) > 16 * 1024)
+      throw new Error("Invalid transcript migration receipt");
+    const existing = this.sessionPlacement(sessionId);
+    if (!existing) throw new Error(`Session ${sessionId} has no isolated placement`);
+    if (existing.transcriptAuthority === "actor") {
+      if (existing.transcriptMigrationReceipt !== migrationReceipt)
+        throw new Error(`Session ${sessionId} transcript authority receipt conflict`);
+      return existing;
+    }
+    const result = this.db.run(`
+      UPDATE session_kernel_placements
+      SET transcript_authority = 'actor', transcript_migration_receipt = ?,
+          transcript_published_at = ?, needs_scan = 1, updated_at = ?
+      WHERE session_id = ? AND placement = 'isolated'
+        AND transcript_authority = 'shared'
+    `, [migrationReceipt, Date.now(), Date.now(), sessionId]);
+    if (result.changes !== 1)
+      throw new Error(`Session ${sessionId} transcript authority publication raced`);
+    return this.sessionPlacement(sessionId)!;
+  }
+
+  rollbackActorTranscriptAuthorities(sessionIds: readonly string[]): void {
+    const rollback = this.db.transaction(() => {
+      const now = Date.now();
+      for (const sessionId of sessionIds) {
+        const result = this.db.run(`
+          UPDATE session_kernel_placements
+          SET transcript_authority = 'shared', transcript_published_at = NULL,
+              needs_scan = 1, updated_at = ?
+          WHERE session_id = ? AND placement = 'isolated'
+            AND transcript_authority = 'actor'
+        `, [now, sessionId]);
+        if (result.changes !== 1)
+          throw new Error(`Session ${sessionId} has no actor transcript authority`);
+      }
+    });
+    rollback.immediate();
+  }
+
+  rollbackActorTranscriptAuthority(sessionId: string): DurableSessionPlacement {
+    const result = this.db.run(`
+      UPDATE session_kernel_placements
+      SET transcript_authority = 'shared', transcript_published_at = NULL,
+          needs_scan = 1, updated_at = ?
+      WHERE session_id = ? AND placement = 'isolated'
+        AND transcript_authority = 'actor'
+    `, [Date.now(), sessionId]);
+    if (result.changes !== 1)
+      throw new Error(`Session ${sessionId} has no actor transcript authority`);
+    return this.sessionPlacement(sessionId)!;
+  }
+
+  claimIsolatedSessionForTranscriptMigration(sessionId: string): DurableSessionPlacement {
+    if (this.hasSessionDurableState(sessionId))
+      throw new Error(`Session ${sessionId} still has central kernel state`);
+    this.db.run(`
+      INSERT INTO session_kernel_placements
+        (session_id, placement, transcript_authority, needs_scan, updated_at)
+      VALUES (?, 'isolated', 'shared', 1, ?)
+      ON CONFLICT(session_id) DO NOTHING
+    `, [sessionId, Date.now()]);
+    const placement = this.sessionPlacement(sessionId);
+    if (!placement || placement.placement !== "isolated")
+      throw new Error(`Session ${sessionId} isolated migration placement was not persisted`);
+    return placement;
+  }
+
 	claimIsolatedSession(sessionId: string): DurableSessionPlacement {
 		if (this.hasSessionDurableState(sessionId))
 			throw new Error(`Session ${sessionId} already has central kernel state`);
 		this.db.run(`
 			INSERT INTO session_kernel_placements
-				(session_id, placement, needs_scan, updated_at)
-			VALUES (?, 'isolated', 1, ?)
+				(session_id, placement, transcript_authority, needs_scan, updated_at)
+			VALUES (?, 'isolated', 'actor', 1, ?)
 			ON CONFLICT(session_id) DO NOTHING
 		`, [sessionId, Date.now()]);
 		const placement = this.sessionPlacement(sessionId);
@@ -6393,11 +6688,19 @@ export type SessionKernelStoreApi = Omit<
 	| "hasSessionDurableState"
 	| "hasPendingSteers"
 	| "hasCreationBranchDeadLetters"
+	| "assertTranscriptDestinationFence"
 	| "legacySessionIds"
 	| "migrateLegacySession"
 	| "sessionPlacement"
 	| "isolatedSessionPlacements"
+	| "actorTranscriptSessionIds"
+	| "transcriptMigrationSessionIds"
+	| "publishActorTranscriptAuthority"
+	| "publishActorTranscriptAuthorities"
+	| "rollbackActorTranscriptAuthority"
+	| "rollbackActorTranscriptAuthorities"
 	| "claimIsolatedSession"
+	| "claimIsolatedSessionForTranscriptMigration"
 	| "markIsolatedSessionDirty"
 	| "settleIsolatedSessionWake"
 	| "isolatedWakeCandidates"

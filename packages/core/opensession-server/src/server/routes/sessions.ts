@@ -7,6 +7,7 @@
  */
 
 import { executeSessionProjection } from "../session-projection-executor";
+import { transcriptSearchWorkerArgv } from "../../runner-host/exe";
 import { requestUser, type RouteContext } from "./context";
 import {
 	cancelAgentRunAndWait,
@@ -30,7 +31,10 @@ import {
 	type WorkspaceGroup,
 } from "@tellahq/opensession-protocol/workspace-group";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
-import { transcriptDbPath, transcriptStore } from "../transcript-store";
+import {
+  deleteSessionTranscript,
+  transcript,
+} from "../actor-transcript";
 import { clearSessionFileArchive } from "../plain-archive";
 import {
 	editPrReviewers,
@@ -680,68 +684,86 @@ export function archivedIndexRow(
  * when nothing matches, which we treat as "no hits", not an error. Chunked so a
  * very long file list can't overflow the argv limit.
  */
+type StoredTranscriptSearchExhaustion =
+	| "sessions"
+	| "rows"
+	| "time"
+	| "matches"
+	| "error"
+	| null;
+
 interface StoredTranscriptSearchResult {
 	matches: Array<{ id: string; snippet: string }>;
 	searchedSessions: number;
+	candidateRows: number;
+	exhausted: StoredTranscriptSearchExhaustion;
 }
 
-/**
- * Search transcript v2 on a read-only child process. Bun's SQLite API is
- * synchronous, so doing this in the coordinator would pause sockets and every
- * other request for the duration of a rare-query scan.
- */
+/** Global search uses bounded read-only handles in a child process. It never
+ * queues synchronous SQLite scans through authoritative actor mailboxes. */
 async function searchStoredTranscripts(
 	query: string,
 	sessionIds: string[],
 	signal?: AbortSignal,
 ): Promise<StoredTranscriptSearchResult> {
-	if (!sessionIds.length || !existsSync(transcriptDbPath()))
-		return { matches: [], searchedSessions: 0 };
+	if (sessionIds.length === 0)
+		return { matches: [], searchedSessions: 0, candidateRows: 0, exhausted: null };
 	const proc = Bun.spawn(
-		[process.execPath, `${import.meta.dir}/../transcript-search-worker.ts`],
-		{
-			stdin: "pipe",
-			stdout: "pipe",
-			stderr: "pipe",
-			timeout: 10_000,
-		},
+		transcriptSearchWorkerArgv(
+			process.execPath,
+			`${import.meta.dir}/../transcript-search-worker.ts`,
+		),
+		{ stdin: "pipe", stdout: "pipe", stderr: "pipe", timeout: 6_000 },
 	);
 	const abort = () => proc.kill();
-	if (signal?.aborted) {
-		abort();
-		await proc.exited;
-		return { matches: [], searchedSessions: 0 };
-	}
+	if (signal?.aborted) abort();
 	signal?.addEventListener("abort", abort, { once: true });
-	proc.stdin.write(
-		JSON.stringify({ dbPath: transcriptDbPath(), query, sessionIds, maxMatches: 50, }),
-	);
+	proc.stdin.write(JSON.stringify({
+		query,
+		sessionIds,
+		maxMatches: 50,
+		maxSessions: 250,
+		maxRows: 6_000,
+		maxMs: 5_000,
+	}));
 	proc.stdin.end();
-	let output = "";
-	let error = "";
-	let code = -1;
 	try {
-		[output, error, code] = await Promise.all([
+		const [output, error, code] = await Promise.all([
 			new Response(proc.stdout).text(),
 			new Response(proc.stderr).text(),
 			proc.exited,
 		]);
-	} finally {
-		signal?.removeEventListener("abort", abort);
-	}
-	if (code !== 0) {
-		if (!signal?.aborted)
-			console.warn(`[transcript-search] store worker failed: ${error.trim().slice(0, 300)}`,);
-		return { matches: [], searchedSessions: 0 };
-	}
-	try {
+		if (code !== 0 || signal?.aborted) {
+			if (!signal?.aborted)
+				console.warn(`[transcript-search] worker failed: ${error.trim().slice(0, 300)}`);
+			return {
+				matches: [],
+				searchedSessions: 0,
+				candidateRows: 0,
+				exhausted: "error",
+			};
+		}
 		const parsed = JSON.parse(output) as StoredTranscriptSearchResult;
+		const exhausted = ["sessions", "rows", "time", "matches"].includes(
+			String(parsed.exhausted),
+		)
+			? parsed.exhausted
+			: null;
 		return {
-			matches: Array.isArray(parsed.matches) ? parsed.matches : [],
+			matches: Array.isArray(parsed.matches) ? parsed.matches.slice(0, 50) : [],
 			searchedSessions: Number(parsed.searchedSessions) || 0,
+			candidateRows: Number(parsed.candidateRows) || 0,
+			exhausted,
 		};
 	} catch {
-		return { matches: [], searchedSessions: 0 };
+		return {
+			matches: [],
+			searchedSessions: 0,
+			candidateRows: 0,
+			exhausted: "error",
+		};
+	} finally {
+		signal?.removeEventListener("abort", abort);
 	}
 }
 
@@ -1241,7 +1263,7 @@ export async function handleSessionsRoutes(
 			// consult it first; unknown ids and store failures fall through to
 			// the legacy merged-transcript scan unchanged.
 			try {
-				const full = transcriptStore().getFullEntry(session.id, entryId);
+				const full = await transcript.getFullEntry(session.id, entryId);
 				// content keeps its exact legacy shape; toolInput/images are
 				// additive (existing clients ignore them) — they carry the
 				// unstripped fields the bounded store row summarized away.
@@ -1334,9 +1356,9 @@ export async function handleSessionsRoutes(
 			// mirror can't resolve the image, decode it from there. Guarded on the
 			// DB file existing — not the flag — so images keep serving through
 			// kill-switch windows.
-			if (!img && existsSync(transcriptDbPath())) {
+			if (!img) {
 				try {
-					const src = transcriptStore().getFullEntry(session.id, entryId)
+					const src = (await transcript.getFullEntry(session.id, entryId))
 						?.images?.[idx];
 					if (typeof src === "string") {
 						if (!src.startsWith("data:")) {
@@ -1421,7 +1443,10 @@ export async function handleSessionsRoutes(
 		}
 		return Response.json({
 			matches,
-			truncated: sessions.length > recentIds.length && matches.length < 50,
+			truncated:
+				stored.exhausted !== null ||
+				stored.searchedSessions < recentIds.length ||
+				(sessions.length > recentIds.length && matches.length < 50),
 		});
 	}
 
@@ -1815,8 +1840,7 @@ export async function handleSessionsRoutes(
 		// (bks-ghpr-*). Best-effort: a store hiccup must never block deletion.
 		const purgeTranscriptRows = async (id: string) => {
 			try {
-				if (existsSync(transcriptDbPath()))
-					await transcriptStore().deleteSessionTranscript(id);
+				await deleteSessionTranscript(id);
 			} catch {}
 			try {
 				searchIndex().remove(`session:${id}`);

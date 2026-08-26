@@ -10,6 +10,12 @@ import {
   type SessionKernelStoreApi,
 } from "./store";
 import { sessionKernelStoreRoute } from "./store-routing";
+import { TranscriptStore } from "../transcript-store";
+import {
+  assertTranscriptActorRequest,
+  type TranscriptActorRequest,
+  type TranscriptActorResult,
+} from "./transcript-protocol";
 
 function minDefined(values: Array<number | undefined>): number | undefined {
   const present = values.filter((value): value is number => value !== undefined);
@@ -87,6 +93,7 @@ function centralStoreFailure(error: unknown): Error & { code: string } {
 export class SessionKernelStoreHost {
   readonly central: SessionKernelStore;
   private readonly isolated = new Map<string, SessionKernelStore>();
+  private readonly transcripts = new Map<string, TranscriptStore>();
   private runtimeCursor = "";
   private maintenanceSessionCursor = "";
   private outboxRouteMaintenanceCursor = 0;
@@ -104,6 +111,8 @@ export class SessionKernelStoreHost {
   }
 
   close(): void {
+    for (const store of this.transcripts.values()) store.close();
+    this.transcripts.clear();
     for (const store of this.isolated.values()) store.close();
     this.isolated.clear();
     this.central.close();
@@ -215,6 +224,31 @@ export class SessionKernelStoreHost {
         () => this.central.markIsolatedSessionProjectionDirty(sessionId),
       );
     return this.openIsolated(sessionId);
+  }
+
+  transcript<T extends TranscriptActorRequest>(
+    request: T,
+  ): TranscriptActorResult<T> {
+    assertTranscriptActorRequest(request);
+    const mutation = "requestId" in request || request.op === "ack_wake";
+    const kernelStore = mutation
+      ? this.storeForSession(request.sessionId, true)
+      : undefined;
+    const placement = this.centralOperation(
+      () => this.central.sessionPlacement(request.sessionId),
+    );
+    if (!placement || placement.placement !== "isolated" ||
+        placement.transcriptAuthority !== "actor")
+      throw new Error(
+        `Session ${request.sessionId} has no isolated actor transcript placement`,
+      );
+    const transcriptStore = this.openTranscript(request.sessionId);
+    if (request.op === "append_destination") {
+      if (transcriptStore.replayActorRequest(request))
+        return transcriptStore.applyActorRequest(request) as TranscriptActorResult<T>;
+      kernelStore!.assertTranscriptDestinationFence(request);
+    }
+    return transcriptStore.applyActorRequest(request) as TranscriptActorResult<T>;
   }
 
   private outboxRoute(id: number): { central?: string; isolated?: string } {
@@ -576,6 +610,29 @@ export class SessionKernelStoreHost {
     return pending;
   }
 
+  private openTranscript(sessionId: string): TranscriptStore {
+    let store = this.transcripts.get(sessionId);
+    if (store) {
+      this.transcripts.delete(sessionId);
+      this.transcripts.set(sessionId, store);
+      return store;
+    }
+    while (this.transcripts.size >= this.maxOpenSessionStores) {
+      const oldest = this.transcripts.keys().next().value as string | undefined;
+      if (!oldest) break;
+      this.transcripts.get(oldest)?.close();
+      this.transcripts.delete(oldest);
+    }
+    if (this.centralPath === ":memory:")
+      throw new Error("Actor transcript storage requires an isolated file database");
+    store = new TranscriptStore(
+      sessionKernelSessionDbPath(sessionId, this.isolatedRoot),
+      { actorOwned: false },
+    );
+    this.transcripts.set(sessionId, store);
+    return store;
+  }
+
   private openIsolated(sessionId: string): SessionKernelStore {
     let store = this.isolated.get(sessionId);
     if (store) {
@@ -715,6 +772,11 @@ export class SessionKernelStoreHost {
   }
 
   private callGlobal(method: string, args: unknown[]): unknown {
+    if (method === "actorTranscriptSessionIds")
+      return this.central.actorTranscriptSessionIds(
+        Number(args[0] ?? 100),
+        String(args[1] ?? ""),
+      );
     if (method === "askMigrationComplete") return this.central.askMigrationComplete();
     if (method === "markAskMigrationComplete") return this.central.markAskMigrationComplete();
     if (method === "deliveryMigrationComplete") return this.central.deliveryMigrationComplete();
