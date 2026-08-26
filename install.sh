@@ -675,7 +675,7 @@ else
     "curl -fsSL https://claude.ai/install.sh | bash" "$HOME/.local/bin"
   if [ "$WITH_CODEX" = "1" ]; then
     install_cli codex "Codex" \
-      "curl -fsSL https://chatgpt.com/codex/install.sh | sh" "$HOME/.local/bin"
+      "curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh" "$HOME/.local/bin"
   fi
 
 fi
