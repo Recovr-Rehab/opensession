@@ -78,8 +78,18 @@ export async function readSystemdCredential(
   }
 }
 
-export function inheritedActivationFd(env: NodeJS.ProcessEnv = process.env, pid = process.pid): number {
-  if (env.LISTEN_PID !== String(pid) || env.LISTEN_FDS !== "1" || env.LISTEN_FDNAMES !== "agent-host")
+interface SocketActivationEnvironment {
+  LISTEN_PID?: string;
+  LISTEN_FDS?: string;
+  LISTEN_FDNAMES?: string;
+}
+
+export function inheritedActivationFd(
+  env?: SocketActivationEnvironment,
+  pid = process.pid,
+): number {
+  const activation = env ?? process.env;
+  if (activation.LISTEN_PID !== String(pid) || activation.LISTEN_FDS !== "1" || activation.LISTEN_FDNAMES !== "agent-host")
     throw new Error("Exactly one named systemd Agent Host socket is required");
   return 3;
 }
