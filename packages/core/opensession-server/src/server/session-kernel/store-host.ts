@@ -7,7 +7,6 @@ import {
   type DurableRunState,
   type DurableSessionQuarantine,
   type DurableTimer,
-  type DeliverySlot,
   type SessionKernelStoreApi,
 } from "./store";
 import { sessionKernelStoreRoute } from "./store-routing";
@@ -23,8 +22,34 @@ const CENTRAL_STORE_FAILURE = "SESSION_KERNEL_CENTRAL_STORE_FAILURE";
 // while a bounded slice prevents startup recovery from opening hundreds of
 // SQLite databases behind one global barrier.
 const RUNTIME_WAKE_CANDIDATE_BATCH = 16;
+const SPARSE_PROJECTION_BACKFILL_BATCH = 128;
 const OUTBOX_ROUTE_MAINTENANCE_BATCH = 8;
 const SESSION_STORE_MAINTENANCE_BATCH = 1;
+
+class SparseProjectionBackfillPendingError extends Error {
+  readonly retryable = true;
+}
+
+const SPARSE_PROJECTION_MUTATIONS = new Set([
+  "setAskRecord",
+  "answerAskRecord",
+  "deleteAskRecord",
+  "setDeliverySlot",
+  "deleteDeliverySlot",
+  "prepareSteerDelivery",
+  "acceptSteerDelivery",
+  "rejectSteerDelivery",
+  "requeueSteerDeliveries",
+  "ackDeliveryDispatch",
+  "failDeliveryDispatch",
+  "prepareDeliveryInterrupt",
+  "beginDeliveryInterruptEffect",
+  "settleDeliveryInterrupt",
+  "claimNextDeliveryDispatch",
+  "claimDeliveryDispatch",
+  "clearSession",
+  "tombstoneSession",
+]);
 
 export function isSessionKernelCentralStoreFailure(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error &&
@@ -65,13 +90,7 @@ export class SessionKernelStoreHost {
   private runtimeCursor = "";
   private maintenanceSessionCursor = "";
   private outboxRouteMaintenanceCursor = 0;
-  private askEntriesCache?: Array<[string, unknown]>;
   private quarantineCache?: DurableSessionQuarantine[];
-  private readonly deliveryEntriesCache = new Map<
-    DeliverySlot,
-    Array<[string, unknown]>
-  >();
-
   constructor(
     private readonly centralPath = sessionKernelDbPath(),
     private readonly isolatedRoot = `${dirname(centralPath)}/session-kernel-sessions`,
@@ -142,28 +161,48 @@ export class SessionKernelStoreHost {
     commandKind: string,
     infrastructure = false,
   ): DurableSessionQuarantine {
+    const isolated = this.isIsolated(sessionId);
+    if (isolated)
+      this.centralOperation(
+        () => this.central.markIsolatedSessionProjectionDirty(sessionId),
+      );
     const quarantine = infrastructure && this.isIsolated(sessionId)
       ? this.centralOperation(
           () => this.central.quarantineSession(sessionId, reason, commandKind),
         )
-      : this.storeForSession(sessionId, true).quarantineSession(
+      : this.storeForSession(sessionId, true, true).quarantineSession(
           sessionId,
           reason,
           commandKind,
         );
     this.quarantineCache = undefined;
-    this.removeCachedAskEntry(sessionId);
-    this.removeCachedDeliveryEntries(sessionId);
+    if (isolated) {
+      if (infrastructure)
+        this.centralOperation(() => this.central.settleIsolatedSessionProjection(
+          sessionId,
+          undefined,
+          undefined,
+        ));
+      else this.refreshSessionProjections(sessionId);
+    }
     return quarantine;
   }
 
-  storeForSession(sessionId: string, mutation = false): SessionKernelStore {
+  storeForSession(
+    sessionId: string,
+    mutation = false,
+    projectionMutation = false,
+  ): SessionKernelStore {
     const placement = this.centralOperation(
       () => this.central.sessionPlacement(sessionId),
     );
     if (placement) {
       if (mutation)
         this.centralOperation(() => this.central.markIsolatedSessionDirty(sessionId));
+      if (projectionMutation)
+        this.centralOperation(
+          () => this.central.markIsolatedSessionProjectionDirty(sessionId),
+        );
       return this.openIsolated(sessionId);
     }
     if (
@@ -171,6 +210,10 @@ export class SessionKernelStoreHost {
       this.centralOperation(() => this.central.hasSessionDurableState(sessionId))
     ) return this.central;
     this.centralOperation(() => this.central.claimIsolatedSession(sessionId));
+    if (projectionMutation)
+      this.centralOperation(
+        () => this.central.markIsolatedSessionProjectionDirty(sessionId),
+      );
     return this.openIsolated(sessionId);
   }
 
@@ -212,6 +255,9 @@ export class SessionKernelStoreHost {
       if (!this.quarantinedSession(sessionId)?.repairable) return false;
       let isolatedReleased = false;
       if (this.isIsolated(sessionId)) {
+        this.centralOperation(
+          () => this.central.markIsolatedSessionProjectionDirty(sessionId),
+        );
         const isolated = this.containIsolated(
           sessionId,
           "storage:quarantine-release",
@@ -224,8 +270,7 @@ export class SessionKernelStoreHost {
       );
       if (centralReleased || isolatedReleased) {
         this.quarantineCache = undefined;
-        this.refreshCachedAskEntry(sessionId);
-        this.refreshCachedDeliveryEntries(sessionId);
+        this.refreshSessionProjections(sessionId);
       }
       return centralReleased || isolatedReleased;
     }
@@ -243,78 +288,108 @@ export class SessionKernelStoreHost {
       return result;
     }
     const result = this.invoke(
-      this.storeForSession(route.sessionId, route.mutation),
+      this.storeForSession(
+        route.sessionId,
+        route.mutation,
+        route.mutation && SPARSE_PROJECTION_MUTATIONS.has(method),
+      ),
       method,
       args,
     );
-    if (route.mutation) {
-      if (
-        method === "setAskRecord" ||
-        method === "answerAskRecord" ||
-        method === "deleteAskRecord" ||
-        method === "clearSession" ||
-        method === "tombstoneSession"
-      ) this.refreshCachedAskEntry(route.sessionId);
-      if (
-        method === "setDeliverySlot" ||
-        method === "deleteDeliverySlot" ||
-        method === "prepareSteerDelivery" ||
-        method === "acceptSteerDelivery" ||
-        method === "rejectSteerDelivery" ||
-        method === "requeueSteerDeliveries" ||
-        method === "ackDeliveryDispatch" ||
-        method === "failDeliveryDispatch" ||
-        method === "prepareDeliveryInterrupt" ||
-        method === "beginDeliveryInterruptEffect" ||
-        method === "settleDeliveryInterrupt" ||
-        method === "claimNextDeliveryDispatch" ||
-        method === "claimDeliveryDispatch" ||
-        method === "clearSession" ||
-        method === "tombstoneSession"
-      ) this.refreshCachedDeliveryEntries(route.sessionId);
-    }
+    if (route.mutation && SPARSE_PROJECTION_MUTATIONS.has(method))
+      this.refreshSessionProjections(route.sessionId);
     return result;
   }
 
-  private removeCachedAskEntry(sessionId: string): void {
-    if (!this.askEntriesCache) return;
-    this.askEntriesCache = this.askEntriesCache.filter(
-      ([cachedSessionId]) => cachedSessionId !== sessionId,
+  refreshSessionProjections(sessionId: string): void {
+    if (!this.isIsolated(sessionId)) return;
+    const store = this.storeForSession(sessionId);
+    const quarantined =
+      this.centralOperation(() => this.central.quarantinedSession(sessionId)) ||
+      store.quarantinedSession(sessionId);
+    const ask = quarantined ? undefined : store.askSnapshot(sessionId);
+    const delivery = quarantined ? undefined : store.deliverySnapshot(sessionId);
+    const sparseDelivery = delivery && (
+      delivery.queued.length > 0 ||
+      delivery.steered.length > 0 ||
+      delivery.pendingSteers.length > 0 ||
+      delivery.dispatch !== undefined ||
+      delivery.interrupt !== undefined
+    ) ? delivery : undefined;
+    this.centralOperation(() => this.central.settleIsolatedSessionProjection(
+      sessionId,
+      ask,
+      sparseDelivery,
+    ));
+  }
+
+  private repairSparseProjections(
+    limit = SPARSE_PROJECTION_BACKFILL_BATCH,
+  ): boolean {
+    const candidates = this.centralOperation(
+      () => this.central.isolatedProjectionPendingSessionIds(limit),
     );
-  }
-
-  private refreshCachedAskEntry(sessionId: string): void {
-    if (!this.askEntriesCache) return;
-    this.removeCachedAskEntry(sessionId);
-    const value = this.storeForSession(sessionId).askSnapshot(sessionId);
-    if (value === undefined) return;
-    this.askEntriesCache.push([sessionId, structuredClone(value)]);
-    this.askEntriesCache.sort(([left], [right]) => left.localeCompare(right));
-  }
-
-  private removeCachedDeliveryEntries(sessionId: string): void {
-    for (const [slot, entries] of this.deliveryEntriesCache)
-      this.deliveryEntriesCache.set(
-        slot,
-        entries.filter(([cachedSessionId]) => cachedSessionId !== sessionId),
+    for (const sessionId of candidates) {
+      const repaired = this.containIsolated(
+        sessionId,
+        "maintenance:sparse-projection",
+        () => {
+          if (this.central.quarantinedSession(sessionId)) {
+            this.central.settleIsolatedSessionProjection(
+              sessionId,
+              undefined,
+              undefined,
+            );
+            return;
+          }
+          const store = this.centralPath === ":memory:"
+            ? this.openIsolated(sessionId)
+            : new SessionKernelStore(
+                sessionKernelSessionDbPath(sessionId, this.isolatedRoot),
+                {
+                  readonly: true,
+                  hydrateRunStateCache: false,
+                  // Schema 29 only adds this central projection table. Session
+                  // ask/delivery/quarantine tables are unchanged from 28.
+                  compatibleReadSchemaFloor: 28,
+                },
+              );
+          try {
+            const quarantined = store.quarantinedSession(sessionId);
+            const ask = quarantined ? undefined : store.askSnapshot(sessionId);
+            const delivery = quarantined ? undefined : store.deliverySnapshot(sessionId);
+            const sparseDelivery = delivery && (
+              delivery.queued.length > 0 ||
+              delivery.steered.length > 0 ||
+              delivery.pendingSteers.length > 0 ||
+              delivery.dispatch !== undefined ||
+              delivery.interrupt !== undefined
+            ) ? delivery : undefined;
+            this.central.settleIsolatedSessionProjection(
+              sessionId,
+              ask,
+              sparseDelivery,
+            );
+          } finally {
+            if (store !== this.isolated.get(sessionId)) store.close();
+          }
+        },
       );
-  }
-
-  refreshCachedDeliveryEntries(sessionId: string): void {
-    if (this.deliveryEntriesCache.size === 0) return;
-    this.removeCachedDeliveryEntries(sessionId);
-    const state = this.storeForSession(sessionId).deliverySnapshot(sessionId);
-    for (const [slot, entries] of this.deliveryEntriesCache) {
-      const value = slot === "queued"
-        ? state.queued
-        : slot === "steered"
-          ? state.steered
-          : state.dispatch;
-      if (value === undefined || (Array.isArray(value) && value.length === 0))
-        continue;
-      entries.push([sessionId, structuredClone(value)]);
-      entries.sort(([left], [right]) => left.localeCompare(right));
+      if (!repaired.ok)
+        this.centralOperation(() => this.central.settleIsolatedSessionProjection(
+          sessionId,
+          undefined,
+          undefined,
+        ));
     }
+    const pending = this.centralOperation(
+      () => this.central.isolatedProjectionPendingSessionIds(1).length > 0,
+    );
+    if (!pending && !this.central.sparseProjectionMigrationComplete())
+      this.centralOperation(
+        () => this.central.markSparseProjectionMigrationComplete(),
+      );
+    return pending;
   }
 
   allRunStates(): Array<DurableRunState & { sessionId: string }> {
@@ -322,23 +397,28 @@ export class SessionKernelStoreHost {
   }
 
   allAskEntries(): Array<[string, unknown]> {
-    if (this.askEntriesCache) return structuredClone(this.askEntriesCache);
-    const entries = this.mapReadStores(
-      "global:ask-entries",
-      (store) => store.askEntries(),
-    ).flat();
-    this.askEntriesCache = entries;
+    const projectionPending = this.repairSparseProjections();
+    if (projectionPending)
+      throw new SparseProjectionBackfillPendingError(
+        "Sparse session projection backfill is still in progress",
+      );
+    const entries = [
+      ...this.central.askEntries(),
+      ...this.central.isolatedAskProjectionEntries(),
+    ];
     return structuredClone(entries);
   }
 
   allDeliveryEntries(slot: Parameters<SessionKernelStoreApi["deliveryEntries"]>[0]) {
-    const cached = this.deliveryEntriesCache.get(slot);
-    if (cached) return structuredClone(cached);
-    const entries = this.mapReadStores(
-      "global:delivery-entries",
-      (store) => store.deliveryEntries(slot),
-    ).flat();
-    this.deliveryEntriesCache.set(slot, entries);
+    const projectionPending = this.repairSparseProjections();
+    if (projectionPending)
+      throw new SparseProjectionBackfillPendingError(
+        "Sparse session projection backfill is still in progress",
+      );
+    const entries = [
+      ...this.central.deliveryEntries(slot),
+      ...this.central.isolatedDeliveryProjectionEntries(slot),
+    ];
     return structuredClone(entries);
   }
 
@@ -366,6 +446,7 @@ export class SessionKernelStoreHost {
     effectKinds: string[],
     limit: number,
   ): { timers: DurableTimer[]; outbox: DurableOutboxItem[] } {
+    this.repairSparseProjections();
     const candidateLimit = Math.max(
       1,
       Math.min(RUNTIME_WAKE_CANDIDATE_BATCH, limit),
@@ -455,6 +536,7 @@ export class SessionKernelStoreHost {
   }
 
   maintain(): boolean {
+    let pending = this.repairSparseProjections(SESSION_STORE_MAINTENANCE_BATCH);
     let routes = this.central.isolatedOutboxRoutes(
       OUTBOX_ROUTE_MAINTENANCE_BATCH,
       this.outboxRouteMaintenanceCursor,
@@ -477,9 +559,10 @@ export class SessionKernelStoreHost {
       if (routedSession.ok && routedSession.value !== route.sessionId)
         this.central.forgetIsolatedOutboxRoute(route.id);
     }
-    let pending =
+    pending =
       routes.length === OUTBOX_ROUTE_MAINTENANCE_BATCH ||
-      this.central.maintain();
+      this.central.maintain() ||
+      pending;
     const placements = this.central.isolatedSessionPlacements(
       SESSION_STORE_MAINTENANCE_BATCH,
       this.maintenanceSessionCursor,
@@ -675,31 +758,62 @@ export class SessionKernelStoreHost {
       return;
     }
     if (method === "clearAskRecords") {
-      this.mapStores("global:clear-asks", (store) => store.clearAskRecords());
-      this.askEntriesCache = [];
+      if (this.repairSparseProjections())
+        throw new SparseProjectionBackfillPendingError(
+          "Sparse session projection backfill is still in progress",
+        );
+      const sessionIds = this.central.isolatedAskProjectionEntries()
+        .map(([sessionId]) => sessionId);
+      this.central.clearAskRecords();
+      for (const sessionId of sessionIds) {
+        this.centralOperation(
+          () => this.central.markIsolatedSessionProjectionDirty(sessionId),
+        );
+        this.storeForSession(sessionId, true, true).clearAskRecords();
+        this.refreshSessionProjections(sessionId);
+      }
       return;
     }
     if (method === "clearDeliverySlot") {
-      this.mapStores("global:clear-delivery", (store) =>
-        store.clearDeliverySlot(args[0] as Parameters<SessionKernelStoreApi["clearDeliverySlot"]>[0]));
-      this.deliveryEntriesCache.clear();
+      if (this.repairSparseProjections())
+        throw new SparseProjectionBackfillPendingError(
+          "Sparse session projection backfill is still in progress",
+        );
+      const slot = args[0] as Parameters<SessionKernelStoreApi["clearDeliverySlot"]>[0];
+      const sessionIds = this.central.isolatedDeliveryProjectionEntries(slot)
+        .map(([sessionId]) => sessionId);
+      this.central.clearDeliverySlot(slot);
+      for (const sessionId of sessionIds) {
+        this.centralOperation(
+          () => this.central.markIsolatedSessionProjectionDirty(sessionId),
+        );
+        this.storeForSession(sessionId, true, true).clearDeliverySlot(slot);
+        this.refreshSessionProjections(sessionId);
+      }
       return;
     }
     if (method === "settlePendingSteers") {
+      const projectionPending = this.repairSparseProjections();
+      if (projectionPending)
+        throw new SparseProjectionBackfillPendingError(
+          "Sparse session projection backfill is still in progress",
+        );
       let settled = this.central.settlePendingSteers();
-      const candidates = this.mapIsolatedReadStores(
-        "global:find-pending-steers",
-        (store, sessionId) => store.hasPendingSteers() ? sessionId : undefined,
-      ).filter((sessionId): sessionId is string => sessionId !== undefined);
+      const candidates = this.central.isolatedPendingSteerProjectionSessionIds();
       for (const sessionId of candidates) {
+        this.centralOperation(
+          () => this.central.markIsolatedSessionProjectionDirty(sessionId),
+        );
         const result = this.containIsolated(
           sessionId,
           "global:settle-pending-steers",
-          () => this.storeForSession(sessionId, true).settlePendingSteers(),
+          () => this.storeForSession(sessionId, true, true).settlePendingSteers(),
         );
-        if (result.ok) settled += result.value;
+        if (result.ok) {
+          settled += result.value;
+          this.refreshSessionProjections(sessionId);
+        }
       }
-      if (settled > 0) this.deliveryEntriesCache.clear();
       return settled;
     }
     if (method === "retryCompatibleCreationBranchDeadLetters") {

@@ -827,6 +827,7 @@ export class HostHandle {
       osSessionId: spec.osSessionId,
       steerable: modelSupportsSteer(spec.model),
       connected: () => this.up,
+      reconcileTerminal: () => this.reconcileTerminalEvidence(),
 
       steer: (text, images, steerId) =>
         this.send({ t: "steer", text, images, steerId }),
@@ -857,6 +858,22 @@ export class HostHandle {
     const terminal = this.terminalEvent;
     this.terminalEvent = undefined;
     return terminal;
+  }
+
+  /** Reconcile a terminal receipt that may have landed after the socket was
+   * lost. Registry busy/steer checks call this synchronously so a completed
+   * detached owner cannot remain steerable until another gateway restart. */
+  reconcileTerminalEvidence(): boolean {
+    if (this.endedClean) return true;
+    const meta = readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`);
+    if (!meta?.done) return false;
+    if (!this.sawTerminal) {
+      this.sawTerminal = true;
+      this.terminalEvent = meta.done;
+      this.queue.push(meta.done);
+    }
+    this.finish();
+    return true;
   }
 
   /** The host id currently serving this run (respawn mints a fresh one). */
@@ -1281,15 +1298,7 @@ export class HostHandle {
     if (this.endedClean) return;
 
     const meta = readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`);
-    if (meta?.done) {
-      // Host finished and exited between our polls — take the terminal state.
-      if (!this.sawTerminal) {
-        this.sawTerminal = true;
-        this.queue.push(meta.done);
-      }
-      this.finish();
-      return;
-    }
+    if (this.reconcileTerminalEvidence()) return;
 
     // Crashed mid-run. If the run had an engine session, respawn a fresh host
     // to resume it — transparent to whoever is consuming events().

@@ -76,6 +76,70 @@ async function rpc(request: KernelActorTransportEnvelope["request"]) {
 }
 
 describe("session kernel actor service", () => {
+  test("restarts the catalog lane instead of the service after a read timeout", async () => {
+    const isolatedService = await startSessionKernelService({
+      port: 0,
+      token,
+      workerCount: 1,
+      responseTimeoutMs: 100,
+      workerUrl: new URL("./testing/read-timeout-worker.ts", import.meta.url),
+    });
+    try {
+      const helloResponse = await fetch(`${isolatedService.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: SESSION_KERNEL_TRANSPORT_VERSION,
+          actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+          request: {
+            t: "hello",
+            rpcId: "read-timeout-handshake",
+            version: SESSION_KERNEL_ACTOR_VERSION,
+          },
+        }),
+      });
+      const hello = await helloResponse.json() as { serviceEpoch: string };
+      expect(helloResponse.status).toBe(200);
+
+      const timedOut = await fetch(`${isolatedService.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: SESSION_KERNEL_TRANSPORT_VERSION,
+          actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+          serviceEpoch: hello.serviceEpoch,
+          request: {
+            t: "call",
+            rpcId: "slow-read",
+            outputBytes: 1024,
+            request: { t: "store", method: "askEntries", args: [] },
+          },
+        }),
+      });
+      expect(timedOut.status).toBe(429);
+      expect(await timedOut.json()).toMatchObject({
+        error: "Session actor lane 0 response timed out",
+      });
+
+      let ready: Response | undefined;
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        ready = await fetch(`${isolatedService.url}/ready`);
+        if (ready.status === 200) break;
+        await Bun.sleep(10);
+      }
+      expect(ready?.status).toBe(200);
+      expect((await fetch(`${isolatedService.url}/live`)).status).toBe(200);
+    } finally {
+      isolatedService.stop();
+    }
+  });
+
   test("accepts the transport worker's first message immediately", async () => {
     const previousToken = process.env.OPENSESSION_SESSION_KERNEL_TOKEN;
     const previousUrl = process.env.OPENSESSION_SESSION_KERNEL_URL;
