@@ -6,9 +6,11 @@ import {
   HostHandle,
   localRunHostsSupported,
   reconcileUncertainHostEvents,
+  retryHostedKernelCall,
   resolveInactiveHostRecovery,
   type HostLauncher,
 } from "./host-client";
+import { SessionKernelActorError } from "./session-kernel/actor-client";
 import type { RunHostMeta, RunHostSpec } from "../runner-host/protocol";
 import {
   TranscriptStore,
@@ -57,6 +59,47 @@ function makeHandle(spec: RunHostSpec) {
   };
   return new HostHandle(dir, spec, {}, launcher);
 }
+
+describe("hosted kernel retry", () => {
+  test("waits out retryable lane failures before succeeding", async () => {
+    let calls = 0;
+    const waits: number[] = [];
+    const result = await retryHostedKernelCall(
+      () => {
+        calls++;
+        if (calls < 3) throw new SessionKernelActorError("lane timed out", true);
+        return "ok";
+      },
+      {
+        attempts: 3,
+        delayMs: 10_100,
+        sleep: async (ms) => { waits.push(ms); },
+      },
+    );
+
+    expect(result).toBe("ok");
+    expect(calls).toBe(3);
+    expect(waits).toEqual([10_100, 10_100]);
+  });
+
+  test("does not retry non-retryable authority failures", async () => {
+    let calls = 0;
+    let waits = 0;
+    const error = new SessionKernelActorError("authority lost", false);
+
+    await expect(
+      retryHostedKernelCall(
+        () => {
+          calls++;
+          throw error;
+        },
+        { sleep: async () => { waits++; } },
+      ),
+    ).rejects.toBe(error);
+    expect(calls).toBe(1);
+    expect(waits).toBe(0);
+  });
+});
 
 describe("uncertain host reconciliation", () => {
   test("delivers an offline terminal result before destructive stop", async () => {
