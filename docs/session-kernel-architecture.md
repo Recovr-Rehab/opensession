@@ -506,6 +506,14 @@ unrelated sessions. Infrastructure ambiguity still fail-stops the actor client.
 
 Transcript and session-file projections use typed admission and settlement
 receipts, then mutate their specialized destination stores on the gateway thread.
+The narrowly scoped `transcript_destination_append` command is replay-safe
+because `transcripts.db` consumes the same stable append identity and stores an
+immutable transactional result receipt. Legacy `transcript_append` remains
+non-replay-safe. A crash after the transcript commit but before actor completion
+therefore re-admits only the new command and reconciles from the destination
+receipt. Admission and settlement are separate short actor reductions; SQLite,
+bus publication, and append hooks never run while a session mailbox lease is
+held.
 The actor returns from admission before that destination work begins and retains
 no execution waiter or callback. Extracting the Worker into the independently supervised local service was
 therefore a transport and failure-isolation change, not an ownership migration;

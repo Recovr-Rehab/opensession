@@ -9,6 +9,49 @@ import {
  * remains free to reduce Stop, steer, and other commands while this continuation
  * is active.
  */
+export function executeDestinationIdempotentSessionProjection<T>(
+  sessionId: string,
+  requestId: string,
+  operation: "transcript_destination_append",
+  identity: unknown,
+  mutate: () => T,
+): T {
+  const plan = sessionGatewayCommand({
+    op: "request",
+    sessionId,
+    requestId,
+    operation,
+    identity,
+  });
+  if (plan.status === "completed") return plan.result as T;
+  if (plan.status === "in_progress")
+    throw new Error(`Destination command ${requestId} is already in progress`);
+  let physicalFinished = false;
+  try {
+    const result = mutate();
+    physicalFinished = true;
+    return sessionGatewayCommand({
+      op: "complete",
+      sessionId,
+      requestId,
+      operation,
+      result,
+    }) as T;
+  } catch (error) {
+    if (!physicalFinished) {
+      sessionGatewayCommand({
+        op: "fail",
+        sessionId,
+        requestId,
+        operation,
+        error: error instanceof Error ? error.message : String(error),
+        retryable: true,
+      });
+    }
+    throw error;
+  }
+}
+
 export function executeSessionProjection<T>(
   sessionId: string,
   operation: GatewayCommandOperation,
@@ -35,7 +78,8 @@ export function executeSessionProjection<T>(
       result,
     }) as T;
   } catch (error) {
-    if (!physicalFinished) sessionGatewayCommand({
+    if (!physicalFinished)
+      sessionGatewayCommand({
       op: "fail",
       sessionId,
       requestId,

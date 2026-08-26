@@ -46,7 +46,10 @@
  * TranscriptStore(tempPath)` directly and must never call transcriptStore().
  */
 
-import { executeSessionProjection } from "./session-projection-executor";
+import {
+  executeDestinationIdempotentSessionProjection,
+  executeSessionProjection,
+} from "./session-projection-executor";
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
@@ -93,6 +96,32 @@ export interface TranscriptPage {
   firstSeq: number;
   /** seq of entries[entries.length-1]; 0 when the page is empty. */
   lastSeq: number;
+}
+
+export interface TranscriptTurnFence {
+  sessionId: string;
+  runId: string;
+  turnId: string;
+  generation: number;
+}
+
+export interface DestinationTranscriptAppendRequest extends TranscriptTurnFence {
+  appendId: string;
+  entries: TranscriptEntry[];
+}
+
+export interface DestinationTranscriptAppendResult extends AppendResult {
+  changes: Array<{ entryId: string; seq: number; changeSeq: number }>;
+}
+
+export class TranscriptAppendConflictError extends Error {
+  readonly code = "TRANSCRIPT_APPEND_CONFLICT";
+  constructor(sessionId: string, appendId: string) {
+    super(
+      `Transcript append ${sessionId}/${appendId} was reused with another request`,
+    );
+    this.name = "TranscriptAppendConflictError";
+  }
 }
 
 export interface AppendResult {
@@ -263,6 +292,17 @@ interface WriteOutcome {
   updated: number;
 }
 
+interface DestinationWriteOutcome {
+  replay: boolean;
+  result: DestinationTranscriptAppendResult;
+  affected: SeqEntry[];
+}
+
+interface ValidatedDestinationAppend extends DestinationTranscriptAppendRequest {
+  digest: string;
+  fenceJson: string;
+}
+
 // ── Store ────────────────────────────────────────────────────────────────────
 
 export class TranscriptStore {
@@ -279,6 +319,11 @@ export class TranscriptStore {
   };
   private txReplace: ((sessionId: string, entries: TranscriptEntry[]) => WriteOutcome) & {
     immediate: (sessionId: string, entries: TranscriptEntry[]) => WriteOutcome;
+  };
+  private txDestinationAppend: ((
+    request: ValidatedDestinationAppend,
+  ) => DestinationWriteOutcome) & {
+    immediate: (request: ValidatedDestinationAppend) => DestinationWriteOutcome;
   };
 
   constructor(public readonly dbPath: string) {
@@ -335,6 +380,15 @@ export class TranscriptStore {
         import_src  TEXT,
         import_watermark INTEGER
       );
+      CREATE TABLE IF NOT EXISTS transcript_append_receipts (
+        session_id TEXT NOT NULL,
+        append_id TEXT NOT NULL,
+        request_digest TEXT NOT NULL,
+        fence_json TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, append_id)
+      );
     `);
     this.migrateChangeSequence();
     type Tx = typeof this.txWrite;
@@ -346,6 +400,7 @@ export class TranscriptStore {
       this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [sessionId]);
       this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [sessionId]);
       this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [sessionId]);
+      this.db.run("DELETE FROM transcript_append_receipts WHERE session_id = ?", [sessionId]);
       this.db.run("DELETE FROM transcript_sessions WHERE session_id = ?", [sessionId]);
     }) as unknown as typeof this.txDelete;
     this.txReplace = this.db.transaction(
@@ -365,6 +420,62 @@ export class TranscriptStore {
         return this.writeEntriesInTx(sessionId, entries);
       }
     ) as unknown as typeof this.txReplace;
+    this.txDestinationAppend = this.db.transaction(
+      (request: ValidatedDestinationAppend) => {
+        const receipt = this.db
+          .query(
+            `SELECT request_digest, result_json FROM transcript_append_receipts
+             WHERE session_id = ? AND append_id = ?`,
+          )
+          .get(request.sessionId, request.appendId) as {
+          request_digest: string;
+          result_json: string;
+        } | null;
+        if (receipt) {
+          if (receipt.request_digest !== request.digest)
+            throw new TranscriptAppendConflictError(
+              request.sessionId,
+              request.appendId,
+            );
+          return {
+            replay: true,
+            result: JSON.parse(
+              receipt.result_json,
+            ) as DestinationTranscriptAppendResult,
+            affected: [],
+          };
+        }
+        const outcome = this.writeEntriesInTx(
+          request.sessionId,
+          request.entries,
+        );
+        this.db.run(
+          `UPDATE transcript_sessions SET
+             imported_at = COALESCE(imported_at, ?),
+             import_src = COALESCE(import_src, 'live-only')
+           WHERE session_id = ?`,
+          [Date.now(), request.sessionId],
+        );
+        const resultJson = canonicalDestinationJson(destinationResult(outcome));
+        const result = JSON.parse(
+          resultJson,
+        ) as DestinationTranscriptAppendResult;
+        this.db.run(
+          `INSERT INTO transcript_append_receipts
+             (session_id, append_id, request_digest, fence_json, result_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            request.sessionId,
+            request.appendId,
+            request.digest,
+            request.fenceJson,
+            resultJson,
+            Date.now(),
+          ],
+        );
+        return { replay: false, result, affected: outcome.affected };
+      },
+    ) as unknown as typeof this.txDestinationAppend;
   }
 
   // ── Append (live path) ─────────────────────────────────────────────────────
@@ -440,6 +551,76 @@ export class TranscriptStore {
       }
     }
     return result;
+  }
+
+  /**
+   * Strict internal destination API for future detached Host recovery. The
+   * actor command and SQLite receipt intentionally share the stable append id:
+   * after a gateway crash the actor re-admits the operation and this store
+   * returns the already-committed destination result without another write.
+   */
+  appendTranscriptDestination(
+    input: DestinationTranscriptAppendRequest,
+  ): DestinationTranscriptAppendResult {
+    const request = validateDestinationAppend(input);
+    try {
+      return executeDestinationIdempotentSessionProjection(
+        request.sessionId,
+        `transcript-destination:${request.appendId}`,
+        "transcript_destination_append",
+        { digest: request.digest, fence: JSON.parse(request.fenceJson) },
+        () => this.appendTranscriptDestinationOwned(request),
+      );
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("reused with another payload")
+      )
+        throw new TranscriptAppendConflictError(
+          request.sessionId,
+          request.appendId,
+        );
+      throw error;
+    }
+  }
+
+  /** Destination-only half used by a future gateway proxy after its own short
+   * actor admission. It is safe to retry independently with the same request. */
+  commitTranscriptDestinationAppend(
+    input: DestinationTranscriptAppendRequest,
+  ): DestinationTranscriptAppendResult {
+    return this.appendTranscriptDestinationOwned(
+      validateDestinationAppend(input),
+    );
+  }
+
+  private appendTranscriptDestinationOwned(
+    request: ValidatedDestinationAppend,
+  ): DestinationTranscriptAppendResult {
+    const outcome = this.txDestinationAppend.immediate(request);
+    if (outcome.replay) return outcome.result;
+    this.importedCache.add(request.sessionId);
+    try {
+      publishTranscript(request.sessionId, {
+        entries: outcome.affected,
+        firstSeq: outcome.result.firstSeq,
+        lastSeq: outcome.result.lastSeq,
+      });
+    } catch (error) {
+      console.warn("[transcript-store] destination bus publish failed:", error);
+    }
+    const hook = g.__osTranscriptAppendHook;
+    if (hook) {
+      try {
+        hook(request.sessionId, outcome.affected);
+      } catch (error) {
+        console.warn(
+          "[transcript-store] destination append hook threw:",
+          error,
+        );
+      }
+    }
+    return outcome.result;
   }
 
   // ── Import (legacy history) ────────────────────────────────────────────────
@@ -1159,6 +1340,276 @@ export class TranscriptStore {
         ON transcript_events(session_id, change_seq)`);
     }).immediate();
   }
+}
+
+// ── Destination validation + identity ─────────────────────────────────────
+
+export const TRANSCRIPT_DESTINATION_MAX_ENTRIES = 500;
+export const TRANSCRIPT_DESTINATION_MAX_BYTES = 4 * 1024 * 1024;
+const DESTINATION_HASH_DOMAIN =
+  "opensession.transcript-destination-append.v1\0";
+const TRANSCRIPT_DESTINATION_MAX_JSON_DEPTH = 64;
+const DESTINATION_REQUEST_KEYS = [
+  "appendId",
+  "entries",
+  "generation",
+  "runId",
+  "sessionId",
+  "turnId",
+] as const;
+const TRANSCRIPT_ENTRY_KEYS = new Set([
+  "agentId",
+  "content",
+  "contextInjection",
+  "featuredMedia",
+  "files",
+  "id",
+  "images",
+  "isError",
+  "model",
+  "noticeKind",
+  "requestId",
+  "sender",
+  "senderVia",
+  "timestamp",
+  "toolInput",
+  "toolName",
+  "toolUseId",
+  "type",
+  "videos",
+]);
+const TRANSCRIPT_TYPES = new Set([
+  "user",
+  "assistant",
+  "tool_use",
+  "tool_result",
+  "system",
+]);
+
+function validateDestinationAppend(input: unknown): ValidatedDestinationAppend {
+  assertPlainJson(input, "request");
+  const record = input as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  if (
+    keys.length !== DESTINATION_REQUEST_KEYS.length ||
+    keys.some((key, index) => key !== DESTINATION_REQUEST_KEYS[index])
+  )
+    throw new TypeError("Invalid transcript destination request keys");
+  const sessionId = boundedId(record.sessionId, "sessionId", 128);
+  const runId = boundedId(record.runId, "runId", 256);
+  const turnId = boundedId(record.turnId, "turnId", 256);
+  const appendId = boundedId(record.appendId, "appendId", 128);
+  const generation = record.generation;
+  if (!Number.isSafeInteger(generation) || (generation as number) < 1)
+    throw new TypeError("Invalid transcript destination generation");
+  if (!Array.isArray(record.entries) || record.entries.length === 0)
+    throw new TypeError("Transcript destination entries must be non-empty");
+  if (record.entries.length > TRANSCRIPT_DESTINATION_MAX_ENTRIES)
+    throw new RangeError("Too many transcript destination entries");
+
+  const entries = record.entries.map((value, index) =>
+    validateDestinationEntry(value, index),
+  );
+  const fence = { sessionId, runId, turnId, generation: generation as number };
+  const fenceJson = canonicalDestinationJson(fence);
+  const payloadJson = canonicalDestinationJson({
+    fence,
+    entries: record.entries,
+  });
+  if (Buffer.byteLength(payloadJson) > TRANSCRIPT_DESTINATION_MAX_BYTES)
+    throw new RangeError("Transcript destination payload is too large");
+  const digest = new Bun.CryptoHasher("sha256")
+    .update(DESTINATION_HASH_DOMAIN)
+    .update(payloadJson)
+    .digest("hex");
+  return { ...fence, appendId, entries, digest, fenceJson };
+}
+
+function validateDestinationEntry(
+  value: unknown,
+  index: number,
+): TranscriptEntry {
+  assertPlainJson(value, `entries[${index}]`);
+  const entry = value as Record<string, unknown>;
+  for (const key of Object.keys(entry)) {
+    if (!TRANSCRIPT_ENTRY_KEYS.has(key))
+      throw new TypeError(`Unknown transcript entry key: ${key}`);
+  }
+  boundedId(entry.id, `entries[${index}].id`, 256);
+  if (typeof entry.type !== "string" || !TRANSCRIPT_TYPES.has(entry.type))
+    throw new TypeError(`Invalid transcript entry type at ${index}`);
+  if (typeof entry.content !== "string")
+    throw new TypeError(`Invalid transcript entry content at ${index}`);
+  if (
+    typeof entry.timestamp !== "string" ||
+    !Number.isFinite(Date.parse(entry.timestamp))
+  )
+    throw new TypeError(`Invalid transcript entry timestamp at ${index}`);
+  for (const key of [
+    "toolName",
+    "toolUseId",
+    "requestId",
+    "model",
+    "agentId",
+    "sender",
+  ]) {
+    if (entry[key] !== undefined && typeof entry[key] !== "string")
+      throw new TypeError(`Invalid transcript entry ${key} at ${index}`);
+  }
+  for (const key of ["isError"]) {
+    if (entry[key] !== undefined && typeof entry[key] !== "boolean")
+      throw new TypeError(`Invalid transcript entry ${key} at ${index}`);
+  }
+  for (const key of ["images", "videos", "featuredMedia"]) {
+    if (
+      entry[key] !== undefined &&
+      (!Array.isArray(entry[key]) ||
+        !(entry[key] as unknown[]).every((item) => typeof item === "string"))
+    )
+      throw new TypeError(`Invalid transcript entry ${key} at ${index}`);
+  }
+  if (
+    entry.noticeKind !== undefined &&
+    (typeof entry.noticeKind !== "string" ||
+      Buffer.byteLength(entry.noticeKind) > 64)
+  )
+    throw new TypeError(`Invalid transcript entry noticeKind at ${index}`);
+  if (entry.senderVia !== undefined && entry.senderVia !== "slack")
+    throw new TypeError(`Invalid transcript entry senderVia at ${index}`);
+  if (entry.contextInjection !== undefined) {
+    const context = entry.contextInjection;
+    if (!isPlainRecord(context))
+      throw new TypeError(
+        `Invalid transcript entry contextInjection at ${index}`,
+      );
+    const contextKeys = Object.keys(context);
+    if (
+      contextKeys.some(
+        (key) => !["bytes", "hash", "source", "turnId"].includes(key),
+      )
+    )
+      throw new TypeError(
+        `Invalid transcript entry contextInjection at ${index}`,
+      );
+    if (typeof context.source !== "string" || !context.source)
+      throw new TypeError(
+        `Invalid transcript entry contextInjection source at ${index}`,
+      );
+    for (const key of ["hash", "turnId"]) {
+      if (context[key] !== undefined && typeof context[key] !== "string")
+        throw new TypeError(
+          `Invalid transcript entry contextInjection ${key} at ${index}`,
+        );
+    }
+    if (
+      context.bytes !== undefined &&
+      (!Number.isSafeInteger(context.bytes) || (context.bytes as number) < 0)
+    )
+      throw new TypeError(
+        `Invalid transcript entry contextInjection bytes at ${index}`,
+      );
+  }
+  if (entry.files !== undefined) {
+    if (!Array.isArray(entry.files))
+      throw new TypeError(`Invalid transcript entry files at ${index}`);
+    for (const file of entry.files) {
+      if (
+        !isPlainRecord(file) ||
+        Object.keys(file).sort().join(",") !== "name,path" ||
+        typeof file.name !== "string" ||
+        typeof file.path !== "string"
+      )
+        throw new TypeError(`Invalid transcript entry file at ${index}`);
+    }
+  }
+  return sanitizeTranscriptMediaEntry(value as TranscriptEntry);
+}
+
+function boundedId(value: unknown, name: string, maxBytes: number): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    Buffer.byteLength(value) > maxBytes ||
+    value.includes("\0")
+  )
+    throw new TypeError(`Invalid transcript destination ${name}`);
+  return value;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function assertPlainJson(
+  value: unknown,
+  path: string,
+  seen = new Set<object>(),
+  depth = 0,
+): void {
+  if (depth > TRANSCRIPT_DESTINATION_MAX_JSON_DEPTH)
+    throw new RangeError(
+      `Transcript destination JSON is too deeply nested at ${path}`,
+    );
+  if (value === null || typeof value === "string" || typeof value === "boolean")
+    return;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value))
+      throw new TypeError(`Non-finite JSON number at ${path}`);
+    return;
+  }
+  if (typeof value !== "object")
+    throw new TypeError(`Unsupported JSON value at ${path}`);
+  if (seen.has(value)) throw new TypeError(`Cyclic JSON value at ${path}`);
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index++) {
+      if (!(index in value))
+        throw new TypeError(`Sparse JSON array at ${path}`);
+      assertPlainJson(value[index], `${path}[${index}]`, seen, depth + 1);
+    }
+  } else {
+    if (!isPlainRecord(value))
+      throw new TypeError(`Non-plain JSON object at ${path}`);
+    for (const [key, child] of Object.entries(value))
+      assertPlainJson(child, `${path}.${key}`, seen, depth + 1);
+  }
+  seen.delete(value);
+}
+
+function canonicalDestinationJson(value: unknown): string {
+  if (value === null || typeof value !== "object")
+    return JSON.stringify(value)!;
+  if (Array.isArray(value))
+    return `[${value.map(canonicalDestinationJson).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map(
+      (key) =>
+        `${JSON.stringify(key)}:${canonicalDestinationJson(record[key])}`,
+    )
+    .join(",")}}`;
+}
+
+function destinationResult(
+  outcome: WriteOutcome,
+): DestinationTranscriptAppendResult {
+  let firstSeq = 0;
+  let lastSeq = 0;
+  const changes = outcome.affected.map((entry) => {
+    if (!firstSeq || entry.seq < firstSeq) firstSeq = entry.seq;
+    if (entry.seq > lastSeq) lastSeq = entry.seq;
+    return { entryId: entry.id, seq: entry.seq, changeSeq: entry.changeSeq };
+  });
+  return {
+    firstSeq,
+    lastSeq,
+    inserted: outcome.inserted,
+    updated: outcome.updated,
+    changes,
+  };
 }
 
 // ── Outline projection ─────────────────────────────────────────────────────

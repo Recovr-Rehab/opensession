@@ -35,6 +35,16 @@ capabilities and Executor operation grants have distinct canonical wire domains
 and are cross-rejected at runtime, not merely separated with TypeScript brands.
 Hosts receive a root descriptor rather than a raw gateway filesystem path.
 
+A prerequisite destination API for future Host recovery now exists only inside
+the gateway. It accepts transcript destination payloads, not credentials,
+provider/model/MCP configuration, or arbitrary prompts, and has no public HTTP
+route or production Host routing. It rejects non-plain or non-JSON values,
+unknown request keys, non-finite numbers, malformed transcript entries, and
+bounded-count/byte overflows before writing. Canonical hashing uses an explicit
+versioned domain and binds the exact turn fence and entries. Only the new
+`transcript_destination_append` gateway operation is replay-safe; broadening the
+legacy transcript operation would make ambiguous old callbacks unsafe.
+
 ## Automation least-privilege
 
 Automation runs (especially event-triggered ones like support-ticket triage)

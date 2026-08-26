@@ -235,6 +235,42 @@ describe("SessionKernel", () => {
 		}
 	});
 
+	test("re-admits only the narrow destination transcript operation after restart", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-transcript-destination-"));
+		const path = join(dir, "kernel.sqlite");
+		let durableStore = new SessionKernelStore(path);
+		const input = {
+			sessionId: "destination-replay",
+			requestId: "transcript-destination:append-one",
+			operation: "transcript_destination_append" as const,
+			identity: { digest: "digest-one", fence: { runId: "run", turnId: "turn", generation: 1 } },
+		};
+		try {
+			expect(durableStore.requestGatewayCommand(input)).toEqual({ status: "execute" });
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			expect(durableStore.requestGatewayCommand(input)).toEqual({ status: "execute" });
+			expect(() => durableStore.requestGatewayCommand({
+				...input,
+				identity: { ...input.identity, digest: "changed" },
+			})).toThrow("reused with another payload");
+		} finally {
+			durableStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("a session tombstone fences a stale destination append after receipt cleanup", () => {
+		const sessionId = "deleted-transcript-destination";
+		store.tombstoneSession(sessionId);
+		expect(() => store.requestGatewayCommand({
+			sessionId,
+			requestId: "transcript-destination:stale",
+			operation: "transcript_destination_append",
+			identity: { digest: "stale" },
+		})).toThrow(`Session ${sessionId} was deleted`);
+	});
+
 	test("deduplicates deletion before and after its permanent tombstone", () => {
 		const input = {
 			sessionId: "delete-once",

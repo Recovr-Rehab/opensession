@@ -186,6 +186,8 @@ describe("single session ownership", () => {
 
 	test("every transcript mutation enters the session owner", () => {
 		const source = read("transcript-store.ts");
+		expect(source).toContain("executeDestinationIdempotentSessionProjection(");
+		expect(source).toContain('"transcript_destination_append"');
 		for (const operation of [
 			"transcript_append",
 			"transcript_import",
