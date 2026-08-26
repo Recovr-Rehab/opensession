@@ -588,7 +588,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					index === 0 && "invisible",
 				)}
 			>
-				<div className="mx-auto grid h-full w-full max-w-[820px] grid-cols-[1fr_auto_1fr] items-center phone:grid-cols-[44px_minmax(0,1fr)] phone:gap-x-2">
+				<div className="mx-auto grid h-full w-full max-w-[820px] grid-cols-[1fr_auto_1fr] items-center phone:grid-cols-[48px_minmax(0,1fr)] phone:gap-x-2">
 					<Button
 						variant="soft"
 						size="lg"
@@ -596,7 +596,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						onClick={() => goTo(index - 1)}
 						aria-label="Back"
 						className={cn(
-							"min-h-11 justify-self-start phone:col-start-1 phone:size-11 phone:justify-center phone:p-0",
+							"min-h-12 justify-self-start rounded-lg px-4 phone:col-start-1 phone:size-12 phone:justify-center phone:p-0",
 							index === 0 && "invisible",
 						)}
 					>
@@ -613,7 +613,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 							else goTo(index + 1);
 						}}
 						disabled={!status || finishing}
-						className="min-h-11 justify-self-end phone:col-start-2 phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
+						className="min-h-12 justify-self-end rounded-lg px-4 phone:col-start-2 phone:w-full phone:justify-center"
 					>
 						{index === 0
 							? "Continue"
