@@ -10,7 +10,7 @@ const prevDir = __setSessionsDirForTest(scratch);
 // The module reads the live sessions-dir binding on every call, so a normal
 // import is isolated by this test file's process without a cache-busting URL.
 const { migrateSessionEngine, isAutomationOwnedSession, sessionHasJournaledRun } =
-  await import("./session-model-migration.ts");
+  await import("./session-model-migration");
 
 function writeSession(id: string, extra: Record<string, unknown> = {}) {
   writeFileSync(
