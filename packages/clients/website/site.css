@@ -1524,7 +1524,9 @@ dialog::backdrop {
 
 .download-card-preview-mac {
 	padding: 18px 0 0 18px;
-	background: linear-gradient(140deg, rgba(18, 128, 207, 0.16), rgba(0, 170, 90, 0.12));
+	background-image: url("./demo-background.webp");
+	background-position: center;
+	background-size: cover;
 }
 
 .download-card-preview-mac img {
