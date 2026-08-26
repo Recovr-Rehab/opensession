@@ -723,6 +723,19 @@ describe("session kernel actor service", () => {
         },
       });
       await Bun.sleep(25);
+      const catalogReadStartedAt = Date.now();
+      expect(await rpc({
+        t: "call",
+        rpcId: "barrier-timeout-quarantines",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "quarantinedSessions",
+          args: [100, 0],
+        },
+      })).toMatchObject({ t: "call_result", status: 1 });
+      expect(Date.now() - catalogReadStartedAt).toBeLessThan(400);
+
       const startedAt = Date.now();
       const response = await fetch(`${service.url}/rpc`, {
         method: "POST",

@@ -610,6 +610,8 @@ export async function startSessionKernelService(
         ),
         request,
       );
+    if (route.scope === "catalog_read")
+      return sendToSlot(slots[0], request);
 
     if (request.t === "hello") return sendToSlot(slots[0], request);
     if (queuedGlobalTurns >= MAX_GLOBAL_TURNS)
