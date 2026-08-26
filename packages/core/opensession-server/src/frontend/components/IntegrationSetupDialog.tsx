@@ -451,7 +451,7 @@ export function IntegrationSetupDialog({
 
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
-			<Modal.Content widthClassName="max-w-[34rem]">
+			<Modal.Content widthClassName="max-w-[40rem]">
 				<Modal.Header
 					title={
 						<span className="flex items-center gap-2.5">
