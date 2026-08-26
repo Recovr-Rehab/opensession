@@ -25,7 +25,7 @@ test("workspace surfaces keep committed and uncommitted work separate", () => {
 test("popup review heading keeps one small gap after a lone PR band", () => {
 	expect(summarySource).toContain('"[&>.ws-summary-band:last-child]:mb-0"');
 	expect(summarySource).toContain(
-		'"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-1"',
+		'"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-2"',
 	);
 	expect(summarySource).not.toContain('embedded ? "h-11" : "h-7 mt-0"');
 });
