@@ -68,7 +68,7 @@ function ConfigurationSection({
 					</p>
 				)}
 			</header>
-			<SettingsSection className="p-4">{children}</SettingsSection>
+			<SettingsSection className="border-0 bg-panel p-4">{children}</SettingsSection>
 		</section>
 	);
 }
@@ -465,7 +465,7 @@ export function IntegrationSetupDialog({
 				{(canToggle || integration.env.length > 0) && (
 					<div className="flex flex-col gap-4">
 						{canToggle && (
-							<SettingsSection className="flex items-center gap-4 p-4">
+							<SettingsSection className="flex items-center gap-4 border-0 bg-panel p-4">
 								<div className="min-w-0 flex-1">
 									<div className="text-item-title font-medium text-fg">
 										Enable {integration.label}
