@@ -62,17 +62,17 @@ Uncommitted checkout edits never become live, including frontend edits.
 - Do not use an ad-hoc `systemctl restart`. It only restarts the already pinned
   release and can violate the gateway/kernel rollout order.
 - Commit and push before deploying. Deployment may be autonomous when the task
-  calls for making the change live, but it is a shared, disruptive operation,
-  not a per-session completion ritual. Check `deploy_status` first. If another
-  deploy is active or just completed, or several sessions are landing related
-  changes, do not start or repeatedly retry another one. Wait for the commit
-  burst to settle and deploy the newest fast-forward commit once.
+  calls for making the change live, but it is a shared operation, not a
+  per-session completion ritual. Concurrent main-line requests queue and
+  coalesce to the newest fast-forward commit; targets already covered become
+  successful no-ops. Do not manually retry a queued request.
 - Use `deploy_self` for ordinary frontend, backend, protocol, and dependency
   changes. It classifies the complete diff from the running backend pin. A
   strictly frontend-only diff is built in its immutable target release and
   promoted without restarting any service; everything else uses the standard
-  health-gated executor, session-kernel, and gateway restart. Prefer one batched
-  rollout over a serial restart train.
+  health-gated executor, session-kernel, and gateway restart. The deploy
+  controller collapses overlapping main-line requests instead of producing a
+  restart train.
 - Use the full root deploy, `sudo deploy/deploy.sh <sha>`, instead when a change
   affects live deployment machinery or an artifact that script installs:
   `deploy/{deploy,self-deploy,release-checkout}.sh`, the three
