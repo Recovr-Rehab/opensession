@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useReducedMotion } from "motion/react";
 import { BASE_PATH } from "../lib/base";
 import { Button } from "../ui/button";
@@ -40,7 +40,7 @@ function GithubSetupStep({
 }: {
 	label: string;
 	guide: string;
-	caption: string;
+	caption: ReactNode;
 	complete?: boolean;
 	href?: string | null;
 	disabled?: boolean;
@@ -299,7 +299,13 @@ export function GithubManifestSetup({
 				<GithubSetupStep
 					label="Enable Device Flow"
 					guide={githubDeviceFlowGuide}
-					caption="Leave OAuth during installation off, then turn on Enable Device Flow."
+					caption={
+						<>
+							Leave OAuth during installation off, then turn on Enable Device Flow.
+							Click “<strong className="font-semibold text-tooltip-fg">Save changes</strong>”
+							to finish.
+						</>
+					}
 					href={settingsUrl}
 				/>
 				<GithubSetupStep
