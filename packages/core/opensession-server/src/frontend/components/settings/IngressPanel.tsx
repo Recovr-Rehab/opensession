@@ -227,8 +227,8 @@ function PrivateAppSetup({
 				)}
 				<SetupSteps>
 							<SetupStep number={1} title="Choose the app domain">
-								<SettingsField className="mb-0">
-									Domain
+								<SettingsField className="mb-0 desktop:grid desktop:grid-cols-[10rem_minmax(0,1fr)] desktop:items-center desktop:gap-4">
+									<span>Domain</span>
 									<Input value={domain} placeholder="os.example.com" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onDomainChange(event.target.value)} />
 								</SettingsField>
 								<p className="m-0">Keep it different from the public callback domain.</p>
@@ -253,17 +253,17 @@ function PrivateAppSetup({
 									{" "}Open Session protects it with server file permissions and never returns it to the browser.
 								</p>
 								<a className="w-fit text-link hover:underline" href={provider === "cloudflare" ? "https://dash.cloudflare.com/profile/api-tokens" : "https://vercel.com/account/settings/tokens"} target="_blank" rel="noreferrer">Create {provider === "cloudflare" ? "Cloudflare" : "Vercel"} token</a>
-								<SettingsField className="mb-0">
-									Certificate email
+								<SettingsField className="mb-0 desktop:grid desktop:grid-cols-[10rem_minmax(0,1fr)] desktop:items-center desktop:gap-4">
+									<span>Certificate email</span>
 									<Input type="email" value={email} placeholder={managedCredential && settings.app.domain.certificateEmailConfigured ? "Leave blank to keep the saved email" : "you@example.com"} disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onEmailChange(event.target.value)} />
 								</SettingsField>
-								<SettingsField className="mb-0">
-									{provider === "cloudflare" ? "Cloudflare" : "Vercel"} API token
+								<SettingsField className="mb-0 desktop:grid desktop:grid-cols-[10rem_minmax(0,1fr)] desktop:items-center desktop:gap-4">
+									<span>{provider === "cloudflare" ? "Cloudflare" : "Vercel"} API token</span>
 									<Input type="password" value={apiToken} placeholder={managedCredential ? "Leave blank to keep the saved token" : "Paste the scoped token"} disabled={busy} autoComplete="off" onChange={(event) => onTokenChange(event.target.value)} />
 								</SettingsField>
 								{provider === "vercel" && (
-									<SettingsField className="mb-0">
-										Team ID <span className="font-normal text-faint">Optional</span>
+									<SettingsField className="mb-0 desktop:grid desktop:grid-cols-[10rem_minmax(0,1fr)] desktop:items-center desktop:gap-4">
+										<span>Team ID <span className="font-normal text-faint">Optional</span></span>
 										<Input value={teamId} placeholder="team_…" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onTeamIdChange(event.target.value)} />
 									</SettingsField>
 								)}
@@ -282,13 +282,13 @@ function PrivateAppSetup({
 						{status === "unreachable" && ingressHostname(domain) === ingressHostname(savedDomain) && (
 							<InlineAlert>DNS points to this server, but the HTTPS app is not reachable. Verify Caddy and the certificate, then try again.</InlineAlert>
 						)}
-						<SettingsFormActions className="phone:flex-col-reverse">
-							<Button variant="soft" disabled={busy || !savedDomain || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onVerify}>
-								{action === "verify" ? "Checking…" : "Verify address"}
-							</Button>
-							<Button variant="primary" disabled={busy || managedInputMissing || !dnsRecord || !settings.custom.caddyInstalled || !settings.app.domain.legoInstalled || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onSetup}>
-								{action === "setup" ? "Setting up…" : managedCredential ? "Update setup" : "Set up private domain"}
-							</Button>
+				<SettingsFormActions className="absolute inset-x-0 bottom-0 z-10 m-0 border-t border-line bg-raised px-5 py-4 phone:flex-col-reverse phone:bg-surface phone:px-4">
+					<Button variant="soft" disabled={busy || !savedDomain || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onVerify}>
+						{action === "verify" ? "Checking…" : "Verify address"}
+					</Button>
+					<Button variant="primary" disabled={busy || managedInputMissing || !dnsRecord || !settings.custom.caddyInstalled || !settings.app.domain.legoInstalled || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onSetup}>
+						{action === "setup" ? "Setting up…" : managedCredential ? "Update setup" : "Set up private domain"}
+					</Button>
 				</SettingsFormActions>
 				<details className="rounded-lg bg-surface p-3 text-meta text-dim">
 					<summary className="cursor-pointer font-medium text-fg">Use an externally managed certificate</summary>
@@ -558,7 +558,7 @@ export function IngressPanel({
 						onClose={() => setSurface(null)}
 						phone={isPhone}
 						label={surface === "domain" ? "Configure domain" : "Configure public callback"}
-						modalClassName="h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(1040px,calc(100vw-32px))] max-w-[1040px]"
+						modalClassName="h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(880px,calc(100vw-32px))] max-w-[880px]"
 						sheetClassName="h-[94dvh]"
 					>
 						{(dismiss) => (
@@ -576,7 +576,7 @@ export function IngressPanel({
 									</div>
 									<Button variant="ghost" aria-label="Close" icon={<IconX size={20} />} className="size-10 shrink-0 justify-center p-0 phone:size-11" onClick={dismiss} />
 								</header>
-								<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 phone:p-4">
+								<div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 phone:p-4", surface === "domain" && "pb-24 phone:pb-32")}>
 									{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 									{surface === "domain" ? (
 										<PrivateAppSetup
