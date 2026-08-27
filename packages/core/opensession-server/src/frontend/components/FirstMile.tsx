@@ -13,13 +13,14 @@ import { SettingCardSkeleton } from "../ui/settings";
 import { LoadingState } from "../ui/state";
 import { BrandMark } from "./BrandTile";
 import { GithubAccounts } from "./Connections";
+import { RepoTile } from "./RepoTile";
 import { GithubAuthCard } from "./SetupIntegrations";
 import { ReposSection } from "./SetupRepos";
 import { SetupRestart } from "./SetupRestart";
 import { UserAvatar } from "./UserAvatar";
 import { OrganizationProfileSection } from "./settings/GeneralPanel";
 import { ProviderAccountsSection } from "./settings/ModelAccounts";
-import { IconCheck, IconGlobe, IconLink, IconRepo } from "./icons";
+import { IconCheck, IconGlobe, IconLink } from "./icons";
 import { githubAuthState, type SetupStatus } from "./setup-shared";
 
 interface FirstMileStep {
@@ -242,7 +243,7 @@ function FirstMileSummary({
 						<span
 							key={`${account.provider}-${index}`}
 							title={account.label}
-							className="flex size-7 items-center justify-center rounded-full border border-bg bg-bg/85 text-fg"
+							className="flex size-7 items-center justify-center rounded-full border border-line bg-bg/85 text-fg"
 						>
 							<BrandMark name={account.provider} size={15} />
 						</span>
@@ -259,12 +260,13 @@ function FirstMileSummary({
 			preview: (
 				<div className="flex -space-x-2">
 					{status.repos.slice(0, 4).map((repo) => (
-						<span
-							key={repo.id}
-							title={repo.label}
-							className="flex size-7 items-center justify-center rounded-full border border-bg bg-bg/85 text-dim"
-						>
-							<IconRepo size={14} />
+						<span key={repo.id} title={repo.label} className="flex size-7">
+							<RepoTile
+								name={repo.id}
+								size={28}
+								round
+								className="border border-line"
+							/>
 						</span>
 					))}
 					<PreviewOverflow count={status.repos.length - 4} />
