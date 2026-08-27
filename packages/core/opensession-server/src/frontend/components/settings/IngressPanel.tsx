@@ -23,7 +23,6 @@ import {
 	ingressHostname,
 	privateAppCaddyConfig,
 	privateAppDnsRecord,
-	publicUrlForMethod,
 } from "../../lib/ingress-ui";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useSetupStatus, type SetupController } from "../../hooks/useSetupStatus";
@@ -43,7 +42,6 @@ import {
 	SettingsField,
 	SettingsForm,
 	SettingsFormActions,
-	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
@@ -541,7 +539,6 @@ export function IngressPanel({
 		method === "cloudflare" && (!tunnelId.trim() || (!tunnelToken.trim() && !settings?.cloudflare.tokenConfigured));
 	const selectedMethod = INGRESS_METHODS.find((option) => option.value === method)!;
 	const selectedHealth = settings?.exposure === method ? settings.health : "not_configured";
-	const selectedPublicUrl = settings ? publicUrlForMethod(settings, method, url) : "";
 	const privateDomain = settings ? configuredAppDomain(settings) : "";
 
 	return (
@@ -590,7 +587,7 @@ export function IngressPanel({
 						onClose={() => setSurface(null)}
 						phone={isPhone}
 						label={surface === "domain" ? "Configure domain" : "Configure public callback"}
-						modalClassName="h-[min(760px,calc(100dvh-48px))] w-[min(780px,calc(100vw-32px))] max-w-[780px]"
+						modalClassName="h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(1040px,calc(100vw-32px))] max-w-[1040px]"
 						sheetClassName="h-[94dvh]"
 					>
 						{(dismiss) => (
@@ -637,58 +634,31 @@ export function IngressPanel({
 								onSaveManual={() => void runPrivateApp("save", () => savePrivateAppDomain(appDomain), "Private app domain saved")}
 							/>
 					) : (
-					<>
-							<SettingsGroupLabel
-								actions={<StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(selectedHealth)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(selectedHealth)} />}
-							>
-								Status
-							</SettingsGroupLabel>
-							<SettingCard>
-								<SettingRow>
-									<SettingRowText>
-										<SettingRowTitle>Public URL</SettingRowTitle>
-										<SettingRowDescription className="selectable break-all font-mono">
-											{selectedPublicUrl || "No public origin configured"}
-										</SettingRowDescription>
-									</SettingRowText>
-								</SettingRow>
-								<SettingRow>
-									<SettingRowText>
-										<SettingRowTitle>Public services</SettingRowTitle>
-										<SettingRowDescription>Webhooks, remote Sandbox callbacks, and workload identity. Never the app.</SettingRowDescription>
-									</SettingRowText>
-								</SettingRow>
-							</SettingCard>
-
-					<div
-						className={cn(
-							"grid items-start gap-3.5 phone:grid-cols-1",
-							onboarding
-								? "grid-cols-2"
-								: "grid-cols-[minmax(0,300px)_minmax(0,1fr)]",
-						)}
-					>
-						<SettingsForm className={cn("m-0 min-w-0 gap-2", onboarding && "gap-2.5 p-6 phone:p-4")}>
-							<div className="px-1 text-label font-medium text-dim">Connection method</div>
+					<div className="grid items-start gap-4">
+						<SettingsForm className="m-0 min-w-0 gap-4 p-6 phone:p-4">
+							<div className="px-1">
+								<div className="text-item-title font-semibold text-fg">Connection method</div>
+								<p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">Choose how external services reach Open Session.</p>
+							</div>
 							<RadioGroup
 								aria-label="Public callback method"
 								value={method}
 								disabled={!!busy || !settings.canManage}
 								onValueChange={(next) => setMethod(next as IngressExposure)}
-								className="grid gap-2"
+								className="grid grid-cols-3 gap-2.5 phone:grid-cols-1"
 							>
 								{INGRESS_METHODS.map((option) => (
 									<label
 										key={option.value}
 										className={cn(
-											"flex min-h-20 cursor-pointer items-center gap-3.5 rounded-xl px-4 py-3.5 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed",
-											onboarding && "bg-hover/50 hover:bg-hover",
+											"flex min-h-24 cursor-pointer items-center gap-3 rounded-xl bg-surface px-4 py-3 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed",
+											onboarding && "hover:bg-hover",
 										)}
 									>
 										<MethodMark method={option.value} />
 										<span className="min-w-0 flex-1">
 											<span className="block text-item-title font-medium text-fg">{option.label}</span>
-											<span className="mt-1 block text-supporting text-dim">{option.description}</span>
+											<span className="mt-1 block text-meta leading-snug text-dim">{option.description}</span>
 										</span>
 										<Radio
 											value={option.value}
@@ -702,12 +672,14 @@ export function IngressPanel({
 							</RadioGroup>
 						</SettingsForm>
 
-						<SettingsForm className={cn("m-0 min-w-0", onboarding && "p-6 phone:p-4")}>
-							<div className="flex items-center gap-3">
-								<MethodMark method={method} size={40} />
-								<div className="min-w-0">
-									<div className="text-item-title font-semibold text-fg">{selectedMethod.label}</div>
-									<p className="mt-0.5 mb-0 text-supporting leading-relaxed text-dim">{selectedMethod.description}</p>
+						<SettingsForm className="m-0 min-w-0 gap-4 p-6 phone:p-4">
+							<div className="flex items-center justify-between gap-4">
+								<div className="flex min-w-0 items-center gap-3">
+									<MethodMark method={method} size={40} />
+									<div className="text-item-title font-semibold text-fg">Set up {selectedMethod.label}</div>
+								</div>
+								<div className="shrink-0">
+									<StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(selectedHealth)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(selectedHealth)} />
 								</div>
 							</div>
 							<div className="grid min-w-0 content-start gap-3.5">
@@ -868,7 +840,6 @@ export function IngressPanel({
 							</div>
 						</SettingsForm>
 					</div>
-					</>
 					)}
 								</div>
 							</>
