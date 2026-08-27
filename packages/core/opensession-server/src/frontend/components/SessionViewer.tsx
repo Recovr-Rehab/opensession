@@ -278,8 +278,6 @@ import {
 	IconArrowRight,
 	IconArrowUp,
 	IconArrowUpToLine,
-	IconCrosshair,
-	IconClock,
 	IconDesk,
 	IconDotsHorizontal,
 	IconEye,
@@ -337,7 +335,6 @@ import {
 	composerQueueItemDraggable,
 	composerQueueItemSeparated,
 	composerQueueList,
-	composerQueuePill,
 	composerQueueSendingShimmer,
 	composerQueueSendingStatus,
 	composerQueueTitle,
@@ -1428,9 +1425,8 @@ export function SessionViewer({
 				return;
 			}
 			if (result.status === "queued" || result.status === "steered") {
-				// The queue's admission echo may arrive before this response. Only now
-				// is it authoritative placement rather than the transient dispatch record
-				// every idle prompt passes through.
+				// Queued messages stay above the composer. A steer is already sent, so
+				// it stays in the conversation while the engine catches up.
 				setPending((current) =>
 					markPendingBusy(
 						current,
@@ -3502,6 +3498,7 @@ export function SessionViewer({
 				: [],
 		);
 		setIsRunningLive(session.isRunning);
+		setPendingDeliveryIds([]);
 		liveTurnStore.clear();
 		setIsStreaming(false);
 	});
@@ -4588,10 +4585,9 @@ export function SessionViewer({
 		}
 	}
 
-	// Busy sends live in the flap from the moment of the send; idle sends are
-	// optimistic transcript bubbles. Both reconcile through the same effect.
-	// While the worktree is still being prepared, everything holds in the flap —
-	// including the create's own first message — until the workspace is ready.
+	// Only deliberately queued sends live above the composer. Idle sends and
+	// steers are conversation messages immediately; both reconcile through the
+	// same transcript path. Workspace setup still holds everything in the flap.
 	const failedOutboxIds = new Set(
 		outboxItems
 			.filter((item) => item.state === "failed")
@@ -4632,11 +4628,15 @@ export function SessionViewer({
 			!fallbackReconciliation.expired.has(item.id),
 	);
 	const pendingQueue = [
-		...visiblePending.filter((p) => p.busyMode || settingUpWorkspace),
+		...visiblePending.filter(
+			(p) => p.busyMode === "queue" || settingUpWorkspace,
+		),
 		...(settingUpWorkspace ? fallbackPending : []),
 	];
 	const pendingBubbles = [
-		...visiblePending.filter((p) => !p.busyMode && !settingUpWorkspace),
+		...visiblePending.filter(
+			(p) => p.busyMode !== "queue" && !settingUpWorkspace,
+		),
 		...(settingUpWorkspace ? [] : fallbackPending),
 	];
 	const optimisticTranscriptEntries: TranscriptEntry[] =
@@ -4722,9 +4722,6 @@ export function SessionViewer({
 					: null,
 				sessionMessageCount
 					? `${sessionMessageCount} session ${sessionMessageCount === 1 ? "message" : "messages"} waiting`
-					: null,
-				steeringMessageCount
-					? `${steeringMessageCount} steering into the current turn`
 					: null,
 			]
 				.filter(Boolean)
@@ -4836,7 +4833,7 @@ export function SessionViewer({
 												composerQueueAction,
 												composerQueueActionSteer,
 											)}
-											aria-label="Steer into the running turn"
+											aria-label="Send now"
 											disabled={!canSteer}
 											onClick={() =>
 												send({
@@ -4863,8 +4860,7 @@ export function SessionViewer({
 				})}
 				</Reorder.Group>
 
-				{/* Just-sent while busy: already visually in the queue, awaiting the
-				    server's echo (which swaps in the real item with actions). */}
+				{/* Deliberately queued sends stay here while their server echo settles. */}
 				{pendingQueue.map((p, i) => (
 					<div
 						key={p.id}
