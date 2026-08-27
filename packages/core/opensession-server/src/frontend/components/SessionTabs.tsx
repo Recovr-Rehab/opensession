@@ -3,13 +3,20 @@ import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { Reorder, useReducedMotion } from "motion/react";
 import type { UnifiedSession } from "../lib/types";
 import { TAB_COLORS, colorHex } from "../lib/tab-colors";
-import { Menu, ContextMenu } from "../ui/menu";
+import { Menu, ContextMenu, MENU_ICON } from "../ui/menu";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import {
 	IconChevronRight,
+	IconCopy,
+	IconFile,
 	IconHistory,
+	IconLink,
+	IconListCircles,
+	IconPencil,
 	IconPlus,
+	IconSidebarLeft,
+	IconSidebarRight,
 	IconX,
 } from "./icons";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
@@ -708,6 +715,7 @@ export function SessionTabs({
 												setEditKey(key);
 											}}
 										>
+											<IconPencil size={20} className={MENU_ICON} />
 											<span className="grow">Rename session</span>
 										</ContextMenu.Item>
 										{/* The cross-bar drag, spelled out: a bar down to its last
@@ -715,23 +723,31 @@ export function SessionTabs({
 								    only way back for someone who never found the gesture. */}
 										{onMoveAcross && (
 											<ContextMenu.Item onClick={() => onMoveAcross(key)}>
+												{moveAcrossSide === "left" ? (
+													<IconSidebarLeft size={20} className={MENU_ICON} />
+												) : (
+													<IconSidebarRight size={20} className={MENU_ICON} />
+												)}
 												<span className="grow">Move to {moveAcrossSide} side</span>
 											</ContextMenu.Item>
 										)}
 										<ContextMenu.Separator />
 										<ContextMenu.SubmenuRoot>
 											<ContextMenu.SubmenuTrigger>
+												<IconCopy size={20} className={MENU_ICON} />
 												<span className="grow">Copy transcript</span>
 												<IconChevronRight size={16} className="text-faint" />
 											</ContextMenu.SubmenuTrigger>
 											<Menu.Popup>
 												<Menu.Item onClick={() => void copySessionTranscript(session, "concise", onToast)}>
+													<IconListCircles size={20} className={MENU_ICON} />
 													<span className="grow">Concise</span>
 													{key === activeId && copyTranscriptLabel && (
 														<Menu.Shortcut>{copyTranscriptLabel}</Menu.Shortcut>
 													)}
 												</Menu.Item>
 												<Menu.Item onClick={() => void copySessionTranscript(session, "full", onToast)}>
+													<IconFile size={20} className={MENU_ICON} />
 													<span className="grow">Full</span>
 												</Menu.Item>
 											</Menu.Popup>
@@ -739,6 +755,7 @@ export function SessionTabs({
 										<ContextMenu.Item
 											onClick={() => copyToClipboard(absoluteLink(sessionPath(session)), () => onToast("Link copied"))}
 										>
+											<IconLink size={20} className={MENU_ICON} />
 											<span className="grow">Copy link</span>
 										</ContextMenu.Item>
 										<ContextMenu.Separator />
@@ -766,6 +783,7 @@ export function SessionTabs({
 										</ContextMenu.Item>
 										<ContextMenu.Separator />
 										<ContextMenu.Item onClick={() => onClose(session)}>
+											<IconX size={20} className={MENU_ICON} />
 											<span className="grow">Close tab</span>
 											{key === activeId && closeLabel && (
 												<ContextMenu.Shortcut>{closeLabel}</ContextMenu.Shortcut>
