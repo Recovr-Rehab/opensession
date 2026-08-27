@@ -959,12 +959,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								disabled={finishing}
 								className="px-4 phone:min-h-11"
 							>
-								{nextLabel ?? (
-									<>
-										<span className="phone:hidden">Enter {PRODUCT_NAME}</span>
-										<span className="desktop:hidden">Enter</span>
-									</>
-								)}
+								{nextLabel ?? `Enter ${PRODUCT_NAME}`}
 							</Button>
 							</div>
 					</motion.footer>
