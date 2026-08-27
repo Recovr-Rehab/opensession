@@ -41,6 +41,8 @@ import React, { useEffect, useState } from "react";
 export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 	const state = hoverState(s);
 	const ov = useSessionOverview(s);
+	const attentionDetail =
+		s.safety?.explanation ?? (!s.isRunning ? s.lastRunError?.message : undefined);
 	const rows: Array<[string, React.ReactNode]> = [];
 	const hasHead =
 		(s.prAdditions != null && s.prDeletions != null) || !!s.prOsReview;
@@ -116,12 +118,12 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 					Blocked on a question. Open the session to answer.
 				</div>
 			)}
-			{!s.waitingForInput && runNeedsAttention(s) && (
+			{!s.waitingForInput && attentionDetail && (
 				<div
 					className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim line-clamp-2"
-					title={s.lastRunError!.message}
+					title={attentionDetail}
 				>
-					{cardRunErrorDetail(s.lastRunError!.message)}
+					{cardRunErrorDetail(attentionDetail)}
 				</div>
 			)}
 			{!s.waitingForInput && (s.queuedCount ?? 0) > 0 && (
@@ -459,7 +461,11 @@ function WsOverviewInfo({
 	const hasHead =
 		(prSession?.prAdditions != null && prSession?.prDeletions != null) ||
 		!!prSession?.prOsReview;
-	const failedSession = workspaceRunNeedingAttention(row.sessions);
+	const attentionSession = workspaceRunNeedingAttention(row.sessions);
+	const attentionDetail =
+		attentionSession?.safety?.explanation ??
+		attentionSession?.lastRunError?.message ??
+		"Needs attention.";
 	return (
 		<>
 			{/* The PR facts, on one strip above the title: what changed, what the
@@ -518,11 +524,9 @@ function WsOverviewInfo({
 				) : (
 					<div
 						className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim line-clamp-2"
-						title={failedSession?.lastRunError?.message}
+						title={attentionDetail}
 					>
-						{cardRunErrorDetail(
-							failedSession?.lastRunError?.message || "Needs attention.",
-						)}
+						{cardRunErrorDetail(attentionDetail)}
 					</div>
 				))}
 
