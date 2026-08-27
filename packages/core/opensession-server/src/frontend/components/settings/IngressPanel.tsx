@@ -111,7 +111,7 @@ function SetupStep({
 }) {
 	return (
 		<li className="grid grid-cols-[24px_minmax(0,1fr)] gap-2.5 py-4 first:pt-0 last:pb-0">
-			<span className="flex size-6 items-center justify-center rounded-full bg-surface text-meta font-semibold text-fg">
+			<span className="flex size-6 items-center justify-center rounded-full bg-fg text-meta font-semibold text-bg">
 				{number}
 			</span>
 			<div className={cn("min-w-0 pt-0.5", controls && "desktop:grid desktop:grid-cols-[minmax(0,1fr)_18rem] desktop:items-start desktop:gap-6")}>
