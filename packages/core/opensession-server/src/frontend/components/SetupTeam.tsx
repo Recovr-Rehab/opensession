@@ -199,7 +199,12 @@ function MemberRow({
 	].filter(Boolean);
 	return (
 		<SettingRow>
-			<UserAvatar name={member.name} login={member.github} size={28} />
+			<UserAvatar
+				name={member.name}
+				login={member.github}
+				size={28}
+				glow={compact}
+			/>
 			<SettingRowText>
 				<SettingRowTitle>{member.name}</SettingRowTitle>
 				{!compact && details.length > 0 && (
