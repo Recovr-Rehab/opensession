@@ -101,7 +101,12 @@ function ContextPopup({
 	children: React.ReactNode;
 }) {
 	return (
-		<BaseContextMenu.Portal>
+		<BaseContextMenu.Portal
+			// Base UI otherwise inherits a containing popup's portal target. A
+			// right-click menu is the active interaction, so mount it at the page
+			// root where its floating layer paints above hover previews.
+			container={typeof document !== "undefined" ? document.body : undefined}
+		>
 			<BaseContextMenu.Positioner
 				collisionPadding={8}
 				className={cn(FLOATING_OVERLAY_LAYER, "outline-none")}
