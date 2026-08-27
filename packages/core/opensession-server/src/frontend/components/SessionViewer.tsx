@@ -7675,7 +7675,7 @@ export function SessionViewer({
 							{inlineRunFailure && (
 								<InlineAlert
 									title="Run failed"
-									className="mx-auto mt-3 max-w-[var(--session-col)] rounded-2xl border-0 text-center"
+									className="mx-auto mt-3 max-w-2xl rounded-2xl border-0 text-center [&>div>div]:leading-snug [&>div>div+div]:mt-0"
 								>
 									{inlineRunFailure.message}
 								</InlineAlert>
