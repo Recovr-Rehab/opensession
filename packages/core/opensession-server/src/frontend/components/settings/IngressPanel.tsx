@@ -229,21 +229,24 @@ function PrivateAppSetup({
 						title="Authorize the DNS provider"
 						controls={
 							<>
-								<Segmented
-									label="Private domain DNS provider"
-									value={provider}
-									onValueChange={(value) => onProviderChange(value as "cloudflare" | "vercel")}
-									className="w-full"
-								>
-									<SegmentedOption value="cloudflare" disabled={busy} className="flex-1 justify-center phone:min-h-11">
-										<BrandMark name="cloudflare" size={16} className="shrink-0" />
-										Cloudflare
-									</SegmentedOption>
-									<SegmentedOption value="vercel" disabled={busy} className="flex-1 justify-center phone:min-h-11">
-										<BrandMark name="vercel" size={15} className="shrink-0" />
-										Vercel
-									</SegmentedOption>
-								</Segmented>
+								<div className="flex min-w-0 flex-col gap-1.5">
+									<div className="text-label font-medium text-dim">DNS provider</div>
+									<Segmented
+										label="Private domain DNS provider"
+										value={provider}
+										onValueChange={(value) => onProviderChange(value as "cloudflare" | "vercel")}
+										className="w-full"
+									>
+										<SegmentedOption value="cloudflare" disabled={busy} className="flex-1 justify-center phone:min-h-11">
+											<BrandMark name="cloudflare" size={16} className="shrink-0" />
+											Cloudflare
+										</SegmentedOption>
+										<SegmentedOption value="vercel" disabled={busy} className="flex-1 justify-center phone:min-h-11">
+											<BrandMark name="vercel" size={15} className="shrink-0" />
+											Vercel
+										</SegmentedOption>
+									</Segmented>
+								</div>
 								<SettingsField className="mb-0">
 									Certificate email
 									<Input type="email" value={email} placeholder={managedCredential && settings.app.domain.certificateEmailConfigured ? "Leave blank to keep the saved email" : "you@example.com"} disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onEmailChange(event.target.value)} />
