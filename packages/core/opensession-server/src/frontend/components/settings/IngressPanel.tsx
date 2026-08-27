@@ -579,7 +579,7 @@ export function IngressPanel({
 						onClose={() => setSurface(null)}
 						phone={isPhone}
 						label={surface === "domain" ? "Configure domain" : "Configure public callback"}
-						modalClassName="h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(880px,calc(100vw-32px))] max-w-[880px]"
+						modalClassName="h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(800px,calc(100vw-32px))] max-w-[800px]"
 						sheetClassName="h-[94dvh]"
 					>
 						{(dismiss) => (
