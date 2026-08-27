@@ -125,15 +125,28 @@ function SetupSteps({ children }: { children: React.ReactNode }) {
 	return <ol className="m-0 grid list-none gap-3 p-0 text-supporting text-dim">{children}</ol>;
 }
 
-function SetupStep({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
+function SetupStep({
+	number,
+	title,
+	children,
+	controls,
+}: {
+	number: number;
+	title: string;
+	children?: React.ReactNode;
+	controls?: React.ReactNode;
+}) {
 	return (
 		<li className="grid grid-cols-[24px_minmax(0,1fr)] gap-2.5">
 			<span className="flex size-6 items-center justify-center rounded-full bg-surface text-meta font-semibold text-dim">
 				{number}
 			</span>
-			<div className="min-w-0 pt-0.5">
-				<div className="font-medium text-fg">{title}</div>
-				<div className="mt-1 grid gap-2 leading-relaxed">{children}</div>
+			<div className={cn("min-w-0 pt-0.5", controls && "desktop:grid desktop:grid-cols-[minmax(0,0.8fr)_minmax(20rem,1.2fr)] desktop:items-start desktop:gap-6")}>
+				<div className="min-w-0">
+					<div className="font-medium text-fg">{title}</div>
+					{children && <div className="mt-1 grid gap-2 leading-relaxed">{children}</div>}
+				</div>
+				{controls && <div className="mt-3 grid min-w-0 gap-3 desktop:mt-0">{controls}</div>}
 			</div>
 		</li>
 	);
@@ -226,14 +239,23 @@ function PrivateAppSetup({
 					<SettingsHint className="m-0">This address is already working. Its certificate is managed outside Open Session.</SettingsHint>
 				)}
 				<SetupSteps>
-							<SetupStep number={1} title="Choose the app domain">
-								<SettingsField className="mb-0 desktop:grid desktop:grid-cols-[10rem_minmax(0,1fr)] desktop:items-center desktop:gap-4">
-									<span>Domain</span>
-									<Input value={domain} placeholder="os.example.com" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onDomainChange(event.target.value)} />
-								</SettingsField>
-								<p className="m-0">Keep it different from the public callback domain.</p>
-							</SetupStep>
-							<SetupStep number={2} title="Authorize the DNS provider">
+					<SetupStep
+						number={1}
+						title="Choose the app domain"
+						controls={
+							<SettingsField className="mb-0">
+								Domain
+								<Input value={domain} placeholder="os.example.com" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onDomainChange(event.target.value)} />
+							</SettingsField>
+						}
+					>
+						<p className="m-0">Keep it different from the public callback domain.</p>
+					</SetupStep>
+					<SetupStep
+						number={2}
+						title="Authorize the DNS provider"
+						controls={
+							<>
 								<SettingCard>
 									<RadioGroup aria-label="Private domain DNS provider" value={provider} disabled={busy} onValueChange={(value) => onProviderChange(value as "cloudflare" | "vercel")}>
 										<label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 py-3">
@@ -246,38 +268,41 @@ function PrivateAppSetup({
 										</label>
 									</RadioGroup>
 								</SettingCard>
-								<p className="m-0">
-									{provider === "cloudflare"
-										? <>Create a token with <strong className="font-medium text-fg">Zone:DNS Edit</strong> and <strong className="font-medium text-fg">Zone:Zone Read</strong> for this zone.</>
-										: <>Create a Vercel token with access to the team that owns this domain.</>}
-									{" "}Open Session protects it with server file permissions and never returns it to the browser.
-								</p>
-								<a className="w-fit text-link hover:underline" href={provider === "cloudflare" ? "https://dash.cloudflare.com/profile/api-tokens" : "https://vercel.com/account/settings/tokens"} target="_blank" rel="noreferrer">Create {provider === "cloudflare" ? "Cloudflare" : "Vercel"} token</a>
-								<SettingsField className="mb-0 desktop:grid desktop:grid-cols-[10rem_minmax(0,1fr)] desktop:items-center desktop:gap-4">
-									<span>Certificate email</span>
+								<SettingsField className="mb-0">
+									Certificate email
 									<Input type="email" value={email} placeholder={managedCredential && settings.app.domain.certificateEmailConfigured ? "Leave blank to keep the saved email" : "you@example.com"} disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onEmailChange(event.target.value)} />
 								</SettingsField>
-								<SettingsField className="mb-0 desktop:grid desktop:grid-cols-[10rem_minmax(0,1fr)] desktop:items-center desktop:gap-4">
-									<span>{provider === "cloudflare" ? "Cloudflare" : "Vercel"} API token</span>
+								<SettingsField className="mb-0">
+									{provider === "cloudflare" ? "Cloudflare" : "Vercel"} API token
 									<Input type="password" value={apiToken} placeholder={managedCredential ? "Leave blank to keep the saved token" : "Paste the scoped token"} disabled={busy} autoComplete="off" onChange={(event) => onTokenChange(event.target.value)} />
 								</SettingsField>
 								{provider === "vercel" && (
-									<SettingsField className="mb-0 desktop:grid desktop:grid-cols-[10rem_minmax(0,1fr)] desktop:items-center desktop:gap-4">
-										<span>Team ID <span className="font-normal text-faint">Optional</span></span>
+									<SettingsField className="mb-0">
+										Team ID <span className="font-normal text-faint">Optional</span>
 										<Input value={teamId} placeholder="team_…" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onTeamIdChange(event.target.value)} />
 									</SettingsField>
 								)}
-							</SetupStep>
-							<SetupStep number={3} title="Set up and verify">
-								<p className="m-0">Open Session creates the DNS-only A record, requests a Let’s Encrypt certificate with DNS-01, configures Caddy, and checks the private address. It checks renewal daily.</p>
-								{(!settings.custom.caddyInstalled || !settings.app.domain.legoInstalled) && (
-									<>
-										<InlineAlert>Install Caddy and the certificate helper first, then reload this page.</InlineAlert>
-										<CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --caddy --no-onboard"}</CodeBlock>
-									</>
-								)}
-							</SetupStep>
-						</SetupSteps>
+							</>
+						}
+					>
+						<p className="m-0">
+							{provider === "cloudflare"
+								? <>Create a token with <strong className="font-medium text-fg">Zone:DNS Edit</strong> and <strong className="font-medium text-fg">Zone:Zone Read</strong> for this zone.</>
+								: <>Create a Vercel token with access to the team that owns this domain.</>}
+							{" "}Open Session protects it with server file permissions and never returns it to the browser.
+						</p>
+						<a className="w-fit text-link hover:underline" href={provider === "cloudflare" ? "https://dash.cloudflare.com/profile/api-tokens" : "https://vercel.com/account/settings/tokens"} target="_blank" rel="noreferrer">Create {provider === "cloudflare" ? "Cloudflare" : "Vercel"} token</a>
+					</SetupStep>
+					<SetupStep number={3} title="Set up and verify">
+						<p className="m-0">Open Session creates the DNS-only A record, requests a Let’s Encrypt certificate with DNS-01, configures Caddy, and checks the private address. It checks renewal daily.</p>
+						{(!settings.custom.caddyInstalled || !settings.app.domain.legoInstalled) && (
+							<>
+								<InlineAlert>Install Caddy and the certificate helper first, then reload this page.</InlineAlert>
+								<CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --caddy --no-onboard"}</CodeBlock>
+							</>
+						)}
+					</SetupStep>
+				</SetupSteps>
 						{status === "waiting_dns" && <InlineAlert>DNS has not reached this server yet. Wait a moment, then verify again.</InlineAlert>}
 						{status === "unreachable" && ingressHostname(domain) === ingressHostname(savedDomain) && (
 							<InlineAlert>DNS points to this server, but the HTTPS app is not reachable. Verify Caddy and the certificate, then try again.</InlineAlert>
