@@ -193,6 +193,7 @@ import {
 	type OptimisticPendingPrompt,
 	optimisticOutboxFallbacks,
 	reconcilePending,
+	withoutPendingTranscriptEchoes,
 } from "../lib/pending-reconcile";
 import {
 	promptOutbox,
@@ -4704,20 +4705,16 @@ export function SessionViewer({
 			? session.lastRunError
 			: null;
 	// Server-side filtering is authoritative; this guard keeps model-routing
-	// plumbing out of the message surface during a rolling deploy.
-	// A `started` delivery is temporarily present in the server queue while its
-	// dispatch is claimed. Keep that receipt from duplicating the authoritative
-	// optimistic transcript bubble. If the bubble expires, the durable queue row
-	// becomes visible again rather than hiding a genuinely stalled message.
-	const startedPendingDeliveryIds = new Set(
-		pendingBubbles
-			.filter((item) => item.serverStarted)
-			.map((item) => item.id.replace(/^outbox-/, "")),
-	);
-	const shownQueued = queued.filter(
-		(item) =>
-			!startedPendingDeliveryIds.has(item.id || "") &&
+	// plumbing out of the message surface during a rolling deploy. An idle send
+	// is durably queued before actor admission, so its queue echo can arrive before
+	// the REST result says whether it started or parked. Keep that receipt off the
+	// queue surface for as long as the same message is an optimistic transcript
+	// bubble. If the bubble expires, the durable row becomes visible again.
+	const shownQueued = withoutPendingTranscriptEchoes(
+		queued.filter((item) =>
 			isClientVisibleQueuedContent(item.content, item.user),
+		),
+		pendingBubbles,
 	);
 	// Classified once, read by both the counts and the rows, so the chip's
 	// tally and what each row renders as can't disagree.
