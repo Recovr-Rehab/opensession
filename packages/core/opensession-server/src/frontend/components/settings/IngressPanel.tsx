@@ -28,7 +28,6 @@ import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { CopyCheck, useCopy } from "../../ui/copy";
 import { Input } from "../../ui/input";
-import { Radio, RadioGroup } from "../../ui/radio";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import {
 	SettingCard,
@@ -49,6 +48,7 @@ import {
 import { ResponsiveDialog } from "../../ui/sheet";
 import { InlineAlert, LoadingState } from "../../ui/state";
 import { toast } from "../../ui/toast";
+import { BrandMark } from "../BrandTile";
 import { IconCopy, IconX } from "../icons";
 import { SetupRestart } from "../SetupRestart";
 
@@ -96,7 +96,7 @@ function ConfigCodeBlock({ code }: { code: string }) {
 }
 
 function SetupSteps({ children }: { children: React.ReactNode }) {
-	return <ol className="m-0 grid list-none gap-3 p-0 text-supporting text-dim">{children}</ol>;
+	return <ol className="m-0 grid list-none divide-y divide-line p-0 text-supporting text-dim">{children}</ol>;
 }
 
 function SetupStep({
@@ -111,7 +111,7 @@ function SetupStep({
 	controls?: React.ReactNode;
 }) {
 	return (
-		<li className="grid grid-cols-[24px_minmax(0,1fr)] gap-2.5">
+		<li className="grid grid-cols-[24px_minmax(0,1fr)] gap-2.5 py-4 first:pt-0 last:pb-0">
 			<span className="flex size-6 items-center justify-center rounded-full bg-surface text-meta font-semibold text-dim">
 				{number}
 			</span>
@@ -230,18 +230,21 @@ function PrivateAppSetup({
 						title="Authorize the DNS provider"
 						controls={
 							<>
-								<SettingCard>
-									<RadioGroup aria-label="Private domain DNS provider" value={provider} disabled={busy} onValueChange={(value) => onProviderChange(value as "cloudflare" | "vercel")}>
-										<label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 py-3">
-											<Radio value="cloudflare" />
-											<span className="font-medium text-fg">Cloudflare DNS</span>
-										</label>
-										<label className="flex min-h-11 cursor-pointer items-center gap-3 border-t border-line px-4 py-3">
-											<Radio value="vercel" />
-											<span className="font-medium text-fg">Vercel DNS</span>
-										</label>
-									</RadioGroup>
-								</SettingCard>
+								<Segmented
+									label="Private domain DNS provider"
+									value={provider}
+									onValueChange={(value) => onProviderChange(value as "cloudflare" | "vercel")}
+									className="w-full"
+								>
+									<SegmentedOption value="cloudflare" disabled={busy} className="flex-1 justify-center phone:min-h-11">
+										<BrandMark name="cloudflare" size={16} className="shrink-0" />
+										Cloudflare
+									</SegmentedOption>
+									<SegmentedOption value="vercel" disabled={busy} className="flex-1 justify-center phone:min-h-11">
+										<BrandMark name="vercel" size={15} className="shrink-0" />
+										Vercel
+									</SegmentedOption>
+								</Segmented>
 								<SettingsField className="mb-0">
 									Certificate email
 									<Input type="email" value={email} placeholder={managedCredential && settings.app.domain.certificateEmailConfigured ? "Leave blank to keep the saved email" : "you@example.com"} disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onEmailChange(event.target.value)} />
