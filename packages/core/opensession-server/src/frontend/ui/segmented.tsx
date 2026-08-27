@@ -123,7 +123,7 @@ export function SegmentedOption({
 		<Toggle
 			value={value}
 			className={cn(
-				"relative cursor-pointer rounded-control border-0 bg-transparent text-control-label font-medium",
+				"relative inline-flex cursor-pointer items-center justify-center rounded-control border-0 bg-transparent text-center text-control-label font-medium",
 				optionSizes[size],
 				"whitespace-nowrap transition-colors duration-[var(--dur-micro)] ease-[var(--ease)]",
 				// Phones get the tap box; the desktop control is a reading size.
