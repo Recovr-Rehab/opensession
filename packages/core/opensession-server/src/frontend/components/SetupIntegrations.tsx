@@ -214,13 +214,21 @@ export function GithubAuthCard({
 					/>
 				</SettingsSection>
 				{onboarding && github.clientIdConfigured && (
-					<div className="mt-6">
+					<div className="mt-6 px-5">
+						<div className="mb-3">
+							<div className="text-dialog-title font-semibold text-fg">
+								Sign in to GitHub
+							</div>
+							<p className="m-0 mt-1 text-supporting text-faint">
+								You can also sign in to GitHub later.
+							</p>
+						</div>
 						<GithubAccounts
 							personal
 							showHeading={false}
 							showHint={false}
 							onConnectRequest={onPersonalSignIn}
-							cardClassName="personal-github-card"
+							cardClassName="personal-github-card border-0 bg-panel!"
 						/>
 					</div>
 				)}

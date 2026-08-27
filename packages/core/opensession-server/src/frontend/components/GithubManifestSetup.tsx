@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useReducedMotion } from "motion/react";
+import { BASE_PATH } from "../lib/base";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Input } from "../ui/input";
@@ -186,19 +187,30 @@ export function GithubManifestSetup({
 	return (
 		<>
 			{connectionStatus ? (
-				<div className="flex items-start justify-between gap-4">
-					<div className="min-w-0">
+				<>
+					<div className="flex items-center gap-2">
 						<IconTile name="github" size={40} />
-						<div className="mt-6 text-dialog-title font-semibold text-fg">
-							How to connect
-						</div>
+						<span
+							aria-hidden="true"
+							className="w-6 border-t-2 border-dotted border-line-strong"
+						/>
+						<img
+							src={`${BASE_PATH}/mac-app-icon.png`}
+							alt=""
+							className="size-10 shrink-0"
+						/>
 					</div>
-					<div className="pt-1">
+					<div className="flex items-center justify-between gap-4">
+						<div className="min-w-0 text-dialog-title font-semibold text-fg">
+							Install Open Session for GitHub
+						</div>
 						<StateChip tone={connectionStatus.tone} label={connectionStatus.label} />
 					</div>
-				</div>
+				</>
 			) : (
-				<div className="text-dialog-title font-semibold text-fg">How to connect</div>
+				<div className="text-dialog-title font-semibold text-fg">
+					Install Open Session for GitHub
+				</div>
 			)}
 			<div className="flex flex-col gap-2">
 				<Segmented
