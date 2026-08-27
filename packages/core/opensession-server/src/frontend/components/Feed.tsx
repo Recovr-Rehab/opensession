@@ -261,7 +261,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 						</TopBarTitle>
 					</TopBarLeading>
 					{team.length > 0 && (
-						<TopBarActions>
+						<TopBarActions className="phone:fixed phone:top-[max(env(safe-area-inset-top,0px),8px)] phone:right-3 phone:z-40">
 							<Menu.Root>
 								<Menu.Trigger
 									render={
@@ -269,7 +269,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 											variant="ghost"
 											size="md"
 											aria-label={scopeName ? `Showing ${scopeName}` : "Showing everyone"}
-											className="gap-0 px-2 phone:min-h-11"
+											className="gap-0 px-2 phone:min-h-11 phone:rounded-full phone:bg-panel phone:shadow-[var(--mobile-header-control-shadow)]"
 										/>
 									}
 								>
