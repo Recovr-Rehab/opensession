@@ -186,7 +186,7 @@ function PrivateAppSetup({
 	const status = settings.app.domain.health;
 	return (
 		<>
-			{!onboarding && (
+			{!onboarding && savedDomain && (
 				<SettingCard className="bg-raised desktop:bg-panel">
 					<SettingRow>
 						<SettingRowText>
