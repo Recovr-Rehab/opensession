@@ -37,6 +37,16 @@ immutable release worktree selected by `~/.opensession/deploy/current`. Other
 sessions may edit and stage files in the shared checkout at the same time.
 Uncommitted checkout edits never become live, including frontend edits.
 
+- Start every task by running `git fetch origin --prune` and checking
+  `git rev-list --left-right --count HEAD...origin/main`. Repeat immediately
+  before committing or pushing. Do not start or continue edits from a stale or
+  diverged `main`.
+- Keep one session responsible for synchronizing the shared checkout at a time.
+  If `main` is behind or diverged, preserve every staged, unstaged, and untracked
+  change, rebase local-only commits onto `origin/main`, resolve conflicts, push,
+  fetch again, and verify the ahead/behind count is `0 0` before continuing.
+  Never use reset, clean, force-push, or an ordinary pull that creates a merge
+  commit to synchronize this checkout.
 - Never reset, revert, switch branches, or discard unrelated work.
 - Stage only your files. Use `git add -p` for shared high-traffic files.
 - Inspect `git diff --cached --name-only` and `git diff --cached` before every
