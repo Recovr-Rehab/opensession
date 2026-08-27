@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { BASE_PATH } from "../lib/base";
 import { PHONE_QUERY } from "../lib/breakpoints";
+import { facepileAvatarStyle } from "../lib/presence";
 import { DEFAULT_DOC_TITLE, PRODUCT_NAME } from "../lib/brand";
 import { useSetupStatus } from "../hooks/useSetupStatus";
 import { copyToClipboard } from "../lib/share-link";
@@ -283,12 +284,16 @@ function FirstMileSummary({
 					: `${status.team.count} members`,
 			preview: (
 				<div className="flex -space-x-2">
-					{status.team.names.slice(0, 4).map((name) => (
+					{status.team.names.slice(0, 4).map((name, index, shown) => (
 						<UserAvatar
 							key={name}
 							name={name}
 							size={28}
-							className="border border-bg"
+							style={facepileAvatarStyle(
+								index,
+								shown.length,
+								"var(--popup-surface)",
+							)}
 						/>
 					))}
 					<PreviewOverflow count={status.team.count - 4} transparent />
