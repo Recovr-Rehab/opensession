@@ -8,6 +8,7 @@ import {
 	visibleSetupWidgetItems,
 	type SetupWidgetItem,
 } from "../../lib/setup-widget";
+import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { Tooltip } from "../../ui/tooltip";
 import {
@@ -80,12 +81,12 @@ function SetupStep({
 			{complete ? (
 				<IconCheckCircleFilled
 					size={20}
-					className="shrink-0 text-accent"
+					className="mr-1 shrink-0 text-accent"
 					aria-hidden="true"
 				/>
 			) : (
 				<span
-					className="flex size-5 shrink-0 items-center justify-center rounded-sm border border-line text-transparent"
+					className="mr-1 flex size-5 shrink-0 items-center justify-center rounded-full border border-line text-transparent"
 					aria-hidden="true"
 				>
 					<IconCheck size={16} />
@@ -108,6 +109,7 @@ export function SetupWidget({
 }) {
 	const [dismissed, setDismissed] = useState(setupWidgetDismissed);
 	const [completedOpen, setCompletedOpen] = useState(false);
+	const [desktopOpen, setDesktopOpen] = useState(false);
 	const setup = useSetupStatus();
 	if (dismissed || !setup.status) return null;
 
@@ -119,14 +121,53 @@ export function SetupWidget({
 	const progress = (completed.length / items.length) * 100;
 	const completedLabel = `${completed.length} ${completed.length === 1 ? "step" : "steps"} checked`;
 
+	if (placement === "desktop" && !desktopOpen) {
+		return (
+			<aside
+				aria-label="Get started"
+				className="mx-2 mb-2 flex flex-none items-center gap-2 rounded-xl border border-divider-soft bg-popup-glass py-1.5 pr-1.5 pl-3 [backdrop-filter:var(--popup-blur)] smooth-shadow-sm"
+				onPointerEnter={() => void setup.refetch()}
+				onFocusCapture={() => void setup.refetch()}
+			>
+				<div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+					<span className="max-w-full truncate text-supporting font-medium leading-[1.3] text-fg">
+						Get started
+					</span>
+					<span className="tabular-nums text-meta leading-[1.3] text-faint">
+						{completed.length} of {items.length}
+					</span>
+				</div>
+				<div className="flex shrink-0 items-center gap-1">
+					<Button
+						variant="primary"
+						size="sm"
+						onClick={() => setDesktopOpen(true)}
+					>
+						Open
+					</Button>
+					<Tooltip label="Dismiss" side="top">
+						<Button
+							variant="ghost"
+							size="sm"
+							icon={<IconX size={16} />}
+							aria-label="Dismiss setup checklist"
+							onClick={() => {
+								dismissSetupWidget();
+								setDismissed(true);
+							}}
+						/>
+					</Tooltip>
+				</div>
+			</aside>
+		);
+	}
+
 	return (
 		<aside
 			aria-labelledby="sidebar-setup-title"
 			className={cn(
-				"z-30 rounded-2xl border border-divider-soft bg-popup-glass p-2 [backdrop-filter:var(--popup-blur)] smooth-shadow-sm",
-				placement === "desktop"
-					? "fixed right-4 bottom-20 w-72"
-					: "mx-3 mt-3 mb-20 flex-none",
+				"z-30 flex-none rounded-2xl border border-divider-soft bg-popup-glass p-2 [backdrop-filter:var(--popup-blur)] smooth-shadow-sm",
+				placement === "desktop" ? "mx-2 mb-2" : "mx-3 mt-3 mb-20",
 			)}
 			style={placement === "phone" ? { order: 100 } : undefined}
 			onPointerEnter={() => void setup.refetch()}
@@ -182,7 +223,7 @@ export function SetupWidget({
 						<IconChevronDown
 							size={20}
 							className={cn(
-								"shrink-0 transition-transform duration-[var(--dur-micro)]",
+								"mr-0.5 shrink-0 transition-transform duration-[var(--dur-micro)]",
 								completedOpen && "rotate-180",
 							)}
 						/>
