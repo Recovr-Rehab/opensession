@@ -80,12 +80,108 @@ export class TranscriptViewStore {
 		}
 		if (!changed) return;
 		if (v2 && needsOrder) this.orderV2();
-		if (immediate) {
-			this.cancelFrame();
-			this.publish();
-		} else {
-			this.schedulePublish();
+		this.commit(immediate);
+	}
+
+	/** Merge one server range, whose durable rows are ordered by immutable seq.
+	 * Rebuild the seq spine with a linear merge instead of sorting every loaded
+	 * transcript entry again for each hydration response. */
+	mergeRange(entries: TranscriptEntry[], immediate = false) {
+		if (entries.length === 0) return;
+		if (entries.some((entry) => entry.seq === undefined)) {
+			this.merge(entries, true, immediate);
+			return;
 		}
+
+		const previousPositions = new Map(
+			this.orderedIds.map((id, index) => [id, index]),
+		);
+		const acceptedIds = new Set<string>();
+		const arrivalPositions = new Map<string, number>();
+		for (let index = 0; index < entries.length; index++) {
+			const entry = entries[index]!;
+			const current = this.byId.get(entry.id);
+			if (
+				current?.changeSeq !== undefined &&
+				entry.changeSeq !== undefined &&
+				entry.changeSeq < current.changeSeq
+			)
+				continue;
+			this.byId.set(entry.id, entry);
+			acceptedIds.add(entry.id);
+			if (!arrivalPositions.has(entry.id))
+				arrivalPositions.set(entry.id, this.orderedIds.length + index);
+		}
+		if (acceptedIds.size === 0) return;
+
+		type SequencedId = { id: string; seq: number; position: number };
+		const existingSpine: SequencedId[] = [];
+		const decorations: string[] = [];
+		for (let index = 0; index < this.orderedIds.length; index++) {
+			const id = this.orderedIds[index]!;
+			if (acceptedIds.has(id)) continue;
+			const entry = this.byId.get(id);
+			if (!entry) continue;
+			if (entry.seq === undefined) decorations.push(id);
+			else existingSpine.push({ id, seq: entry.seq, position: index });
+		}
+		const rangeSpine = [...acceptedIds]
+			.map((id): SequencedId => {
+				const entry = this.byId.get(id)!;
+				return {
+					id,
+					seq: entry.seq!,
+					position:
+						previousPositions.get(id) ?? arrivalPositions.get(id)!,
+				};
+			})
+			.sort((a, b) => a.seq - b.seq || a.position - b.position);
+
+		const sequencedIds: string[] = [];
+		let existingIndex = 0;
+		let rangeIndex = 0;
+		while (
+			existingIndex < existingSpine.length ||
+			rangeIndex < rangeSpine.length
+		) {
+			const existing = existingSpine[existingIndex];
+			const incoming = rangeSpine[rangeIndex];
+			if (
+				incoming === undefined ||
+				(existing !== undefined &&
+					(existing.seq < incoming.seq ||
+						(existing.seq === incoming.seq &&
+							existing.position < incoming.position)))
+			) {
+				sequencedIds.push(existing!.id);
+				existingIndex++;
+			} else {
+				sequencedIds.push(incoming.id);
+				rangeIndex++;
+			}
+		}
+
+		// Decorations have no seq. The existing canonical order already sorts
+		// them by timestamp, so placing them around the new seq spine is linear.
+		const orderedIds: string[] = [];
+		let seqIndex = 0;
+		for (const id of decorations) {
+			const decorationTime = this.entryTime(this.byId.get(id)!);
+			while (
+				seqIndex < sequencedIds.length &&
+				this.entryTime(this.byId.get(sequencedIds[seqIndex]!)!) <=
+					decorationTime
+			) {
+				orderedIds.push(sequencedIds[seqIndex++]!);
+			}
+			orderedIds.push(id);
+		}
+		while (seqIndex < sequencedIds.length)
+			orderedIds.push(sequencedIds[seqIndex++]!);
+
+		this.orderedIds = orderedIds;
+		this.refreshOrderingMetadata();
+		this.commit(immediate);
 	}
 
 	prepend(entries: TranscriptEntry[], v2 = false) {
@@ -124,6 +220,25 @@ export class TranscriptViewStore {
 			.map((id) => this.byId.get(id))
 			.filter((entry): entry is TranscriptEntry => Boolean(entry));
 		this.replace(typeof updater === "function" ? updater(current) : updater);
+	}
+
+	private commit(immediate: boolean) {
+		if (immediate) {
+			this.cancelFrame();
+			this.publish();
+		} else {
+			this.schedulePublish();
+		}
+	}
+
+	private entryTimes = new WeakMap<TranscriptEntry, number>();
+	private entryTime(entry: TranscriptEntry) {
+		const cached = this.entryTimes.get(entry);
+		if (cached !== undefined) return cached;
+		const parsed = Date.parse(entry.timestamp);
+		const value = Number.isFinite(parsed) ? parsed : 0;
+		this.entryTimes.set(entry, value);
+		return value;
 	}
 
 	private schedulePublish() {

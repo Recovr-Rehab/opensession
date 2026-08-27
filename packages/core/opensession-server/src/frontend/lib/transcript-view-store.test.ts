@@ -54,6 +54,51 @@ describe("TranscriptViewStore", () => {
 		expect(store.getSnapshot().map((item) => item.id)).toEqual(["1", "2", "3"]);
 	});
 
+	test("linearly merges a sequenced range around existing decorations", () => {
+		const store = new TranscriptViewStore([
+			{ ...entry("1", "2026-01-01T00:00:01.000Z"), seq: 1 },
+			entry("decoration", "2026-01-01T00:00:02.500Z"),
+			{ ...entry("4", "2026-01-01T00:00:04.000Z"), seq: 4 },
+		]);
+
+		store.mergeRange(
+			[
+				{ ...entry("3", "2026-01-01T00:00:03.000Z"), seq: 3 },
+				{ ...entry("2", "2026-01-01T00:00:02.000Z"), seq: 2 },
+			],
+			true,
+		);
+
+		expect(store.getSnapshot().map((item) => item.id)).toEqual([
+			"1",
+			"2",
+			"decoration",
+			"3",
+			"4",
+		]);
+	});
+
+	test("moves a live decoration onto the seq spine during range hydration", () => {
+		const live = {
+			...entry("2", "2026-01-01T00:00:02.000Z"),
+			changeSeq: 2,
+		};
+		const store = new TranscriptViewStore([
+			{ ...entry("1"), seq: 1, changeSeq: 1 },
+			live,
+			{ ...entry("3"), seq: 3, changeSeq: 3 },
+		]);
+
+		store.mergeRange([{ ...live, seq: 2, changeSeq: 4 }], true);
+		store.mergeRange(
+			[{ ...live, content: "stale", seq: 2, changeSeq: 2 }],
+			true,
+		);
+
+		expect(store.getSnapshot().map((item) => item.id)).toEqual(["1", "2", "3"]);
+		expect(store.getSnapshot()[1].content).toBe("2");
+	});
+
 	test("rejects delayed mutations and orders v2 entries by immutable seq", () => {
 		const store = new TranscriptViewStore([
 			{ ...entry("2"), seq: 2, changeSeq: 2 },
