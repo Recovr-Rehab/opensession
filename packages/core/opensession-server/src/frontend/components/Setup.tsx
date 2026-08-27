@@ -227,6 +227,10 @@ export function SetupPanel({
               <IngressPanel
                 embedded
                 setup={setup}
+                initialUrls={{
+                  app: status.access.publicBaseUrl,
+                  callback: status.ingress?.publicBaseUrl || "",
+                }}
                 onChanged={refetch}
                 onStatusChange={(settings) =>
                   setDomainsReady(

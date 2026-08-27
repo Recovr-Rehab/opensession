@@ -363,12 +363,14 @@ function PrivateAppSetup({
 export function IngressPanel({
 	onboarding = false,
 	embedded = false,
+	initialUrls,
 	onChanged,
 	onStatusChange,
 	setup: parentSetup,
 }: {
 	onboarding?: boolean;
 	embedded?: boolean;
+	initialUrls?: { app: string; callback: string };
 	onChanged?: () => void | Promise<void>;
 	onStatusChange?: (settings: PublicIngressSettings) => void;
 	setup?: SetupController;
@@ -536,6 +538,23 @@ export function IngressPanel({
 	const selectedMethod = INGRESS_METHODS.find((option) => option.value === method)!;
 	const selectedHealth = settings?.exposure === method ? settings.health : "not_configured";
 	const privateDomain = settings ? configuredAppDomain(settings) : "";
+	const domainUrl = settings?.app.publicBaseUrl || initialUrls?.app || "";
+	const callbackUrl = settings?.publicBaseUrl || initialUrls?.callback || "";
+	const pendingStatus = error
+		? { label: "Unavailable", dot: "var(--red)" }
+		: { label: "Checking", dot: "var(--text-faint)" };
+	const domainStatus = settings
+		? {
+				label: ingressHealthLabel(settings.app.domain.health),
+				dot: ingressHealthDot(settings.app.domain.health),
+			}
+		: pendingStatus;
+	const callbackStatus = settings
+		? {
+				label: ingressHealthLabel(settings.health),
+				dot: ingressHealthDot(settings.health),
+			}
+		: pendingStatus;
 
 	return (
 		<SettingsPanel className={onboarding ? "mx-auto max-w-[1120px]" : "relative"}>
@@ -547,38 +566,38 @@ export function IngressPanel({
 			)}
 
 			{error && !surface && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
-			{!settings ? (
+			{!settings && !initialUrls ? (
 				<SettingCardSkeleton rows={3} label="Loading public ingress" />
 			) : (
 				<>
-					<SettingCard>
+					<SettingCard aria-busy={!settings}>
 						<SettingRow>
 							<SettingRowText>
 								<SettingRowTitle>Domain</SettingRowTitle>
 								<SettingRowDescription className="selectable break-all font-mono">
-									{settings.app.publicBaseUrl || "No domain configured"}
+									{domainUrl || "No domain configured"}
 								</SettingRowDescription>
 							</SettingRowText>
 							<SettingRowControl className="flex items-center gap-2">
-								<StatusChip label={ingressHealthLabel(settings.app.domain.health)} dot={ingressHealthDot(settings.app.domain.health)} />
-								<Button size="sm" className="phone:min-h-11" onClick={() => setSurface("domain")}>Configure</Button>
+								<StatusChip {...domainStatus} />
+								<Button size="sm" className="phone:min-h-11" disabled={!settings} onClick={() => setSurface("domain")}>Configure</Button>
 							</SettingRowControl>
 						</SettingRow>
 						<SettingRow>
 							<SettingRowText>
 								<SettingRowTitle>Public callback</SettingRowTitle>
 								<SettingRowDescription className="selectable break-all font-mono">
-									{settings.publicBaseUrl || "No public callback configured"}
+									{callbackUrl || "No public callback configured"}
 								</SettingRowDescription>
 							</SettingRowText>
 							<SettingRowControl className="flex items-center gap-2">
-								<StatusChip label={ingressHealthLabel(settings.health)} dot={ingressHealthDot(settings.health)} />
-								<Button size="sm" className="phone:min-h-11" onClick={() => setSurface("callbacks")}>Configure</Button>
+								<StatusChip {...callbackStatus} />
+								<Button size="sm" className="phone:min-h-11" disabled={!settings} onClick={() => setSurface("callbacks")}>Configure</Button>
 							</SettingRowControl>
 						</SettingRow>
 					</SettingCard>
 
-					<ResponsiveDialog
+					{settings && <ResponsiveDialog
 						open={surface !== null}
 						onClose={() => setSurface(null)}
 						phone={isPhone}
@@ -806,7 +825,7 @@ export function IngressPanel({
 								</div>
 							</>
 						)}
-					</ResponsiveDialog>
+					</ResponsiveDialog>}
 					{!onboarding && !embedded && <SetupRestart setup={setup} />}
 				</>
 			)}
