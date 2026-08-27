@@ -25,27 +25,20 @@ import { usePeople } from "../lib/people";
 import { UserAvatar } from "./UserAvatar";
 import { personLensFilter, setFilter } from "../lib/sidebar-filter";
 import { presenceState, StatusDot, useTeamPresence } from "./TeamPresence";
-import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState, ListSkeleton } from "../ui/state";
 import { Button } from "../ui/button";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
+import { TopBar, TopBarActions, TopBarLeading, TopBarTitle } from "../ui/top-bar";
 import { IconFeed, IconPeople, IconRepo, IconRobot } from "./icons";
-import {
-	PEOPLE_CHIP,
-	PEOPLE_CHIP_GLYPH,
-	PEOPLE_CHIP_GLYPH_SELECTED,
-	PEOPLE_CHIP_ROW,
-	PEOPLE_CHIP_SELECTED,
-	PEOPLE_SECTION_LABEL,
-} from "../lib/people-classes";
+import { PEOPLE_SECTION_LABEL } from "../lib/people-classes";
 
 /**
  * What the team has been shipping.
  *
- * The page is the feed. The team is the row above it, because who shipped it
- * is how you narrow the feed, not a destination of its own — there is no
- * per-person page to open, since everything you would put on one already
+ * The page is the feed. The team is the face stack in its top bar, because who
+ * shipped it is how you narrow the feed, not a destination of its own. There
+ * is no per-person page to open, since everything you would put on one already
  * exists as their sidebar.
  *
  * So picking a teammate does two things at once, which is the point: it
@@ -81,29 +74,6 @@ const RENDER_CEILING = 1500;
 
 /** Everyone, or one person. */
 type Scope = { kind: "everyone" } | { kind: "person"; key: string };
-
-function ScopeChip({
-	selected,
-	onClick,
-	mark,
-	label,
-}: {
-	selected: boolean;
-	onClick: () => void;
-	mark: React.ReactNode;
-	label: string;
-}) {
-	return (
-		<button
-			className={cn(PEOPLE_CHIP, selected && PEOPLE_CHIP_SELECTED)}
-			onClick={onClick}
-			aria-pressed={selected}
-		>
-			{mark}
-			<span className="min-w-0 truncate">{label}</span>
-		</button>
-	);
-}
 
 /**
  * The owner of a row, in the same 24px slot whoever they are. A teammate wears
@@ -263,6 +233,13 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	const canWiden = !!nextStep && (hasOlder || scoped.length > shipped.length);
 
 	const scopeName = scope.kind === "person" ? personLabel(scope.key) : null;
+	const scopeValue = scope.kind === "person" ? scope.key : "everyone";
+	const stackedMembers =
+		scope.kind === "person"
+			? [...chips].sort((a, b) => Number(b.key === scope.key) - Number(a.key === scope.key))
+			: chips;
+	const visibleStack = stackedMembers.slice(0, 5);
+	const hiddenStackCount = stackedMembers.length - visibleStack.length;
 	const feedLoading =
 		recentPrs.length === 0 &&
 		commits.length === 0 &&
@@ -271,66 +248,91 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 		dayGroups.length === 0 && (widening || personPrsLoading);
 
 	return (
-		// The page frame every other list page in the app uses: one centred
-		// column at the shared width and padding, a PageHeader on top.
-		<div data-page-scroll className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
-			<div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 phone:pt-[calc(var(--header-h)+18px)] max-[560px]:px-4 max-[560px]:pb-12">
-				<PageHeader>
-					<div className="min-w-0">
-						<PageTitle>Feed</PageTitle>
-						<PageDescription>
-							What the team has been shipping. Pick someone to narrow it, and to
-							put their workspaces in the sidebar.
-						</PageDescription>
-					</div>
-				</PageHeader>
-
-				{team.length > 0 && (
-					<div className={PEOPLE_CHIP_ROW}>
-						<ScopeChip
-							selected={scope.kind === "everyone"}
-							onClick={() => pick({ kind: "everyone" })}
-							mark={
-								<span
-									className={cn(
-										PEOPLE_CHIP_GLYPH,
-										scope.kind === "everyone" && PEOPLE_CHIP_GLYPH_SELECTED,
-									)}
-								>
-									<IconPeople size={17} />
-								</span>
-							}
-							label="Everyone"
-						/>
-						{chips.map((member) => (
-							<ScopeChip
-								key={member.key}
-								selected={scope.kind === "person" && scope.key === member.key}
-								onClick={() => pick({ kind: "person", key: member.key })}
-								mark={
-									// The face carries whether they're around. The dot rings
-									// itself in the chip's own fill so it reads as a gap in the
-									// picture rather than a mark on it.
-									<span className="relative flex">
-										<UserAvatar name={member.person.name} size={26} />
-										<StatusDot
-											state={presenceState(member)}
-											ring={
-												scope.kind === "person" && scope.key === member.key
-													? "var(--accent)"
-													: "var(--bg-panel)"
-											}
-											size={8}
+		<div className="flex min-h-0 w-full flex-1 flex-col bg-surface">
+			<TopBar
+				as="header"
+				className="wco-chrome h-[var(--desktop-header-h)] shrink-0 border-b border-divider phone:h-auto phone:py-2.5"
+			>
+				<div className="mx-auto flex w-full max-w-[920px] items-center px-6 phone:px-4">
+					<TopBarLeading>
+						<IconFeed size={20} className="text-dim" />
+						<TopBarTitle className="text-item-title font-semibold text-fg">
+							Feed
+						</TopBarTitle>
+					</TopBarLeading>
+					{team.length > 0 && (
+						<TopBarActions>
+							<Menu.Root>
+								<Menu.Trigger
+									render={
+										<Button
+											variant="ghost"
+											size="md"
+											aria-label={scopeName ? `Showing ${scopeName}` : "Showing everyone"}
+											className="gap-0 px-2 phone:min-h-11"
 										/>
+									}
+								>
+									<span className="flex -space-x-2" aria-hidden="true">
+										{visibleStack.map((member) => (
+											<span
+												key={member.key}
+												className={cn(
+													"relative rounded-avatar bg-surface p-0.5",
+													scope.kind === "person" && scope.key === member.key && "bg-accent",
+												)}
+											>
+												<UserAvatar name={member.person.name} size={24} edge={false} />
+											</span>
+										))}
+										{hiddenStackCount > 0 && (
+											<span className="relative flex size-7 items-center justify-center rounded-avatar bg-active text-meta font-semibold text-dim shadow-[0_0_0_2px_var(--bg-surface)]">
+												+{hiddenStackCount}
+											</span>
+										)}
 									</span>
-								}
-								label={member.isYou ? "You" : member.person.name}
-							/>
-						))}
-					</div>
-				)}
+								</Menu.Trigger>
+								<Menu.Popup align="end" className="min-w-[200px]">
+									<Menu.RadioGroup
+										value={scopeValue}
+										onValueChange={(value) =>
+											pick(
+												value === "everyone"
+													? { kind: "everyone" }
+													: { kind: "person", key: String(value) },
+											)
+										}
+									>
+										<Menu.RadioItem value="everyone" closeOnClick>
+											<span className="flex size-6 items-center justify-center text-dim">
+												<IconPeople size={18} />
+											</span>
+											<span className="min-w-0 flex-1">Everyone</span>
+											<Menu.Check on={scope.kind === "everyone"} />
+										</Menu.RadioItem>
+										{chips.map((member) => (
+											<Menu.RadioItem key={member.key} value={member.key} closeOnClick>
+												<span className="relative flex">
+													<UserAvatar name={member.person.name} size={24} />
+													<StatusDot state={presenceState(member)} ring="var(--bg-popup)" size={7} />
+												</span>
+												<span className="min-w-0 flex-1 truncate">
+													{member.isYou ? "You" : member.person.name}
+												</span>
+												<Menu.Check on={scope.kind === "person" && scope.key === member.key} />
+											</Menu.RadioItem>
+										))}
+									</Menu.RadioGroup>
+								</Menu.Popup>
+							</Menu.Root>
+						</TopBarActions>
+					)}
+				</div>
+			</TopBar>
 
-				{feedLoading ? (
+			<div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
+				<div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-6 phone:px-4 phone:pb-12 phone:pt-4">
+					{feedLoading ? (
 					<>
 						<div className="mb-2 flex min-h-[30px] items-center">
 							<h3 className={cn(PEOPLE_SECTION_LABEL, "mb-0")}>Shipped</h3>
@@ -513,7 +515,8 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 							</div>
 						)}
 					</>
-				)}
+					)}
+				</div>
 			</div>
 		</div>
 	);
