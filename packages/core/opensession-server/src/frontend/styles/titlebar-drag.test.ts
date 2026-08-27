@@ -4,14 +4,21 @@ const HTML = new URL("../index.html", import.meta.url);
 const CSS = new URL("./base.css", import.meta.url);
 const USER_PICKER = new URL("../components/UserPicker.tsx", import.meta.url);
 const APP = new URL("../App.tsx", import.meta.url);
+const FIRST_MILE = new URL("../components/FirstMile.tsx", import.meta.url);
+const SETTINGS = new URL("../components/Settings.tsx", import.meta.url);
+const SETTINGS_CLASSES = new URL("../lib/settings-classes.ts", import.meta.url);
 
 test("Electron titlebar drag regions do not depend on WCO visibility", async () => {
-	const [html, css, userPicker, app] = await Promise.all([
-		Bun.file(HTML).text(),
-		Bun.file(CSS).text(),
-		Bun.file(USER_PICKER).text(),
-		Bun.file(APP).text(),
-	]);
+	const [html, css, userPicker, app, firstMile, settings, settingsClasses] =
+		await Promise.all([
+			Bun.file(HTML).text(),
+			Bun.file(CSS).text(),
+			Bun.file(USER_PICKER).text(),
+			Bun.file(APP).text(),
+			Bun.file(FIRST_MILE).text(),
+			Bun.file(SETTINGS).text(),
+			Bun.file(SETTINGS_CLASSES).text(),
+		]);
 
 	expect(html).toContain('window.os1.desktop === true');
 	expect(html).toContain('classList.add("desktop-shell")');
@@ -31,5 +38,21 @@ test("Electron titlebar drag regions do not depend on WCO visibility", async () 
 	expect(app).toContain('className="wco-collapsed-drag-handle"');
 	expect(css).toContain(
 		".app-body.sidebar-collapsed\n\t.wco-collapsed-drag-handle",
+	);
+	expect(firstMile).toContain(
+		'className="wco-chrome relative z-20 flex h-11 shrink-0 items-start justify-center"',
+	);
+	expect(settings).toContain("!TOOL_SECTIONS.has(active) && (");
+	expect(settings).toContain("className={SETTINGS_DRAG_HANDLE}");
+	expect(settingsClasses).toContain(
+		'"settings-drag-handle wco-chrome absolute inset-x-0 top-0 z-10 h-[var(--desktop-header-h)]"',
+	);
+	expect(settingsClasses).toContain("`settings-nav flex");
+	expect(settingsClasses).toContain('"settings-content flex');
+	expect(css).toContain(
+		"html:is(.wco, .desktop-shell) .settings-drag-handle {\n\tdisplay: block;",
+	);
+	expect(css).toContain(
+		"html:is(.wco, .desktop-shell) .settings-nav,\nhtml:is(.wco, .desktop-shell) .settings-content:not(.settings-content-tool) {\n\tpadding-top: var(--desktop-header-h);",
 	);
 });

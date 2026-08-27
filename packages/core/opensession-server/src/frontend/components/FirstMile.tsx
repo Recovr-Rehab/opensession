@@ -728,7 +728,9 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			<nav
 				ref={progressRef}
 				aria-label="Onboarding progress"
-				className="relative z-20 flex h-11 shrink-0 items-start justify-center"
+				// This top row doubles as the Electron window drag region; base.css
+				// carves its step buttons back out so they remain clickable.
+				className="wco-chrome relative z-20 flex h-11 shrink-0 items-start justify-center"
 			>
 				{steps.map((item, stepIndex) => (
 					<button

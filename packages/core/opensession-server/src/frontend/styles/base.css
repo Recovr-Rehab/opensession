@@ -1451,6 +1451,19 @@ html:is(.wco, .desktop-shell) .wco-chrome
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
+/* Settings has no visible titlebar row, so its empty strip is shell-only and
+   the nav starts below it. Keeping both rules here lets the durable Electron
+   capability work even while Chromium reports WCO as hidden. */
+.settings-drag-handle {
+	display: none;
+}
+html:is(.wco, .desktop-shell) .settings-drag-handle {
+	display: block;
+}
+html:is(.wco, .desktop-shell) .settings-nav,
+html:is(.wco, .desktop-shell) .settings-content:not(.settings-content-tool) {
+	padding-top: var(--desktop-header-h);
+}
 /* Chromium withholds pointer events from native drag regions. While a visible
    menu is mounted, temporarily return the chrome to the page so its outside
    press can dismiss the menu. A hidden keep-mounted popup must not disable

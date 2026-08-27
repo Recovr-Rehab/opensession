@@ -8,6 +8,7 @@ import {
 	SETTINGS_CONTENT,
 	SETTINGS_CONTENT_SHEET,
 	SETTINGS_CONTENT_TOOL,
+	SETTINGS_DRAG_HANDLE,
 	SETTINGS_PAGE,
 	SETTINGS_PANEL_FRAME,
 	SETTINGS_PANEL_FRAME_GALLERY,
@@ -329,6 +330,9 @@ export function Settings({
 
 	return (
 		<div className={cn(SETTINGS_PAGE, SETTINGS_LEADING)}>
+			{!TOOL_SECTIONS.has(active) && (
+				<div aria-hidden="true" className={SETTINGS_DRAG_HANDLE} />
+			)}
 			{/* Back and search stay put; only the section list scrolls, so neither
 			    they nor the account footer are lost once the list outgrows the nav. */}
 			<aside className={SETTINGS_NAV}>
