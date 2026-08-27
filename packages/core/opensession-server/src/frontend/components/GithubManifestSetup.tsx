@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { Input } from "../ui/input";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SettingsHint } from "../ui/settings";
 import { duration } from "../ui/motion";
 import { InlineAlert } from "../ui/state";
 import { IconTile } from "./BrandTile";
+import { IconCheckCircle } from "./icons";
 import {
 	githubAppCreateOwner,
 	githubAppInstallUrlForSlug,
@@ -16,26 +18,47 @@ import {
 	type GithubAppOwnerType,
 } from "../lib/github-app-setup";
 import {
-	SetupSteps,
 	StateChip,
 	setupRequest,
 	type ChipTone,
 	type SetupGithub,
 } from "./setup-shared";
 
-function githubManifestSteps(owner: GithubAppOwnerType) {
-	const account = owner === "organization" ? "organization" : "personal account";
-	return [
-		<>
-			Review the prefilled name and permissions, then create a GitHub App for your{" "}
-			{account}.
-		</>,
-		<>
-			Open the created App, enable <strong>Device Flow</strong>, then save the
-			 changes.
-		</>,
-		<>Install the App on the repositories Open Session should reach.</>,
-	];
+function GithubSetupStep({
+	label,
+	complete = false,
+	href,
+	disabled,
+	onClick,
+}: {
+	label: string;
+	complete?: boolean;
+	href?: string | null;
+	disabled?: boolean;
+	onClick?: () => void;
+}) {
+	return (
+		<Button
+			size="lg"
+			icon={
+				<IconCheckCircle
+					size={20}
+					className={complete ? "text-green" : "text-faint"}
+				/>
+			}
+			className={cn(
+				"min-h-11 w-full justify-start",
+				complete && "disabled:opacity-100",
+			)}
+			disabled={disabled || (!href && !onClick)}
+			onClick={onClick}
+			{...(href
+				? { render: <a href={href} target="_blank" rel="noreferrer" /> }
+				: {})}
+		>
+			{label}
+		</Button>
+	);
 }
 
 export function GithubManifestSetup({
@@ -174,7 +197,7 @@ export function GithubManifestSetup({
 				</Segmented>
 				{formOwner === "organization" && (
 					<label className="flex flex-col gap-1">
-						<span className="text-label font-medium text-dim">Organization login</span>
+						<span className="text-label font-medium text-dim">Organization ID</span>
 						<Input
 							value={formInstallationOwner}
 							onChange={(event) =>
@@ -196,7 +219,18 @@ export function GithubManifestSetup({
 					</label>
 				)}
 			</div>
-			<SetupSteps steps={githubManifestSteps(formOwner)} />
+			<div className="flex flex-col gap-2">
+				<GithubSetupStep
+					label="Create GitHub app"
+					complete={github.clientIdConfigured}
+					disabled={
+						github.clientIdConfigured || !ownerReady || ownerSwitching || starting
+					}
+					onClick={() => void createApp()}
+				/>
+				<GithubSetupStep label="Enable Device Flow" href={settingsUrl} />
+				<GithubSetupStep label="Install GitHub app" href={installUrl} />
+			</div>
 			{result === "created" && (
 				<SettingsHint className="m-0">
 					GitHub App created. Enable Device Flow before you install it.
@@ -206,49 +240,6 @@ export function GithubManifestSetup({
 				<InlineAlert>GitHub App setup could not be completed. Try again.</InlineAlert>
 			)}
 			{error && <InlineAlert>{error}</InlineAlert>}
-			<div className="mt-auto flex flex-col gap-2">
-				<Button
-					variant="primary"
-					size="lg"
-					className="min-h-11 w-full justify-center"
-					disabled={
-						github.clientIdConfigured || !ownerReady || ownerSwitching || starting
-					}
-					onClick={() => void createApp()}
-				>
-					{github.clientIdConfigured
-						? "1. GitHub App created"
-						: starting
-							? "Opening GitHub…"
-							: "1. Create GitHub App"}
-				</Button>
-				{settingsUrl ? (
-					<Button
-						size="lg"
-						className="min-h-11 w-full justify-center"
-						render={<a href={settingsUrl} target="_blank" rel="noreferrer" />}
-					>
-						2. Enable Device Flow
-					</Button>
-				) : (
-					<Button size="lg" className="min-h-11 w-full justify-center" disabled>
-						2. Enable Device Flow
-					</Button>
-				)}
-				{installUrl ? (
-					<Button
-						size="lg"
-						className="min-h-11 w-full justify-center"
-						render={<a href={installUrl} target="_blank" rel="noreferrer" />}
-					>
-						3. Install GitHub App
-					</Button>
-				) : (
-					<Button size="lg" className="min-h-11 w-full justify-center" disabled>
-						3. Install GitHub App
-					</Button>
-				)}
-			</div>
 		</>
 	);
 }

@@ -97,15 +97,14 @@ function renderGithub(appSlug: string | null): string {
 }
 
 describe("GitHub App onboarding actions", () => {
-	test("shows all numbered steps and disables post-create actions without an App slug", () => {
+	test("shows clickable setup steps and disables unavailable actions", () => {
 		const markup = renderGithub(null);
-		expect(markup).toContain("1. Create GitHub App");
-		expect(markup).toMatch(
-			/<button[^>]*disabled=""[^>]*><span[^>]*>2\. Enable Device Flow<\/span><\/button>/,
-		);
-		expect(markup).toMatch(
-			/<button[^>]*disabled=""[^>]*><span[^>]*>3\. Install GitHub App<\/span><\/button>/,
-		);
+		expect(markup).toContain("Create GitHub app");
+		expect(markup).toContain("Enable Device Flow");
+		expect(markup).toContain("Install GitHub app");
+		expect(markup.match(/disabled=""/g)).toHaveLength(2);
+		expect(markup).toContain("Organization ID");
+		expect(markup).not.toMatch(/>\d\. /);
 	});
 
 	test("links personal App settings independently from its organization installation", () => {
@@ -114,11 +113,11 @@ describe("GitHub App onboarding actions", () => {
 			'href="https://github.com/settings/apps/open-session-acme"',
 		);
 		expect(markup).not.toContain("/organizations/acme/settings/apps/open-session-acme");
-		expect(markup).toContain("2. Enable Device Flow");
+		expect(markup).toContain("Enable Device Flow");
 		expect(markup).toContain(
 			'href="https://github.com/apps/open-session-acme/installations/new"',
 		);
-		expect(markup).toContain("3. Install GitHub App");
+		expect(markup).toContain("Install GitHub app");
 	});
 
 	test("links organization App settings only when appOrg identifies the owner", () => {
@@ -150,15 +149,16 @@ describe("GitHub App onboarding actions", () => {
 		);
 		expect(markup).toContain("Optional. Sign in now");
 		expect(markup).toContain("connect later under Account");
+		expect(markup).toContain('class="text-green"');
 	});
 
 	test("uses the same manifest-only setup in Settings", () => {
 		const markup = renderToStaticMarkup(
 			<GithubManifestSetup github={github} returnTo="settings" />,
 		);
-		expect(markup).toContain("1. Create GitHub App");
-		expect(markup).toContain("2. Enable Device Flow");
-		expect(markup).toContain("3. Install GitHub App");
+		expect(markup).toContain("Create GitHub app");
+		expect(markup).toContain("Enable Device Flow");
+		expect(markup).toContain("Install GitHub app");
 		expect(markup).not.toContain('type="file"');
 		expect(markup).not.toContain("Client secret");
 	});

@@ -263,20 +263,12 @@ function FirstMileSummary({
 	];
 
 	return (
-		<div
-			className={cn(
-				"grid gap-4 phone:grid-cols-2 phone:gap-3",
-				"grid-cols-5",
-			)}
-		>
+		<div className="grid justify-center gap-4 desktop:grid-cols-[repeat(auto-fit,200px)] phone:grid-cols-2 phone:gap-3">
 			{tiles.map((tile) => {
 				const className = cn(
-					"flex aspect-square min-w-0 flex-col justify-between rounded-3xl border p-5 text-left backdrop-blur-xl phone:rounded-2xl phone:p-3.5",
+					"flex aspect-square min-w-0 flex-col justify-between rounded-2xl bg-palette-glass p-5 text-left [backdrop-filter:var(--popup-blur)] smooth-shadow-sm desktop:size-[200px] phone:p-3.5",
 					tile.step &&
 						"focus-ring cursor-pointer transition-[transform,filter] duration-150 hover:brightness-[0.98] active:scale-[0.96] motion-reduce:transform-none",
-					tile.ready
-						? "border-transparent bg-green-soft shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_12px_28px_-24px_color-mix(in_srgb,var(--green)_45%,transparent)]"
-						: "border-divider-soft bg-settings-plate/65",
 				);
 				const content = (
 					<>
@@ -447,12 +439,12 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					}}
 					className={cn(
 						"relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-2xl phone:h-full phone:max-h-none phone:max-w-none phone:self-stretch phone:rounded-none phone:[box-shadow:none]",
-						step.id === "welcome"
-							? "max-w-[560px] bg-transparent [backdrop-filter:none]"
-							: cn(
-									step.id === "ready" ? "max-w-[900px]" : "max-w-[750px]",
-									"bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
-								),
+						step.id === "welcome" || step.id === "ready"
+							? cn(
+									step.id === "ready" ? "max-w-[1144px]" : "max-w-[560px]",
+									"bg-transparent [backdrop-filter:none]",
+								)
+							: "max-w-[750px] bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
 					)}
 				>
 					<div
@@ -560,10 +552,12 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						<div
 							className={cn(
 								"flex items-center gap-3",
-								index === 0 ? "justify-center" : "justify-between",
+								index === 0 || step.id === "ready"
+									? "justify-center"
+									: "justify-between",
 							)}
 						>
-							{index > 0 && (
+							{index > 0 && step.id !== "ready" && (
 								<Button
 									variant="soft"
 									size="lg"
