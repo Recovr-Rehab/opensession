@@ -18,10 +18,17 @@ interface Props {
   /** Files still on their way to disk: a ghost card each, in the row where
    *  they will land. See ImageThumbs for why they are shown at all. */
   pending?: number;
+  onRemovePending?: (index: number) => void;
 }
 
 /** Removable preview cards for non-image file attachments (staged to disk server-side). */
-export function FileChips({ files, onRemove, disabled, pending = 0 }: Props) {
+export function FileChips({
+  files,
+  onRemove,
+  disabled,
+  pending = 0,
+  onRemovePending,
+}: Props) {
   if (files.length === 0 && pending < 1) return null;
   return (
     <div className={fileChipRow}>
@@ -59,6 +66,18 @@ export function FileChips({ files, onRemove, disabled, pending = 0 }: Props) {
             <span className="h-3 w-[92px] rounded-sm bg-hover" />
             <span className="h-2.5 w-[46px] rounded-sm bg-hover" />
           </span>
+          {onRemovePending && (
+            <button
+              type="button"
+              className="absolute top-1 right-[5px] shrink-0 text-[15px] leading-none text-faint enabled:hover:text-fg disabled:cursor-default disabled:opacity-50"
+              onClick={() => onRemovePending(i)}
+              disabled={disabled}
+              aria-label="Cancel file upload"
+              title="Cancel file upload"
+            >
+              ×
+            </button>
+          )}
         </div>
       ))}
     </div>

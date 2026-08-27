@@ -92,6 +92,8 @@ interface Props {
 	staging: StagingCount;
 	onRemoveImage: (index: number) => void;
 	onRemoveFile: (index: number) => void;
+	onRemovePendingImage?: (index: number) => void;
+	onRemovePendingFile?: (index: number) => void;
 	onAddAttachments: (picked: FileList | File[]) => void;
 	sendKey: SendKeyPref;
 	/** Whether the send key has anything to create, so it can decline the key
@@ -135,6 +137,8 @@ export function NewSessionPrompt({
 	staging,
 	onRemoveImage,
 	onRemoveFile,
+	onRemovePendingImage,
+	onRemovePendingFile,
 	onAddAttachments,
 	sendKey,
 	canCreate,
@@ -479,12 +483,14 @@ export function NewSessionPrompt({
 				images={images}
 				pending={staging.images}
 				onRemove={onRemoveImage}
+				onRemovePending={onRemovePendingImage}
 				disabled={disabled}
 			/>
 			<FileChips
 				files={files}
 				pending={staging.files}
 				onRemove={onRemoveFile}
+				onRemovePending={onRemovePendingFile}
 				disabled={disabled}
 			/>
 			{/* The ghost tiles are the whole message on screen, and they say

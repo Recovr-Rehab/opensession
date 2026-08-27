@@ -71,16 +71,13 @@ import {
 } from "../lib/session-viewer-classes";
 import { loadDraft, saveDraft, clearDraft, workspaceDraftKey } from "../lib/drafts";
 import {
-	addStaging,
 	attachToDraft,
-	countStaging,
 	dropStagingAttachments,
 	isStaging,
-	NOTHING_STAGING,
 	sameFiles,
 	sameImages,
-	subtractStaging,
 } from "../lib/attachments";
+import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import type { FileAttachment } from "../lib/images";
 import { hasDraggedFiles } from "../lib/file-drag";
 import {
@@ -204,7 +201,8 @@ export function WorkspacePane({
 	// browser's draft store until the first session consumes them.
 	const [images, setImages] = useState<string[]>(() => loadDraft(draftKey).images);
 	const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(draftKey).files);
-	const [staging, setStaging] = useState(NOTHING_STAGING);
+	const uploads = useAttachmentUploads();
+	const staging = uploads.staging;
 	const [fileDragActive, setFileDragActive] = useState(false);
 	const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [overflowOpen, setOverflowOpen] = useState(false);
@@ -334,25 +332,21 @@ export function WorkspacePane({
 	useEffect(() => () => clearTimeout(startTimer.current), []);
 
 	const addWorkspaceAttachments = useCallback(async (picked: FileList | File[]) => {
-			const selected = Array.from(picked);
-			const batch = countStaging(selected);
-			setStaging((current) => addStaging(current, batch));
-			await (async () => {
-const { rejected, applied } = await attachToDraft(draftKey, selected);
-				if (applied) {
-					const stored = loadDraft(draftKey);
-					setImages((current) =>
-						sameImages(current, stored.images) ? current : stored.images,
-					);
-					setFiles((current) =>
-						sameFiles(current, stored.files) ? current : stored.files,
-					);
-				}
-				if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
-})().finally(async () => {
-setStaging((current) => subtractStaging(current, batch));
-});
-		}, [draftKey]);
+			const results = await uploads.upload(picked, (file, signal) =>
+				attachToDraft(draftKey, [file], signal),
+			);
+			if (results.some((result) => result.applied)) {
+				const stored = loadDraft(draftKey);
+				setImages((current) =>
+					sameImages(current, stored.images) ? current : stored.images,
+				);
+				setFiles((current) =>
+					sameFiles(current, stored.files) ? current : stored.files,
+				);
+			}
+			const rejected = results.flatMap((result) => result.rejected);
+			if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
+		}, [draftKey, uploads]);
 
 	useEffect(() => {
 		if (tab !== null || !connected || starting) {
@@ -954,6 +948,8 @@ setStaging((current) => subtractStaging(current, batch));
 					onFilesChange={setFiles}
 					staging={staging}
 					onAddAttachments={addWorkspaceAttachments}
+					onRemovePendingImage={uploads.cancelPendingImage}
+					onRemovePendingFile={uploads.cancelPendingFile}
 				/>
 				{startError && <InlineAlert className="mt-2.5">{startError}</InlineAlert>}
 			</div>

@@ -172,15 +172,12 @@ import {
 } from "../lib/image-region-comment-registry";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import {
-	addStaging,
 	attachToDraft,
-	countStaging,
 	dropStagingAttachments,
-	NOTHING_STAGING,
 	sameFiles,
 	sameImages,
-	subtractStaging,
 } from "../lib/attachments";
+import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import {
 	foregroundFileComposerOpen,
 	hasDraggedFiles,
@@ -1290,7 +1287,8 @@ export function SessionViewer({
 	const draftKey = `session:${session.id}`;
 	const [images, setImages] = useState<string[]>(() => loadDraft(draftKey).images);
 	const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(draftKey).files);
-	const [uploadStaging, setUploadStaging] = useState(NOTHING_STAGING);
+	const uploads = useAttachmentUploads();
+	const uploadStaging = uploads.staging;
 	const dragDepthRef = useRef(0);
 	const fileDragPresentRef = useRef(false);
 	const cancelledFileDragRef = useRef(false);
@@ -1704,30 +1702,26 @@ export function SessionViewer({
 		const accepted = noteMode
 			? selected.filter((file) => noteImageTypes.has(file.type))
 			: selected;
-		const batch = countStaging(accepted);
-		setUploadStaging((current) => addStaging(current, batch));
-		await (async () => {
-			const { rejected, applied } = await attachToDraft(draftKey, accepted);
-			if (applied) {
-				const stored = loadDraft(draftKey);
-				setImages((current) =>
-					sameImages(current, stored.images) ? current : stored.images,
-				);
-				setFiles((current) =>
-					sameFiles(current, stored.files) ? current : stored.files,
-				);
-			}
-			const failures = [
-				...rejected,
-				...disallowed.map(
-					(file) =>
-						`${file.name} (notes accept PNG, JPEG, GIF, or WebP images)`,
-				),
-			];
-			if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
-		})().finally(() => {
-			setUploadStaging((current) => subtractStaging(current, batch));
-		});
+		const results = await uploads.upload(accepted, (file, signal) =>
+			attachToDraft(draftKey, [file], signal),
+		);
+		if (results.some((result) => result.applied)) {
+			const stored = loadDraft(draftKey);
+			setImages((current) =>
+				sameImages(current, stored.images) ? current : stored.images,
+			);
+			setFiles((current) =>
+				sameFiles(current, stored.files) ? current : stored.files,
+			);
+		}
+		const failures = [
+			...results.flatMap((result) => result.rejected),
+			...disallowed.map(
+				(file) =>
+					`${file.name} (notes accept PNG, JPEG, GIF, or WebP images)`,
+			),
+		];
+		if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
 	}
 
 	function resetFileDrag() {
@@ -7982,6 +7976,8 @@ export function SessionViewer({
 									onFilesChange={setFiles}
 									staging={uploadStaging}
 									onAddAttachments={addSessionAttachments}
+									onRemovePendingImage={uploads.cancelPendingImage}
+									onRemovePendingFile={uploads.cancelPendingFile}
 									attachmentShortcutActive={focused}
 									quote={quote}
 									onQuoteClear={clearQuote}

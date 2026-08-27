@@ -14,10 +14,17 @@ interface Props {
    * picture replaces it.
    */
   pending?: number;
+  onRemovePending?: (index: number) => void;
 }
 
 /** Removable thumbnail row for pasted/dropped image attachments. */
-export function ImageThumbs({ images, onRemove, disabled, pending = 0 }: Props) {
+export function ImageThumbs({
+  images,
+  onRemove,
+  disabled,
+  pending = 0,
+  onRemovePending,
+}: Props) {
   if (images.length === 0 && pending < 1) return null;
   return (
     <div className="mb-2 flex flex-wrap gap-2">
@@ -60,10 +67,21 @@ export function ImageThumbs({ images, onRemove, disabled, pending = 0 }: Props) 
           a 16:9 screenshot at this height, so the common paste barely moves
           when the real thumbnail lands. */}
       {Array.from({ length: pending }, (_, i) => (
-        <div
-          key={`staging-${i}`}
-          className="h-14 w-[100px] animate-pulse rounded-control border border-line-strong bg-hover"
-        />
+        <div key={`staging-${i}`} className="relative">
+          <div className="h-14 w-[100px] animate-pulse rounded-control border border-line-strong bg-hover" />
+          {onRemovePending && (
+            <button
+              type="button"
+              className="absolute -top-1.5 -right-1.5 flex size-[18px] items-center justify-center rounded-full bg-fg p-0 text-panel"
+              onClick={() => onRemovePending(i)}
+              disabled={disabled}
+              aria-label="Cancel image upload"
+              title="Cancel image upload"
+            >
+              <IconX className="block" size={12} dense />
+            </button>
+          )}
+        </div>
       ))}
     </div>
   );
