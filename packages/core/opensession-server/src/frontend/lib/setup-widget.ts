@@ -5,6 +5,7 @@ import {
 import type { SettingsSectionKey } from "./settings-sections";
 
 export const SETUP_WIDGET_DISMISSED_KEY = "opensession:setup-widget-dismissed:v1";
+export const SETUP_WIDGET_VISIBLE_ITEM_LIMIT = 3;
 
 export type SetupWidgetTarget = SettingsSectionKey | "new-session";
 
@@ -98,6 +99,14 @@ export function setupWidgetItems(
 			target: "new-session",
 		},
 	];
+}
+
+export function visibleSetupWidgetItems(
+	items: SetupWidgetItem[],
+): SetupWidgetItem[] {
+	return items
+		.filter((item) => !item.complete)
+		.slice(0, SETUP_WIDGET_VISIBLE_ITEM_LIMIT);
 }
 
 export function setupWidgetDismissed(): boolean {

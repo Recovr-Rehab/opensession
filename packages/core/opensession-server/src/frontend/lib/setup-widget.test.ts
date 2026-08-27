@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { SetupStatus } from "../components/setup-shared";
-import { setupWidgetItems } from "./setup-widget";
+import {
+	SETUP_WIDGET_VISIBLE_ITEM_LIMIT,
+	setupWidgetItems,
+	visibleSetupWidgetItems,
+} from "./setup-widget";
 
 const status: SetupStatus = {
 	publicBaseUrl: "http://127.0.0.1:3850",
@@ -120,6 +124,18 @@ describe("sidebar setup checklist", () => {
 			members: true,
 			session: true,
 		});
+	});
+
+	test("folds completed steps and limits the compact widget", () => {
+		const items = setupWidgetItems(status, false);
+		expect(visibleSetupWidgetItems(items).map((item) => item.id)).toEqual([
+			"github",
+			"models",
+			"repository",
+		]);
+		expect(visibleSetupWidgetItems(items)).toHaveLength(
+			SETUP_WIDGET_VISIBLE_ITEM_LIMIT,
+		);
 	});
 
 	test("does not count GitHub or a tool missing credentials as connected tools", () => {
