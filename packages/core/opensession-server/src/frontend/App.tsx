@@ -1517,18 +1517,6 @@ export function App(
 		else restore();
 	}
 
-	// Escape leaves Settings, the same way its Back control does. The window-level
-	// handler below is installed once, so it reads the current closer through a
-	// ref; null when Settings is not the open surface. Null while the setup
-	// onboarding covers Settings too: opening it pushes /welcome over the
-	// settings entry without changing the route, so Settings still reads as
-	// active — and an Escape would pop history and dismiss the walkthrough.
-	const leaveSettingsRef = useRef<(() => void) | null>(null);
-	useLayoutEffect(() => {
-	leaveSettingsRef.current =
-		settingsActive && !firstMileActive ? leaveSettings : null;
-	});
-
 	// Edge-swipe-from-left pops the pushed page back to the sidebar on phones.
 	useBackSwipe({
 		active: mobileDetail,
@@ -2032,20 +2020,6 @@ const path = await resolveAnonymousUserPath(
 			if (e.key === "Escape") {
 				if (commandMenuRef.current?.isOpen()) commandMenuRef.current.close();
 				else if (paletteOpenRef.current) hotkeyClosePalette();
-				else if (leaveSettingsRef.current) {
-					// A field, a menu or a modal inside Settings owns the keystroke
-					// first: only an unclaimed Escape closes the whole surface.
-					if (e.defaultPrevented || blockingOverlayOpen()) return;
-					const target = e.target as HTMLElement | null;
-					if (
-						target &&
-						(target.tagName === "INPUT" ||
-							target.tagName === "TEXTAREA" ||
-							target.isContentEditable)
-					)
-						return;
-					leaveSettingsRef.current();
-				}
 			}
 		};
 		window.addEventListener("keydown", onKey);
