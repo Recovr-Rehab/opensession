@@ -6217,6 +6217,17 @@ fetchFeedItems("plain")
 				</div>
 			)}
 
+			{/* Phones keep setup in the sidebar's normal scroll flow. The bottom
+			    margin clears the paired new-session and Desk controls. */}
+			{isPhone && (
+				<SetupWidget
+					placement="phone"
+					hasCreatedSession={sessions.length > 0}
+					onOpenSettings={onOpenSettings}
+					onNewSession={onNewSession}
+				/>
+			)}
+
 			{/* One card for the whole workspace list: the rows come out of a plain
 			    render function, not a component, so they can't each own a popover.
 			    The hovered row is the anchor instead — same shell, same card. */}
@@ -6355,11 +6366,16 @@ fetchFeedItems("plain")
 			onCustomize={() => setCustomizeOpen(true)}
 		/>
 		</ContextMenu.Root>
-		<SetupWidget
-			hasCreatedSession={sessions.length > 0}
-			onOpenSettings={onOpenSettings}
-			onNewSession={onNewSession}
-		/>
+		{!isPhone &&
+			createPortal(
+				<SetupWidget
+					placement="desktop"
+					hasCreatedSession={sessions.length > 0}
+					onOpenSettings={onOpenSettings}
+					onNewSession={onNewSession}
+				/>,
+				document.body,
+			)}
 		<SidebarCustomizeDialog
 			open={customizeOpen}
 			onOpenChange={setCustomizeOpen}
