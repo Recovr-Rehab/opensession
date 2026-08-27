@@ -187,11 +187,13 @@ export function GithubAuthCard({
 	github,
 	onboarding = false,
 	onPersonalSignIn,
+	onContentSizeChange,
 }: {
 	github: SetupGithub;
 	onSaved: (updated: SetupGithub, restartRequired: boolean) => void;
 	onboarding?: boolean;
 	onPersonalSignIn?: () => void;
+	onContentSizeChange?: () => void;
 }) {
 	const state = githubAuthState(github);
 
@@ -206,6 +208,7 @@ export function GithubAuthCard({
 					<GithubManifestSetup
 						github={github}
 						returnTo="welcome"
+						onContentSizeChange={onContentSizeChange}
 						connectionStatus={
 							onboarding
 								? {
