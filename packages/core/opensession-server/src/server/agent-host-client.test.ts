@@ -9,7 +9,7 @@ import {
 } from "@tellahq/opensession-protocol";
 import {
   AgentHostClient,
-  decodeAgentHostServerMessageV4,
+  decodeAgentHostServerMessageV5,
 } from "./agent-host-client";
 
 const roots: string[] = [];
@@ -90,11 +90,11 @@ async function rawHost(onFrame: (frame: any, socket: Socket) => void) {
 const send = (socket: Socket, value: unknown) =>
   socket.write(`${JSON.stringify(value)}\n`);
 
-describe("AgentHostClient v4", () => {
+describe("AgentHostClient v5", () => {
   test("strictly decodes Host frames", async () => {
     const hello = {
       t: "hello",
-      version: 4,
+      version: 5,
       requestId: "request-1",
       accepted: true,
       hostId: "host-000000000001",
@@ -102,13 +102,29 @@ describe("AgentHostClient v4", () => {
       hostIncarnation: "incarnation-0001",
       hostChallenge: "challenge-00000001",
     } as const;
-    expect(await decodeAgentHostServerMessageV4(hello)).toEqual(hello);
+    expect(await decodeAgentHostServerMessageV5(hello)).toEqual(hello);
     expect(
-      await decodeAgentHostServerMessageV4({ ...hello, provider: "forbidden" }),
+      await decodeAgentHostServerMessageV5({ ...hello, provider: "forbidden" }),
     ).toBeUndefined();
     expect(
-      await decodeAgentHostServerMessageV4({ ...hello, version: 3 }),
+      await decodeAgentHostServerMessageV5({ ...hello, version: 4 }),
     ).toBeUndefined();
+    const terminal = {
+      t: "turn_terminal",
+      version: 5,
+      requestId: "terminal-1",
+      fence,
+      hostSeq: 2,
+      hostGeneration: 1,
+      hostIncarnation: "incarnation-0001",
+      result: { status: "cancelled" },
+      resultDigest: digest("f"),
+      receiptsDigest: digest("9"),
+      finalAckHostSeq: 1,
+      operations: [],
+    } as const;
+    expect(await decodeAgentHostServerMessageV5(terminal)).toEqual(terminal);
+    expect(await decodeAgentHostServerMessageV5({ ...terminal, fallback: true })).toBeUndefined();
   });
 
   test("dispatches descriptors through injected authority and streams opaque bytes", async () => {
@@ -124,7 +140,7 @@ describe("AgentHostClient v4", () => {
       if (frame.t === "hello")
         send(socket, {
           t: "hello",
-          version: 4,
+          version: 5,
           requestId: frame.requestId,
           accepted: true,
           hostId: "host-000000000001",
@@ -135,7 +151,7 @@ describe("AgentHostClient v4", () => {
       if (frame.t === "attach") {
         send(socket, {
           t: "attached",
-          version: 4,
+          version: 5,
           requestId: frame.requestId,
           fence,
           planHash: digest("a"),
@@ -145,7 +161,7 @@ describe("AgentHostClient v4", () => {
         });
         send(socket, {
           t: "operation_request",
-          version: 4,
+          version: 5,
           requestId: "request-operation-1",
           fence,
           hostSeq: 1,
@@ -215,7 +231,7 @@ describe("AgentHostClient v4", () => {
       if (frame.t === "hello")
         send(socket, {
           t: "hello",
-          version: 4,
+          version: 5,
           requestId: frame.requestId,
           accepted: true,
           hostId: "host-000000000001",
@@ -226,7 +242,7 @@ describe("AgentHostClient v4", () => {
       if (frame.t === "attach") {
         send(socket, {
           t: "attached",
-          version: 4,
+          version: 5,
           requestId: frame.requestId,
           fence,
           planHash: digest("a"),
@@ -236,7 +252,7 @@ describe("AgentHostClient v4", () => {
         });
         send(socket, {
           t: "operation_request",
-          version: 4,
+          version: 5,
           requestId: "request-operation-2",
           fence,
           hostSeq: 2,

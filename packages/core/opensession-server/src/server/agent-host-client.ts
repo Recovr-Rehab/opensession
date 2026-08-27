@@ -4,11 +4,14 @@ import {
   INITIAL_AGENT_HOST_STREAM_BYTES,
   INITIAL_AGENT_HOST_STREAM_CHUNKS,
   decodeAgentHostAttached,
+  decodeAgentHostTurnTerminal,
   decodeAgentHostOperationCancel,
   decodeAgentHostOperationQuery,
   decodeAgentHostOperationRequest,
   decodeAgentHostOperationStreamAck,
   decodeAgentHostTurnStarted,
+  hashAgentOperationReceiptV1,
+  hashAgentTurnTerminalReceiptsV1,
   decodeAgentOperationReceiptV1,
   decodeExecutorId,
   isAgentTurnFence,
@@ -21,6 +24,8 @@ import {
   type AgentHostOperationStreamAckV4,
   type AgentHostServerMessage,
   type AgentHostSignedAttachReceiptV4,
+  type AgentHostTurnTerminalV5,
+  type AgentHostTerminalOperationV5,
   type AgentOperationDescriptorV1,
   type AgentOperationDigest,
   type AgentOperationKind,
@@ -112,6 +117,10 @@ export interface AgentHostClientOptions {
   readonly acknowledgeOperationStream: (
     intent: Readonly<AgentHostOperationStreamAckIntent>,
   ) => Promise<void>;
+  /** Resolves before the exact terminal frame is acknowledged to the Host. */
+  readonly onTurnTerminal?: (
+    terminal: Readonly<AgentHostTurnTerminalV5>,
+  ) => void | Promise<void>;
   readonly onError?: (error: Error) => void;
   readonly failpoint?: (
     point: AgentHostClientFailpoint,
@@ -136,8 +145,8 @@ const sameFence = (a: Readonly<AgentTurnFence>, b: Readonly<AgentTurnFence>) =>
   a.turnId === b.turnId &&
   a.generation === b.generation;
 
-/** Strict gateway-side v4 hello codec. */
-export function decodeAgentHostServerHelloV4(
+/** Strict gateway-side v5 hello codec. */
+export function decodeAgentHostServerHelloV5(
   value: unknown,
 ): ServerHello | undefined {
   if (
@@ -167,8 +176,8 @@ export function decodeAgentHostServerHelloV4(
     return undefined;
   return Object.freeze(structuredClone(value)) as unknown as ServerHello;
 }
-/** Strict gateway-side v4 error codec. */
-export function decodeAgentHostServerErrorV4(
+/** Strict gateway-side v5 error codec. */
+export function decodeAgentHostServerErrorV5(
   value: unknown,
 ): ServerError | undefined {
   if (!record(value)) return undefined;
@@ -183,7 +192,7 @@ export function decodeAgentHostServerErrorV4(
   if (
     !exact(value, keys) ||
     value.t !== "error" ||
-    value.version !== 4 ||
+    value.version !== AGENT_HOST_PROTOCOL_VERSION ||
     !id(value.requestId) ||
     ![
       "unsupported_version",
@@ -198,21 +207,22 @@ export function decodeAgentHostServerErrorV4(
     return undefined;
   return Object.freeze(structuredClone(value)) as unknown as ServerError;
 }
-/** Strict decoder for every Host-to-gateway v4 frame. */
-export async function decodeAgentHostServerMessageV4(
+/** Strict decoder for every Host-to-gateway v5 frame. */
+export async function decodeAgentHostServerMessageV5(
   value: unknown,
   nowMs = Date.now(),
   turnDeadlineMs?: number,
 ): Promise<AgentHostServerMessage | undefined> {
   return (
-    decodeAgentHostServerHelloV4(value) ??
+    decodeAgentHostServerHelloV5(value) ??
     decodeAgentHostAttached(value) ??
     decodeAgentHostTurnStarted(value) ??
+    decodeAgentHostTurnTerminal(value) ??
     (await decodeAgentHostOperationRequest(value, nowMs, turnDeadlineMs)) ??
     decodeAgentHostOperationQuery(value) ??
     decodeAgentHostOperationCancel(value) ??
     decodeAgentHostOperationStreamAck(value) ??
-    decodeAgentHostServerErrorV4(value)
+    decodeAgentHostServerErrorV5(value)
   );
 }
 
@@ -256,6 +266,12 @@ export class AgentHostClient {
   private requestSequence = 0;
   private receiveChain = Promise.resolve();
   private generation = 0;
+  private terminal?: AgentHostTurnTerminalV5;
+  private terminalNotified = false;
+  private readonly terminalWaiters = new Set<{
+    resolve: (terminal: Readonly<AgentHostTurnTerminalV5>) => void;
+    reject: (error: Error) => void;
+  }>();
 
   constructor(private readonly options: AgentHostClientOptions) {}
 
@@ -306,7 +322,7 @@ export class AgentHostClient {
             try {
               const hello = await this.request("hello", {
                 t: "hello",
-                version: 4,
+                version: AGENT_HOST_PROTOCOL_VERSION,
                 requestId: this.nextRequestId(),
               });
               if (hello.t !== "hello")
@@ -327,7 +343,7 @@ export class AgentHostClient {
               const resume = this.resumeCursor();
               const attached = await this.request("attached", {
                 t: "attach",
-                version: 4,
+                version: AGENT_HOST_PROTOCOL_VERSION,
                 requestId: this.nextRequestId(),
                 fence: requested.fence,
                 planHash: requested.planHash as AgentOperationDigest,
@@ -351,6 +367,7 @@ export class AgentHostClient {
                 this.highestHostSeq = recoveryBaseline;
               }
               this.ready = true;
+              if (this.terminal) this.writeTerminalAck(this.terminal);
               finish();
             } catch (error) {
               fail(error instanceof Error ? error : new Error(String(error)));
@@ -390,7 +407,7 @@ export class AgentHostClient {
     this.turnDeadlineMs = decoded.limits.turnDeadlineMs;
     const result = await this.request("turn_started", {
       t: "start_turn",
-      version: 4,
+      version: AGENT_HOST_PROTOCOL_VERSION,
       requestId: this.nextRequestId(),
       planHash: this.planHash as AgentOperationDigest,
       spec: decoded,
@@ -399,8 +416,24 @@ export class AgentHostClient {
       throw new Error("Agent Host turn start mismatch");
   }
 
+  getTurnTerminal(): Readonly<AgentHostTurnTerminalV5> | undefined {
+    return this.terminal;
+  }
+
+  waitForTurnTerminal(): Promise<Readonly<AgentHostTurnTerminalV5>> {
+    if (this.terminal) return Promise.resolve(this.terminal);
+    if (this.closed)
+      return Promise.reject(new Error("Agent Host client is closed"));
+    return new Promise((resolve, reject) =>
+      this.terminalWaiters.add({ resolve, reject }),
+    );
+  }
+
   close(): void {
     this.closed = true;
+    for (const waiter of this.terminalWaiters)
+      waiter.reject(new Error("Agent Host client is closed"));
+    this.terminalWaiters.clear();
     this.generation++;
     if (this.socket)
       this.disconnect(this.socket, new Error("Agent Host client closed"));
@@ -425,7 +458,7 @@ export class AgentHostClient {
     raw: unknown,
   ): Promise<void> {
     if (socket !== this.socket || generation !== this.generation) return;
-    const message = await decodeAgentHostServerMessageV4(
+    const message = await decodeAgentHostServerMessageV5(
       raw,
       Date.now(),
       this.turnDeadlineMs,
@@ -459,7 +492,8 @@ export class AgentHostClient {
       throw new Error("Agent Host stream gap requires recovery");
     this.highestHostSeq = message.hostSeq;
     if (message.t === "turn_started") {
-      this.markConsumed(message.hostSeq);
+      if (this.markConsumed(message.hostSeq))
+        this.writeConsumptionAck(generation);
       if (pending && pending.expected === message.t) {
         clearTimeout(pending.timer);
         this.pending.delete(message.requestId);
@@ -467,9 +501,14 @@ export class AgentHostClient {
       }
       return;
     }
+    if (message.t === "turn_terminal") {
+      await this.consumeTerminal(message, generation);
+      return;
+    }
     if (message.t === "operation_stream_ack") {
       await this.consumeStreamAck(message);
-      this.markConsumed(message.hostSeq);
+      if (this.markConsumed(message.hostSeq))
+        this.writeConsumptionAck(generation);
       return;
     }
     void this.consumeIntent(message, generation).catch((error) =>
@@ -549,11 +588,10 @@ export class AgentHostClient {
       );
       await this.options.failpoint?.("after_coordinator_result");
       this.acceptReceipt(op, result.receipt);
-      this.markConsumed(message.hostSeq);
       await this.writeReceipt(
         {
           t: "operation_cancel_receipt",
-          version: 4,
+          version: AGENT_HOST_PROTOCOL_VERSION,
           requestId: this.nextRequestId(),
           fence: this.fence!,
           ackHostSeq: message.hostSeq,
@@ -564,6 +602,8 @@ export class AgentHostClient {
         },
         generation,
       );
+      if (this.markConsumed(message.hostSeq))
+        this.writeConsumptionAck(generation);
       op.uncertain = false;
     }
   }
@@ -654,9 +694,8 @@ export class AgentHostClient {
     this.acceptReceipt(op, result.receipt);
     if (result.fromStreamSeq < 1 || result.fromStreamSeq > op.sentStreamSeq + 1)
       throw new Error("Invalid operation replay cursor");
-    this.markConsumed(hostSeq);
     const common = {
-      version: 4 as const,
+      version: AGENT_HOST_PROTOCOL_VERSION,
       requestId: this.nextRequestId(),
       fence: this.fence!,
       ackHostSeq: hostSeq,
@@ -669,6 +708,7 @@ export class AgentHostClient {
         : { ...common, t: type, fromStreamSeq: result.fromStreamSeq },
       generation,
     );
+    if (this.markConsumed(hostSeq)) this.writeConsumptionAck(generation);
     let seq = result.fromStreamSeq;
     for await (const raw of result.chunks ?? []) {
       if (
@@ -684,7 +724,7 @@ export class AgentHostClient {
       await this.awaitCredit(op, bytes.byteLength, generation);
       this.write({
         t: "operation_stream",
-        version: 4,
+        version: AGENT_HOST_PROTOCOL_VERSION,
         requestId: this.nextRequestId(),
         fence: this.fence!,
         operationId: op.operationId,
@@ -772,10 +812,91 @@ export class AgentHostClient {
       await new Promise<void>((resolve) => op.waiters.add(resolve));
     }
   }
-  private markConsumed(hostSeq: number): void {
+  private markConsumed(hostSeq: number): boolean {
+    const previous = this.lastHostSeq;
     this.consumedHostSeq.add(hostSeq);
     while (this.consumedHostSeq.delete(this.lastHostSeq + 1))
       this.lastHostSeq++;
+    return this.lastHostSeq !== previous;
+  }
+  private writeConsumptionAck(generation: number): void {
+    if (generation !== this.generation || !this.fence) return;
+    this.write({
+      t: "consumption_ack",
+      version: AGENT_HOST_PROTOCOL_VERSION,
+      requestId: this.nextRequestId(),
+      fence: this.fence,
+      ackHostSeq: this.lastHostSeq,
+      operations: [...this.operations.values()]
+        .map((operation) => ({
+          operationId: operation.operationId,
+          throughStreamSeq: operation.throughStreamSeq,
+        }))
+        .sort((a, b) => a.operationId.localeCompare(b.operationId)),
+    });
+  }
+  private async consumeTerminal(
+    message: AgentHostTurnTerminalV5,
+    generation: number,
+  ): Promise<void> {
+    if (message.finalAckHostSeq !== this.lastHostSeq)
+      throw new Error("Agent Host terminal acknowledgement cursor mismatch");
+    const expected: AgentHostTerminalOperationV5[] = [];
+    for (const operation of [...this.operations.values()].sort((a, b) =>
+      a.operationId.localeCompare(b.operationId),
+    )) {
+      if (!operation.receipt || operation.receiptRank < 2)
+        throw new Error(
+          "Agent Host terminal preceded an operation terminal receipt",
+        );
+      expected.push({
+        operationId: operation.operationId,
+        receiptDigest: await hashAgentOperationReceiptV1(operation.receipt),
+        throughStreamSeq: operation.throughStreamSeq,
+      });
+    }
+    if (
+      JSON.stringify(expected) !== JSON.stringify(message.operations) ||
+      (await hashAgentTurnTerminalReceiptsV1(expected)) !==
+        message.receiptsDigest
+    )
+      throw new Error("Agent Host terminal receipt projection mismatch");
+    const authority = this.receipt?.expected;
+    if (
+      authority &&
+      (message.hostGeneration !== authority.hostGeneration ||
+        message.hostIncarnation !== authority.hostIncarnation)
+    )
+      throw new Error("Agent Host terminal supervision identity mismatch");
+    if (
+      this.terminal &&
+      (this.terminal.resultDigest !== message.resultDigest ||
+        this.terminal.receiptsDigest !== message.receiptsDigest ||
+        this.terminal.hostSeq !== message.hostSeq)
+    )
+      throw new Error("Agent Host terminal identity changed");
+    if (!this.terminal) this.terminal = Object.freeze(structuredClone(message));
+    if (!this.terminalNotified) {
+      this.terminalNotified = true;
+      for (const waiter of this.terminalWaiters) waiter.resolve(this.terminal);
+      this.terminalWaiters.clear();
+      await this.options.onTurnTerminal?.(this.terminal);
+    }
+    if (this.markConsumed(message.hostSeq) && generation !== this.generation)
+      return;
+    this.writeTerminalAck(this.terminal);
+  }
+  private writeTerminalAck(terminal: AgentHostTurnTerminalV5): void {
+    if (!this.fence) throw new Error("Agent Host supervision unavailable");
+    this.write({
+      t: "turn_terminal_ack",
+      version: AGENT_HOST_PROTOCOL_VERSION,
+      requestId: this.nextRequestId(),
+      fence: this.fence,
+      ackHostSeq: terminal.hostSeq,
+      resultDigest: terminal.resultDigest,
+      receiptsDigest: terminal.receiptsDigest,
+    });
   }
   private async writeReceipt(
     message: AgentHostClientMessage,

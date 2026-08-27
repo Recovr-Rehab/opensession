@@ -15,6 +15,11 @@ import {
   decodeAgentHostOperationStream,
   decodeAgentHostOperationStreamAck,
   decodeAgentHostStartTurn,
+  decodeAgentHostConsumptionAck,
+  decodeAgentHostTurnTerminal,
+  decodeAgentHostTurnTerminalAck,
+  hashAgentTurnResultV1,
+  hashAgentTurnTerminalReceiptsV1,
   decodeAgentTurnSpec,
   hashAgentTurnSpecV2,
   type AgentTurnSpec,
@@ -38,7 +43,7 @@ const receipt: AgentOperationReceiptV1 = {
   actorIdentity: { supervisorEpoch: 1, hostId: "host-1", hostGeneration: 1, hostIncarnation: "incarnation-1", transcriptAnchor: descriptor.transcript },
   state: "prepared", acceptedAtMs: 1, providerRef: { adapterId: "adapter-1", adapterVersion: "1" },
 };
-const common = { version: 4 as const, requestId: "request-1", fence };
+const common = { version: 5 as const, requestId: "request-1", fence };
 
 async function makeSpec(): Promise<AgentTurnSpec> {
   return {
@@ -49,12 +54,12 @@ async function makeSpec(): Promise<AgentTurnSpec> {
   };
 }
 
-describe("Agent Host protocol v4", () => {
-  test("hard cuts v3 and exact hello keys", () => {
-    expect(AGENT_HOST_PROTOCOL_VERSION).toBe(4);
-    expect(decodeAgentHostHello({ t: "hello", version: 4, requestId: "request-1" })).toBeDefined();
-    expect(decodeAgentHostHello({ t: "hello", version: 3, requestId: "request-1" })).toBeUndefined();
-    expect(decodeAgentHostHello({ t: "hello", version: 4, requestId: "request-1", extra: true })).toBeUndefined();
+describe("Agent Host protocol v5", () => {
+  test("hard cuts v4 and exact hello keys", () => {
+    expect(AGENT_HOST_PROTOCOL_VERSION).toBe(5);
+    expect(decodeAgentHostHello({ t: "hello", version: 5, requestId: "request-1" })).toBeDefined();
+    expect(decodeAgentHostHello({ t: "hello", version: 4, requestId: "request-1" })).toBeUndefined();
+    expect(decodeAgentHostHello({ t: "hello", version: 5, requestId: "request-1", extra: true })).toBeUndefined();
   });
 
   test("decodes only the frozen descriptor-only turn spec and hashes domain v2", async () => {
@@ -70,7 +75,7 @@ describe("Agent Host protocol v4", () => {
       expect(decodeAgentTurnSpec({ ...spec, [key]: "forbidden" }, now)).toBeUndefined();
     expect(decodeAgentTurnSpec({ ...spec, limits: { ...spec.limits, maxInFlightOperations: 9 } }, now)).toBeUndefined();
     expect(decodeAgentTurnSpec({ ...spec, initialOperation: { ...spec.initialOperation, deadlineMs: now + 5 * 60_000 + 1 } }, now)).toBeUndefined();
-    expect(decodeAgentHostStartTurn({ t: "start_turn", version: 4, requestId: "request-1", planHash: d("1"), spec }, now)).toBeDefined();
+    expect(decodeAgentHostStartTurn({ t: "start_turn", version: 5, requestId: "request-1", planHash: d("1"), spec }, now)).toBeDefined();
   });
 
   test("strictly decodes sorted immutable attach resume cursors", () => {
@@ -115,6 +120,22 @@ describe("Agent Host protocol v4", () => {
     expect(decodeAgentHostOperationStreamAck(ack)).toBeDefined();
     expect(decodeAgentHostOperationStreamAck({ ...ack, creditBytes: MAX_AGENT_HOST_STREAM_BYTES + 1 })).toBeUndefined();
     expect(decodeAgentHostOperationStreamAck({ ...ack, creditChunks: 33 })).toBeUndefined();
+  });
+
+  test("decodes exact terminal projection and cumulative acknowledgements", async () => {
+    const operations = [{ operationId: "operation-1", receiptDigest: d("8"), throughStreamSeq: 2 }];
+    const terminal = {
+      t: "turn_terminal" as const, ...common, hostSeq: 5,
+      hostGeneration: 7, hostIncarnation: "incarnation-terminal-1",
+      result: { status: "failed" as const }, resultDigest: await hashAgentTurnResultV1({ status: "failed", error: "redacted from frame" }),
+      receiptsDigest: await hashAgentTurnTerminalReceiptsV1(operations), finalAckHostSeq: 4, operations,
+    };
+    expect(decodeAgentHostTurnTerminal(terminal)).toEqual(terminal);
+    expect(JSON.stringify(terminal)).not.toContain("redacted from frame");
+    expect(decodeAgentHostTurnTerminal({ ...terminal, prompt: "forbidden" })).toBeUndefined();
+    expect(decodeAgentHostConsumptionAck({ t: "consumption_ack", ...common, ackHostSeq: 4, operations: [{ operationId: "operation-1", throughStreamSeq: 2 }] })).toBeDefined();
+    expect(decodeAgentHostTurnTerminalAck({ t: "turn_terminal_ack", ...common, ackHostSeq: 5, resultDigest: terminal.resultDigest, receiptsDigest: terminal.receiptsDigest })).toBeDefined();
+    expect(decodeAgentHostTurnTerminalAck({ t: "turn_terminal_ack", ...common, ackHostSeq: 5, resultDigest: terminal.resultDigest, receiptsDigest: terminal.receiptsDigest, fallback: true })).toBeUndefined();
   });
 
   test("rejects accessors and non-plain objects", async () => {

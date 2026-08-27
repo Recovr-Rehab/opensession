@@ -27,15 +27,20 @@ import {
   MAX_AGENT_HOST_STREAM_CHUNKS,
   MAX_AGENT_HOST_WRITABLE_BYTES,
   decodeAgentHostAttach,
+  decodeAgentHostConsumptionAck,
   decodeAgentHostHello,
   decodeAgentHostOperationCancelReceipt,
   decodeAgentHostOperationQueryReceipt,
   decodeAgentHostOperationReceipt,
   decodeAgentHostOperationStream,
   decodeAgentHostStartTurn,
+  decodeAgentHostTurnTerminalAck,
   decodeAgentHostSupervisionPublicKeyringV2,
   decodeExecutorId,
   hashAgentTurnSpecV2,
+  hashAgentTurnResultV1,
+  hashAgentTurnTerminalReceiptsV1,
+  projectAgentTurnTerminalOperationsV1,
   verifySignedAgentHostSupervisionEnvelopeV2,
   type AgentHostAttachResumeCursorV4,
   type AgentHostClientMessage,
@@ -43,6 +48,7 @@ import {
   type AgentHostOperationCancelV4,
   type AgentHostServerMessage,
   type AgentHostSupervisionPublicKeyringV2,
+  type AgentHostTurnTerminalV5,
   type AgentOperationReceiptV1,
   type AgentTurnFence,
   type AgentTurnSpec,
@@ -146,6 +152,10 @@ interface Turn {
   result?: AgentTurnResult;
   cancelling: boolean;
   cancelSettled: boolean;
+  acknowledgedHostSeq: number;
+  acknowledgedStreams: Map<string, number>;
+  terminal?: AgentHostTurnTerminalV5;
+  completing: boolean;
 }
 interface Identity {
   dev: number;
@@ -167,7 +177,9 @@ const rank = (s: AgentOperationReceiptV1["state"]) =>
 export class AgentHost {
   private server?: Server;
   private inheritedServer?: VerifiedUnixSocketServer;
-  private peerVerifier?: Awaited<ReturnType<typeof createLinuxPeerCredentialVerifier>>;
+  private peerVerifier?: Awaited<
+    ReturnType<typeof createLinuxPeerCredentialVerifier>
+  >;
   private starting?: Promise<void>;
   private stopping?: Promise<void>;
   private active?: Turn;
@@ -192,7 +204,7 @@ export class AgentHost {
       !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,255}$/.test(options.hostIncarnation) ||
       !ring
     )
-      throw new Error("Invalid Agent Host v4 identity or public keyring");
+      throw new Error("Invalid Agent Host v5 identity or public keyring");
     this.keyring = ring;
   }
   start() {
@@ -236,14 +248,18 @@ export class AgentHost {
       throw new Error("Agent Host requires process replacement");
     if (this.options.inheritedFd !== undefined) {
       if (this.options.socketPath !== undefined)
-        throw new Error("Agent Host inherited listener cannot name a socket path");
+        throw new Error(
+          "Agent Host inherited listener cannot name a socket path",
+        );
       const expectedPeerUid = this.options.expectedPeerUid;
       if (
         !Number.isSafeInteger(expectedPeerUid) ||
         expectedPeerUid! <= 0 ||
         expectedPeerUid! > 0xffff_ffff
       )
-        throw new Error("Agent Host inherited listener requires an exact non-root gateway UID");
+        throw new Error(
+          "Agent Host inherited listener requires an exact non-root gateway UID",
+        );
       const verifier = await createLinuxPeerCredentialVerifier();
       this.peerVerifier = verifier;
       const inherited = createVerifiedUnixSocketServer(
@@ -504,10 +520,14 @@ export class AgentHost {
     if (!p.hello) {
       const hello = decodeAgentHostHello(raw);
       if (!hello) {
-        if (rec(raw) && id(raw.requestId) && raw.version !== 4)
+        if (
+          rec(raw) &&
+          id(raw.requestId) &&
+          raw.version !== AGENT_HOST_PROTOCOL_VERSION
+        )
           this.send(p, {
             t: "error",
-            version: 4,
+            version: AGENT_HOST_PROTOCOL_VERSION,
             requestId: raw.requestId,
             code: "unsupported_version",
             message: "Unsupported Agent Host protocol version",
@@ -536,18 +556,22 @@ export class AgentHost {
       decodeAgentHostOperationReceipt(raw) ??
       decodeAgentHostOperationQueryReceipt(raw) ??
       decodeAgentHostOperationCancelReceipt(raw) ??
-      decodeAgentHostOperationStream(raw);
+      decodeAgentHostOperationStream(raw) ??
+      decodeAgentHostConsumptionAck(raw) ??
+      decodeAgentHostTurnTerminalAck(raw);
     if (!m) return this.invalid(p, raw);
     if (m.t === "start_turn") return this.startTurn(p, m);
     const turn = this.active;
     if (!turn || turn.owner !== p || !sameFence(turn.fence, m.fence))
       return this.close(p);
+    if (m.t === "consumption_ack") return this.consumptionAck(turn, m);
+    if (m.t === "turn_terminal_ack") return this.terminalAck(turn, m);
     await this.operationMessage(turn, m);
   }
   private invalid(p: Peer, raw: unknown) {
     this.send(p, {
       t: "error",
-      version: 4,
+      version: AGENT_HOST_PROTOCOL_VERSION,
       requestId: rec(raw) && id(raw.requestId) ? raw.requestId : "invalid",
       code: "invalid_request",
       message: "Invalid Agent Host request",
@@ -617,13 +641,29 @@ export class AgentHost {
     if (resumed) {
       this.clear(turn.reconnect);
       turn.reconnect = undefined;
+      if (m.resume!.lastHostSeq <= turn.seq)
+        turn.acknowledgedHostSeq = Math.max(
+          turn.acknowledgedHostSeq,
+          m.resume!.lastHostSeq,
+        );
+      for (const cursor of m.resume!.operations) {
+        const operation = turn.ops.get(cursor.operationId);
+        if (operation && cursor.throughStreamSeq <= operation.through)
+          turn.acknowledgedStreams.set(
+            cursor.operationId,
+            Math.max(
+              turn.acknowledgedStreams.get(cursor.operationId) ?? 0,
+              cursor.throughStreamSeq,
+            ),
+          );
+      }
     }
     if (old && old !== p) this.close(old);
     await this.hit("afterOwnerSwapBeforeAttachedWrite");
     const recovery = resumed && this.needsRecovery(turn, m.resume!);
     this.send(p, {
       t: "attached",
-      version: 4,
+      version: AGENT_HOST_PROTOCOL_VERSION,
       requestId: m.requestId,
       fence: authority.fence,
       planHash: authority.planHash as `sha256:${string}`,
@@ -676,7 +716,7 @@ export class AgentHost {
     } catch (e) {
       this.send(p, {
         t: "error",
-        version: 4,
+        version: AGENT_HOST_PROTOCOL_VERSION,
         requestId: m.requestId,
         code: "turn_failed",
         message: String(e),
@@ -698,6 +738,9 @@ export class AgentHost {
       runSettled: false,
       cancelling: false,
       cancelSettled: false,
+      acknowledgedHostSeq: 0,
+      acknowledgedStreams: new Map(),
+      completing: false,
     };
     this.active = t;
     t.deadline = this.set(
@@ -706,7 +749,7 @@ export class AgentHost {
     );
     this.sequenced(t, {
       t: "turn_started",
-      version: 4,
+      version: AGENT_HOST_PROTOCOL_VERSION,
       requestId: m.requestId,
       fence: t.fence,
     } as never);
@@ -761,7 +804,7 @@ export class AgentHost {
     t.ops.set(r.operationId, o);
     const seq = this.buffer(t, {
       t: "operation_request",
-      version: 4,
+      version: AGENT_HOST_PROTOCOL_VERSION,
       requestId: t.requestId,
       fence: t.fence,
       operationId: r.operationId,
@@ -802,7 +845,7 @@ export class AgentHost {
     o.sent.add(
       this.sequenced(t, {
         t: "operation_query",
-        version: 4,
+        version: AGENT_HOST_PROTOCOL_VERSION,
         requestId: t.requestId,
         fence: t.fence,
         ...q,
@@ -815,7 +858,7 @@ export class AgentHost {
     o.sent.add(
       this.sequenced(t, {
         t: "operation_cancel",
-        version: 4,
+        version: AGENT_HOST_PROTOCOL_VERSION,
         requestId: t.requestId,
         fence: t.fence,
         ...c,
@@ -826,7 +869,14 @@ export class AgentHost {
     t: Turn,
     m: Exclude<
       AgentHostClientMessage,
-      { t: "hello" | "attach" | "start_turn" }
+      {
+        t:
+          | "hello"
+          | "attach"
+          | "start_turn"
+          | "consumption_ack"
+          | "turn_terminal_ack";
+      }
     >,
   ) {
     const o = t.ops.get(m.operationId);
@@ -942,7 +992,7 @@ export class AgentHost {
     o.sent.add(
       this.sequenced(t, {
         t: "operation_stream_ack",
-        version: 4,
+        version: AGENT_HOST_PROTOCOL_VERSION,
         requestId: t.requestId,
         fence: t.fence,
         operationId: o.request.operationId,
@@ -1003,7 +1053,7 @@ export class AgentHost {
         o.sent.add(
           this.sequenced(t, {
             t: "operation_request",
-            version: 4,
+            version: AGENT_HOST_PROTOCOL_VERSION,
             requestId: t.requestId,
             fence: t.fence,
             operationId: o.request.operationId,
@@ -1114,20 +1164,105 @@ export class AgentHost {
       this.complete(t);
     });
   }
-  private complete(t: Turn) {
+  private consumptionAck(
+    t: Turn,
+    m: Extract<AgentHostClientMessage, { t: "consumption_ack" }>,
+  ) {
+    if (m.ackHostSeq < t.acknowledgedHostSeq || m.ackHostSeq > t.seq)
+      return this.invalid(t.owner, m);
+    const cursors = new Map(
+      m.operations.map((item) => [item.operationId, item.throughStreamSeq]),
+    );
+    for (const [operationId, throughStreamSeq] of cursors) {
+      const operation = t.ops.get(operationId);
+      const previous = t.acknowledgedStreams.get(operationId) ?? 0;
+      if (
+        !operation ||
+        throughStreamSeq < previous ||
+        throughStreamSeq > operation.through
+      )
+        return this.invalid(t.owner, m);
+    }
+    t.acknowledgedHostSeq = m.ackHostSeq;
+    for (const [operationId, throughStreamSeq] of cursors)
+      t.acknowledgedStreams.set(operationId, throughStreamSeq);
+    this.complete(t);
+  }
+  private terminalAck(
+    t: Turn,
+    m: Extract<AgentHostClientMessage, { t: "turn_terminal_ack" }>,
+  ) {
+    const terminal = t.terminal;
     if (
-      this.active !== t ||
-      !t.runSettled ||
-      [...t.ops.values()].some((o) => !o.terminal || o.pending) ||
-      (t.cancelling && !t.cancelSettled)
+      !terminal ||
+      m.ackHostSeq !== terminal.hostSeq ||
+      m.resultDigest !== terminal.resultDigest ||
+      m.receiptsDigest !== terminal.receiptsDigest
     )
-      return;
+      return this.invalid(t.owner, m);
     this.clear(t.deadline);
     this.clear(t.reconnect);
-    for (const o of t.ops.values()) this.clear(o.timer);
+    for (const operation of t.ops.values()) this.clear(operation.timer);
     this.active = undefined;
     if (this.owner === t.owner) this.owner = undefined;
     this.close(t.owner);
+  }
+  private complete(t: Turn) {
+    if (
+      this.active !== t ||
+      t.terminal ||
+      t.completing ||
+      !t.runSettled ||
+      [...t.ops.values()].some((o) => !o.terminal || o.pending) ||
+      (t.cancelling && !t.cancelSettled) ||
+      t.acknowledgedHostSeq !== t.seq ||
+      [...t.ops].some(
+        ([operationId, operation]) =>
+          (t.acknowledgedStreams.get(operationId) ?? 0) !== operation.through,
+      )
+    )
+      return;
+    t.completing = true;
+    void this.projectTerminal(t).catch(() => {
+      t.completing = false;
+      this.cancelTurn(t, "shutdown");
+    });
+  }
+  private async projectTerminal(t: Turn) {
+    const result = t.result!;
+    const operations = await projectAgentTurnTerminalOperationsV1(
+      [...t.ops].map(([operationId, operation]) => ({
+        operationId,
+        receipt: operation.receipt!,
+        throughStreamSeq: operation.through,
+      })),
+    );
+    const [resultDigest, receiptsDigest] = await Promise.all([
+      hashAgentTurnResultV1(result),
+      hashAgentTurnTerminalReceiptsV1(operations),
+    ]);
+    if (this.active !== t || t.terminal) return;
+    const finalAckHostSeq = t.acknowledgedHostSeq;
+    const frame = {
+      t: "turn_terminal" as const,
+      version: AGENT_HOST_PROTOCOL_VERSION,
+      requestId: t.requestId,
+      fence: t.fence,
+      hostGeneration: this.options.hostGeneration,
+      hostIncarnation: this.options.hostIncarnation,
+      result: { status: result.status },
+      resultDigest,
+      receiptsDigest,
+      finalAckHostSeq,
+      operations,
+    };
+    const hostSeq = this.buffer(t, frame as never);
+    t.terminal = Object.freeze({
+      ...frame,
+      hostSeq,
+      result: Object.freeze(frame.result),
+    });
+    this.writeBuffered(t, hostSeq);
   }
   private close(p: Peer) {
     if (!p.closed) {

@@ -2,6 +2,7 @@ import {
   decodeAgentOperationDescriptorV1,
   decodeAgentOperationReceiptV1,
   hashAgentOperationDescriptorV1,
+  hashAgentOperationReceiptV1,
   type AgentOperationDescriptorV1,
   type AgentOperationDigest,
   type AgentOperationKind,
@@ -15,7 +16,7 @@ import type {
 } from "./agent-host-supervision";
 export { decodeAgentTurnFence, isAgentTurnFence, type AgentTurnFence } from "./agent-host-fence";
 
-export const AGENT_HOST_PROTOCOL_VERSION = 4 as const;
+export const AGENT_HOST_PROTOCOL_VERSION = 5 as const;
 export const AGENT_HOST_SUPERVISION_VERSION = 2 as const;
 export const AGENT_HOST_SUPERVISION_AUDIENCE = "opensession-agent-host" as const;
 export const AGENT_HOST_SUPERVISION_PURPOSE = "agent-host-supervision" as const;
@@ -112,7 +113,7 @@ export async function hashAgentTurnSpecV2(spec: AgentTurnSpec, nowMs = Date.now(
   return `sha256:${[...result].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
-interface Base { readonly t: string; readonly version: 4; readonly requestId: string }
+interface Base { readonly t: string; readonly version: 5; readonly requestId: string }
 interface Fenced extends Base { readonly fence: Readonly<AgentTurnFence> }
 export interface AgentHostAttachResumeCursorV4 { readonly lastHostSeq: number; readonly operations: readonly Readonly<{ operationId: string; throughStreamSeq: number }>[] }
 export interface AgentHostChallengeDescriptorV4 { readonly hostId: string; readonly hostGeneration: number; readonly hostIncarnation: string; readonly hostChallenge: string }
@@ -132,10 +133,14 @@ export type AgentHostOperationQueryReceiptV4 = GatewayResult & { readonly t: "op
 export type AgentHostOperationCancelReceiptV4 = GatewayResult & { readonly t: "operation_cancel_receipt"; readonly cancelId: string; readonly disposition: "not_started" | "cancelled" | "too_late" | "indeterminate"; readonly receipt: AgentOperationReceiptV1 };
 export type AgentHostOperationStreamV4 = Fenced & { readonly t: "operation_stream"; readonly operationId: string; readonly streamSeq: number; readonly encoding: typeof STREAM_ENCODING; readonly bytes: string };
 export type AgentHostOperationStreamAckV4 = HostAsync & { readonly t: "operation_stream_ack"; readonly throughStreamSeq: number; readonly creditBytes: number; readonly creditChunks: number };
-export type AgentHostClientMessage = (Base & { readonly t: "hello" }) | AgentHostAttachV4 | AgentHostStartTurnV4 | AgentHostOperationReceiptV4 | AgentHostOperationQueryReceiptV4 | AgentHostOperationCancelReceiptV4 | AgentHostOperationStreamV4;
-export type AgentHostServerMessage = (Base & { readonly t: "hello"; readonly accepted: true; readonly hostId: string; readonly hostGeneration: number; readonly hostIncarnation: string; readonly hostChallenge: string }) | AgentHostAttachedV4 | (Fenced & { readonly t: "turn_started"; readonly hostSeq: number }) | AgentHostOperationRequestV4 | AgentHostOperationQueryV4 | AgentHostOperationCancelV4 | AgentHostOperationStreamAckV4 | (Base & { readonly t: "error"; readonly code: "unsupported_version" | "invalid_request" | "stale_generation" | "host_busy" | "turn_failed"; readonly message: string; readonly fence?: Readonly<AgentTurnFence> });
+export interface AgentHostTerminalOperationV5 { readonly operationId: string; readonly receiptDigest: AgentOperationDigest; readonly throughStreamSeq: number }
+export type AgentHostConsumptionAckV5 = Fenced & { readonly t: "consumption_ack"; readonly ackHostSeq: number; readonly operations: readonly Readonly<{ operationId: string; throughStreamSeq: number }>[] };
+export type AgentHostTurnTerminalV5 = Fenced & { readonly t: "turn_terminal"; readonly hostSeq: number; readonly hostGeneration: number; readonly hostIncarnation: string; readonly result: Readonly<{ status: "completed" | "cancelled" | "failed" }>; readonly resultDigest: AgentOperationDigest; readonly receiptsDigest: AgentOperationDigest; readonly finalAckHostSeq: number; readonly operations: readonly Readonly<AgentHostTerminalOperationV5>[] };
+export type AgentHostTurnTerminalAckV5 = Fenced & { readonly t: "turn_terminal_ack"; readonly ackHostSeq: number; readonly resultDigest: AgentOperationDigest; readonly receiptsDigest: AgentOperationDigest };
+export type AgentHostClientMessage = (Base & { readonly t: "hello" }) | AgentHostAttachV4 | AgentHostStartTurnV4 | AgentHostOperationReceiptV4 | AgentHostOperationQueryReceiptV4 | AgentHostOperationCancelReceiptV4 | AgentHostOperationStreamV4 | AgentHostConsumptionAckV5 | AgentHostTurnTerminalAckV5;
+export type AgentHostServerMessage = (Base & { readonly t: "hello"; readonly accepted: true; readonly hostId: string; readonly hostGeneration: number; readonly hostIncarnation: string; readonly hostChallenge: string }) | AgentHostAttachedV4 | (Fenced & { readonly t: "turn_started"; readonly hostSeq: number }) | AgentHostOperationRequestV4 | AgentHostOperationQueryV4 | AgentHostOperationCancelV4 | AgentHostOperationStreamAckV4 | AgentHostTurnTerminalV5 | (Base & { readonly t: "error"; readonly code: "unsupported_version" | "invalid_request" | "stale_generation" | "host_busy" | "turn_failed"; readonly message: string; readonly fence?: Readonly<AgentTurnFence> });
 
-function base(value: unknown, t: string, keys: readonly string[]): value is Record<string, unknown> { return record(value) && exact(value, keys) && value.t === t && value.version === 4 && id(value.requestId); }
+function base(value: unknown, t: string, keys: readonly string[]): value is Record<string, unknown> { return record(value) && exact(value, keys) && value.t === t && value.version === AGENT_HOST_PROTOCOL_VERSION && id(value.requestId); }
 function fenced(value: unknown, t: string, tail: readonly string[]): value is Record<string, unknown> { return base(value, t, ["t", "version", "requestId", "fence", ...tail]) && isAgentTurnFence(value.fence); }
 function hostAsync(value: unknown, t: string, tail: readonly string[]): value is Record<string, unknown> { return fenced(value, t, ["hostSeq", "operationId", ...tail]) && positive(value.hostSeq) && id(value.operationId); }
 function gateway(value: unknown, t: string, tail: readonly string[]): value is Record<string, unknown> { return fenced(value, t, ["ackHostSeq", "operationId", ...tail]) && uint(value.ackHostSeq) && id(value.operationId); }
@@ -148,6 +153,13 @@ function decodeResume(value: unknown): AgentHostAttachResumeCursorV4 | null | un
   return deepFreeze({ lastHostSeq: value.lastHostSeq, operations });
 }
 export const decodeAgentHostAttachResumeCursorV4 = decodeResume;
+function decodeOperationCursors(value: unknown): readonly Readonly<{ operationId: string; throughStreamSeq: number }>[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_AGENT_HOST_IN_FLIGHT_OPERATIONS) return undefined;
+  const operations: { operationId: string; throughStreamSeq: number }[] = [];
+  for (const item of value) { if (!record(item) || !exact(item, ["operationId", "throughStreamSeq"]) || !id(item.operationId) || !uint(item.throughStreamSeq)) return undefined; operations.push({ operationId: item.operationId, throughStreamSeq: item.throughStreamSeq }); }
+  if (operations.some((item, index) => index > 0 && operations[index - 1]!.operationId >= item.operationId)) return undefined;
+  return deepFreeze(operations);
+}
 function decodeExpected(value: unknown): ExpectedAgentHostSupervisionBindingsV3 | undefined {
   const keys = ["fence", "planHash", "hostId", "hostGeneration", "hostIncarnation", "supervisorEpoch", "kernelServiceEpoch", "hostChallenge", "nonce", "audience", "purpose", "keyId", "issuedAtMs", "expiresAtMs"];
   if (!record(value) || !exact(value, keys) || !isAgentTurnFence(value.fence) || !digest(value.planHash) || !id(value.hostId) || !positive(value.hostGeneration) || !boundedName(value.hostIncarnation, 256) || !positive(value.supervisorEpoch) || !boundedName(value.kernelServiceEpoch, 256) || typeof value.hostChallenge !== "string" || !SUPERVISION_TOKEN_RE.test(value.hostChallenge) || typeof value.nonce !== "string" || !SUPERVISION_TOKEN_RE.test(value.nonce) || value.audience !== AGENT_HOST_SUPERVISION_AUDIENCE || value.purpose !== AGENT_HOST_SUPERVISION_PURPOSE || !boundedName(value.keyId, 256) || !uint(value.issuedAtMs) || !positive(value.expiresAtMs) || value.expiresAtMs <= value.issuedAtMs) return undefined;
@@ -190,6 +202,22 @@ export function decodeAgentHostOperationCancelReceipt(value: unknown): AgentHost
 function canonicalStreamBytes(value: unknown): value is string { if (typeof value !== "string" || value.length < 2 || value.length > 65_536 || !/^[A-Za-z0-9_-]+$/.test(value)) return false; try { const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4); const binary = atob(padded); if (binary.length < 1 || binary.length > MAX_AGENT_HOST_STREAM_CHUNK_BYTES) return false; return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") === value; } catch { return false; } }
 export function decodeAgentHostOperationStream(value: unknown): AgentHostOperationStreamV4 | undefined { return fenced(value, "operation_stream", ["operationId", "streamSeq", "encoding", "bytes"]) && id(value.operationId) && positive(value.streamSeq) && value.encoding === STREAM_ENCODING && canonicalStreamBytes(value.bytes) ? immutable(value) as unknown as AgentHostOperationStreamV4 : undefined; }
 export function decodeAgentHostOperationStreamAck(value: unknown): AgentHostOperationStreamAckV4 | undefined { return hostAsync(value, "operation_stream_ack", ["throughStreamSeq", "creditBytes", "creditChunks"]) && uint(value.throughStreamSeq) && uint(value.creditBytes) && value.creditBytes <= MAX_AGENT_HOST_STREAM_BYTES && uint(value.creditChunks) && value.creditChunks <= MAX_AGENT_HOST_STREAM_CHUNKS ? immutable(value) as unknown as AgentHostOperationStreamAckV4 : undefined; }
+export function decodeAgentHostConsumptionAck(value: unknown): AgentHostConsumptionAckV5 | undefined { if (!fenced(value, "consumption_ack", ["ackHostSeq", "operations"]) || !uint(value.ackHostSeq)) return; const operations = decodeOperationCursors(value.operations); return operations ? deepFreeze({ ...value, operations }) as AgentHostConsumptionAckV5 : undefined; }
+export function decodeAgentHostTurnTerminal(value: unknown): AgentHostTurnTerminalV5 | undefined {
+  if (!fenced(value, "turn_terminal", ["hostSeq", "hostGeneration", "hostIncarnation", "result", "resultDigest", "receiptsDigest", "finalAckHostSeq", "operations"]) || !positive(value.hostSeq) || !positive(value.hostGeneration) || !boundedName(value.hostIncarnation, 256) || !record(value.result) || !exact(value.result, ["status"]) || !["completed", "cancelled", "failed"].includes(value.result.status as string) || !digest(value.resultDigest) || !digest(value.receiptsDigest) || !uint(value.finalAckHostSeq) || value.finalAckHostSeq >= value.hostSeq) return;
+  if (!Array.isArray(value.operations) || value.operations.length > MAX_AGENT_HOST_IN_FLIGHT_OPERATIONS) return;
+  const operations: AgentHostTerminalOperationV5[] = [];
+  for (const item of value.operations) { if (!record(item) || !exact(item, ["operationId", "receiptDigest", "throughStreamSeq"]) || !id(item.operationId) || !digest(item.receiptDigest) || !uint(item.throughStreamSeq)) return; operations.push({ operationId: item.operationId, receiptDigest: item.receiptDigest, throughStreamSeq: item.throughStreamSeq }); }
+  if (operations.some((item, index) => index > 0 && operations[index - 1]!.operationId >= item.operationId)) return;
+  return deepFreeze({ ...value, operations }) as unknown as AgentHostTurnTerminalV5;
+}
+export function decodeAgentHostTurnTerminalAck(value: unknown): AgentHostTurnTerminalAckV5 | undefined { return fenced(value, "turn_terminal_ack", ["ackHostSeq", "resultDigest", "receiptsDigest"]) && positive(value.ackHostSeq) && digest(value.resultDigest) && digest(value.receiptsDigest) ? immutable(value) as unknown as AgentHostTurnTerminalAckV5 : undefined; }
+const AGENT_TURN_RESULT_HASH_DOMAIN = "OpenSession-Agent-Turn-Result-v1\0";
+const AGENT_TURN_RECEIPTS_HASH_DOMAIN = "OpenSession-Agent-Turn-Receipts-v1\0";
+async function hashTerminalValue(domain: string, value: unknown): Promise<AgentOperationDigest> { const bytes = textEncoder.encode(`${domain}${JSON.stringify(canonical(value))}`); const result = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)); return `sha256:${[...result].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`; }
+export function hashAgentTurnResultV1(result: Readonly<{ status: "completed" | "cancelled" } | { status: "failed"; error: string }>): Promise<AgentOperationDigest> { return hashTerminalValue(AGENT_TURN_RESULT_HASH_DOMAIN, result); }
+export async function projectAgentTurnTerminalOperationsV1(operations: readonly Readonly<{ operationId: string; receipt: AgentOperationReceiptV1; throughStreamSeq: number }>[]): Promise<readonly Readonly<AgentHostTerminalOperationV5>[]> { const projected = await Promise.all(operations.map(async (operation) => ({ operationId: operation.operationId, receiptDigest: await hashAgentOperationReceiptV1(operation.receipt), throughStreamSeq: operation.throughStreamSeq }))); projected.sort((a, b) => a.operationId.localeCompare(b.operationId)); return deepFreeze(projected); }
+export function hashAgentTurnTerminalReceiptsV1(operations: readonly Readonly<AgentHostTerminalOperationV5>[]): Promise<AgentOperationDigest> { return hashTerminalValue(AGENT_TURN_RECEIPTS_HASH_DOMAIN, operations); }
 
 export interface AgentHostSupervisionAuthorityV2 {
   readonly version: typeof AGENT_HOST_SUPERVISION_VERSION;
