@@ -272,6 +272,13 @@ export async function sessionDelivery<T extends DeliveryActorRequest>(
     );
   else if (request.op === "enqueue")
     result = store.enqueueDelivery(request.sessionId, request.item, request.front);
+  else if (request.op === "promote_queued")
+    result = store.promoteQueuedDelivery(
+      request.sessionId,
+      request.itemId,
+      request.promptEntryId,
+      request.item,
+    );
   else if (request.op === "delete")
     result = store.deleteDeliverySlot(request.sessionId, request.slot);
   else if (request.op === "clear_slot")

@@ -416,6 +416,8 @@ function BubbleMeta({ ts, onEdit }: { ts?: string; onEdit?: () => void }) {
 
 interface Props {
 	entry: TranscriptEntry;
+	/** Sent to the conversation, but the running engine has not read it yet. */
+	pendingDelivery?: boolean;
 	/**
 	 * Who owns/drives this session (session.startedBy). An un-attributed user
 	 * turn is this person's own words, so it's credited to them — "You" only
@@ -567,6 +569,7 @@ function EntryFiles({
 // markdown/highlighting.
 export const MessageBubble = function MessageBubble({
 	entry,
+	pendingDelivery = false,
 	owner,
 	sessionId,
 	onEdit,
@@ -602,7 +605,16 @@ export const MessageBubble = function MessageBubble({
 	// their words, so their own bubble — the "who" lives in the label.
 	if (e.type === "user" && e.sender && e.senderVia) {
 		return (
-			<div className={cn(msgRow, msgOwnTurn)} data-eid={e.id}>
+			<div
+				className={cn(
+					msgRow,
+					msgOwnTurn,
+					pendingDelivery &&
+						"opacity-70 transition-opacity duration-200 motion-reduce:transition-none",
+				)}
+				data-delivery-pending={pendingDelivery || undefined}
+				data-eid={e.id}
+			>
 				<div className={cn(msgLabel, msgLabelHuman)}>
 					<TeammateAvatar name={e.sender} />
 					{e.sender} · via Slack
@@ -656,7 +668,10 @@ export const MessageBubble = function MessageBubble({
 					// with only a timestamp needs the clearance on hover devices.
 					!fromOther &&
 						(onEdit ? "mb-8.75" : "[@media(hover:hover)]:mb-8.75"),
+					pendingDelivery &&
+						"opacity-70 transition-opacity duration-200 motion-reduce:transition-none",
 				)}
+				data-delivery-pending={pendingDelivery || undefined}
 				data-eid={e.id}
 			>
 				{fromOther && (

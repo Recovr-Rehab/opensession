@@ -3226,6 +3226,38 @@ export class SessionKernelStore {
     }).result as boolean;
   }
 
+  promoteQueuedDelivery(
+    sessionId: string,
+    itemId: string,
+    promptEntryId: string,
+    directItem?: unknown,
+  ): unknown | undefined {
+    if (!itemId || !promptEntryId || promptEntryId.length > 256)
+      throw new Error("Invalid promoted prompt identity");
+    return this.mutateDelivery(sessionId, "delivery_queued_promoted", (state) => {
+      const queue = state.queued as Array<Record<string, unknown> & { id?: string }>;
+      const index = queue.findIndex((item) => item.id === itemId);
+      if (index < 0 && directItem === undefined) return undefined;
+      const queuedItem = index >= 0 ? queue.splice(index, 1)[0] : undefined;
+      const item = {
+        ...(queuedItem ?? {}),
+        ...(directItem && typeof directItem === "object"
+          ? directItem as Record<string, unknown>
+          : {}),
+        id: itemId,
+        promptEntryId,
+      };
+      // "Send now" outranks ordinary queued work if physical steering cannot
+      // target the run. It is still queue-owned recovery state, not a composer
+      // row, because promptEntryId marks it as already sent.
+      state.queued = [
+        item,
+        ...queue.filter((candidate) => candidate.id !== itemId),
+      ];
+      return item;
+    }).result;
+  }
+
   deleteDeliverySlot(sessionId: string, slot: DeliverySlot): boolean {
     const prior = this.deliveryRow(sessionId);
     const existed =
@@ -3261,12 +3293,14 @@ export class SessionKernelStore {
       const queue = state.queued as Array<{ id?: string }>;
       const index = queue.findIndex((item) => item.id === itemId);
       if (index < 0 && directItem === undefined) return undefined;
-      const item =
-        index >= 0
-          ? queue.splice(index, 1)[0]
-          : directItem && typeof directItem === "object"
-            ? { ...(directItem as Record<string, unknown>), id: itemId }
-            : { id: itemId, value: directItem };
+      const queuedItem = index >= 0 ? queue.splice(index, 1)[0] : undefined;
+      const item = directItem && typeof directItem === "object"
+        ? {
+            ...(queuedItem as Record<string, unknown> | undefined),
+            ...(directItem as Record<string, unknown>),
+            id: itemId,
+          }
+        : queuedItem ?? { id: itemId, value: directItem };
       state.queued = queue;
       state.pendingSteers.push({
         item,

@@ -795,7 +795,7 @@ describe("single session ownership", () => {
       "await recordRunOutcome(session.id, runFailure",
     );
     expect(terminalOutcome).toBeGreaterThan(0);
-    expect(run.indexOf("await clearSteerReceipts", terminalOutcome))
+    expect(run.indexOf("await requeueSteerReceipts", terminalOutcome))
       .toBeGreaterThan(terminalOutcome);
     expect(run.indexOf('type: "stream_done"', terminalOutcome))
       .toBeGreaterThan(terminalOutcome);
