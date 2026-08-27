@@ -91,7 +91,7 @@ const STEPS: FirstMileStep[] = [
 	{
 		id: "github-account",
 		label: "Personal GitHub",
-		title: "Personal GitHub account",
+		title: "Sign in to GitHub",
 		description: "Sign in so interactive sessions can open pull requests as you.",
 	},
 	{
@@ -483,8 +483,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			!footer ||
 			window.matchMedia(PHONE_QUERY).matches ||
 			crossfade ||
-			panelSize?.phase === "measuring" ||
-			panelSize?.phase === "animating"
+			panelSize?.phase === "measuring"
 		)
 			return;
 
@@ -825,17 +824,20 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										/>
 									)}
 									{step.id === "github-account" && (
-										<div className="mx-auto w-full max-w-[34rem] px-4 phone:px-0">
+										<div className="w-full px-9 phone:px-5">
 											<GithubAccounts
 												personal
 												showHeading={false}
 												showHint={false}
+												cancelOutside
+												cardClassName="border-line! bg-button! smooth-shadow-xs"
+												onContentSizeChange={resizePanelForContentChange}
 												loadingFallback={
 													<SettingCardSkeleton
 														rows={1}
 														icon={30}
 														label="Loading GitHub account"
-														className="[&_.bg-settings-plate]:min-h-[72px]"
+														className="[&_.bg-settings-plate]:min-h-[72px] [&_.bg-settings-plate]:border-line! [&_.bg-settings-plate]:bg-button!"
 													/>
 												}
 											/>

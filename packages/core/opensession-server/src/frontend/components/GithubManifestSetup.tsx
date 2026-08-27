@@ -192,10 +192,12 @@ export function GithubManifestSetup({
 				<>
 					<div className="flex items-center justify-center gap-2 pb-5">
 						<IconTile name="github" size={48} />
-						<span
-							aria-hidden="true"
-							className="w-8 border-t border-dashed border-line-strong"
-						/>
+						<span aria-hidden="true" className="flex gap-1">
+							<span className="size-1 bg-line-strong" />
+							<span className="size-1 bg-line-strong" />
+							<span className="size-1 bg-line-strong" />
+							<span className="size-1 bg-line-strong" />
+						</span>
 						<img
 							src={`${BASE_PATH}/mac-app-icon.png`}
 							alt=""
@@ -214,7 +216,12 @@ export function GithubManifestSetup({
 					Install Open Session for GitHub
 				</div>
 			)}
-			<div className="flex flex-col gap-2">
+			<div
+				className={cn(
+					"flex flex-col",
+					formOwner === "organization" ? "gap-5" : "gap-2",
+				)}
+			>
 				<Segmented
 					label="GitHub App owner"
 					value={owner}

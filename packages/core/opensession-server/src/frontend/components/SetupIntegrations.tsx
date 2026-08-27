@@ -204,7 +204,7 @@ export function GithubAuthCard({
 					onboarding ? "w-full" : "mx-auto mt-3 w-full max-w-[34rem]"
 				}
 			>
-				<SettingsSection className="flex flex-col gap-4">
+				<SettingsSection className="flex flex-col gap-5">
 					<GithubManifestSetup
 						github={github}
 						returnTo="welcome"
