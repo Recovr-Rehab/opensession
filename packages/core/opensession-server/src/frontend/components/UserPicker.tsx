@@ -500,11 +500,11 @@ setError(e.message);
             </span>
             .
           </AuthCopy>
-          {/* The code is what this screen is for, so it gets the display step
-              and room to breathe rather than the inline chip size. */}
+          {/* The code is what this screen is for, so it gets the largest type
+              step and a plain paper block rather than the shared input chrome. */}
           <DeviceCode
             code={flow.userCode}
-            className="text-page-title px-4 py-2.5"
+            className="border-0 bg-surface px-4 py-2.5 text-stat [box-shadow:none]! hover:bg-surface"
           />
           <a
             href={flow.verificationUri}

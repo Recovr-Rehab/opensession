@@ -28,6 +28,7 @@ const semanticFontSizes = [
 	"dialog-title",
 	"section-title",
 	"page-title",
+	"stat",
 ] as const;
 
 const twMerge = extendTailwindMerge({
