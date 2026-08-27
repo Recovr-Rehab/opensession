@@ -141,7 +141,7 @@ function SetupStep({
 			<span className="flex size-6 items-center justify-center rounded-full bg-surface text-meta font-semibold text-dim">
 				{number}
 			</span>
-			<div className={cn("min-w-0 pt-0.5", controls && "desktop:grid desktop:grid-cols-[minmax(0,0.8fr)_minmax(20rem,1.2fr)] desktop:items-start desktop:gap-6")}>
+			<div className={cn("min-w-0 pt-0.5", controls && "desktop:grid desktop:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)] desktop:items-start desktop:gap-6")}>
 				<div className="min-w-0">
 					<div className="font-medium text-fg">{title}</div>
 					{children && <div className="mt-1 grid gap-2 leading-relaxed">{children}</div>}
@@ -729,25 +729,37 @@ export function IngressPanel({
 							{method === "custom" && (
 								<>
 									<SetupSteps>
-										<SetupStep number={1} title="Choose a separate public domain">
-											<SettingsField className="mb-0">
-												Domain
-												<Input key={method} value={url} placeholder="ingress.example.com" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => { customDraftTouched.current = true; setDrafts((current) => ({ ...current, custom: event.target.value })); }} />
-											</SettingsField>
+										<SetupStep
+											number={1}
+											title="Choose a separate public domain"
+											controls={
+												<SettingsField className="mb-0">
+													Domain
+													<Input key={method} value={url} placeholder="ingress.example.com" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => { customDraftTouched.current = true; setDrafts((current) => ({ ...current, custom: event.target.value })); }} />
+												</SettingsField>
+											}
+										>
 											<p className="m-0">Do not use the private app hostname. HTTPS is added automatically.</p>
 										</SetupStep>
 										<SetupStep number={2} title="Open ports 80 and 443">
 											<p className="m-0">Allow inbound TCP traffic from the public internet to ports 80 and 443 in the server firewall and your cloud security group. Caddy uses port 80 for certificate validation and serves HTTPS on port 443.</p>
 										</SetupStep>
-										<SetupStep number={3} title="Add DNS records at your provider">
+										<SetupStep
+											number={3}
+											title="Add DNS records at your provider"
+											controls={
+												<>
+													<SettingsField className="mb-0">
+														Public IPv4 or IPv6 address
+														<Input value={publicAddress} placeholder="203.0.113.10" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => { setPublicAddress(event.target.value); setError(null); }} />
+													</SettingsField>
+													{records.length ? records.map((record) => <CodeBlock key={record}>{record}</CodeBlock>) : (
+														<InlineAlert>Enter this server’s public address to generate the DNS record.</InlineAlert>
+													)}
+												</>
+											}
+										>
 											<p className="m-0">Point the domain to this server’s public IP address, not its private or Tailscale address.</p>
-											<SettingsField className="mb-0">
-												Public IPv4 or IPv6 address
-												<Input value={publicAddress} placeholder="203.0.113.10" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => { setPublicAddress(event.target.value); setError(null); }} />
-											</SettingsField>
-											{records.length ? records.map((record) => <CodeBlock key={record}>{record}</CodeBlock>) : (
-												<InlineAlert>Enter this server’s public address to generate the DNS record.</InlineAlert>
-											)}
 										</SetupStep>
 										<SetupStep number={4} title="Configure Caddy">
 											<p className="m-0">Open Session adds this dedicated site to /etc/caddy/Caddyfile, binds it to the public-facing network interface, and reloads Caddy. If DNS is still propagating, the status stays at Waiting for DNS and checks again automatically.</p>
