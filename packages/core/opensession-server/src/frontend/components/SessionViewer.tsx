@@ -311,6 +311,7 @@ import {
 } from "../lib/source-chip-classes";
 import { sessionWasAgentStarted } from "../lib/sidebar-placement";
 import { Button } from "../ui/button";
+import { useConfirm } from "../ui/confirm";
 import {
 	TopBar,
 	TopBarAction,
@@ -5212,6 +5213,7 @@ export function SessionViewer({
 	}
 
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+	const [confirm, confirmDialog] = useConfirm();
 	const [deleting, setDeleting] = useState(false);
 	const [archiving, setArchiving] = useState(false);
 	const [deleteLabel, setDeleteLabel] = useState("");
@@ -5911,6 +5913,7 @@ export function SessionViewer({
 					</div>
 				</div>
 			)}
+			{confirmDialog}
 			<DeleteSessionDialog
 				open={showDeleteConfirm}
 				onOpenChange={setShowDeleteConfirm}
@@ -6290,10 +6293,15 @@ export function SessionViewer({
 						{onDeleteWorkspace && (
 							<Menu.Item
 								className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
-								onClick={() => {
-									const message = `Delete workspace "${workspaceName || session.title}"? Its sessions become standalone.`;
-									if (window.confirm(message)) void onDeleteWorkspace();
-								}}
+								onClick={() =>
+									confirm({
+										title: `Delete workspace "${workspaceName || session.title}"?`,
+										description: "Its sessions become standalone.",
+										confirmLabel: "Delete",
+										destructive: true,
+										onConfirm: () => void onDeleteWorkspace(),
+									})
+								}
 								title="Delete workspace"
 							>
 								<IconTrash size={20} />

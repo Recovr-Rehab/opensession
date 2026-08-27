@@ -47,6 +47,7 @@ import {
 	IconTrash,
 } from "./icons";
 import { Button } from "../ui/button";
+import { useConfirm } from "../ui/confirm";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
@@ -208,6 +209,7 @@ export function WorkspacePane({
 	const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [overflowOpen, setOverflowOpen] = useState(false);
 	const [renameDraft, setRenameDraft] = useState<string | null>(null);
+	const [confirm, confirmDialog] = useConfirm();
 	const workspaceCopy = useCopy();
 	const currentUser = useCurrentUser();
 	// Only a workspace that mounted with a server draft gets autosaved back to
@@ -682,12 +684,17 @@ setStaging((current) => subtractStaging(current, batch));
 					{onDeleteWorkspace && (
 						<Menu.Item
 							className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
-							onClick={() => {
-								const message = workspaceSessions.length
-									? `Delete workspace "${workspace.name}"? Its sessions become standalone.`
-									: `Delete workspace "${workspace.name}"?`;
-								if (window.confirm(message)) void onDeleteWorkspace();
-							}}
+							onClick={() =>
+								confirm({
+									title: `Delete workspace "${workspace.name}"?`,
+									description: workspaceSessions.length
+										? "Its sessions become standalone."
+										: undefined,
+									confirmLabel: "Delete",
+									destructive: true,
+									onConfirm: () => void onDeleteWorkspace(),
+								})
+							}
 						>
 							<IconTrash size={20} />
 							<span className="grow">Delete workspace</span>
@@ -828,6 +835,7 @@ setStaging((current) => subtractStaging(current, batch));
 				<div className="flex-1 min-w-0 min-h-0">{main}</div>
 			</div>
 			{rightPanelEl && infoPanel ? createPortal(infoPanel, rightPanelEl) : null}
+			{confirmDialog}
 		</MarkdownRepoProvider>
 	);
 

@@ -6149,8 +6149,13 @@ fetchFeedItems("plain")
 												confirmDeleteDraft(() => onDeleteWorkspace(ws.id));
 												return;
 											}
-											const message = `Delete workspace "${ws.name}"? Its sessions become standalone.`;
-											if (window.confirm(message)) onDeleteWorkspace(ws.id);
+											confirm({
+												title: `Delete workspace "${ws.name}"?`,
+												description: "Its sessions become standalone.",
+												confirmLabel: "Delete",
+												destructive: true,
+												onConfirm: () => onDeleteWorkspace(ws.id),
+											});
 										}
 									: null
 							}
