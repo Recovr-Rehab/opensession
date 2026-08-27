@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { SessionSafetyState } from "../lib/types";
 import { Button } from "../ui/button";
-import { IconShieldCheck } from "./icons";
 
 export function SessionSafetyNotice({
   safety,
@@ -18,20 +17,15 @@ export function SessionSafetyNotice({
   return (
     <section
       aria-labelledby="session-safety-title"
-      className="mx-auto my-4 w-full max-w-[52rem] rounded-xl bg-yellow-soft p-4 text-fg phone:my-3 phone:rounded-lg"
+      className="mx-auto my-4 w-full max-w-[46rem] rounded-2xl bg-yellow-soft p-4 text-fg phone:my-3 phone:rounded-xl"
     >
-      <div className="flex items-center gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-control bg-panel text-yellow">
-          <IconShieldCheck size={22} />
-        </div>
-        <h2
-          id="session-safety-title"
-          className="m-0 text-item-title font-semibold"
-        >
-          Paused for safety
-        </h2>
-      </div>
-      <p className="mt-3 text-pretty text-body leading-relaxed text-dim">
+      <h2
+        id="session-safety-title"
+        className="m-0 text-body font-semibold"
+      >
+        Paused for safety
+      </h2>
+      <p className="mt-1 text-pretty text-body leading-relaxed text-dim">
         {safety.explanation}
       </p>
       {repairError && (
