@@ -16,13 +16,16 @@ function gitStatus(overrides: Partial<GitStatusInfo> = {}): GitStatusInfo {
 	};
 }
 
-test("does not offer Pull or Push for a shared checkout's instance-wide divergence", () => {
-	expect(
-		deriveHeadline(
-			null,
-			gitStatus({ sharedCheckout: true, ahead: 71, behind: 187 }),
-		),
-	).toEqual({ key: "clean", label: "Up to date", tone: "muted" });
+test("does not offer PR, Pull, or Push status for a shared checkout", () => {
+	const shared = gitStatus({ sharedCheckout: true, ahead: 71, behind: 187 });
+	expect(deriveHeadline(null, shared)).toEqual({
+		key: "clean",
+		label: "Up to date",
+		tone: "muted",
+	});
+	// A transient GitHub failure does not make PR status relevant: shared
+	// checkouts do not create per-session PRs.
+	expect(deriveHeadline(null, shared, true).key).toBe("clean");
 });
 
 test("says the PR status is unavailable rather than claiming there is no PR", () => {

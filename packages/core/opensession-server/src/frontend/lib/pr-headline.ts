@@ -61,8 +61,6 @@ export function deriveHeadline(
 	git: GitStatusInfo | null,
 	prUnavailable = false,
 ): PrHeadline {
-	if (!pr && prUnavailable)
-		return { key: "unavailable", label: "PR status unavailable", tone: "yellow" };
 	const sharedCheckout = git?.sharedCheckout ?? false;
 	const ahead = git?.ahead ?? 0;
 	const behind = git?.behind ?? 0;
@@ -106,8 +104,11 @@ export function deriveHeadline(
 		return { key: "ready", label: "Ready to merge", tone: "green" };
 	}
 	// This branch state belongs to the instance as a whole. It cannot safely be
-	// pulled, rebased or reset from one session.
+	// pulled, rebased or reset from one session. A failed PR probe does not make
+	// PR status relevant here: shared checkouts do not create per-session PRs.
 	if (sharedCheckout) return { key: "clean", label: "Up to date", tone: "muted" };
+	if (prUnavailable)
+		return { key: "unavailable", label: "PR status unavailable", tone: "yellow" };
 	if (behind > 0)
 		return {
 			key: "behind",
