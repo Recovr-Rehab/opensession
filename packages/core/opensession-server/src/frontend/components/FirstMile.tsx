@@ -642,7 +642,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			</nav>
 
 			{!status ? (
-				<div className="flex min-h-40 w-full max-w-[560px] self-center justify-self-center items-center justify-center rounded-3xl bg-palette-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
+				<div className="flex min-h-40 w-full max-w-[560px] self-center justify-self-center items-center justify-center rounded-section bg-palette-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
 					<LoadingState>
 						{failed ? "Couldn't load setup." : "Preparing your workspace…"}
 					</LoadingState>
@@ -655,7 +655,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					transition={{ type: "tween", duration: duration.micro, ease }}
 					onAnimationComplete={finishPanelCrossfade}
 					className={cn(
-						"relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-3xl phone:h-full phone:max-h-none phone:max-w-none phone:self-stretch phone:rounded-none phone:[box-shadow:none]",
+						"relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-section phone:h-full phone:max-h-none phone:max-w-none phone:self-stretch phone:rounded-none phone:[box-shadow:none]",
 						panelSize
 							? "max-w-none"
 							: step.id === "ready"
