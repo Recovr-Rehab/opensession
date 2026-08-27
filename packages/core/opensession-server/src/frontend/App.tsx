@@ -5803,6 +5803,7 @@ console.error("Rename workspace failed:", error);
 							<Feed
 								sessions={sessions}
 								teamViewing={teamViewing}
+								headerActionsEl={topbarActionsEl}
 								onSelect={(id) => navigate({ view: "session", id })}
 							/>
 						) : route.view === "tasks" ? (

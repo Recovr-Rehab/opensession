@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { UnifiedSession } from "../lib/types";
 import {
 	fetchRecentCommits,
@@ -24,13 +25,12 @@ import { useCurrentUser } from "./UserPicker";
 import { usePeople } from "../lib/people";
 import { UserAvatar } from "./UserAvatar";
 import { personLensFilter, setFilter } from "../lib/sidebar-filter";
-import { presenceState, StatusDot, useTeamPresence } from "./TeamPresence";
+import { useTeamPresence } from "./TeamPresence";
 import { EmptyState, ListSkeleton } from "../ui/state";
 import { Button } from "../ui/button";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
-import { TopBar, TopBarActions, TopBarLeading, TopBarTitle } from "../ui/top-bar";
-import { IconFeed, IconPeople, IconRepo, IconRobot } from "./icons";
+import { IconFeed, IconRepo, IconRobot } from "./icons";
 import { PEOPLE_SECTION_LABEL } from "../lib/people-classes";
 
 /**
@@ -52,8 +52,10 @@ import { PEOPLE_SECTION_LABEL } from "../lib/people-classes";
 
 interface Props {
 	sessions: UnifiedSession[];
-	/** Who's viewing what right now (global presence), for the face dots. */
+	/** Who's viewing what right now, used to keep active teammates first. */
 	teamViewing?: Array<{ user: string; sessionId: string }>;
+	/** The app-level title bar's actions slot. */
+	headerActionsEl?: HTMLElement | null;
 	/** By id, not by row: most of what the feed can open is archived, and an
 	 *  archived session is not in `sessions`. */
 	onSelect: (sessionId: string) => void;
@@ -98,11 +100,12 @@ function FeedOwnerMark({ owner }: { owner: FeedOwner }) {
 	);
 }
 
-export function Feed({ sessions, teamViewing, onSelect }: Props) {
+export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props) {
 	const currentUser = useCurrentUser();
 	const team = useTeamPresence({ sessions, teamViewing, currentUser });
 	const people = usePeople();
 	const [scope, setScope] = useState<Scope>({ kind: "everyone" });
+	const [showAllPeople, setShowAllPeople] = useState(false);
 	// The other axis: which repo shipped it. Unlike the person scope this is
 	// the page's own filter and touches nothing else, because a repo is not
 	// something the sidebar can be turned to.
@@ -233,13 +236,52 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	const canWiden = !!nextStep && (hasOlder || scoped.length > shipped.length);
 
 	const scopeName = scope.kind === "person" ? personLabel(scope.key) : null;
-	const scopeValue = scope.kind === "person" ? scope.key : "everyone";
 	const stackedMembers =
 		scope.kind === "person"
 			? [...chips].sort((a, b) => Number(b.key === scope.key) - Number(a.key === scope.key))
 			: chips;
-	const visibleStack = stackedMembers.slice(0, 5);
-	const hiddenStackCount = stackedMembers.length - visibleStack.length;
+	const visiblePeople = showAllPeople ? stackedMembers : stackedMembers.slice(0, 5);
+	const hiddenPeopleCount = stackedMembers.length - visiblePeople.length;
+	const peoplePicker = (
+		<div
+			className="flex items-center gap-0.5 phone:fixed phone:top-[max(env(safe-area-inset-top,0px),8px)] phone:right-3 phone:z-40 phone:rounded-full phone:bg-panel phone:shadow-[var(--mobile-header-control-shadow)]"
+			aria-label="Filter feed by person"
+		>
+			{visiblePeople.map((member) => {
+				const selected = scope.kind === "person" && scope.key === member.key;
+				return (
+					<button
+						key={member.key}
+						type="button"
+						className={cn(
+							"focus-ring relative z-0 flex min-h-10 items-center gap-1.5 rounded-control p-1 text-label font-medium text-fg transition-[background-color,color] hover:z-10 hover:bg-hover phone:min-h-11 phone:rounded-full",
+							selected && "z-10 bg-accent-soft pr-2 text-accent",
+						)}
+						onClick={() => pick(selected ? { kind: "everyone" } : { kind: "person", key: member.key })}
+						aria-pressed={selected}
+						aria-label={selected ? "Show everyone" : `Show ${member.person.name}`}
+					>
+						<UserAvatar name={member.person.name} size={30} edge={false} />
+						{selected && (
+							<span className="max-w-28 truncate pr-0.5">
+								{member.isYou ? "You" : personLabel(member.key)}
+							</span>
+						)}
+					</button>
+				);
+			})}
+			{hiddenPeopleCount > 0 && (
+				<button
+					type="button"
+					className="focus-ring relative z-0 flex size-10 min-h-10 items-center justify-center rounded-control bg-active text-label font-semibold text-dim hover:z-10 hover:bg-hover phone:size-11 phone:min-h-11 phone:rounded-full"
+					onClick={() => setShowAllPeople(true)}
+					aria-label={`Show ${hiddenPeopleCount} more people`}
+				>
+					+{hiddenPeopleCount}
+				</button>
+			)}
+		</div>
+	);
 	const feedLoading =
 		recentPrs.length === 0 &&
 		commits.length === 0 &&
@@ -249,89 +291,12 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 
 	return (
 		<div className="flex min-h-0 w-full flex-1 flex-col bg-surface">
-			<TopBar
-				as="header"
-				className="wco-chrome h-[var(--desktop-header-h)] shrink-0 border-b border-divider phone:h-auto phone:py-2.5"
-			>
-				<div className="mx-auto flex w-full max-w-[920px] items-center px-6 phone:px-4">
-					<TopBarLeading>
-						<IconFeed size={20} className="text-dim" />
-						<TopBarTitle className="text-item-title font-semibold text-fg">
-							Feed
-						</TopBarTitle>
-					</TopBarLeading>
-					{team.length > 0 && (
-						<TopBarActions className="phone:fixed phone:top-[max(env(safe-area-inset-top,0px),8px)] phone:right-3 phone:z-40">
-							<Menu.Root>
-								<Menu.Trigger
-									render={
-										<Button
-											variant="ghost"
-											size="md"
-											aria-label={scopeName ? `Showing ${scopeName}` : "Showing everyone"}
-											className="gap-0 px-2 phone:min-h-11 phone:rounded-full phone:bg-panel phone:shadow-[var(--mobile-header-control-shadow)]"
-										/>
-									}
-								>
-									<span className="flex -space-x-2" aria-hidden="true">
-										{visibleStack.map((member) => (
-											<span
-												key={member.key}
-												className={cn(
-													"relative rounded-avatar bg-surface p-0.5",
-													scope.kind === "person" && scope.key === member.key && "bg-accent",
-												)}
-											>
-												<UserAvatar name={member.person.name} size={24} edge={false} />
-											</span>
-										))}
-										{hiddenStackCount > 0 && (
-											<span className="relative flex size-7 items-center justify-center rounded-avatar bg-active text-meta font-semibold text-dim shadow-[0_0_0_2px_var(--bg-surface)]">
-												+{hiddenStackCount}
-											</span>
-										)}
-									</span>
-								</Menu.Trigger>
-								<Menu.Popup align="end" className="min-w-[200px]">
-									<Menu.RadioGroup
-										value={scopeValue}
-										onValueChange={(value) =>
-											pick(
-												value === "everyone"
-													? { kind: "everyone" }
-													: { kind: "person", key: String(value) },
-											)
-										}
-									>
-										<Menu.RadioItem value="everyone" closeOnClick>
-											<span className="flex size-6 items-center justify-center text-dim">
-												<IconPeople size={18} />
-											</span>
-											<span className="min-w-0 flex-1">Everyone</span>
-											<Menu.Check on={scope.kind === "everyone"} />
-										</Menu.RadioItem>
-										{chips.map((member) => (
-											<Menu.RadioItem key={member.key} value={member.key} closeOnClick>
-												<span className="relative flex">
-													<UserAvatar name={member.person.name} size={24} />
-													<StatusDot state={presenceState(member)} ring="var(--bg-popup)" size={7} />
-												</span>
-												<span className="min-w-0 flex-1 truncate">
-													{member.isYou ? "You" : member.person.name}
-												</span>
-												<Menu.Check on={scope.kind === "person" && scope.key === member.key} />
-											</Menu.RadioItem>
-										))}
-									</Menu.RadioGroup>
-								</Menu.Popup>
-							</Menu.Root>
-						</TopBarActions>
-					)}
-				</div>
-			</TopBar>
-
+			{team.length > 0 &&
+				headerActionsEl &&
+				createPortal(<div className="phone:hidden">{peoplePicker}</div>, headerActionsEl)}
+			{team.length > 0 && <div className="hidden phone:block">{peoplePicker}</div>}
 			<div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
-				<div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-6 phone:px-4 phone:pb-12 phone:pt-4">
+				<div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-6 phone:px-4 phone:pb-12 phone:pt-[calc(var(--header-h)+18px)]">
 					{feedLoading ? (
 					<>
 						<div className="mb-2 flex min-h-[30px] items-center">
