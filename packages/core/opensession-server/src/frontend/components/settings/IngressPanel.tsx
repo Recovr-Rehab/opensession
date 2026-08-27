@@ -643,7 +643,7 @@ export function IngressPanel({
 							</Segmented>
 						</SettingsForm>
 
-						<SettingsForm className="m-0 min-w-0 gap-4 p-6 phone:p-4">
+						<SettingsForm className="m-0 min-w-0 gap-4 bg-raised p-6 phone:p-4">
 							<div className="flex items-center justify-between gap-4">
 								<div className="min-w-0 text-item-title font-semibold text-fg">Set up {selectedMethod.label}</div>
 								<div className="shrink-0">
