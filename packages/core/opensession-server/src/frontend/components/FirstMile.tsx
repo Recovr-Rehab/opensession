@@ -157,9 +157,13 @@ function PreviewOverflow({
 function FirstMileSummary({
 	status,
 	onSelect,
+	inviteCopied,
+	onCopyInviteLink,
 }: {
 	status: SetupStatus;
 	onSelect: (step: FirstMileStep["id"]) => void;
+	inviteCopied: boolean;
+	onCopyInviteLink: () => void;
 }) {
 	const github = githubAuthState(status.github);
 	let serverHost = status.publicBaseUrl;
@@ -267,6 +271,29 @@ function FirstMileSummary({
 				</div>
 			),
 		},
+		{
+			title: "Members",
+			step: null,
+			ready: status.team.count > 0,
+			copyInvite: true,
+			label:
+				status.team.count === 1
+					? "1 member"
+					: `${status.team.count} members`,
+			preview: (
+				<div className="flex -space-x-2">
+					{status.team.names.slice(0, 4).map((name) => (
+						<UserAvatar
+							key={name}
+							name={name}
+							size={28}
+							className="border border-bg"
+						/>
+					))}
+					<PreviewOverflow count={status.team.count - 4} transparent />
+				</div>
+			),
+		},
 	];
 
 	return (
@@ -297,6 +324,17 @@ function FirstMileSummary({
 						<div className="min-w-0">
 							<div className="text-item-title font-semibold text-fg">{tile.title}</div>
 							<div className="mt-1 text-supporting leading-snug text-dim">{tile.label}</div>
+							{"copyInvite" in tile && (
+								<Button
+									variant="soft"
+									size="sm"
+									onClick={onCopyInviteLink}
+									icon={inviteCopied ? <IconCheck size={15} /> : <IconLink size={15} />}
+									className="mt-3 min-h-10 w-full px-2.5 phone:min-h-11"
+								>
+									{inviteCopied ? "Invite link copied" : "Copy invite link"}
+								</Button>
+							)}
 						</div>
 					</>
 				);
@@ -866,6 +904,8 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 											onSelect={(stepId) =>
 												goTo(steps.findIndex((item) => item.id === stepId))
 											}
+											inviteCopied={inviteCopied}
+											onCopyInviteLink={copyInviteLink}
 										/>
 									)}
 								</div>
@@ -905,17 +945,6 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								</Button>
 							)}
 
-							{step.id === "ready" && (
-								<Button
-									variant="soft"
-									size="lg"
-									onClick={copyInviteLink}
-									className="gap-2 px-4 phone:min-h-11"
-								>
-									{inviteCopied ? <IconCheck size={16} /> : <IconLink size={16} />}
-									{inviteCopied ? "Invite link copied" : "Copy invite link"}
-								</Button>
-							)}
 
 							<Button
 								variant="primary"
