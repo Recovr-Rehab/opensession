@@ -109,6 +109,7 @@ export function ReposSection({
 				actions={
 					<Button
 						size="sm"
+						variant="primary"
 						icon={pendingRepo ? <Spinner /> : <IconPlus size={16} />}
 						disabled={pendingRepo !== null}
 						onClick={() => setPickerOpen(true)}
@@ -843,10 +844,10 @@ function AddRepoPicker({
 						setError(null);
 					}}
 				>
-					<SegmentedOption value="remote" className="flex-1 justify-center">
+					<SegmentedOption value="remote" className="flex flex-1 justify-center">
 						Remote
 					</SegmentedOption>
-					<SegmentedOption value="local" className="flex-1 justify-center">
+					<SegmentedOption value="local" className="flex flex-1 justify-center">
 						Local folder
 					</SegmentedOption>
 				</Segmented>
