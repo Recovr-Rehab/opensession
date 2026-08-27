@@ -7,8 +7,9 @@ import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SettingsHint } from "../ui/settings";
 import { duration } from "../ui/motion";
 import { InlineAlert } from "../ui/state";
+import { Tooltip } from "../ui/tooltip";
 import { IconTile } from "./BrandTile";
-import { IconCheckCircle } from "./icons";
+import { IconCheckCircleFilled, IconQuestionCircle } from "./icons";
 import {
 	githubAppCreateOwner,
 	githubAppInstallUrlForSlug,
@@ -38,26 +39,50 @@ function GithubSetupStep({
 	onClick?: () => void;
 }) {
 	return (
-		<Button
-			size="lg"
-			icon={
-				<IconCheckCircle
-					size={20}
-					className={complete ? "text-green" : "text-faint"}
-				/>
-			}
-			className={cn(
-				"min-h-11 w-full justify-start",
-				complete && "disabled:opacity-100",
-			)}
-			disabled={disabled || (!href && !onClick)}
-			onClick={onClick}
-			{...(href
-				? { render: <a href={href} target="_blank" rel="noreferrer" /> }
-				: {})}
-		>
-			{label}
-		</Button>
+		<div className="relative">
+			<Button
+				size="lg"
+				icon={
+					<IconCheckCircleFilled
+						size={20}
+						className={complete ? "text-green" : "text-faint"}
+					/>
+				}
+				className={cn(
+					"min-h-11 w-full justify-start pr-12",
+					complete && "disabled:opacity-100",
+				)}
+				disabled={disabled || (!href && !onClick)}
+				onClick={onClick}
+				{...(href
+					? { render: <a href={href} target="_blank" rel="noreferrer" /> }
+					: {})}
+			>
+				{label}
+			</Button>
+			<Tooltip
+				side="top"
+				align="end"
+				offset={6}
+				label={
+					<span
+						aria-label={`${label} screenshot placeholder`}
+						className="flex h-20 w-[100px] flex-col justify-end gap-1.5 rounded-md bg-white/10 p-2"
+					>
+						<span className="h-2 w-12 rounded-sm bg-white/20" />
+						<span className="h-1.5 w-16 rounded-sm bg-white/15" />
+					</span>
+				}
+			>
+				<button
+					type="button"
+					aria-label={`Preview ${label.toLowerCase()}`}
+					className="focus-ring absolute top-1/2 right-1 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] hover:bg-hover hover:text-fg phone:right-0 phone:size-11"
+				>
+					<IconQuestionCircle size={20} />
+				</button>
+			</Tooltip>
+		</div>
 	);
 }
 

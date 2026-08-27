@@ -104,6 +104,11 @@ describe("GitHub App onboarding actions", () => {
 		expect(markup).toContain("Install GitHub app");
 		expect(markup.match(/disabled=""/g)).toHaveLength(2);
 		expect(markup).toContain("Organization ID");
+		expect(markup).toContain("<mask");
+		expect(markup).toContain('fill="currentColor"');
+		expect(markup).toContain('aria-label="Preview create github app"');
+		expect(markup).toContain('aria-label="Preview enable device flow"');
+		expect(markup).toContain('aria-label="Preview install github app"');
 		expect(markup).not.toMatch(/>\d\. /);
 	});
 
@@ -139,7 +144,7 @@ describe("GitHub App onboarding actions", () => {
 		expect(markup).not.toContain("Client secret");
 	});
 
-	test("offers optional GitHub account sign-in after the App is created", () => {
+	test("keeps personal sign-in out of the GitHub App step", () => {
 		const markup = renderToStaticMarkup(
 			<GithubAuthCard
 				github={{ ...github, appSlug: "open-session-acme", clientIdConfigured: true }}
@@ -147,8 +152,8 @@ describe("GitHub App onboarding actions", () => {
 				onboarding
 			/>,
 		);
-		expect(markup).toContain("Optional. Sign in now");
-		expect(markup).toContain("connect later under Account");
+		expect(markup).not.toContain("Optional. Sign in now");
+		expect(markup).not.toContain("connect later under Account");
 		expect(markup).toContain('class="text-green"');
 	});
 

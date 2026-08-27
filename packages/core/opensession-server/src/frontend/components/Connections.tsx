@@ -992,7 +992,14 @@ function GithubAppWizard({
 export function GithubAccounts({
   personal = false,
   showHeading = true,
-}: { personal?: boolean; showHeading?: boolean } = {}) {
+  showHint = true,
+  loadingFallback = null,
+}: {
+  personal?: boolean;
+  showHeading?: boolean;
+  showHint?: boolean;
+  loadingFallback?: React.ReactNode;
+} = {}) {
   const [data, setData] = useState<GithubAuthData | null>(null);
   const [flow, setFlow] = useState<DeviceFlow | null>(null);
   const [flowState, setFlowState] = useState<"idle" | "starting" | "waiting">("idle");
@@ -1174,7 +1181,7 @@ setError(e.message);
 });
   }
 
-  if (!data) return null;
+  if (!data) return loadingFallback;
 
   // The device-flow well and the just-connected note render the same in both
   // the operator roster and the simple-mode card, so they're built once here.
@@ -1657,7 +1664,7 @@ setError(e.message);
             );
           })}
       </SettingCard>
-      {personal && (
+      {personal && showHint && (
         <SettingsHint>
           {active
             ? "Sign in with GitHub to open pull requests as yourself in interactive sessions. Automations and unconnected teammates use the workspace bot."

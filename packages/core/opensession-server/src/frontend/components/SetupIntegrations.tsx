@@ -5,7 +5,6 @@ import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
 import { GithubManifestSetup } from "./GithubManifestSetup";
 export { GithubManifestSetup } from "./GithubManifestSetup";
-import { GithubAccounts } from "./Connections";
 import { IntegrationSetupDialog } from "./IntegrationSetupDialog";
 import { IconTile } from "./BrandTile";
 import {
@@ -211,15 +210,6 @@ export function GithubAuthCard({
 						}
 					/>
 				</SettingsSection>
-				{onboarding && github.clientIdConfigured && (
-					<div className="mt-6">
-						<SettingsHint className="mb-2 mt-0 px-5">
-							Optional. Sign in now so sessions can use your GitHub account. You can
-							skip this and connect later under Account.
-						</SettingsHint>
-						<GithubAccounts personal showHeading={false} />
-					</div>
-				)}
 			</div>
 		</div>
 	);
