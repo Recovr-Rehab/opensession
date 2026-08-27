@@ -53,8 +53,8 @@ const ICON_VERSION = 6;
 const TILE =
 	// Settings applies body leading to every descendant, which makes the fallback
 	// letter's line box taller than the tile and leaves its cap height visibly
-	// high. A direct-child rule wins that page-level override; the one-pixel
-	// nudge then centers the glyph optically rather than its font metrics.
+	// high. A direct-child rule wins that page-level override, then flex centers
+	// the tight line box without an extra baseline offset.
 	"repo-tile inline-flex size-[18px] shrink-0 items-center justify-center rounded-sm text-meta font-bold [&>span]:!leading-none";
 
 export function RepoTile({
@@ -123,7 +123,7 @@ export function RepoTile({
 	const letter = repoLetter(name);
 	return (
 		<span className={cn(TILE, className)} style={style}>
-			<span className="translate-y-px">{letter}</span>
+			<span>{letter}</span>
 		</span>
 	);
 }
