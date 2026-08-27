@@ -86,6 +86,7 @@ import { clearDraft, saveDraft, NEW_SESSION_DRAFT_KEY } from "./lib/drafts";
 import { dropStagingAttachments } from "./lib/attachments";
 import type { NewSessionPrefill } from "./lib/new-session-link";
 import {
+	errorMatchesPendingCreate,
 	shouldApplyCreatedSessionReply,
 	shouldOpenCreatedSession,
 } from "./lib/new-session-navigation";
@@ -1888,7 +1889,6 @@ const path = await resolveAnonymousUserPath(
 				originPath: routePath(routeRef.current),
 			};
 			pendingCreateDraftRef.current = draft;
-			if (!started.openImmediately) return;
 
 			const shell: UnifiedSession = {
 				id: started.id,
@@ -1913,10 +1913,16 @@ const path = await resolveAnonymousUserPath(
 				workspacePreparing: true,
 			};
 			flushSync(() => {
+				// Every create appears in the sidebar at send time. Background and
+				// "Create more" used to wait for session_created even though the open
+				// action already had this complete deterministic shell.
 				inject(shell, { sticky: true });
-				setOptimisticSession(shell);
-				setPalette({ open: false });
+				if (started.openImmediately) {
+					setOptimisticSession(shell);
+					setPalette({ open: false });
+				}
 			});
+			if (!started.openImmediately) return;
 			if (started.prompt || started.images?.length) {
 				setPendingInitialPrompts((current) => ({
 					...current,
@@ -2147,10 +2153,7 @@ const path = await resolveAnonymousUserPath(
 			if (msg.type === "error") {
 				const draft = pendingCreateDraftRef.current;
 				const errorSessionId = "sessionId" in msg ? msg.sessionId : undefined;
-				if (
-					draft?.openImmediately &&
-					(!errorSessionId || errorSessionId === draft.id)
-				) {
+				if (draft && errorMatchesPendingCreate(errorSessionId, draft.id)) {
 					pendingCreateDraftRef.current = null;
 					clearTimeout(pendingTimer.current);
 					setPendingSessionId((pending) =>
@@ -2167,21 +2170,23 @@ const path = await resolveAnonymousUserPath(
 					});
 					unstick(draft.id);
 					remove(draft.id);
-					// The accepted send cleared the global composer immediately. Put
-					// its submitted payload back before reopening only when creation
-					// itself fails, so recovery never holds the normal path hostage.
-					saveDraft(NEW_SESSION_DRAFT_KEY, {
-						text: draft.prompt,
-						images: draft.images ?? [],
-						files: draft.files ?? [],
-					});
-					if (
-						routeRef.current.view === "session" &&
-						routeRef.current.id === draft.id
-					) navigate(parseRoute(draft.originPath));
-					primeSoftKeyboard();
-					setPaletteState((current) => ({ ...current, open: true }));
-					toast(msg.message || "Couldn't create the session.");
+					if (draft.openImmediately) {
+						// The accepted send cleared the global composer immediately. Put
+						// its submitted payload back before reopening only when creation
+						// itself fails, so recovery never holds the normal path hostage.
+						saveDraft(NEW_SESSION_DRAFT_KEY, {
+							text: draft.prompt,
+							images: draft.images ?? [],
+							files: draft.files ?? [],
+						});
+						if (
+							routeRef.current.view === "session" &&
+							routeRef.current.id === draft.id
+						) navigate(parseRoute(draft.originPath));
+						primeSoftKeyboard();
+						setPaletteState((current) => ({ ...current, open: true }));
+						toast(msg.message || "Couldn't create the session.");
+					}
 					return;
 				}
 			}

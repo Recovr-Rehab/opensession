@@ -63,6 +63,7 @@ import {
 	acknowledgeSessionCommand,
   deliveryInterruptForAnchor,
   durableSessionCommand,
+	isCreationEffectPendingError,
 	isRetryableSessionCommandError,
   sessionProjectionOr,
   sessionGatewayCommand,
@@ -1656,11 +1657,28 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					kernelToken,
 					e instanceof Error ? e : new Error(String(e)),
 				);
+			} else if (
+				msg?.type === "create_session" &&
+				isCreationEffectPendingError(e)
+			) {
+				// No terminal response: the deterministic create is still durable.
+				// Reconnect makes the client replay it instead of reopening the modal
+				// while the actor completes the same session in the background.
+				setTimeout(() => ws.close(1012, "Retry session create"), 50).unref?.();
 			} else {
+				const errorSessionId =
+					msg?.type === "create_session"
+						? typeof msg.clientSessionId === "string"
+							? msg.clientSessionId
+							: undefined
+						: typeof msg?.sessionId === "string"
+							? msg.sessionId
+							: undefined;
 				try {
 					ws.send(
 						JSON.stringify({
 							type: "error",
+							...(errorSessionId ? { sessionId: errorSessionId } : {}),
 							message: `Internal error handling "${msg?.type || "message"}" — see server log`,
 						}),
 					);

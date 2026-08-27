@@ -92,6 +92,7 @@ import {
 	type CreationSetupPlan,
 	SESSION_KERNEL_MAX_OPENING_PLAN_BYTES,
 	ensureCreationPlanned,
+	isCreationEffectPendingError,
 	requestCreationAttachment,
 	requestCreationBranch,
 	requestCreationCredential,
@@ -1676,7 +1677,13 @@ export async function handleCreateSessionMessage(
 	if (rawClientSessionId !== undefined && !isClientSessionId(rawClientSessionId)) {
 		sendCreateFrame(
 			{ sockets: new Set([ws]) },
-			{ type: "error", message: "Invalid session create id" },
+			{
+				type: "error",
+				...(typeof rawClientSessionId === "string"
+					? { sessionId: rawClientSessionId }
+					: {}),
+				message: "Invalid session create id",
+			},
 		);
 		return;
 	}
@@ -1698,7 +1705,11 @@ export async function handleCreateSessionMessage(
 		) pendingWebCreates.delete(clientSessionId);
 	};
 	const failCreate = (message: string) => {
-		sendCreateFrame(attempt, { type: "error", message });
+		sendCreateFrame(attempt, {
+			type: "error",
+			...(clientSessionId ? { sessionId: clientSessionId } : {}),
+			message,
+		});
 		finishCreate();
 	};
 
@@ -2488,6 +2499,13 @@ export async function handleCreateSessionMessage(
 			});
 		}
 	} catch (e: any) {
+		if (isCreationEffectPendingError(e)) {
+			// The actor owns this effect durably. Free the in-process join entry and
+			// let the WebSocket reconnect replay the same deterministic session id;
+			// reporting failure here can race the effect's later success.
+			finishCreate();
+			throw e;
+		}
 		// Setup failed before anything was persisted or announced. Every socket
 		// that replayed this create receives the same terminal response.
 		clearCreatePlan(bksId);
