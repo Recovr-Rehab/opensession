@@ -188,16 +188,16 @@ export function GithubManifestSetup({
 		<>
 			{connectionStatus ? (
 				<>
-					<div className="flex items-center gap-2">
-						<IconTile name="github" size={40} />
+					<div className="flex items-center justify-center gap-2 pb-5">
+						<IconTile name="github" size={48} />
 						<span
 							aria-hidden="true"
-							className="w-6 border-t-2 border-dotted border-line-strong"
+							className="w-8 border-t border-dashed border-line-strong"
 						/>
 						<img
 							src={`${BASE_PATH}/mac-app-icon.png`}
 							alt=""
-							className="size-10 shrink-0"
+							className="size-12 shrink-0"
 						/>
 					</div>
 					<div className="flex items-center justify-between gap-4">

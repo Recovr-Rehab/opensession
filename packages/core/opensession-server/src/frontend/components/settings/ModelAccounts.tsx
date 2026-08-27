@@ -1088,8 +1088,11 @@ export function ProviderAccountsSection({
 							render={
 								<Button
 									size={onboarding ? "md" : "sm"}
-									variant="default"
-									className="phone:min-h-11"
+									variant={onboarding ? "primary" : "default"}
+									className={cn(
+										"phone:min-h-11",
+										onboarding && "bg-fg text-bg hover:bg-fg/85",
+									)}
 									icon={<IconPlus size={16} />}
 									caret={!onboarding}
 								>
