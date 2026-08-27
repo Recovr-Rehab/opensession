@@ -62,7 +62,7 @@ function SetupStep({
 		<button
 			type="button"
 			className={cn(
-				"focus-ring flex min-h-10 w-full items-center gap-2 rounded-control px-2 text-left text-label font-medium transition-[background-color,color,scale] duration-[var(--dur-micro)] hover:bg-hover active:scale-[0.96] phone:min-h-11",
+				"focus-ring flex min-h-9 w-full items-center gap-1.5 rounded-control px-1.5 text-left text-label font-medium transition-[background-color,color,scale] duration-[var(--dur-micro)] hover:bg-hover active:scale-[0.96] phone:min-h-11",
 				complete ? "text-dim" : "text-fg",
 			)}
 			onClick={() =>
@@ -123,7 +123,7 @@ export function SetupWidget({
 		<aside
 			aria-labelledby="sidebar-setup-title"
 			className={cn(
-				"z-30 rounded-xl bg-popup p-2 smooth-shadow-sm",
+				"z-30 rounded-2xl border border-divider-soft bg-popup-glass p-2 [backdrop-filter:var(--popup-blur)] smooth-shadow-sm",
 				placement === "desktop"
 					? "fixed right-4 bottom-20 w-72"
 					: "mx-3 mt-3 mb-20 flex-none",
@@ -156,7 +156,7 @@ export function SetupWidget({
 					<button
 						type="button"
 						aria-label="Dismiss setup checklist"
-						className="focus-ring flex size-10 shrink-0 items-center justify-center rounded-control text-faint transition-[color,background-color,scale] duration-[var(--dur-micro)] hover:bg-hover hover:text-fg active:scale-[0.96] phone:size-11"
+						className="focus-ring ml-auto flex size-10 shrink-0 items-center justify-center rounded-control text-faint transition-[color,background-color,scale] duration-[var(--dur-micro)] hover:bg-hover hover:text-fg active:scale-[0.96] phone:size-11"
 						onClick={() => {
 							dismissSetupWidget();
 							setDismissed(true);
