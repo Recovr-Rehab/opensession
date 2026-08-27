@@ -408,7 +408,7 @@ function ChartCard({
 }) {
 	const heading = <h3 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">{title}</h3>;
 	return (
-		<Card as="section" className="min-w-0 p-5">
+		<Card as="section" className="min-w-0 bg-raised p-5">
 			{actions ? (
 				<div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
 					{heading}
@@ -445,7 +445,7 @@ function StatTile({
 	sub?: string;
 }) {
 	return (
-		<Card className="min-w-0 px-5 py-4">
+		<Card className="min-w-0 bg-raised px-5 py-4">
 			<div className="text-label font-medium text-dim">{label}</div>
 			<div className="mt-1 text-stat font-semibold text-fg">
 				{value}

@@ -153,7 +153,7 @@ function OverviewTile({
   loading?: boolean;
 }) {
   return (
-    <span className="min-w-0 rounded-xl bg-panel px-5 py-4">
+    <span className="min-w-0 rounded-xl bg-raised px-5 py-4">
       <span className="flex items-center gap-2 text-label font-medium text-dim">
         {live !== undefined ? (
           <span
