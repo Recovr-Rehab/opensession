@@ -429,24 +429,27 @@ setSaving(false);
 						{saving ? "Adding…" : actionLabel}
 					</Button>
 					{inviteUrl && (
-						<Button
-							variant="primary"
-							type="button"
-							className="w-full phone:min-h-11"
-							icon={
-								<CopyCheck
-									copied={inviteCopy.copied}
-									idle={<IconLink size={16} />}
-									size={16}
-									checkClassName="text-on-accent"
-								/>
-							}
-							onClick={() =>
-								inviteCopy.copy(inviteUrl, { toast: "Invite link copied" })
-							}
-						>
-							{inviteCopy.copied ? "Invite link copied" : "Or copy invite link"}
-						</Button>
+						<>
+							<div className="text-center text-supporting text-faint">Or</div>
+							<Button
+								variant="primary"
+								type="button"
+								className="w-full phone:min-h-11"
+								icon={
+									<CopyCheck
+										copied={inviteCopy.copied}
+										idle={<IconLink size={16} />}
+										size={16}
+										checkClassName="text-on-accent"
+									/>
+								}
+								onClick={() =>
+									inviteCopy.copy(inviteUrl, { toast: "Invite link copied" })
+								}
+							>
+								{inviteCopy.copied ? "Invite link copied" : "Copy invite link"}
+							</Button>
+						</>
 					)}
 				</form>
 			</Modal.Content>
