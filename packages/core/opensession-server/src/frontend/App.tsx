@@ -90,6 +90,7 @@ import {
 	shouldApplyCreatedSessionReply,
 	shouldOpenCreatedSession,
 } from "./lib/new-session-navigation";
+import { consumeNewSessionWorkspaceDraft } from "./lib/new-session-workspace-draft";
 import { primeSoftKeyboard } from "./lib/soft-keyboard";
 import { trackKeyboardInset } from "./lib/keyboard-inset";
 import type { CommandPaletteAction } from "./components/SessionSearch";
@@ -2214,7 +2215,14 @@ const path = await resolveAnonymousUserPath(
 				// nor gets to take the foreground.
 				const roomScoped = "sessionId" in msg;
 				const draft = pendingDraft?.id === msg.id ? pendingDraft : null;
-				if (draft) pendingCreateDraftRef.current = null;
+				if (draft) {
+					pendingCreateDraftRef.current = null;
+					// The default create unmounts NewSession before this reply. Consume
+					// its parked workspace here so the next global create cannot reuse it
+					// as an existing workspace and appear as another tab.
+					if (draft.workspaceId)
+						consumeNewSessionWorkspaceDraft(draft.workspaceId);
+				}
 				if (!shouldApplyCreatedSessionReply(msg.replayed, !!draft)) {
 					// The durable command outbox replayed a create that this page already
 					// finished. Its real row may be live or archived; either way the lists,
