@@ -35,12 +35,8 @@ export function DownloadAppsDialog({
 
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
-			<Modal.Content
-				widthClassName="max-w-[48rem]"
-				className="rounded-3xl bg-popup-glass [backdrop-filter:var(--popup-blur)]"
-			>
+			<Modal.Content widthClassName="max-w-[48rem]">
 				<Modal.Header
-					className="static bg-transparent"
 					title={
 						showInstallHelp ? (
 							<span className="flex min-w-0 items-center gap-1">
