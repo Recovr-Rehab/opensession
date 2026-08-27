@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Workspace, UnifiedSession } from "../lib/types";
 import { fetchHomeStats, fetchRecentPrs, type HomeStats, type RecentPr } from "../lib/api";
@@ -30,6 +30,7 @@ import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { Input } from "../ui/input";
 import { EmptyState } from "../ui/state";
+import { cn } from "../ui/cn";
 import {
   PR_GROUP_LABEL,
   PR_LIST,
@@ -45,6 +46,7 @@ import {
   IconPlus,
   IconPullRequest,
   IconRepo,
+  IconSearch,
   IconSidebarLeft,
   IconX,
 } from "./icons";
@@ -256,6 +258,9 @@ export function Prs({
   const currentUser = useCurrentUser();
   const isPhone = useIsPhone();
   const [query, setQuery] = useState("");
+  const [searchActive, setSearchActive] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchExpanded = searchActive || query.length > 0;
   const [workspaceId, setWorkspaceId] = useState("all");
   const [repo, setRepo] = useState("all");
   // Whose pull requests to show, and nothing more. This used to be the app's
@@ -283,6 +288,10 @@ export function Prs({
   }));
   const rowLimit = visiblePrRowLimit(renderWindow, renderScope);
   const [addingToSidebar, setAddingToSidebar] = useState(false);
+
+  useEffect(() => {
+    if (searchActive) searchInputRef.current?.focus();
+  }, [searchActive]);
 
   function openPreviewTarget(repo: string, branch: string) {
     setPreview({ repo, branch, title: repo, state: "OPEN", workspaceId: null });
@@ -423,25 +432,56 @@ setAddingToSidebar(false);
   // menu below.
   const actions = (
     <>
-      {/* Everything else in this row is sized by its own label, so the field is
-          what gives the bar back when the pane is narrow. It has to be weighted
-          weighted to do it. Shrink is shared in proportion, so on equal terms
-          every control gives up its share at once and a scope's label is the
-          first thing an ellipsis takes: a label needs its exact width and loses
-          a word to one spare pixel, while a field that is merely shorter costs
-          nothing. The scopes are therefore given a shrink of almost zero, so
-          the field surrenders everything it has before a label gives anything,
-          and past the field's floor the labels do truncate, which is the honest
-          end of a bar that has run out of room. */}
-      <Input
-        className="w-[200px] min-w-[90px] shrink-[100]"
-        type="search"
-        aria-label="Search pull requests"
-        placeholder="Search pull requests…"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        spellCheck={false}
-      />
+      {/* Search rests as one quiet glyph beside the page name. Activating it
+          grows the field to the right, into the flexible space before the
+          trailing filters. A non-empty search stays open when focus moves on,
+          so the active filter remains visible. */}
+      <div
+        className={cn(
+          "relative h-8 shrink-0 transition-[width] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+          searchExpanded ? "w-[200px] min-w-[90px] shrink-[100]" : "w-8",
+        )}
+      >
+        <Input
+          ref={searchInputRef}
+          className={cn(
+            "absolute inset-0 h-8 pl-8 [&::-webkit-search-cancel-button]:hidden",
+            "transition-opacity duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
+            searchExpanded ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+          type="search"
+          aria-label="Search pull requests"
+          placeholder="Search pull requests…"
+          value={query}
+          tabIndex={searchExpanded ? 0 : -1}
+          onFocus={() => setSearchActive(true)}
+          onBlur={() => setSearchActive(false)}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            setQuery("");
+            setSearchActive(false);
+            event.currentTarget.blur();
+          }}
+          spellCheck={false}
+        />
+        <Tooltip label="Search" side="bottom">
+          <Button
+            variant="ghost"
+            icon={<IconSearch size={18} />}
+            className={cn(
+              "absolute inset-y-0 left-0 z-10",
+              searchExpanded && "pointer-events-none text-faint",
+            )}
+            aria-label="Search pull requests"
+            aria-expanded={searchExpanded}
+            aria-hidden={searchExpanded || undefined}
+            tabIndex={searchExpanded ? -1 : 0}
+            onClick={() => setSearchActive(true)}
+          />
+        </Tooltip>
+      </div>
 
       {/* Search sits with the page name. The scopes and CTA remain a trailing
           group, so widening the pane grows the quiet space between the two
