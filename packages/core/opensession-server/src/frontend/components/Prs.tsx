@@ -207,7 +207,7 @@ function OverviewStats({
       }
       aria-label="Open Analytics"
       aria-busy={!stats}
-      className="focus-ring grid w-full cursor-pointer grid-cols-2 gap-3 rounded-xl text-left tabular-nums desktop:grid-cols-4"
+      className="focus-ring grid w-full cursor-pointer grid-cols-2 items-stretch gap-3 rounded-xl text-left tabular-nums desktop:grid-cols-4"
     >
       <OverviewTile
         label="Agents running"
