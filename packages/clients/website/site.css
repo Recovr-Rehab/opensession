@@ -680,7 +680,11 @@ summary:focus-visible {
 	   surface and follows its squircle exactly, without a circular inset that
 	   leaves a white crescent around the corner. */
 	clip-path: border-box;
-	background: var(--window);
+	contain: paint;
+	/* The poster and frame are opaque. Keeping their backing transparent lets
+	   the stage fill the antialiased edge instead of exposing a white halo when
+	   the iframe's search backdrop darkens. */
+	background: transparent;
 	box-shadow: 0 22px 54px var(--window-shadow);
 }
 
