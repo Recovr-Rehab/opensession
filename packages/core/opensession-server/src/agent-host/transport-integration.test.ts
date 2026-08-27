@@ -17,6 +17,7 @@ import {
   type AgentHostSupervisionPublicKeyringV2,
   type AgentOperationReceiptV1,
   type AgentTurnFence,
+  type AgentHostTurnTerminalV5,
   type AgentTurnSpec,
 } from "@tellahq/opensession-protocol";
 import { AgentHostClient } from "../server/agent-host-client";
@@ -318,6 +319,7 @@ async function setup(options: SetupOptions = {}) {
   const queryIntents: any[] = [];
   const cancelIntents: unknown[] = [];
   const streamAckIntents: unknown[] = [];
+  const terminalEvents: AgentHostTurnTerminalV5[] = [];
   const errors: Error[] = [];
   let dispatches = 0;
   const clients: AgentHostClient[] = [];
@@ -402,6 +404,9 @@ async function setup(options: SetupOptions = {}) {
       streamAckIntents.push(intent);
       await options.acknowledgeOperationStream?.(intent);
     },
+    onTurnTerminal: async (terminal) => {
+      terminalEvents.push(terminal);
+    },
     failpoint: options.failpoint,
     onError: (error) => errors.push(error),
   });
@@ -416,6 +421,7 @@ async function setup(options: SetupOptions = {}) {
     queryIntents,
     cancelIntents,
     streamAckIntents,
+    terminalEvents,
     errors,
     clients,
     get dispatches() {
@@ -440,7 +446,7 @@ function assertNoForbiddenAuthority(value: unknown) {
     expect(serialized).not.toContain(forbidden);
 }
 
-describe("Agent Host v4 end-to-end transport", () => {
+describe("Agent Host v5 end-to-end transport", () => {
   test("Driver consumption and durable coordinator ACK gate live publication", async () => {
     const driverGate = deferred();
     const coordinatorGate = deferred();
@@ -565,6 +571,14 @@ describe("Agent Host v4 end-to-end transport", () => {
       "terminal receipt did not complete the drained turn",
     );
     expect((harness.host as any).active).toBeUndefined();
+    expect(harness.terminalEvents).toHaveLength(1);
+    expect(harness.client.getTurnTerminal()).toBe(harness.terminalEvents[0]);
+    expect(await harness.client.waitForTurnTerminal()).toBe(harness.terminalEvents[0]);
+    expect(harness.terminalEvents[0]).toMatchObject({
+      result: { status: "completed" },
+      hostGeneration: 1,
+      operations: [{ operationId: spec.initialOperation.operationId, throughStreamSeq: 2 }],
+    });
     expect(harness.driver.delivered).toEqual([
       { seq: 1, bytes: "first" },
       { seq: 2, bytes: "second" },

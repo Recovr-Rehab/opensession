@@ -110,7 +110,7 @@ class FakeDriver implements AgentTurnDriver {
   async shutdown() {}
 }
 
-describe("Agent Host driver v4 boundary", () => {
+describe("Agent Host driver v5 boundary", () => {
   test("forwards exact request, query, and cancel operation intents", async () => {
     const transport = new FakeTransport();
 
@@ -165,7 +165,7 @@ describe("Agent Host driver v4 boundary", () => {
     expect(acknowledgements).toEqual([1, 2]);
   });
 
-  test("exposes no policy-rich v3 inputs or control methods", () => {
+  test("exposes no policy-rich v4 inputs or control methods", () => {
     const allowedKeys = new Set([
       "operationId",
       "descriptor",

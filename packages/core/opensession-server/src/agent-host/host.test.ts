@@ -199,12 +199,12 @@ async function attach(
     operations: { operationId: string; throughStreamSeq: number }[];
   } = null,
 ) {
-  send(p, { t: "hello", version: 4, requestId: "hello-1" });
+  send(p, { t: "hello", version: 5, requestId: "hello-1" });
   await wait();
   const h = p.messages.shift();
   send(p, {
     t: "attach",
-    version: 4,
+    version: 5,
     requestId: "attach-1",
     fence,
     planHash,
@@ -222,6 +222,14 @@ async function attach(
 function receipt(
   state: AgentOperationReceiptV1["state"],
 ): AgentOperationReceiptV1 {
+  const terminalRef = {
+    appendId: "append-host-1",
+    entryIds: ["entry-output-host-1"],
+    firstSeq: 1,
+    lastSeq: 1,
+    throughChangeSeq: 1,
+    requestDigest: `sha256:${"9".repeat(64)}` as const,
+  };
   return {
     version: 1,
     operationId: "operation-1",
@@ -248,13 +256,13 @@ function receipt(
     completedAtMs: state === "settled" ? now + 2 : undefined,
     outcome:
       state === "settled" ? { status: "succeeded", code: "ok" } : undefined,
-    transcriptRefs: state === "settled" ? [] : undefined,
+    transcriptRefs: state === "settled" ? [terminalRef] : undefined,
     kernelTerminal:
       state === "settled"
         ? {
             outputDigest: `sha256:${"f".repeat(64)}`,
             outcomeCode: "ok",
-            transcriptRefs: [],
+            transcriptRefs: [terminalRef],
             pendingToolUseEntryIds: [],
           }
         : undefined,
@@ -262,14 +270,14 @@ function receipt(
   };
 }
 
-describe("Agent Host protocol v4", () => {
+describe("Agent Host protocol v5", () => {
   test("strict attach, operation receipts, stream credit and terminal drain", async () => {
     const { socketPath, driver, receipt: sign } = await setup();
     const p = await peer(socketPath);
     expect((await attach(p, sign)).mode).toBe("fresh");
     send(p, {
       t: "start_turn",
-      version: 4,
+      version: 5,
       requestId: "start-1",
       planHash,
       spec,
@@ -283,7 +291,7 @@ describe("Agent Host protocol v4", () => {
     expect(credit.creditBytes).toBe(256 * 1024);
     send(p, {
       t: "operation_receipt",
-      version: 4,
+      version: 5,
       requestId: "r1",
       fence,
       ackHostSeq: request.hostSeq,
@@ -292,7 +300,7 @@ describe("Agent Host protocol v4", () => {
     });
     send(p, {
       t: "operation_stream",
-      version: 4,
+      version: 5,
       requestId: "s1",
       fence,
       operationId: "operation-1",
@@ -312,18 +320,85 @@ describe("Agent Host protocol v4", () => {
       .at(-1);
     send(p, {
       t: "operation_receipt",
-      version: 4,
+      version: 5,
       requestId: "r2",
       fence,
       ackHostSeq: last.hostSeq,
       operationId: "operation-1",
       receipt: receipt("settled"),
     });
+    send(p, {
+      t: "consumption_ack",
+      version: 5,
+      requestId: "consumed-1",
+      fence,
+      ackHostSeq: last.hostSeq,
+      operations: [{ operationId: "operation-1", throughStreamSeq: 1 }],
+    });
+    send(p, {
+      t: "consumption_ack",
+      version: 5,
+      requestId: "consumed-duplicate",
+      fence,
+      ackHostSeq: last.hostSeq,
+      operations: [{ operationId: "operation-1", throughStreamSeq: 1 }],
+    });
     driver.finish();
+    await wait();
+    expect(p.socket.destroyed).toBe(false);
+    expect(p.messages.filter((message) => message.t === "turn_terminal")).toHaveLength(1);
+    const terminal = p.messages.find((message) => message.t === "turn_terminal");
+    expect(terminal).toMatchObject({
+      hostGeneration: 1,
+      result: { status: "completed" },
+      finalAckHostSeq: last.hostSeq,
+      operations: [{ operationId: "operation-1", throughStreamSeq: 1 }],
+    });
+    send(p, {
+      t: "turn_terminal_ack",
+      version: 5,
+      requestId: "terminal-ack-1",
+      fence,
+      ackHostSeq: terminal.hostSeq,
+      resultDigest: terminal.resultDigest,
+      receiptsDigest: terminal.receiptsDigest,
+    });
     await wait();
     expect(p.socket.destroyed).toBe(true);
   });
-  test("keeps a detached driver alive through reconnect grace and atomically resumes", async () => {
+  test("replays one terminal after reconnect following the terminal write", async () => {
+    const { socketPath, driver, receipt: sign } = await setup({ reconnectGraceMs: 200 });
+    const first = await peer(socketPath);
+    await attach(first, sign);
+    send(first, { t: "start_turn", version: 5, requestId: "start-replay", planHash, spec });
+    await wait();
+    first.messages.shift();
+    await driver.transport!.requestOperation(spec.initialOperation);
+    await wait();
+    const request = first.messages.find((message) => message.t === "operation_request");
+    const finalIntent = first.messages.at(-1);
+    send(first, { t: "operation_receipt", version: 5, requestId: "executing-replay", fence, ackHostSeq: request.hostSeq, operationId: "operation-1", receipt: receipt("executing") });
+    send(first, { t: "operation_receipt", version: 5, requestId: "settled-replay", fence, ackHostSeq: finalIntent.hostSeq, operationId: "operation-1", receipt: receipt("settled") });
+    send(first, { t: "consumption_ack", version: 5, requestId: "consumed-replay", fence, ackHostSeq: finalIntent.hostSeq, operations: [{ operationId: "operation-1", throughStreamSeq: 0 }] });
+    driver.finish();
+    await wait();
+    const written = first.messages.find((message) => message.t === "turn_terminal");
+    expect(written).toBeDefined();
+    first.socket.destroy();
+    await wait();
+
+    const second = await peer(socketPath);
+    expect((await attach(second, sign, { lastHostSeq: finalIntent.hostSeq, operations: [{ operationId: "operation-1", throughStreamSeq: 0 }] })).mode).toBe("resumed");
+    await wait();
+    const replayed = second.messages.filter((message) => message.t === "turn_terminal");
+    expect(replayed).toHaveLength(1);
+    expect(replayed[0]).toEqual(written);
+    send(second, { t: "turn_terminal_ack", version: 5, requestId: "terminal-replay-ack", fence, ackHostSeq: written.hostSeq, resultDigest: written.resultDigest, receiptsDigest: written.receiptsDigest });
+    await wait();
+    expect(second.socket.destroyed).toBe(true);
+  });
+
+  test("keeps a detached driver alive through reconnect before terminal write and atomically resumes", async () => {
     const {
       socketPath,
       driver,
@@ -333,7 +408,7 @@ describe("Agent Host protocol v4", () => {
     await attach(first, sign);
     send(first, {
       t: "start_turn",
-      version: 4,
+      version: 5,
       requestId: "start-1",
       planHash,
       spec,
@@ -363,10 +438,10 @@ describe("Agent Host protocol v4", () => {
       "afterOwnerSwapBeforeAttachedWrite",
     ]);
   });
-  test("rejects v3 without compatibility", async () => {
+  test("rejects v4 without compatibility", async () => {
     const { socketPath } = await setup();
     const p = await peer(socketPath);
-    send(p, { t: "hello", version: 3, requestId: "old" });
+    send(p, { t: "hello", version: 4, requestId: "old" });
     await wait();
     expect(p.socket.destroyed).toBe(true);
   });
