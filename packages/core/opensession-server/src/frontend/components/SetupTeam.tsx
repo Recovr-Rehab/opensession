@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import { githubLoginFromInput } from "../lib/github-login";
 import { refreshPeople } from "../lib/people";
+import { copyToClipboard } from "../lib/share-link";
 import { Button } from "../ui/button";
 import { Field, FieldGrid, Input } from "../ui/input";
 import { MENU_ICON, Menu } from "../ui/menu";
@@ -111,16 +112,12 @@ await load();
 		await onChanged();
 	}
 
-	async function copyInviteLink() {
-		await navigator.clipboard
-			.writeText(`${window.location.origin}${BASE_PATH}/`)
-			.then(() => {
-				setInviteCopied(true);
-				toast("Invite link copied", { variant: "success" });
-			})
-			.catch(() => {
-				toast("Couldn’t copy invite link", { variant: "error" });
-			});
+	function copyInviteLink() {
+		copyToClipboard(`${window.location.origin}${BASE_PATH}/`, () => {
+			setInviteCopied(true);
+			toast("Invite link copied", { variant: "success" });
+			window.setTimeout(() => setInviteCopied(false), 2000);
+		});
 	}
 
 	return (
@@ -134,7 +131,7 @@ await load();
 							variant="default"
 							className="phone:min-h-11"
 							icon={inviteCopied ? <IconCheck size={16} /> : <IconLink size={16} />}
-							onClick={() => void copyInviteLink()}
+							onClick={copyInviteLink}
 						>
 							{inviteCopied ? "Invite link copied" : "Copy invite link"}
 						</Button>
