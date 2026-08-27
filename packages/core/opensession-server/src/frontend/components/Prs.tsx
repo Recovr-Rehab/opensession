@@ -20,6 +20,7 @@ import {
 import { Button } from "../ui/button";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { ResponsiveDialog } from "../ui/sheet";
+import { toast } from "../ui/toast";
 import { PrQueuePreview } from "./PrQueuePreview";
 import { useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
@@ -55,7 +56,9 @@ interface Props {
   onNewSession: () => void;
   onShowArchived: () => void;
   onOpenAnalytics?: () => void;
-  /** Open the workspace already attached to this PR. */
+  /** Create or adopt the PR's workspace without leaving the preview. */
+  onAddToSidebar: (pr: PrPreviewTarget) => Promise<string>;
+  /** Open a PR workspace after it is already represented in the sidebar. */
   onOpenWorkspace: (workspaceId: string, pr: PrPreviewTarget) => void;
   /** The pane's top bar, where this page's controls go. */
   topbarActionsEl?: HTMLElement | null;
@@ -246,6 +249,7 @@ export function Prs({
   onNewSession,
   onShowArchived,
   onOpenAnalytics,
+  onAddToSidebar,
   onOpenWorkspace,
   topbarActionsEl,
 }: Props) {
@@ -278,18 +282,29 @@ export function Prs({
     limit: INITIAL_PR_ROWS,
   }));
   const rowLimit = visiblePrRowLimit(renderWindow, renderScope);
+  const [addingToSidebar, setAddingToSidebar] = useState(false);
 
   function openPreviewTarget(repo: string, branch: string) {
-    const workspaceId = allWorktrees.find(
-      (row) => row.repo === repo && row.branch === branch,
-    )?.workspaceId;
-    setPreview({
-      repo,
-      branch,
-      title: repo,
-      state: "OPEN",
-      workspaceId: workspaceId ?? null,
-    });
+    setPreview({ repo, branch, title: repo, state: "OPEN", workspaceId: null });
+  }
+
+  async function addPreviewToSidebar() {
+    if (!preview || addingToSidebar) return;
+    const target = preview;
+    setAddingToSidebar(true);
+    await (async () => {
+const workspaceId = await onAddToSidebar(target);
+      setPreview((current) =>
+        current?.repo === target.repo && current.branch === target.branch
+          ? { ...current, workspaceId }
+          : current,
+      );
+      toast("Added to sidebar");
+})().catch(async () => {
+toast("Couldn't add to sidebar");
+}).finally(async () => {
+setAddingToSidebar(false);
+});
   }
 
   useEffect(() => {
@@ -748,6 +763,16 @@ export function Prs({
                   }}
                 >
                   Open workspace
+                </Button>
+              ) : preview.state === "OPEN" ? (
+                <Button
+                  variant="default"
+                  className="min-h-10 shrink-0 phone:min-h-11"
+                  icon={<IconSidebarLeft size={18} />}
+                  disabled={addingToSidebar}
+                  onClick={() => void addPreviewToSidebar()}
+                >
+                  {addingToSidebar ? "Adding…" : "Add to sidebar"}
                 </Button>
               ) : null}
               <Button

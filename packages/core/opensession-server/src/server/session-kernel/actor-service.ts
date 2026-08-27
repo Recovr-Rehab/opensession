@@ -19,6 +19,8 @@ import {
 } from "./actor-routing";
 import { READ_METHODS } from "./store-routing";
 import { workerEntry } from "../../runner-host/exe";
+import { chooseSessionLane, type LaneLoad } from "./lane-placement";
+import type { SessionKernelStoreHostMetrics } from "./store-host";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3849;
@@ -52,14 +54,45 @@ type Pending = {
   request: KernelActorTransportEnvelope["request"];
   readOnly: boolean;
   criticalSessionId?: string;
+  /** When the turn started executing on the worker (lane busy-time metric). */
+  startedAt: number;
 };
 
 type SlotTurn = {
   request: KernelActorTransportEnvelope["request"];
   allowUnready: boolean;
   priority: boolean;
+  enqueuedAt: number;
   resolve: (response: KernelActorResponse) => void;
   reject: (error: Error) => void;
+};
+
+/** Cumulative per-lane counters. Monotonic for the service lifetime — they
+ * deliberately survive lane restarts so operators can see instability. */
+type LaneMetrics = {
+  turnsCompleted: number;
+  queueWaitMsTotal: number;
+  busyMsTotal: number;
+  timeouts: number;
+  restarts: number;
+  rejectedFull: number;
+  kernelStoreCacheMisses: number;
+  kernelStoreCacheEvictions: number;
+  transcriptStoreCacheMisses: number;
+  transcriptStoreCacheEvictions: number;
+  sqliteBusy: number;
+};
+
+const EMPTY_WORKER_METRICS: SessionKernelStoreHostMetrics = {
+  kernelStoreCacheMisses: 0,
+  kernelStoreCacheEvictions: 0,
+  transcriptStoreCacheMisses: 0,
+  transcriptStoreCacheEvictions: 0,
+  sqliteBusy: 0,
+};
+
+type KernelActorWorkerResponse = KernelActorResponse & {
+  workerMetrics?: SessionKernelStoreHostMetrics;
 };
 
 type WorkerSlot = {
@@ -71,6 +104,8 @@ type WorkerSlot = {
   ready: boolean;
   restarting: boolean;
   priorityBurst: number;
+  metrics: LaneMetrics;
+  workerMetrics: SessionKernelStoreHostMetrics;
 };
 
 type QueuedSessionTurn = {
@@ -85,6 +120,8 @@ type QueuedSessionTurn = {
 
 type SessionMailbox = {
   running: boolean;
+  /** Chosen once when the mailbox activates and kept until it drains. */
+  slot: WorkerSlot;
   normal: QueuedSessionTurn[];
   priority: QueuedSessionTurn[];
   priorityBurst: number;
@@ -233,6 +270,16 @@ export async function startSessionKernelService(
       ready: false,
       restarting: false,
       priorityBurst: 0,
+      metrics: {
+        turnsCompleted: 0,
+        queueWaitMsTotal: 0,
+        busyMsTotal: 0,
+        timeouts: 0,
+        restarts: 0,
+        rejectedFull: 0,
+        ...EMPTY_WORKER_METRICS,
+      },
+      workerMetrics: { ...EMPTY_WORKER_METRICS },
     }),
   );
   const sessionSlots = slots.slice(1);
@@ -362,6 +409,7 @@ export async function startSessionKernelService(
     if (safeCatalogReadRestart)
       console.warn("Restarting session kernel catalog lane after read failure", error);
     slot.restarting = true;
+    slot.metrics.restarts += 1;
     stopSlot(slot, error, true);
     void (async () => {
       const critical = active.filter((entry) => entry.criticalSessionId);
@@ -414,7 +462,10 @@ export async function startSessionKernelService(
     const originalRpcId = turn.request.rpcId;
     const rpcId = crypto.randomUUID();
     const generation = slot.generation;
+    const startedAt = Date.now();
+    slot.metrics.queueWaitMsTotal += Math.max(0, startedAt - turn.enqueuedAt);
     const timer = setTimeout(() => {
+      slot.metrics.timeouts += 1;
       const error = new Error(`Session actor lane ${slot.index} response timed out`);
       restartSessionSlot(slot, error, generation);
     }, responseTimeoutMs);
@@ -425,6 +476,7 @@ export async function startSessionKernelService(
       request: turn.request,
       readOnly: isReadOnlyRequest(turn.request),
       criticalSessionId: criticalSessionId(turn.request),
+      startedAt,
     });
     try {
       slot.worker.postMessage({ ...turn.request, rpcId });
@@ -460,30 +512,51 @@ export async function startSessionKernelService(
         RESERVED_LANE_PRIORITY_TURNS,
         Math.max(0, laneQueueLimit - 1),
       ))
-    ) return Promise.reject(new RetryableActorHostError("Session actor lane is full"));
+    ) {
+      slot.metrics.rejectedFull += 1;
+      return Promise.reject(new RetryableActorHostError("Session actor lane is full"));
+    }
     return new Promise((resolve, reject) => {
-      const turn = { request, allowUnready, priority, resolve, reject };
+      const turn = { request, allowUnready, priority, enqueuedAt: Date.now(), resolve, reject };
       if (urgent) slot.queue.unshift(turn);
       else slot.queue.push(turn);
       pumpSlot(slot);
     });
   }
 
+  function collectWorkerMetrics(
+    slot: WorkerSlot,
+    current: SessionKernelStoreHostMetrics,
+  ): void {
+    for (const key of Object.keys(current) as Array<keyof SessionKernelStoreHostMetrics>) {
+      const previous = slot.workerMetrics[key];
+      slot.metrics[key] += current[key] >= previous
+        ? current[key] - previous
+        : current[key];
+    }
+    slot.workerMetrics = current;
+  }
+
   async function startSlot(slot: WorkerSlot): Promise<void> {
     slot.generation += 1;
     const generation = slot.generation;
+    slot.workerMetrics = { ...EMPTY_WORKER_METRICS };
     const worker = new Worker(workerUrl, { type: "module" });
     slot.worker = worker;
     slot.ready = false;
     worker.addEventListener(
       "message",
-      (event: MessageEvent<KernelActorResponse>) => {
+      (event: MessageEvent<KernelActorWorkerResponse>) => {
         if (slot.worker !== worker || generation !== slot.generation) return;
-        const response = event.data;
+        const { workerMetrics, ...actorResponse } = event.data;
+        if (workerMetrics) collectWorkerMetrics(slot, workerMetrics);
+        const response = actorResponse as KernelActorResponse;
         const entry = slot.pending.get(response.rpcId);
         if (!entry) return;
         slot.pending.delete(response.rpcId);
         clearTimeout(entry.timer);
+        slot.metrics.turnsCompleted += 1;
+        slot.metrics.busyMsTotal += Math.max(0, Date.now() - entry.startedAt);
         const restored = { ...response, rpcId: entry.originalRpcId };
         entry.resolve(restored);
         if (actorFatal(response))
@@ -532,15 +605,16 @@ export async function startSessionKernelService(
   }
 
   function assignedSessionSlot(sessionId: string): WorkerSlot {
-    // Stable affinity keeps one logical actor's in-memory SQLite/cache state on
-    // one lane until that lane restarts. The durable database remains the
-    // authority and is rehydrated after restart or LRU passivation.
-    let hash = 2_166_136_261;
-    for (let index = 0; index < sessionId.length; index += 1) {
-      hash ^= sessionId.charCodeAt(index);
-      hash = Math.imul(hash, 16_777_619);
-    }
-    return sessionSlots[(hash >>> 0) % sessionSlots.length]!;
+    // Placement is chosen only when a mailbox activates. The mailbox owns the
+    // pin until it drains, so queued turns never migrate while a logical actor
+    // is live. A later activation may choose the quieter rendezvous candidate.
+    const loads: LaneLoad[] = sessionSlots.map((slot) => ({
+      // A restarting lane retries quickly; weigh it as a full queue rather
+      // than excluding it so both candidates stay usable.
+      queued: slot.queue.length + (slot.ready ? 0 : laneQueueLimit),
+      executing: slot.pending.size,
+    }));
+    return sessionSlots[chooseSessionLane(sessionId, loads)]!;
   }
 
   function pumpSessionMailbox(sessionId: string, mailbox: SessionMailbox): void {
@@ -569,7 +643,7 @@ export async function startSessionKernelService(
     }
     mailbox.running = true;
     void turn.gate
-      .then(() => sendToSlot(assignedSessionSlot(sessionId), turn.request))
+      .then(() => sendToSlot(mailbox.slot, turn.request))
       .then(turn.resolve, turn.reject)
       .finally(() => {
         queuedSessionTurns -= 1;
@@ -588,6 +662,7 @@ export async function startSessionKernelService(
     if (!mailbox) {
       mailbox = {
         running: false,
+        slot: assignedSessionSlot(sessionId),
         normal: [],
         priority: [],
         priorityBurst: 0,
@@ -743,6 +818,18 @@ export async function startSessionKernelService(
               ready: sessionSlots.filter((slot) => slot.ready).length,
               capacity: sessionSlots.length,
             },
+            // Per-lane occupancy and cumulative counters. Index 0 is the
+            // catalog lane; the rest are session execution lanes. Counters are
+            // monotonic for the service lifetime so operators can compute
+            // rates and spot lane skew, timeout storms, and restart churn.
+            lanes: slots.map((slot) => ({
+              index: slot.index,
+              ready: slot.ready,
+              restarting: slot.restarting,
+              queued: slot.queue.length,
+              executing: slot.pending.size,
+              ...slot.metrics,
+            })),
           },
           { status: ready ? 200 : 503 },
         );

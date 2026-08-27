@@ -34,7 +34,6 @@ function pr(
 		reviewRequested: [],
 		mergeable: "MERGEABLE",
 		...patch,
-		workspaceId: patch.workspaceId ?? `ws-${patch.number}`,
 	};
 }
 

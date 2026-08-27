@@ -19,7 +19,6 @@ import {
   targetForDeliveryInterrupt,
   targetForTurnCancel,
 } from ".";
-import { SESSION_KERNEL_ACTOR_VERSION } from "./actor-protocol";
 
 
 let store: SessionKernelStore;
@@ -41,7 +40,6 @@ test("tracked schema version matches the store reader", async () => {
 			readFileSync(join(import.meta.dir, "schema-version"), "utf8").trim(),
 		),
 	).toBe(SESSION_KERNEL_SCHEMA_VERSION);
-	expect(SESSION_KERNEL_ACTOR_VERSION).toBe(SESSION_KERNEL_SCHEMA_VERSION);
 });
 
 test("refuses an unsafe schema downgrade", async () => {

@@ -3184,33 +3184,60 @@ const path = await resolveAnonymousUserPath(
 		if (subagentSelected && routeSubagentStack.length === 0)
 			setActiveViewTabState(null);
 	}, [subagentSelected, routeSubagentStack.length]);
-	// Open PR rows already carry their adopt-or-create workspace from the server.
-	// Refresh the workspace payload before routing because the PR and workspace
-	// requests can race on a cold load. No click should mint its destination.
+	// Sidebar PR row → the PR's ONE workspace (resolve-or-create server-side,
+	// adopt-don't-duplicate), landing on THAT PR's Review tab: the row is a pull
+	// request, so its diff is what you clicked for. The focus pulse matters when
+	// the workspace carries several PRs — each has its own row, and without it
+	// they'd all land on the primary. Falls back to the legacy preview routes if
+	// the resolve fails, so a click is never dead.
 	const openPrWorkspace = async (item: ReviewQueueItem) => {
-		await refreshWorkspaces();
-		focusReviewPr({
-			repo: item.pr.repo,
-			branch: item.pr.branch,
-			number: item.pr.number,
-			workspaceId: item.pr.workspaceId,
-		});
-		navigate({
-			view: "workspace",
-			id: item.pr.workspaceId,
-			tab: "review",
-		});
-	};
+			await (async () => {
+const { workspaceId } = await resolveWorkspaceApi({
+					pr: {
+						repo: item.pr.repo,
+						number: item.pr.number,
+						branch: item.pr.branch,
+						title: item.pr.title,
+					},
+				});
+				// The resolved workspace can be session-less, so wait for the active
+				// workspace payload to carry it before routing to its Review pane.
+				await refreshWorkspaces();
+				focusReviewPr({
+					repo: item.pr.repo,
+					branch: item.pr.branch,
+					number: item.pr.number,
+					workspaceId,
+				});
+				navigate({ view: "workspace", id: workspaceId, tab: "review" });
+})().catch(async () => {
+if (item.sessionId) navigate({ view: "reviews", id: item.sessionId });
+				else
+					navigate({ view: "pr", repo: item.pr.repo, branch: item.pr.branch });
+});
+		};
 	const openPrReview = async (pr: OpenPr) => {
-		await refreshWorkspaces();
-		focusReviewPr({
-			repo: pr.repo,
-			branch: pr.branch,
-			number: pr.number,
-			workspaceId: pr.workspaceId,
-		});
-		navigate({ view: "workspace", id: pr.workspaceId, tab: "review" });
-	};
+			await (async () => {
+const { workspaceId } = await resolveWorkspaceApi({
+					pr: {
+						repo: pr.repo,
+						number: pr.number,
+						branch: pr.branch,
+						title: pr.title,
+					},
+				});
+				await refreshWorkspaces();
+				focusReviewPr({
+					repo: pr.repo,
+					branch: pr.branch,
+					number: pr.number,
+					workspaceId,
+				});
+				navigate({ view: "workspace", id: workspaceId, tab: "review" });
+})().catch(async () => {
+navigate({ view: "pr", repo: pr.repo, branch: pr.branch });
+});
+		};
 	// Sidebar feed row (a video, a dashboard, …) to the item's ONE workspace, its web
 	// panel foregrounded (the feeds design).
 	const openFeedItemWorkspace = async (feed: FeedDescriptor, item: FeedItem) => {
@@ -5953,6 +5980,18 @@ console.error("Archive failed:", e);
 								onNewSession={() => openPalette()}
 								onShowArchived={refreshArchived}
 								onOpenAnalytics={() => navigate({ view: "analytics" })}
+								onAddToSidebar={async (pr) => {
+									const { workspaceId } = await resolveWorkspaceApi({
+										pr: {
+											repo: pr.repo,
+											branch: pr.branch,
+											number: pr.number,
+											title: pr.title,
+										},
+									});
+									refreshWorkspaces();
+									return workspaceId;
+								}}
 								onOpenWorkspace={(workspaceId, pr) => {
 									focusReviewPr({
 										repo: pr.repo,

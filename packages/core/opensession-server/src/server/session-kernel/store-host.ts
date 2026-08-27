@@ -32,6 +32,14 @@ const SPARSE_PROJECTION_BACKFILL_BATCH = 128;
 const OUTBOX_ROUTE_MAINTENANCE_BATCH = 8;
 const SESSION_STORE_MAINTENANCE_BATCH = 1;
 
+export type SessionKernelStoreHostMetrics = {
+  kernelStoreCacheMisses: number;
+  kernelStoreCacheEvictions: number;
+  transcriptStoreCacheMisses: number;
+  transcriptStoreCacheEvictions: number;
+  sqliteBusy: number;
+};
+
 class SparseProjectionBackfillPendingError extends Error {
   readonly retryable = true;
 }
@@ -98,6 +106,13 @@ export class SessionKernelStoreHost {
   private runtimeDueCursor = "";
   private maintenanceSessionCursor = "";
   private outboxRouteMaintenanceCursor = 0;
+  private readonly laneMetrics: SessionKernelStoreHostMetrics = {
+    kernelStoreCacheMisses: 0,
+    kernelStoreCacheEvictions: 0,
+    transcriptStoreCacheMisses: 0,
+    transcriptStoreCacheEvictions: 0,
+    sqliteBusy: 0,
+  };
   constructor(
     private readonly centralPath = sessionKernelDbPath(),
     private readonly isolatedRoot = `${dirname(centralPath)}/session-kernel-sessions`,
@@ -109,6 +124,19 @@ export class SessionKernelStoreHost {
     if (!Number.isInteger(maxOpenSessionStores) || maxOpenSessionStores > 1_024)
       throw new Error("Invalid active session store bound");
     this.central = new SessionKernelStore(centralPath);
+  }
+
+  metrics(): SessionKernelStoreHostMetrics {
+    return { ...this.laneMetrics };
+  }
+
+  recordSqliteBusy(error: unknown): void {
+    const code = error && typeof error === "object" && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+    const message = error instanceof Error ? error.message : String(error);
+    if (code.startsWith("SQLITE_BUSY") || /sqlite_busy|database is locked/i.test(message))
+      this.laneMetrics.sqliteBusy += 1;
   }
 
   close(): void {
@@ -296,6 +324,42 @@ export class SessionKernelStoreHost {
         `Session ${request.sessionId} has no isolated actor transcript placement`,
       );
     const transcriptStore = this.openTranscript(request.sessionId);
+    if (request.op === "agent_append_destination") {
+      return transcriptStore.commitAgentTranscriptDestinationAppend({
+        sessionId: request.sessionId,
+        appendId: request.appendId,
+        runId: request.runId,
+        turnId: request.turnId,
+        generation: request.generation,
+        transcriptAnchor: request.transcriptAnchor,
+        entries: [...request.entries],
+      }) as TranscriptActorResult<T>;
+    }
+    if (request.op === "agent_query_destination_receipt") {
+      if (this.storeForSession(request.sessionId).isTombstoned(request.sessionId))
+        throw new Error(`Session ${request.sessionId} was deleted`);
+      return transcriptStore.queryAgentTranscriptReceiptRef({
+        sessionId: request.sessionId,
+        appendId: request.appendId,
+        runId: request.runId,
+        turnId: request.turnId,
+        generation: request.generation,
+        transcriptAnchor: request.transcriptAnchor,
+        requestDigest: request.requestDigest,
+      }) as TranscriptActorResult<T>;
+    }
+    if (request.op === "agent_validate_destination_receipt") {
+      if (this.storeForSession(request.sessionId).isTombstoned(request.sessionId))
+        throw new Error(`Session ${request.sessionId} was deleted`);
+      return transcriptStore.validateAgentTranscriptReceiptRef({
+        sessionId: request.sessionId,
+        runId: request.runId,
+        turnId: request.turnId,
+        generation: request.generation,
+        transcriptAnchor: request.transcriptAnchor,
+        receipt: request.receipt,
+      }) as TranscriptActorResult<T>;
+    }
     if (request.op === "append_destination") {
       if (transcriptStore.replayActorRequest(request))
         return transcriptStore.applyActorRequest(request) as TranscriptActorResult<T>;
@@ -713,11 +777,13 @@ export class SessionKernelStoreHost {
       this.transcripts.set(sessionId, store);
       return store;
     }
+    this.laneMetrics.transcriptStoreCacheMisses += 1;
     while (this.transcripts.size >= this.maxOpenSessionStores) {
       const oldest = this.transcripts.keys().next().value as string | undefined;
       if (!oldest) break;
       this.transcripts.get(oldest)?.close();
       this.transcripts.delete(oldest);
+      this.laneMetrics.transcriptStoreCacheEvictions += 1;
     }
     if (this.centralPath === ":memory:")
       throw new Error("Actor transcript storage requires an isolated file database");
@@ -738,12 +804,14 @@ export class SessionKernelStoreHost {
       this.isolated.set(sessionId, store);
       return store;
     }
+    this.laneMetrics.kernelStoreCacheMisses += 1;
     while (this.isolated.size >= this.maxOpenSessionStores) {
       const oldestSessionId = this.isolated.keys().next().value as string | undefined;
       if (!oldestSessionId) break;
       const oldest = this.isolated.get(oldestSessionId);
       this.isolated.delete(oldestSessionId);
       oldest?.close();
+      this.laneMetrics.kernelStoreCacheEvictions += 1;
     }
     store = new SessionKernelStore(
       this.centralPath === ":memory:"

@@ -529,9 +529,14 @@ and replay committed changes without becoming another session owner.
 The writable stores and autonomous session coordinators run in the bounded
 actor-host Worker pool behind `SessionKernelStoreHost`. The service mailbox is
 the logical actor: it is created on first routing, serializes one session's
-turns, and disappears when its queue drains. Worker-local SQLite connections
-activate lazily and are passivated by a bounded LRU. The pool defaults to four
-session lanes plus a compatibility catalog lane and is bounded to 32 lanes.
+turns, and disappears when its queue drains. At activation, two rendezvous
+candidates are compared by live lane load; the chosen lane remains pinned until
+the mailbox drains. Worker-local kernel and transcript SQLite connections
+activate lazily and are passivated by separate bounded LRUs. The pool scales to
+available CPUs (16 session lanes on the production host), keeps a separate
+compatibility catalog lane, and is bounded to 32 session lanes. `/ready` reports
+per-lane queue occupancy, wait and processing time, restarts/timeouts, separate
+kernel/transcript cache misses and evictions, and SQLite-busy events.
 A session with no legacy durable rows is claimed in the placement catalog before
 its first mutation, then writes only its own SQLite database. The schema-23
 offline deploy migrator runs after gateway and actor shutdown, verifies each

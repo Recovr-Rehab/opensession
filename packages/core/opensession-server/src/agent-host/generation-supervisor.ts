@@ -48,6 +48,7 @@ export interface AgentHostTurnFence {
   readonly sessionId: string;
   readonly runId: string;
   readonly turnId: string;
+  readonly generation: number;
 }
 
 export interface PersistedTurnPin {
@@ -242,9 +243,12 @@ function sameManifest(
   return MANIFEST_KEYS.every((key) => left[key] === right[key]);
 }
 
-const TURN_FENCE_KEYS = ["sessionId", "runId", "turnId"] as const;
+const TURN_FENCE_KEYS = ["sessionId", "runId", "turnId", "generation"] as const;
+const TURN_FENCE_TOKEN_KEYS = ["sessionId", "runId", "turnId"] as const;
 
-function exactTurnFence(value: AgentHostTurnFence): Readonly<AgentHostTurnFence> {
+function exactTurnFence(
+  value: AgentHostTurnFence,
+): Readonly<AgentHostTurnFence> {
   if (
     !value ||
     typeof value !== "object" ||
@@ -253,16 +257,23 @@ function exactTurnFence(value: AgentHostTurnFence): Readonly<AgentHostTurnFence>
     !Object.keys(value).every((key) =>
       TURN_FENCE_KEYS.includes(key as (typeof TURN_FENCE_KEYS)[number]),
     ) ||
-    !TURN_FENCE_KEYS.every(
+    !TURN_FENCE_TOKEN_KEYS.every(
       (key) => typeof value[key] === "string" && TOKEN_RE.test(value[key]),
-    )
+    ) ||
+    !Number.isSafeInteger(value.generation) ||
+    value.generation < 0
   )
     throw new Error("Invalid Agent Host turn fence");
   return Object.freeze({ ...value });
 }
 
 function turnFenceKey(fence: AgentHostTurnFence): string {
-  return JSON.stringify([fence.sessionId, fence.runId, fence.turnId]);
+  return JSON.stringify([
+    fence.sessionId,
+    fence.runId,
+    fence.turnId,
+    fence.generation,
+  ]);
 }
 
 function exactTurnPin(value: PersistedTurnPin): Readonly<PersistedTurnPin> {
@@ -271,9 +282,13 @@ function exactTurnPin(value: PersistedTurnPin): Readonly<PersistedTurnPin> {
     typeof value !== "object" ||
     Array.isArray(value) ||
     Object.keys(value).length !== 5 ||
-    !["fence", "generation", "generationDigest", "generationEpoch", "pinnedAtMs"].every(
-      (key) => own(value, key),
-    )
+    ![
+      "fence",
+      "generation",
+      "generationDigest",
+      "generationEpoch",
+      "pinnedAtMs",
+    ].every((key) => own(value, key))
   )
     throw new Error("Invalid persisted Agent Host turn pin");
   const fence = exactTurnFence(value.fence);
@@ -295,7 +310,9 @@ function exactTurnPin(value: PersistedTurnPin): Readonly<PersistedTurnPin> {
   });
 }
 
-function decodePersistedTurnPins(value: unknown): PersistedTurnPins | undefined {
+function decodePersistedTurnPins(
+  value: unknown,
+): PersistedTurnPins | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
   const candidate = value as Record<string, unknown>;
   if (
@@ -514,10 +531,7 @@ export class AgentHostGenerationSupervisor {
       const generation = this.getExact(identity);
       generation.healthy = false;
       const wasActive = generation.state === "active";
-      if (
-        generation.state !== "draining" &&
-        generation.state !== "blocked"
-      )
+      if (generation.state !== "draining" && generation.state !== "blocked")
         generation.state = "admission-closed";
       if (this.activeKey === identityKey(identity)) this.activeKey = undefined;
       if (wasActive) await this.persistActive(null);
@@ -551,7 +565,9 @@ export class AgentHostGenerationSupervisor {
         const generation = this.generations.get(identityKey(pin.generation));
         if (!generation || !sameManifest(generation.manifest, pin.generation)) {
           this.pinRevision = undefined;
-          throw new Error("Persisted Agent Host turn generation is unavailable");
+          throw new Error(
+            "Persisted Agent Host turn generation is unavailable",
+          );
         }
       }
       for (const pin of persistedPins.pins)
@@ -660,7 +676,9 @@ export class AgentHostGenerationSupervisor {
       if (existing) {
         const local = this.generations.get(identityKey(existing.generation));
         if (!local || !sameManifest(local.manifest, existing.generation))
-          throw new Error("Persisted Agent Host turn generation is unavailable");
+          throw new Error(
+            "Persisted Agent Host turn generation is unavailable",
+          );
         this.turnPins.set(fenceKey, existing);
         return this.snapshot(identityKey(existing.generation))!;
       }
@@ -717,8 +735,8 @@ export class AgentHostGenerationSupervisor {
       );
       if (!verified || !sameTurnPin(verified.pin, pin))
         throw new Error("Agent Host terminal receipt verification failed");
-      return this.persistPinRemoval((candidate) =>
-        turnFenceKey(candidate.fence) === fenceKey,
+      return this.persistPinRemoval(
+        (candidate) => turnFenceKey(candidate.fence) === fenceKey,
       );
     });
   }

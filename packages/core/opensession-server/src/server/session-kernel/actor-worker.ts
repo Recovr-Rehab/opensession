@@ -65,7 +65,9 @@ function routedStoreCall(
 export function startSessionKernelActorWorker(): void {
   const host = new SessionKernelStoreHost();
   function post(message: KernelActorResponse): void {
-    self.postMessage(message);
+    // Internal worker telemetry is consumed by the parent service and stripped
+    // before the actor response crosses the HTTP boundary.
+    self.postMessage({ ...message, workerMetrics: host.metrics() });
   }
 
   function executeCall(
@@ -307,6 +309,7 @@ export function startSessionKernelActorWorker(): void {
       const length = Buffer.byteLength(body);
       return { status: length > outputBytes ? 2 : 1, length, body };
     } catch (error) {
+      host.recordSqliteBusy(error);
       let failStop = false;
       let responseCode:
         | "actor_fatal"
@@ -463,6 +466,7 @@ export function startSessionKernelActorWorker(): void {
         });
       }
     } catch (error) {
+      host.recordSqliteBusy(error);
       const sessionId = request.t === "acknowledge" ? request.sessionId : undefined;
       const isolatedFailure =
         !!sessionId &&

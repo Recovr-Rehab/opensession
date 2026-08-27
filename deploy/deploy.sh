@@ -262,6 +262,28 @@ if ! cmp -s "$SESSION_KERNEL_UNIT_RENDERED" /etc/systemd/system/opensession-sess
 fi
 rm -f "$SESSION_KERNEL_UNIT_RENDERED"
 
+# Keep kernel capacity policy in a dedicated, non-secret drop-in. The actor
+# deliberately does not load the gateway's application/secrets environment.
+SESSION_KERNEL_CAPACITY_SOURCE="$REPO_DIR/deploy/systemd/opensession-session-kernel.service.d/capacity.conf"
+SESSION_KERNEL_CAPACITY_PATH="/etc/systemd/system/opensession-session-kernel.service.d/capacity.conf"
+[ ! -L "$(dirname "$SESSION_KERNEL_CAPACITY_PATH")" ] || {
+  echo "[deploy] ERROR: session kernel drop-in directory cannot be a symlink" >&2
+  exit 1
+}
+install -d -o root -g root -m 0755 "$(dirname "$SESSION_KERNEL_CAPACITY_PATH")"
+[ ! -L "$SESSION_KERNEL_CAPACITY_PATH" ] || {
+  echo "[deploy] ERROR: session kernel capacity drop-in cannot be a symlink" >&2
+  exit 1
+}
+if ! cmp -s "$SESSION_KERNEL_CAPACITY_SOURCE" "$SESSION_KERNEL_CAPACITY_PATH"; then
+  echo "[deploy] session kernel capacity override changed - syncing drop-in + daemon-reload"
+  install -o root -g root -m 0644 \
+    "$SESSION_KERNEL_CAPACITY_SOURCE" "$SESSION_KERNEL_CAPACITY_PATH"
+  systemctl daemon-reload
+  RESTART_KERNEL=1
+  RESTART_GATEWAY=1
+fi
+
 if [ "$RESTART_GATEWAY" = "1" ]; then
   # Drain before replacing the executor. The old gateway must not spend the
   # drain window talking to a newer, potentially incompatible launcher.

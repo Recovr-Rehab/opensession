@@ -4,6 +4,7 @@ import type {
   AgentHostReadinessCollectorDependencies,
 } from "./readiness-collector";
 import { decodeLinuxUcred } from "../security/transport/linux-peer-credentials";
+import type { ProductionSessionKernelReadinessFacade } from "./session-kernel-readiness";
 
 type MaybePromise<T> = T | Promise<T>;
 type Read<T> = (signal: AbortSignal) => MaybePromise<T>;
@@ -46,12 +47,7 @@ export interface ProductionLedgerReadinessOwner<T> {
   readiness(signal: AbortSignal): MaybePromise<T>;
 }
 
-export interface ProductionSessionKernelReadinessFacade {
-  readiness(signal: AbortSignal): MaybePromise<Readonly<{
-    schemaVersion: number;
-    cancellationAvailable: boolean;
-  }>>;
-}
+export type { ProductionSessionKernelReadinessFacade } from "./session-kernel-readiness";
 
 export interface ProductionRegistryCapacity {
   readonly size: number;
