@@ -11,7 +11,6 @@ import {
 import { cn } from "../../ui/cn";
 import { Tooltip } from "../../ui/tooltip";
 import {
-	IconArrowRight,
 	IconBranches,
 	IconCheck,
 	IconCheckCircleFilled,
@@ -114,6 +113,7 @@ export function SetupWidget({
 
 	const items = setupWidgetItems(setup.status, hasCreatedSession);
 	const completed = items.filter((item) => item.complete);
+	if (completed.length === items.length) return null;
 	const visibleItems = visibleSetupWidgetItems(items);
 
 	const progress = (completed.length / items.length) * 100;
@@ -123,7 +123,7 @@ export function SetupWidget({
 		<aside
 			aria-labelledby="sidebar-setup-title"
 			className={cn(
-				"z-30 rounded-2xl border border-divider-soft bg-blue-soft p-2 [backdrop-filter:var(--popup-blur)] smooth-shadow-sm",
+				"z-30 rounded-2xl border border-divider-soft bg-popup-glass p-2 [backdrop-filter:var(--popup-blur)] smooth-shadow-sm",
 				placement === "desktop"
 					? "fixed right-4 bottom-20 w-72"
 					: "mx-3 mt-3 mb-20 flex-none",
@@ -136,27 +136,29 @@ export function SetupWidget({
 				<h2 id="sidebar-setup-title" className="m-0 shrink-0 text-label font-semibold text-fg">
 					Get started
 				</h2>
-				<span className="shrink-0 tabular-nums text-meta text-faint">
-					{completed.length} of {items.length}
-				</span>
-				<div
-					role="progressbar"
-					aria-label="Setup progress"
-					aria-valuemin={0}
-					aria-valuemax={items.length}
-					aria-valuenow={completed.length}
-					className="h-1 w-8 shrink-0 overflow-hidden rounded-[999px] bg-active"
-				>
+				<div className="ml-auto flex shrink-0 items-center gap-2">
 					<div
-						className="h-full rounded-[999px] bg-accent"
-						style={{ width: `${progress}%` }}
-					/>
+						role="progressbar"
+						aria-label="Setup progress"
+						aria-valuemin={0}
+						aria-valuemax={items.length}
+						aria-valuenow={completed.length}
+						className="h-1 w-8 overflow-hidden rounded-[999px] bg-active"
+					>
+						<div
+							className="h-full rounded-[999px] bg-accent"
+							style={{ width: `${progress}%` }}
+						/>
+					</div>
+					<span className="tabular-nums text-meta text-faint">
+						{completed.length} of {items.length}
+					</span>
 				</div>
 				<Tooltip label="Dismiss">
 					<button
 						type="button"
 						aria-label="Dismiss setup checklist"
-						className="focus-ring ml-auto flex size-10 shrink-0 items-center justify-center rounded-control text-faint transition-[color,background-color,scale] duration-[var(--dur-micro)] hover:bg-hover hover:text-fg active:scale-[0.96] phone:size-11"
+						className="focus-ring flex size-10 shrink-0 items-center justify-center rounded-control text-faint transition-[color,background-color,scale] duration-[var(--dur-micro)] hover:bg-hover hover:text-fg active:scale-[0.96] phone:size-11"
 						onClick={() => {
 							dismissSetupWidget();
 							setDismissed(true);
@@ -212,15 +214,6 @@ export function SetupWidget({
 					/>
 				))}
 			</div>
-
-			<button
-				type="button"
-				className="focus-ring mt-1 flex min-h-10 w-full items-center gap-1 rounded-control px-2 text-left text-meta font-medium text-faint transition-[background-color,color,scale] duration-[var(--dur-micro)] hover:bg-hover hover:text-fg active:scale-[0.96] phone:min-h-11"
-				onClick={() => onOpenSettings("setup")}
-			>
-				<span>Open setup</span>
-				<IconArrowRight className="ml-auto" size={20} />
-			</button>
 		</aside>
 	);
 }
