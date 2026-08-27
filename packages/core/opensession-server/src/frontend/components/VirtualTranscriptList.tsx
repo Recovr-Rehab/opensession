@@ -16,6 +16,7 @@ import {
 	type TranscriptSizes,
 } from "../lib/transcript-sizes";
 import { newTailBlockKeys } from "../lib/transcript-block-identity";
+import { TranscriptTopApproachGate } from "../lib/transcript-top-approach";
 import {
 	registerTranscriptVirtualNavigation,
 	type TranscriptVirtualNavigation,
@@ -41,7 +42,7 @@ interface Props {
 	/** Fired when the reader climbs near the top of what is mounted, so a
 	 * caller loading history incrementally can hydrate the next page. */
 	onTopApproach?: () => void;
-	/** Re-evaluate top demand after the caller enables or retries loading. */
+	/** Re-evaluate visible demand after the caller enables or retries loading. */
 	topApproachGeneration?: number;
 	/** Head of the incrementally hydrated range window. */
 	topGrowthKey?: string | null;
@@ -99,11 +100,9 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	private container: HTMLDivElement | null = null;
 	private topApproachContainer: HTMLDivElement | null = null;
 	private topApproachCallback: (() => void) | undefined;
-	private topApproachGeneration: number | undefined;
-	private topApproachItemsLength = -1;
-	private topApproachFirstKey: string | undefined;
 	private topApproachTimer: number | undefined;
-	private topApproachLastFire = Number.NEGATIVE_INFINITY;
+	private topApproachTouchY: number | null = null;
+	private topApproachGate = new TranscriptTopApproachGate();
 	private rowObserver: ResizeObserver | null = null;
 	private rowRefs = new Map<string, (node: HTMLDivElement | null) => void>();
 	/** Every block key this adapter instance has ever mounted. The first build
@@ -315,10 +314,15 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	private evaluateTopApproach = () => {
 		const container = this.topApproachContainer;
 		const callback = this.topApproachCallback;
-		if (!container || !callback || container.scrollTop > container.clientHeight) return;
-		const now = performance.now();
-		if (now - this.topApproachLastFire < 900) return;
-		this.topApproachLastFire = now;
+		if (
+			!container ||
+			!callback ||
+			!this.topApproachGate.shouldFire(
+				container.scrollTop <= container.clientHeight,
+				performance.now(),
+			)
+		)
+			return;
 		callback();
 	};
 
@@ -330,14 +334,39 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		}, 100);
 	};
 
+	private requestTopApproach = () => {
+		this.topApproachGate.request();
+		this.onTopApproachScroll();
+	};
+
 	private onTopApproachWheel = (event: WheelEvent) => {
-		if (event.deltaY < 0) this.onTopApproachScroll();
+		if (event.deltaY < 0) this.requestTopApproach();
+	};
+
+	private onTopApproachTouchStart = (event: TouchEvent) => {
+		this.topApproachTouchY = event.touches[0]?.clientY ?? null;
+	};
+
+	private onTopApproachTouchMove = (event: TouchEvent) => {
+		const y = event.touches[0]?.clientY;
+		if (y === undefined || this.topApproachTouchY === null) return;
+		if (y > this.topApproachTouchY + 1) this.requestTopApproach();
+		this.topApproachTouchY = y;
 	};
 
 	private clearTopApproach() {
 		this.topApproachContainer?.removeEventListener("scroll", this.onTopApproachScroll);
 		this.topApproachContainer?.removeEventListener("wheel", this.onTopApproachWheel);
+		this.topApproachContainer?.removeEventListener(
+			"touchstart",
+			this.onTopApproachTouchStart,
+		);
+		this.topApproachContainer?.removeEventListener(
+			"touchmove",
+			this.onTopApproachTouchMove,
+		);
 		this.topApproachContainer = null;
+		this.topApproachTouchY = null;
 		if (this.topApproachTimer !== undefined) {
 			window.clearTimeout(this.topApproachTimer);
 			this.topApproachTimer = undefined;
@@ -348,31 +377,20 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		const container = this.scrollContainer();
 		const callback = this.props.onTopApproach;
 		const containerChanged = container !== this.topApproachContainer;
-		const wiringChanged =
-			containerChanged || callback !== this.topApproachCallback;
-		const firstKey = this.props.items[0]?.key;
-		if (
-			!wiringChanged &&
-			this.props.topApproachGeneration === this.topApproachGeneration &&
-			this.props.items.length === this.topApproachItemsLength &&
-			firstKey === this.topApproachFirstKey
-		)
-			return;
+		if (!containerChanged && callback === this.topApproachCallback) return;
 		this.clearTopApproach();
 		this.topApproachCallback = callback;
-		this.topApproachGeneration = this.props.topApproachGeneration;
-		this.topApproachItemsLength = this.props.items.length;
-		this.topApproachFirstKey = firstKey;
-		// Range completions change the generation, length, and first key together.
-		// Preserve the cooldown across those commits so a fast response cannot
-		// immediately chain another batch. A continued upward wheel gesture still
-		// re-evaluates demand even while native scrolling is pinned at scrollTop 0.
-		if (containerChanged) this.topApproachLastFire = Number.NEGATIVE_INFINITY;
+		if (containerChanged) this.topApproachGate.reset();
 		if (!container || !callback) return;
 		this.topApproachContainer = container;
 		container.addEventListener("scroll", this.onTopApproachScroll, { passive: true });
 		container.addEventListener("wheel", this.onTopApproachWheel, { passive: true });
-		this.evaluateTopApproach();
+		container.addEventListener("touchstart", this.onTopApproachTouchStart, {
+			passive: true,
+		});
+		container.addEventListener("touchmove", this.onTopApproachTouchMove, {
+			passive: true,
+		});
 	}
 
 	// Geometry reads and the near-visible filter run inside the debounce, not
