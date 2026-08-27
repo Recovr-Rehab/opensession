@@ -523,10 +523,13 @@ setBusy(false);
 	return (
 		<Popover.Root>
 			<Popover.Trigger
-				className="shrink-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]"
+				className={cn(
+					"shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]",
+					repo?.iconSource === "github" ? "rounded-full" : "rounded-sm",
+				)}
 				aria-label={`Change ${id}'s icon`}
 			>
-				<RepoTile name={id} size={28} glow={glow} />
+				<RepoTile name={id} size={28} glow={glow} className="border border-line" />
 			</Popover.Trigger>
 			<Popover.Popup className="w-[248px] p-3" initialFocus>
 				<div className="mb-2 text-meta font-medium text-dim">Icon</div>

@@ -147,7 +147,7 @@ function PreviewOverflow({
 		<span
 			className={cn(
 				"flex size-7 items-center justify-center rounded-full border text-meta font-semibold text-dim",
-				transparent ? "border-transparent bg-transparent" : "border-bg bg-bg/85",
+				transparent ? "border-transparent bg-transparent" : "border-line bg-bg/85",
 			)}
 		>
 			+{count}
@@ -264,7 +264,6 @@ function FirstMileSummary({
 							<RepoTile
 								name={repo.id}
 								size={28}
-								round
 								className="border border-line"
 							/>
 						</span>
