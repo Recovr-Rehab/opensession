@@ -402,7 +402,7 @@ setSaving(false);
 					title={title}
 					description={
 						inviteUrl
-							? "Add their GitHub account or copy a link for them to sign in."
+							? "Add their GitHub account or share the invite link."
 							: "They can sign in with this GitHub account."
 					}
 				/>
@@ -421,23 +421,33 @@ setSaving(false);
 					</Field>
 					{error && <InlineAlert>{error}</InlineAlert>}
 					{inviteUrl && (
-						<Button
-							variant="soft"
-							type="button"
-							className="w-full phone:min-h-11"
-							icon={
-								<CopyCheck
-									copied={inviteCopy.copied}
-									idle={<IconLink size={16} />}
-									size={16}
-								/>
-							}
-							onClick={() =>
-								inviteCopy.copy(inviteUrl, { toast: "Invite link copied" })
-							}
-						>
-							{inviteCopy.copied ? "Link copied" : "Copy invite link"}
-						</Button>
+						<>
+							<div
+								className="flex items-center gap-3 text-meta text-faint"
+								aria-hidden="true"
+							>
+								<span className="h-px flex-1 bg-divider-soft" />
+								<span>Or</span>
+								<span className="h-px flex-1 bg-divider-soft" />
+							</div>
+							<Button
+								variant="soft"
+								type="button"
+								className="w-full phone:min-h-11"
+								icon={
+									<CopyCheck
+										copied={inviteCopy.copied}
+										idle={<IconLink size={16} />}
+										size={16}
+									/>
+								}
+								onClick={() =>
+									inviteCopy.copy(inviteUrl, { toast: "Invite link copied" })
+								}
+							>
+								{inviteCopy.copied ? "Link copied" : "Copy invite link"}
+							</Button>
+						</>
 					)}
 					<Modal.Footer>
 						<Button
