@@ -72,6 +72,18 @@ class ReceiptVerifier implements AgentHostTurnReceiptVerifier {
           fence: { ...expectedPin.fence, runId: "different-run" },
         },
       };
+    if (receipt === "cross-generation-receipt")
+      return {
+        kind: "terminal",
+        receiptId: "cross-generation-receipt",
+        pin: {
+          ...expectedPin,
+          fence: {
+            ...expectedPin.fence,
+            generation: expectedPin.fence.generation + 1,
+          },
+        },
+      };
     if (receipt !== terminalReceipt) return false;
     return { kind: "terminal", receiptId: terminalReceipt, pin: expectedPin };
   }
@@ -89,6 +101,20 @@ class ReceiptVerifier implements AgentHostTurnReceiptVerifier {
         receiptId: "cross-session-receipt",
         sessionId: "different-session",
         pins: expectedPins,
+      };
+    if (receipt === "cross-generation-deletion")
+      return {
+        kind: "session-deletion",
+        receiptId: "cross-generation-deletion",
+        sessionId: expectedSessionId,
+        pins: expectedPins.map((pin, index) =>
+          index === 0
+            ? {
+                ...pin,
+                fence: { ...pin.fence, generation: pin.fence.generation + 1 },
+              }
+            : pin,
+        ),
       };
     if (receipt !== deletionReceipt) return false;
     return {
@@ -133,7 +159,13 @@ function turn(
   turnId: string,
   overrides: Partial<AgentHostTurnFence> = {},
 ): AgentHostTurnFence {
-  return { sessionId: "session-1", runId: "run-1", turnId, ...overrides };
+  return {
+    sessionId: "session-1",
+    runId: "run-1",
+    turnId,
+    generation: 1,
+    ...overrides,
+  };
 }
 
 function supervisor(
@@ -184,7 +216,17 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
     await readyAndRecover(authority, blue);
     await authority.promote(blue);
     await expect(
-      authority.admitNewTurn({ sessionId: "session", runId: "run", turnId: "" }),
+      authority.admitNewTurn({
+        sessionId: "session",
+        runId: "run",
+        turnId: "",
+        generation: 1,
+      }),
+    ).rejects.toThrow("Invalid Agent Host turn fence");
+    await expect(
+      authority.admitNewTurn(
+        turn("unsafe", { generation: Number.MAX_SAFE_INTEGER + 1 }),
+      ),
     ).rejects.toThrow("Invalid Agent Host turn fence");
   });
 
@@ -205,7 +247,9 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
     const restarted = supervisor(clock, admission, pins);
     await readyAndRecover(restarted, blue, green);
     expect(restarted.targetForExistingTurn(blueTurn, blue).generation).toBe(1);
-    expect((await restarted.admitNewTurn(turn("turn-green"))).generation).toBe(2);
+    expect((await restarted.admitNewTurn(turn("turn-green"))).generation).toBe(
+      2,
+    );
     expect(() => restarted.targetForExistingTurn(blueTurn, green)).toThrow(
       "Stale",
     );
@@ -218,6 +262,41 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
       [blue.releaseDigest, 1],
       [green.releaseDigest, 2],
     ]);
+  });
+
+  test("same logical turn IDs in different run generations remain distinct", async () => {
+    const admission = new AdmissionStorage();
+    const pins = new PinStorage();
+    const blue = manifest(1);
+    const green = manifest(2);
+    const firstGeneration = turn("reused", { generation: 41 });
+    const nextGeneration = turn("reused", { generation: 42 });
+    const authority = supervisor(new Clock(), admission, pins);
+    await readyAndRecover(authority, blue, green);
+    await authority.promote(blue);
+    expect((await authority.admitNewTurn(firstGeneration)).generation).toBe(1);
+    await authority.promote(green);
+    expect((await authority.admitNewTurn(nextGeneration)).generation).toBe(2);
+
+    expect(
+      authority.targetForExistingTurn(firstGeneration, blue).generation,
+    ).toBe(1);
+    expect(
+      authority.targetForExistingTurn(nextGeneration, green).generation,
+    ).toBe(2);
+    expect(() => authority.targetForExistingTurn(nextGeneration, blue)).toThrow(
+      "Stale",
+    );
+    expect((pins.value as PersistedTurnPins).pins).toHaveLength(2);
+
+    const restarted = supervisor(new Clock(), admission, pins);
+    await readyAndRecover(restarted, blue, green);
+    expect(
+      restarted.targetForExistingTurn(firstGeneration, blue).generation,
+    ).toBe(1);
+    expect(
+      restarted.targetForExistingTurn(nextGeneration, green).generation,
+    ).toBe(2);
   });
 
   test("terminal evidence releases exactly one turn and permits retirement", async () => {
@@ -236,7 +315,9 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
     await authority.admitNewTurn(owned);
     await authority.promote(green);
     await expect(authority.retire(blue)).rejects.toThrow("owned");
-    expect(await authority.releaseTurn(owned, blue, terminalReceipt)).toBe(true);
+    expect(await authority.releaseTurn(owned, blue, terminalReceipt)).toBe(
+      true,
+    );
     await authority.retire(blue);
     expect(controller.stops).toEqual([blue]);
   });
@@ -256,11 +337,14 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
         evidenceId: "caller-asserted",
       },
       "cross-fence-receipt",
+      "cross-generation-receipt",
       "stale-receipt",
       "ambiguous-receipt",
     ];
     for (const receipt of failures) {
-      await expect(authority.releaseTurn(owned, blue, receipt)).rejects.toThrow();
+      await expect(
+        authority.releaseTurn(owned, blue, receipt),
+      ).rejects.toThrow();
       expect(authority.targetForExistingTurn(owned, blue).generation).toBe(1);
     }
   });
@@ -278,21 +362,55 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
     for (const receipt of [
       { authenticated: true, durable: true },
       "cross-session-receipt",
+      "cross-generation-deletion",
       "stale-receipt",
       "ambiguous-receipt",
     ]) {
       await expect(
         authority.releaseSessionTurns("session-1", receipt),
       ).rejects.toThrow();
-      expect(authority.targetForExistingTurn(turn("one"), blue).generation).toBe(1);
+      expect(
+        authority.targetForExistingTurn(turn("one"), blue).generation,
+      ).toBe(1);
     }
-    expect(await authority.releaseSessionTurns("session-1", deletionReceipt)).toBe(2);
-    expect(() => authority.targetForExistingTurn(turn("one"), blue)).toThrow("Stale");
+    expect(
+      await authority.releaseSessionTurns("session-1", deletionReceipt),
+    ).toBe(2);
+    expect(() => authority.targetForExistingTurn(turn("one"), blue)).toThrow(
+      "Stale",
+    );
     expect(
       authority.targetForExistingTurn(
         turn("other", { sessionId: "session-2", runId: "run-2" }),
         blue,
       ).generation,
+    ).toBe(1);
+  });
+
+  test("terminal and deletion receipts cannot cross reused run generations", async () => {
+    const authority = supervisor();
+    const blue = manifest(1);
+    const firstGeneration = turn("same", { generation: 7 });
+    const nextGeneration = turn("same", { generation: 8 });
+    await readyAndRecover(authority, blue);
+    await authority.promote(blue);
+    await authority.admitNewTurn(firstGeneration);
+    await authority.admitNewTurn(nextGeneration);
+
+    await expect(
+      authority.releaseTurn(firstGeneration, blue, "cross-generation-receipt"),
+    ).rejects.toThrow("terminal receipt verification failed");
+    expect(
+      authority.targetForExistingTurn(nextGeneration, blue).generation,
+    ).toBe(1);
+    await expect(
+      authority.releaseSessionTurns("session-1", "cross-generation-deletion"),
+    ).rejects.toThrow("deletion receipt verification failed");
+    expect(
+      authority.targetForExistingTurn(firstGeneration, blue).generation,
+    ).toBe(1);
+    expect(
+      authority.targetForExistingTurn(nextGeneration, blue).generation,
     ).toBe(1);
   });
 
@@ -305,7 +423,9 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
     await readyAndRecover(first, blue);
     await first.promote(blue);
     pins.throwAfterCommit = true;
-    await expect(first.admitNewTurn(owned)).rejects.toThrow("simulated process crash");
+    await expect(first.admitNewTurn(owned)).rejects.toThrow(
+      "simulated process crash",
+    );
 
     const restarted = supervisor(new Clock(), admission, pins);
     await readyAndRecover(restarted, blue);
@@ -324,13 +444,27 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
     await left.promote(blue);
     await right.recoverAdmission();
 
+    const firstGeneration = turn("race", { generation: 1 });
+    const nextGeneration = turn("race", { generation: 2 });
     const results = await Promise.allSettled([
-      left.admitNewTurn(turn("race-a")),
-      right.admitNewTurn(turn("race-b")),
+      left.admitNewTurn(firstGeneration),
+      right.admitNewTurn(nextGeneration),
     ]);
-    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
-    expect((pins.value as PersistedTurnPins).pins).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+    const persisted = pins.value as PersistedTurnPins;
+    expect(persisted.pins).toHaveLength(1);
+    expect([1, 2]).toContain(persisted.pins[0]!.fence.generation);
+
+    const restarted = supervisor(new Clock(), admission, pins);
+    await readyAndRecover(restarted, blue);
+    await restarted.admitNewTurn(firstGeneration);
+    await restarted.admitNewTurn(nextGeneration);
+    expect((pins.value as PersistedTurnPins).pins).toHaveLength(2);
   });
 
   test("24h deadline reports blocked/indeterminate and never retires or reassigns", async () => {
@@ -349,7 +483,9 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
     expect(authority.snapshot(blue)?.state).toBe("blocked");
     expect(authority.targetForExistingTurn(owned, blue).generation).toBe(1);
     await expect(authority.retire(blue)).rejects.toThrow("owned");
-    expect(authority.deletionBroadcastTargets().map((item) => item.generation)).toContain(1);
+    expect(
+      authority.deletionBroadcastTargets().map((item) => item.generation),
+    ).toContain(1);
   });
 
   test("tamper, stale generation, and session/run crossover fail closed", async () => {
@@ -382,8 +518,12 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
     };
     const tampered = supervisor(new Clock(), admission, pins);
     await ready(tampered, blue);
-    await expect(tampered.recoverAdmission()).rejects.toThrow("Invalid persisted Agent Host turn pins");
-    await expect(tampered.admitNewTurn(turn("closed"))).rejects.toThrow("admission is closed");
+    await expect(tampered.recoverAdmission()).rejects.toThrow(
+      "Invalid persisted Agent Host turn pins",
+    );
+    await expect(tampered.admitNewTurn(turn("closed"))).rejects.toThrow(
+      "admission is closed",
+    );
 
     pins.value = {
       ...persisted,
@@ -410,6 +550,18 @@ describe("AgentHostGenerationSupervisor durable turn ownership", () => {
     const staleEpoch = supervisor(new Clock(), admission, pins);
     await ready(staleEpoch, blue);
     await expect(staleEpoch.recoverAdmission()).rejects.toThrow(
+      "Invalid persisted Agent Host turn pins",
+    );
+
+    const { generation: _staleGeneration, ...threeFieldFence } =
+      persisted.pins[0]!.fence;
+    pins.value = {
+      ...persisted,
+      pins: [{ ...persisted.pins[0], fence: threeFieldFence }],
+    };
+    const legacyPin = supervisor(new Clock(), admission, pins);
+    await ready(legacyPin, blue);
+    await expect(legacyPin.recoverAdmission()).rejects.toThrow(
       "Invalid persisted Agent Host turn pins",
     );
   });
