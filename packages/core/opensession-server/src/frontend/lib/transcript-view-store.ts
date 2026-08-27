@@ -84,8 +84,8 @@ export class TranscriptViewStore {
 	}
 
 	/** Merge one server range, whose durable rows are ordered by immutable seq.
-	 * Rebuild the seq spine with a linear merge instead of sorting every loaded
-	 * transcript entry again for each hydration response. */
+	 * Splice its bounded seq window, or linearly rebuild a mixed decoration spine,
+	 * instead of sorting every loaded entry again for each hydration response. */
 	mergeRange(entries: TranscriptEntry[], immediate = false) {
 		if (entries.length === 0) return;
 		if (entries.some((entry) => entry.seq === undefined)) {
@@ -93,9 +93,7 @@ export class TranscriptViewStore {
 			return;
 		}
 
-		const previousPositions = new Map(
-			this.orderedIds.map((id, index) => [id, index]),
-		);
+		let canSplice = !this.hasUnsequenced;
 		const acceptedIds = new Set<string>();
 		const arrivalPositions = new Map<string, number>();
 		for (let index = 0; index < entries.length; index++) {
@@ -107,6 +105,10 @@ export class TranscriptViewStore {
 				entry.changeSeq < current.changeSeq
 			)
 				continue;
+			// Durable seq is immutable. Keep the general rebuild as a safe fallback
+			// if a malformed replacement ever violates that invariant.
+			if (current?.seq !== undefined && current.seq !== entry.seq)
+				canSplice = false;
 			this.byId.set(entry.id, entry);
 			acceptedIds.add(entry.id);
 			if (!arrivalPositions.has(entry.id))
@@ -114,6 +116,61 @@ export class TranscriptViewStore {
 		}
 		if (acceptedIds.size === 0) return;
 
+		const rangeIds = [...acceptedIds].sort(
+			(a, b) => this.byId.get(a)!.seq! - this.byId.get(b)!.seq!,
+		);
+		if (canSplice) {
+			const firstSeq = this.byId.get(rangeIds[0]!)!.seq!;
+			const lastSeq = this.byId.get(rangeIds[rangeIds.length - 1]!)!.seq!;
+			let low = 0;
+			let high = this.orderedIds.length;
+			while (low < high) {
+				const middle = (low + high) >>> 1;
+				if (this.byId.get(this.orderedIds[middle]!)!.seq! < firstSeq)
+					low = middle + 1;
+				else high = middle;
+			}
+			const start = low;
+			high = this.orderedIds.length;
+			while (low < high) {
+				const middle = (low + high) >>> 1;
+				if (this.byId.get(this.orderedIds[middle]!)!.seq! <= lastSeq)
+					low = middle + 1;
+				else high = middle;
+			}
+			const end = low;
+			const existingIds = this.orderedIds
+				.slice(start, end)
+				.filter((id) => !acceptedIds.has(id));
+			const mergedIds: string[] = [];
+			let existingIndex = 0;
+			let rangeIndex = 0;
+			while (
+				existingIndex < existingIds.length || rangeIndex < rangeIds.length
+			) {
+				const existingId = existingIds[existingIndex];
+				const rangeId = rangeIds[rangeIndex];
+				if (
+					rangeId === undefined ||
+					(existingId !== undefined &&
+						this.byId.get(existingId)!.seq! <= this.byId.get(rangeId)!.seq!)
+				) {
+					mergedIds.push(existingId!);
+					existingIndex++;
+				} else {
+					mergedIds.push(rangeId);
+					rangeIndex++;
+				}
+			}
+			this.orderedIds.splice(start, end - start, ...mergedIds);
+			this.lastSeq = Math.max(this.lastSeq, lastSeq);
+			this.commit(immediate);
+			return;
+		}
+
+		const previousPositions = new Map(
+			this.orderedIds.map((id, index) => [id, index]),
+		);
 		type SequencedId = { id: string; seq: number; position: number };
 		const existingSpine: SequencedId[] = [];
 		const decorations: string[] = [];
@@ -125,17 +182,11 @@ export class TranscriptViewStore {
 			if (entry.seq === undefined) decorations.push(id);
 			else existingSpine.push({ id, seq: entry.seq, position: index });
 		}
-		const rangeSpine = [...acceptedIds]
-			.map((id): SequencedId => {
-				const entry = this.byId.get(id)!;
-				return {
-					id,
-					seq: entry.seq!,
-					position:
-						previousPositions.get(id) ?? arrivalPositions.get(id)!,
-				};
-			})
-			.sort((a, b) => a.seq - b.seq || a.position - b.position);
+		const rangeSpine = rangeIds.map((id): SequencedId => ({
+			id,
+			seq: this.byId.get(id)!.seq!,
+			position: previousPositions.get(id) ?? arrivalPositions.get(id)!,
+		}));
 
 		const sequencedIds: string[] = [];
 		let existingIndex = 0;
