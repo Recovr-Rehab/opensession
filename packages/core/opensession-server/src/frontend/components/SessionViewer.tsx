@@ -518,6 +518,9 @@ interface Props {
 	 */
 	workspaceName?: string;
 	onRenameWorkspace?: (name: string) => void;
+	/** The header overflow is workspace-scoped; session lifecycle belongs to its tab. */
+	onArchiveWorkspace?: () => void;
+	onDeleteWorkspace?: () => void | Promise<void>;
 	/** Sibling sessions in this session's workspace (the tab strip's list, oldest
 	    first) — feeds the floating overview panel's cross-session media. */
 	workspaceSessions?: UnifiedSession[];
@@ -775,6 +778,8 @@ export function SessionViewer({
 	onRename,
 	workspaceName,
 	onRenameWorkspace,
+	onArchiveWorkspace,
+	onDeleteWorkspace,
 	workspaceSessions,
 	onSetStatus,
 	allSessions,
@@ -5093,6 +5098,16 @@ export function SessionViewer({
 		send({ type: "cancel", sessionId: session.id });
 	}
 
+	function handleShareWorkspace() {
+		const path = session.workspaceId
+			? `${BASE_PATH}/workspace/${encodeURIComponent(session.workspaceId)}`
+			: sessionPath(session);
+		shareLink(absoluteLink(path), {
+			toast: "Link copied",
+			title: workspaceName || session.title || undefined,
+		});
+	}
+
 	function handleShare() {
 		// Share the workspace pane on screen rather than the session that happened
 		// to host it. Session and sub-agent links keep their existing canonical form.
@@ -5140,7 +5155,7 @@ export function SessionViewer({
 			// every sibling session picks the new name up. Session titles live on tabs.
 			// A worker's header titles the WORKER (the workspace is the crumb before
 			// it), so the same edit there renames just this session.
-			if (workspaceName && !parentSession && onRenameWorkspace)
+			if (session.workspaceId && onRenameWorkspace)
 				onRenameWorkspace(renameDraft.trim());
 			else onRename?.(session.id, renameDraft.trim());
 		}
@@ -5948,6 +5963,7 @@ export function SessionViewer({
 				</Modal.Content>
 			</Modal.Root>
 			{!hideHeader && (() => {
+				const workspaceScopedMenu = Boolean(session.workspaceId);
 				const addToSidebarAction = (inMenu: boolean) =>
 					canAddToSidebar &&
 					(inMenu ? (
@@ -5975,9 +5991,22 @@ export function SessionViewer({
 				// copied confirmation is CopyCheck's green checkmark in both.
 				const shareAction = (inMenu: boolean) =>
 					inMenu ? (
-						<Menu.Item onClick={handleShare} title="Copy a link to this session">
+						<Menu.Item
+							onClick={workspaceScopedMenu ? handleShareWorkspace : handleShare}
+							title={
+								workspaceScopedMenu
+									? "Copy a link to this workspace"
+									: "Copy a link to this session"
+							}
+						>
 							<CopyCheck copied={copied} idle={<IconLink size={20} />} size={20} className={MENU_ICON} />
-							<span className="grow">{copied ? "Copied" : "Share"}</span>
+							<span className="grow">
+								{copied
+									? "Copied"
+									: workspaceScopedMenu
+										? "Share workspace"
+										: "Share"}
+							</span>
 						</Menu.Item>
 					) : (
 						<Button
@@ -6159,14 +6188,14 @@ export function SessionViewer({
 							<Menu.Item
 								onClick={() => setRenameDraft(workspaceName || session.title)}
 								title={
-									workspaceName
+									workspaceScopedMenu
 										? "Rename this workspace"
 										: "Rename this session"
 								}
 							>
 								<IconPencil size={20} className={MENU_ICON} />
 								<span className="grow">
-									{workspaceName ? "Rename workspace" : "Rename session"}
+									{workspaceScopedMenu ? "Rename workspace" : "Rename session"}
 								</span>
 							</Menu.Item>
 						)}
@@ -6250,6 +6279,29 @@ export function SessionViewer({
 						<span className="grow">Delete session</span>
 					</Menu.Item>
 				);
+				const workspaceLifecycleActions = workspaceScopedMenu && (
+					<>
+						{onArchiveWorkspace && (workspaceSessions?.length ?? 0) > 0 && (
+							<Menu.Item onClick={onArchiveWorkspace}>
+								<IconArchive size={20} className={MENU_ICON} />
+								<span className="grow">Archive workspace</span>
+							</Menu.Item>
+						)}
+						{onDeleteWorkspace && (
+							<Menu.Item
+								className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+								onClick={() => {
+									const message = `Delete workspace "${workspaceName || session.title}"? Its sessions become standalone.`;
+									if (window.confirm(message)) void onDeleteWorkspace();
+								}}
+								title="Delete workspace"
+							>
+								<IconTrash size={20} />
+								<span className="grow">Delete workspace</span>
+							</Menu.Item>
+						)}
+					</>
+				);
 				// Secondary header controls (Linear/Plain links). Inline on desktop;
 				// on phones they fold into the ⋯ menu so the single top bar holds only
 				// ⋯ + the Workspace toggle beside the centered title. The code
@@ -6261,7 +6313,7 @@ export function SessionViewer({
 						    beside the workspace name on desktop — it names the session, it
 						    isn't an action. .viewer-title is hidden on phones, so the ⋯
 						    menu keeps carrying it there. */}
-						{session.automation && inMenu && (
+						{session.automation && inMenu && !workspaceScopedMenu && (
 							<Menu.Item
 								render={<a href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`} />}
 								title={session.automation}
@@ -6370,9 +6422,9 @@ export function SessionViewer({
 								{(compactHeader || isPhone) && shareAction(true)}
 								<Menu.Separator className={VIEWER_MENU_SEP} />
 								{newSessionAction}
-								{forkAction}
-								{spinOffAction}
-								{transcriptActions}
+								{!workspaceScopedMenu && forkAction}
+								{!workspaceScopedMenu && spinOffAction}
+								{!workspaceScopedMenu && transcriptActions}
 								{portalsAction}
 								{branchAction && (
 									<>
@@ -6384,8 +6436,14 @@ export function SessionViewer({
 								{isPhone && secondaryActions(true)}
 								{archivedActions}
 								<Menu.Separator className={VIEWER_MENU_SEP} />
-								{(!isPhone || session.archived) && archiveAction}
-								{deleteAction}
+								{workspaceScopedMenu
+									? workspaceLifecycleActions
+									: (
+										<>
+											{(!isPhone || session.archived) && archiveAction}
+											{deleteAction}
+										</>
+									)}
 							</Menu.Popup>
 						</div>
 					</Menu.Root>

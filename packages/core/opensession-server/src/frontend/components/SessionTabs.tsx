@@ -17,9 +17,11 @@ import {
 	IconPlus,
 	IconSidebarLeft,
 	IconSidebarRight,
+	IconTrash,
 	IconX,
 } from "./icons";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
+import { DeleteSessionDialog } from "./DeleteSessionDialog";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { UserAvatar } from "./UserAvatar";
 import {
@@ -66,7 +68,7 @@ import { shouldShowTabStrip } from "../lib/split-tabs";
  *
  * There is no pinning here anymore (pinning moved to the sidebar). Right-click
  * opens a context menu (rename / copy concise or full transcript / copy link /
- * tab color / close); double-click the title also renames the session. The +
+ * tab color / close / delete); double-click the title also renames the session. The +
  * button starts a new session in this workspace sharing its worktree;
  * right-clicking + offers the other modes (stacked worktree / ask).
  *
@@ -187,6 +189,8 @@ interface Props {
 	onRename: (id: string, title: string) => void;
 	/** Close (archive) a session — the × revealed on hover. */
 	onClose: (session: UnifiedSession) => void;
+	/** Permanently delete a session from its tab's context menu. */
+	onDelete?: (session: UnifiedSession, cleanWorktree: boolean) => void | Promise<void>;
 	/** Un-archive a session from the history menu, back into the strip. */
 	onRestore: (session: UnifiedSession) => void;
 	/** Report a copy action's outcome ("Link copied", …). */
@@ -290,6 +294,7 @@ export function SessionTabs({
 	morphOrigin,
 	onRename,
 	onClose,
+	onDelete,
 	onRestore,
 	onToast,
 }: Props) {
@@ -298,6 +303,8 @@ export function SessionTabs({
 	const reducedMotion = useReducedMotion();
 	const [editKey, setEditKey] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
+	const [deleteTarget, setDeleteTarget] = useState<UnifiedSession | null>(null);
+	const [deleting, setDeleting] = useState(false);
 	// On phones the +/history controls ride INSIDE the scroll (see below) so the
 	// tab strip claims the full width instead of losing it to pinned chrome; on
 	// desktop they stay pinned after the last tab. Icons run a touch bigger on
@@ -403,6 +410,20 @@ export function SessionTabs({
 	function commitRename() {
 		if (editKey !== null) onRename(editKey, draft.trim());
 		setEditKey(null);
+	}
+
+	async function deleteSession(cleanWorktree: boolean) {
+		if (!deleteTarget || !onDelete || deleting) return;
+		setDeleting(true);
+		const deleted = await Promise.resolve()
+			.then(() => onDelete(deleteTarget, cleanWorktree))
+			.then(() => true)
+			.catch((error) => {
+				onToast(error instanceof Error ? error.message : "Delete failed");
+				return false;
+			});
+		setDeleting(false);
+		if (deleted) setDeleteTarget(null);
 	}
 
 	// Closed sessions of this workspace, if there are any to offer.
@@ -789,6 +810,15 @@ export function SessionTabs({
 												<ContextMenu.Shortcut>{closeLabel}</ContextMenu.Shortcut>
 											)}
 										</ContextMenu.Item>
+										{onDelete && (
+											<ContextMenu.Item
+												className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+												onClick={() => setDeleteTarget(session)}
+											>
+												<IconTrash size={20} />
+												<span className="grow">Delete session</span>
+											</ContextMenu.Item>
+										)}
 									</ContextMenu.Popup>
 								</ContextMenu.Root>
 							</ReorderTabItem>
@@ -804,7 +834,19 @@ export function SessionTabs({
 				    visible — never scrolled off when the tabs overflow a narrow pane. */}
 			{!isPhone && newTabButton}
 			{!isPhone && <div className={TAB_ACTIONS}>{historyMenu}</div>}
-
+			{deleteTarget && (
+				<DeleteSessionDialog
+					open
+					onOpenChange={(open) => {
+						if (!open && !deleting) setDeleteTarget(null);
+					}}
+					hasWorktree={Boolean(
+						deleteTarget.worktreeDir && deleteTarget.mode !== "ask"
+					)}
+					deleting={deleting}
+					onDelete={(cleanWorktree) => void deleteSession(cleanWorktree)}
+				/>
+			)}
 		</div>
 	);
 }

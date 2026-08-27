@@ -3739,6 +3739,7 @@ console.error("Rename failed:", e);
 					refresh();
 				}}
 				onClose={closeSession}
+				onDelete={deleteSessionFromTab}
 				onToast={showToast}
 				onRestore={restoreSession}
 			/>
@@ -4172,8 +4173,59 @@ if (siblingCreateRef.current === optimisticId)
 	};
 	const confirmRunningClose = (session: UnifiedSession, onConfirm: () => void) =>
 		confirmRunningCloses([session], onConfirm);
+	const archiveWorkspaceFromHeader = (members: UnifiedSession[]) => {
+		if (!members.length) return;
+		confirmRunningCloses(members, () => {
+			void (async () => {
+				goBack();
+				for (const member of members) {
+					patch(member.id, { archived: true, archivedReason: "manual" });
+				}
+				try {
+					await Promise.all(
+						members.map((member) => archiveSessionApi(member.id, true)),
+					);
+					rememberArchived(members.map((member) => member.id));
+					dropStalePins(members);
+					refresh();
+				} catch (error) {
+					console.error("Archive workspace failed:", error);
+					for (const member of members) {
+						patch(member.id, {
+							archived: false,
+							archivedReason: undefined,
+						});
+					}
+				}
+			})();
+		});
+	};
+	const deleteWorkspaceFromHeader = async (workspaceId: string) => {
+		await deleteWorkspaceApi(workspaceId);
+		refreshWorkspaces();
+		refresh();
+		if (route.view === "workspace" && route.id === workspaceId) goBack();
+	};
 	const closeSession = (s: UnifiedSession) =>
 		confirmRunningClose(s, () => void closeSessionNow(s));
+	const deleteSessionFromTab = async (
+		session: UnifiedSession,
+		cleanWorktree: boolean,
+	) => {
+		const wasOpen = currentSession?.id === session.id;
+		const next = wasOpen
+			? workspaceSessions.find((candidate) => candidate.id !== session.id)
+			: undefined;
+		await deleteSessionApi(session.id, cleanWorktree);
+		remove(session.id);
+		if (wasOpen) {
+			if (next) navigate({ view: "session", id: next.id });
+			else if (activeWorkspaceId)
+				navigate({ view: "workspace", id: activeWorkspaceId });
+			else goBack();
+		}
+		refresh();
+	};
 	const selectSessionTab = (next: UnifiedSession) => {
 		const empty =
 			currentSession &&
@@ -4984,7 +5036,8 @@ console.error("Rename failed:", error);
 				}}
 				workspaceName={
 					activeWorkspaceId
-						? workspaces.find((project) => project.id === activeWorkspaceId)?.name
+						? workspaces.find((project) => project.id === activeWorkspaceId)?.name ??
+							viewerSession.workspaceName
 						: undefined
 				}
 				onRenameWorkspace={
@@ -4997,6 +5050,16 @@ console.error("Rename workspace failed:", error);
 });
 								refreshWorkspaces();
 							}
+						: undefined
+				}
+				onArchiveWorkspace={
+					activeWorkspaceId
+						? () => archiveWorkspaceFromHeader(workspaceSessions)
+						: undefined
+				}
+				onDeleteWorkspace={
+					activeWorkspaceId
+						? () => deleteWorkspaceFromHeader(activeWorkspaceId)
 						: undefined
 				}
 			/>
@@ -5692,16 +5755,14 @@ console.error("Rename workspace failed:", error);
 });
 										refreshWorkspaces();
 									}}
-									onArchiveSession={(session, archived) => {
-										if (archived) closeSession(session);
-										else void unarchiveSessions([session]);
-									}}
-									onDeleteSession={async (session, cleanWorktree) => {
-										await deleteSessionApi(session.id, cleanWorktree);
-										remove(session.id);
-										refresh();
-									}}
-									onOpenNewSession={openPrefilledSession}
+									archivedSessions={archivedSessions}
+									onRestoreSession={restoreSession}
+									onArchiveWorkspace={() =>
+										archiveWorkspaceFromHeader(workspaceSessions)
+									}
+									onDeleteWorkspace={() =>
+										deleteWorkspaceFromHeader(routeWorkspace.id)
+									}
 									rightPanelEl={rightPanelEl}
 								/>
 							) : workspacesLoaded ? (
