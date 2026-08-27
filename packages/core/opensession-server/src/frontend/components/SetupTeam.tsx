@@ -420,54 +420,34 @@ setSaving(false);
 						/>
 					</Field>
 					{error && <InlineAlert>{error}</InlineAlert>}
+					<Button
+						variant="primary"
+						type="submit"
+						className="w-full phone:min-h-11"
+						disabled={!github.trim() || saving}
+					>
+						{saving ? "Adding…" : actionLabel}
+					</Button>
 					{inviteUrl && (
-						<>
-							<div
-								className="flex items-center gap-3 text-meta text-faint"
-								aria-hidden="true"
-							>
-								<span className="h-px flex-1 bg-divider-soft" />
-								<span>Or</span>
-								<span className="h-px flex-1 bg-divider-soft" />
-							</div>
-							<Button
-								variant="soft"
-								type="button"
-								className="w-full phone:min-h-11"
-								icon={
-									<CopyCheck
-										copied={inviteCopy.copied}
-										idle={<IconLink size={16} />}
-										size={16}
-									/>
-								}
-								onClick={() =>
-									inviteCopy.copy(inviteUrl, { toast: "Invite link copied" })
-								}
-							>
-								{inviteCopy.copied ? "Link copied" : "Copy invite link"}
-							</Button>
-						</>
-					)}
-					<Modal.Footer>
-						<Button
-							variant="ghost"
-							type="button"
-							className="phone:min-h-11"
-							disabled={saving}
-							onClick={() => onOpenChange(false)}
-						>
-							Cancel
-						</Button>
 						<Button
 							variant="primary"
-							type="submit"
-							className="phone:min-h-11"
-							disabled={!github.trim() || saving}
+							type="button"
+							className="w-full phone:min-h-11"
+							icon={
+								<CopyCheck
+									copied={inviteCopy.copied}
+									idle={<IconLink size={16} />}
+									size={16}
+									checkClassName="text-on-accent"
+								/>
+							}
+							onClick={() =>
+								inviteCopy.copy(inviteUrl, { toast: "Invite link copied" })
+							}
 						>
-							{saving ? "Adding…" : actionLabel}
+							{inviteCopy.copied ? "Invite link copied" : "Or copy invite link"}
 						</Button>
-					</Modal.Footer>
+					)}
 				</form>
 			</Modal.Content>
 		</Modal.Root>
