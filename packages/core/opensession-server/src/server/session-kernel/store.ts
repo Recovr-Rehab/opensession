@@ -2344,15 +2344,38 @@ export class SessionKernelStore {
 	}
 
 	runState(sessionId: string): DurableRunState {
-		const state = this.runStateCache.get(sessionId);
-		return state
-			? { ...state }
-			: {
-					state: "idle",
-					since: new Date(0).toISOString(),
-					generation: 0,
-					changeSeq: 0,
-				};
+		// Global compatibility turns can mutate an isolated session through the
+		// catalog lane while its stable session lane still has the same database
+		// open. The mailbox barrier serializes those writers, but it cannot refresh
+		// another worker's in-memory cache. Read the durable row before deriving the
+		// next change sequence so a later session turn never reuses a journal key.
+		const row = this.db
+			.query(
+				`SELECT run_state, run_since, last_event, generation,
+				 current_run_id, change_seq FROM session_kernel_state
+				 WHERE session_id = ?`,
+			)
+			.get(sessionId) as Record<string, unknown> | null;
+		if (!row) {
+			this.runStateCache.delete(sessionId);
+			return {
+				state: "idle",
+				since: new Date(0).toISOString(),
+				generation: 0,
+				changeSeq: 0,
+			};
+		}
+		const state: DurableRunState = {
+			state: String(row.run_state),
+			since: String(row.run_since),
+			lastEvent: row.last_event == null ? undefined : String(row.last_event),
+			generation: Number(row.generation),
+			currentRunId:
+				row.current_run_id == null ? undefined : String(row.current_run_id),
+			changeSeq: Number(row.change_seq),
+		};
+		this.runStateCache.set(sessionId, state);
+		return { ...state };
 	}
 
 	runStates(): Array<DurableRunState & { sessionId: string }> {
@@ -3740,9 +3763,14 @@ export class SessionKernelStore {
 	}): DurableRunState {
 		const now = Date.now();
 		const since = new Date(now).toISOString();
+		let next!: DurableRunState;
 		const tx = this.db.transaction(() => {
 			const prior = this.runState(input.sessionId);
 			const changeSeq = prior.changeSeq + 1;
+			const generation = input.generation ?? prior.generation;
+			const currentRunId = ["idle", "stopped", "failed"].includes(input.state)
+				? undefined
+				: (input.currentRunId ?? prior.currentRunId);
 			this.db.run(
 				`INSERT INTO session_kernel_state
 					(session_id, run_state, run_since, last_event, generation,
@@ -3761,10 +3789,8 @@ export class SessionKernelStore {
 					input.state,
 					since,
 					input.event,
-					input.generation ?? prior.generation,
-					["idle", "stopped", "failed"].includes(input.state)
-						? null
-						: ( input.currentRunId ?? prior.currentRunId ?? null),
+					generation,
+					currentRunId ?? null,
 					changeSeq,
 					now,
 				],
@@ -3784,18 +3810,16 @@ export class SessionKernelStore {
 					now,
 				],
 			);
+			next = {
+				state: input.state,
+				since,
+				lastEvent: input.event,
+				generation,
+				currentRunId,
+				changeSeq,
+			};
 		});
 		tx.immediate();
-		const next: DurableRunState = {
-			state: input.state,
-			since,
-			lastEvent: input.event,
-			generation: input.generation ?? this.runState(input.sessionId).generation,
-			currentRunId: ["idle", "stopped", "failed"].includes(input.state)
-				? undefined
-				: ( input.currentRunId ?? this.runState(input.sessionId).currentRunId),
-			changeSeq: this.runState(input.sessionId).changeSeq + 1,
-		};
 		this.runStateCache.set(input.sessionId, next);
 		this.dirtyChangeSessions.add(input.sessionId);
 		return next;

@@ -101,6 +101,44 @@ test("read-only mirrors observe later WAL commits and cannot mutate", async () =
 	}
 });
 
+test("session lanes refresh change sequences written through another lane", () => {
+	const dir = mkdtempSync(join(tmpdir(), "session-kernel-lane-sequence-"));
+	const path = join(dir, "kernel.sqlite");
+	const sessionLane = new SessionKernelStore(path);
+	const catalogLane = new SessionKernelStore(path);
+	try {
+		expect(
+			sessionLane.applyRunEvent({
+				sessionId: "cross-lane-sequence",
+				event: "prompt",
+				runKey: "run-one",
+			}),
+		).toMatchObject({ accepted: true, state: { changeSeq: 1 } });
+		expect(
+			catalogLane.appendChange(
+				"cross-lane-sequence",
+				"catalog_lane_mutation",
+			),
+		).toBe(2);
+		expect(
+			sessionLane.applyRunEvent({
+				sessionId: "cross-lane-sequence",
+				event: "run_registered",
+				runKey: "run-one",
+			}),
+		).toMatchObject({ accepted: true, state: { changeSeq: 3 } });
+		expect(
+			sessionLane
+				.changesSince("cross-lane-sequence", 0)
+				.map((change) => change.changeSeq),
+		).toEqual([1, 2, 3]);
+	} finally {
+		catalogLane.close();
+		sessionLane.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
 test("durable cancel and interrupt receipts restore their original command target", async () => {
   expect(targetForTurnCancel({
     cancelId: "stop:request-one",
