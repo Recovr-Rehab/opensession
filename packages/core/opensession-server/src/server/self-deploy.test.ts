@@ -174,6 +174,10 @@ describe("deploy/self-deploy.sh", () => {
 	test("the server launches through the fixed privileged helper", async () => {
 		const source = await Bun.file(resolve(import.meta.dir, "self-deploy.ts")).text();
 		expect(source).toContain('RUN_HOST_HELPER, "self-deploy"');
+		expect(source).toContain("Deployment may be autonomous");
+		expect(source).toContain("deploy the newest fast-forward commit once");
+		expect(source).toContain("only rebuilds the already pinned source");
+		expect(source).toContain("does not require separate human approval");
 		expect(source).toContain("Migration path for instances upgrading");
 		expect(source).toContain("Environment=OPENSESSION_BUN_BIN=${process.execPath}");
 		expect(source).toContain("Environment=OPENSESSION_STATE_DIR=");

@@ -43,7 +43,7 @@ export const INTERNAL_MCP_CAPABILITIES = {
   "opensession-self-deploy": {
     summary: "Standard deploy of an ordinary source change to the live instance.",
     guidance:
-      "Deploy an ordinary frontend, backend, protocol, or dependency change to a specific commit. It restarts all three runtime services but does not refresh root-owned host artifacts; changes to live deploy controllers, service templates, credential installers, the run-host helper, or root-managed systemd artifacts require the documented full root deploy instead. Use only when the task explicitly requires deploying the instance.",
+      "Deploy an ordinary frontend, backend, protocol, or dependency change to a specific commit. Deployment may be autonomous, but check status and batch a burst of commits into one rollout instead of retrying serial deploys. Frontend changes need pinned promotion too; rebuild-frontend cannot publish shared-checkout source. It restarts all three runtime services but does not refresh root-owned host artifacts; changes to live deploy controllers, service templates, credential installers, the run-host helper, or root-managed systemd artifacts require the documented full root deploy instead.",
   },
   "opensession-humans": {
     summary: "Ask a teammate and fold their answer back into this session.",

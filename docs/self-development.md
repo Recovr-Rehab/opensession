@@ -95,7 +95,18 @@ until an operator deliberately adopts the immutable-release deploy path.
 A docs-only commit does not need a live rollout. A frontend-only commit does.
 The production frontend watcher follows the pinned release worktree, not the
 shared WIP checkout, so editing `src/frontend` in the shared checkout cannot
-change the live bundle.
+change the live bundle. `/api/rebuild-frontend` also rebuilds the already pinned
+source; it cannot publish frontend source from the shared checkout.
+
+Deployment may be autonomous when the task calls for making a change live, but
+it is a shared operation across every coding session. Before deploying, call
+`deploy_status`. If a deploy is active or just completed, or multiple sessions
+are landing a burst of related commits, do not launch or repeatedly retry
+another deploy. Wait for the burst to settle and deploy the newest
+fast-forward commit once. The lock protects the release pointer but does not
+batch callers; independent retries otherwise become a serial restart train.
+This applies to UI work too because the current pinned-release promotion still
+restarts all three runtime services.
 
 Do not substitute `systemctl restart opensession`. That restarts the currently
 pinned release, does not pick up the new commit, and bypasses the coordinated
@@ -106,7 +117,10 @@ executor/kernel/gateway rollout.
 The `opensession-self-deploy` in-process MCP server is available only to
 interactive admin sessions, never automations or dev instances.
 `deploy_self({ sha?, confirm: true })` launches the controller from the running
-release as a transient system unit so it survives the gateway restart.
+release as a transient system unit so it survives the gateway restart. The
+`confirm` flag makes the disruption deliberate; it is not a requirement for a
+separate human approval. An agent may deploy autonomously, subject to the
+coordination and batching rule above.
 
 The controller:
 

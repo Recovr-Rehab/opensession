@@ -44,11 +44,17 @@ Uncommitted checkout edits never become live, including frontend edits.
 - Commit and push promptly. Never use `git add -A`.
 - Do not use an ad-hoc `systemctl restart`. It only restarts the already pinned
   release and can violate the gateway/kernel rollout order.
-- After an approved live rollout, commit and push first, then deploy that exact
-  commit. Use the standard (light) `deploy_self` flow for ordinary frontend,
-  backend, protocol, and dependency changes. Despite its name, it restarts and
+- Commit and push before deploying. Deployment may be autonomous when the task
+  calls for making the change live, but it is a shared, disruptive operation,
+  not a per-session completion ritual. Check `deploy_status` first. If another
+  deploy is active or just completed, or several sessions are landing related
+  changes, do not start or repeatedly retry another one. Wait for the commit
+  burst to settle and deploy the newest fast-forward commit once.
+- Use the standard (light) `deploy_self` flow for ordinary frontend, backend,
+  protocol, and dependency changes. Despite its name, it currently restarts and
   health-checks the executor, session kernel, and gateway; “light” means it
-  reuses installed root-owned artifacts.
+  reuses installed root-owned artifacts. Prefer one batched rollout over a
+  serial restart train.
 - Use the full root deploy, `sudo deploy/deploy.sh <sha>`, instead when a change
   affects live deployment machinery or an artifact that script installs:
   `deploy/{deploy,self-deploy,release-checkout}.sh`, the three
@@ -58,8 +64,13 @@ Uncommitted checkout edits never become live, including frontend edits.
   immutable release. Other operator-managed artifacts, such as watchdog units
   and sandbox images, follow their own documented rollout. When unsure, inspect
   `deploy/deploy.sh` rather than assuming a restart applies the change.
-- A docs-only change needs no live deploy. A frontend-only change does: its
-  source watcher watches the pinned release, not the shared WIP checkout.
+- A docs-only change needs no live deploy. A frontend-only change needs a
+  pinned-release promotion to become live: the production source watcher and
+  `/api/rebuild-frontend` use the pinned release, not the shared WIP checkout.
+  Because that promotion currently restarts all three services, batch UI
+  commits rather than deploying each agent's commit separately. Do not claim a
+  shared-checkout UI edit is already live merely because frontend rebuilds are
+  restart-free *within* the pinned release.
 
 For risky isolated work, use `OPENSESSION_DEV=1` with a dedicated
 `OPENSESSION_STATE_DIR`. See `docs/self-development.md` for the deployment

@@ -204,7 +204,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 	const tools = [
 		tool(
 			"deploy_self",
-			"Standard (light) deploy of THIS Open Session instance to an immutable git release. Use for ordinary frontend, backend, protocol, and dependency changes only. It DOES NOT install changed root-owned artifacts. If the target changes the live deploy controllers, opensession*.service, credential installers, the fixed run-host helper/installer, or root-deploy-managed systemd units/drop-ins, do not use this tool: run the documented full root deploy instead. The target must advance from the running release; stale or parallel targets are refused. The shared WIP checkout is only an object source and is never changed. Prepares locked dependencies, atomically switches the runtime pointer, restarts and health-gates the gateway/kernel/executor release, and switches back to last-known-good on failure. Detached engine turns survive and sessions reattach, but the UI blips. Requires confirm: true.",
+			"Standard (light) deploy of THIS Open Session instance to an immutable git release. Deployment may be autonomous, but it is a shared disruptive operation, not a per-session completion ritual. Check deploy_status first. If a deploy is active/recent or several sessions are landing commits, wait for the burst to settle and deploy the newest fast-forward commit once; do not retry into a serial restart train. Use for ordinary frontend, backend, protocol, and dependency changes only. Frontend changes still need pinned-release promotion today, and this promotion restarts all three services; /api/rebuild-frontend only rebuilds the already pinned source. It DOES NOT install changed root-owned artifacts. If the target changes the live deploy controllers, opensession*.service, credential installers, the fixed run-host helper/installer, or root-deploy-managed systemd units/drop-ins, do not use this tool: run the documented full root deploy instead. The target must advance from the running release; stale or parallel targets are refused. The shared WIP checkout is only an object source and is never changed. Prepares locked dependencies, atomically switches the runtime pointer, restarts and health-gates the gateway/kernel/executor release, and switches back to last-known-good on failure. Detached engine turns survive and sessions reattach, but the UI blips.",
 			{
 				sha: z
 					.string()
@@ -215,7 +215,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 				confirm: z
 					.boolean()
 					.describe(
-						"Must be exactly true. This restarts the live Open Session instance for everyone — confirm deliberately, never as a default.",
+						"Must be exactly true. This is deliberate acknowledgement by the calling agent that the rollout restarts the live Open Session instance for everyone; it does not require separate human approval.",
 					),
 			},
 			async (args: { sha?: string; confirm: boolean }) => {
