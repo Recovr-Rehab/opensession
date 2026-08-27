@@ -38,7 +38,8 @@ import {
   toolLineStats,
   unwrapMcpDispatcher,
 } from "@tellahq/opensession-protocol/tool-presentation";
-import { formatDuration } from "../lib/time";
+import { formatDuration, fullTime } from "../lib/time";
+import { Tooltip } from "../ui/tooltip";
 import { ExtBadge, fileExt } from "./lang-marks";
 import { openGalleryFrom } from "./MediaLightbox";
 import { useOpenAsset, useOpenAssetPaths } from "../lib/open-asset";
@@ -423,6 +424,9 @@ export const ToolCallBlock = function ToolCallBlock({
 
   return (
     <div className="relative" data-eid={entry.id}>
+      {/* Tool rows have no spare inline space for a timestamp, so reveal the
+          call's wall-clock time on hover or keyboard focus. */}
+      <Tooltip label={fullTime(entry.timestamp)}>
       <button
         type="button"
         aria-expanded={expanded}
@@ -597,6 +601,7 @@ export const ToolCallBlock = function ToolCallBlock({
           <span className="flex-shrink-0 text-meta text-faint">–</span>
         ) : null}
       </button>
+      </Tooltip>
 
       {expanded && (
         <div className="relative z-[1] mb-1.5 ml-[30px] mt-1 space-y-1.5">
