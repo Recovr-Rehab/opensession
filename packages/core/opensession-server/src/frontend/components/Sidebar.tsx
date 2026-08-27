@@ -317,6 +317,7 @@ import { WorkspaceDraftIndicator } from "./sidebar/WorkspaceDraftIndicator";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
 import { SidebarToolRows, SidebarToolsMenu } from "./sidebar/SidebarToolsMenu";
 import { SidebarCustomizeDialog } from "./sidebar/SidebarCustomizeDialog";
+import { SetupWidget } from "./sidebar/SetupWidget";
 import { OrganizationSwitcher } from "./OrganizationSwitcher";
 import { EmptyState, ListSkeleton } from "../ui/state";
 import {
@@ -5189,6 +5190,13 @@ fetchFeedItems("plain")
 			}
 		>
 			{isPhone && sidebarChrome}
+			{isPhone && (
+				<SetupWidget
+					hasCreatedSession={sessions.length > 0}
+					onOpenSettings={onOpenSettings}
+					onNewSession={onNewSession}
+				/>
+			)}
 
 			<div className="block max-w-full min-w-0 flex-none">
 
@@ -6172,6 +6180,13 @@ fetchFeedItems("plain")
 			onCustomize={() => setCustomizeOpen(true)}
 		/>
 		</ContextMenu.Root>
+		{!isPhone && (
+			<SetupWidget
+				hasCreatedSession={sessions.length > 0}
+				onOpenSettings={onOpenSettings}
+				onNewSession={onNewSession}
+			/>
+		)}
 		<SidebarCustomizeDialog
 			open={customizeOpen}
 			onOpenChange={setCustomizeOpen}
