@@ -351,6 +351,7 @@ toast("Couldn’t copy the organization link", { variant: "error" });
 		<GithubMemberDialog
 			open={inviteOpen}
 			onOpenChange={setInviteOpen}
+			inviteUrl={organizationUrl}
 			title="Invite member"
 			actionLabel="Invite member"
 			onSaved={(login) => {

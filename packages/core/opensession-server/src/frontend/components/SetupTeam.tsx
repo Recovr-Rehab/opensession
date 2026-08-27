@@ -4,6 +4,7 @@ import { githubLoginFromInput } from "../lib/github-login";
 import { refreshPeople } from "../lib/people";
 import { copyToClipboard } from "../lib/share-link";
 import { Button } from "../ui/button";
+import { CopyCheck, useCopy } from "../ui/copy";
 import { Field, FieldGrid, Input } from "../ui/input";
 import { MENU_ICON, Menu } from "../ui/menu";
 import { Modal } from "../ui/modal";
@@ -341,12 +342,14 @@ export function GithubMemberDialog({
 	open,
 	onOpenChange,
 	onSaved,
+	inviteUrl,
 	title = "Add member",
 	actionLabel = "Add member",
 }: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onSaved: (github: string) => void | Promise<void>;
+	inviteUrl?: string;
 	title?: string;
 	actionLabel?: string;
 }) {
@@ -354,6 +357,7 @@ export function GithubMemberDialog({
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const githubRef = useRef<HTMLInputElement>(null);
+	const inviteCopy = useCopy();
 
 	useEffect(() => {
 		if (!open) return;
@@ -396,7 +400,11 @@ setSaving(false);
 			<Modal.Content initialFocus={githubRef}>
 				<Modal.Header
 					title={title}
-					description="They can sign in with this GitHub account."
+					description={
+						inviteUrl
+							? "Add their GitHub account or copy a link for them to sign in."
+							: "They can sign in with this GitHub account."
+					}
 				/>
 				<form className="flex flex-col gap-3" onSubmit={submit}>
 					<Field label="GitHub username or profile link">
@@ -412,16 +420,41 @@ setSaving(false);
 						/>
 					</Field>
 					{error && <InlineAlert>{error}</InlineAlert>}
+					{inviteUrl && (
+						<Button
+							variant="soft"
+							type="button"
+							className="w-full phone:min-h-11"
+							icon={
+								<CopyCheck
+									copied={inviteCopy.copied}
+									idle={<IconLink size={16} />}
+									size={16}
+								/>
+							}
+							onClick={() =>
+								inviteCopy.copy(inviteUrl, { toast: "Invite link copied" })
+							}
+						>
+							{inviteCopy.copied ? "Link copied" : "Copy invite link"}
+						</Button>
+					)}
 					<Modal.Footer>
 						<Button
 							variant="ghost"
 							type="button"
+							className="phone:min-h-11"
 							disabled={saving}
 							onClick={() => onOpenChange(false)}
 						>
 							Cancel
 						</Button>
-						<Button variant="primary" type="submit" disabled={!github.trim() || saving}>
+						<Button
+							variant="primary"
+							type="submit"
+							className="phone:min-h-11"
+							disabled={!github.trim() || saving}
+						>
 							{saving ? "Adding…" : actionLabel}
 						</Button>
 					</Modal.Footer>
