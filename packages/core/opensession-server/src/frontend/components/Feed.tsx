@@ -244,7 +244,7 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 	const hiddenPeopleCount = stackedMembers.length - visiblePeople.length;
 	const peoplePicker = (
 		<div
-			className="flex items-center gap-0.5 phone:fixed phone:top-[max(env(safe-area-inset-top,0px),8px)] phone:right-3 phone:z-40 phone:rounded-full phone:bg-panel phone:shadow-[var(--mobile-header-control-shadow)]"
+			className="flex w-max items-center gap-0.5"
 			aria-label="Filter feed by person"
 		>
 			{visiblePeople.map((member) => {
@@ -294,9 +294,13 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 			{team.length > 0 &&
 				headerActionsEl &&
 				createPortal(<div className="phone:hidden">{peoplePicker}</div>, headerActionsEl)}
-			{team.length > 0 && <div className="hidden phone:block">{peoplePicker}</div>}
 			<div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
 				<div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-6 phone:px-4 phone:pb-12 phone:pt-[calc(var(--header-h)+18px)]">
+					{team.length > 0 && (
+						<div className="mb-3 hidden overflow-x-auto pb-1 phone:block">
+							{peoplePicker}
+						</div>
+					)}
 					{feedLoading ? (
 					<>
 						<div className="mb-2 flex min-h-[30px] items-center">
