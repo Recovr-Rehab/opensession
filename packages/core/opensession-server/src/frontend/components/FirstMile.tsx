@@ -264,7 +264,7 @@ function FirstMileSummary({
 							<RepoTile
 								name={repo.id}
 								size={28}
-								className="border border-line"
+								className="ring-1 ring-inset ring-line"
 							/>
 						</span>
 					))}

@@ -529,7 +529,7 @@ setBusy(false);
 				)}
 				aria-label={`Change ${id}'s icon`}
 			>
-				<RepoTile name={id} size={28} glow={glow} className="border border-line" />
+				<RepoTile name={id} size={28} glow={glow} className="ring-1 ring-inset ring-line" />
 			</Popover.Trigger>
 			<Popover.Popup className="w-[248px] p-3" initialFocus>
 				<div className="mb-2 text-meta font-medium text-dim">Icon</div>
