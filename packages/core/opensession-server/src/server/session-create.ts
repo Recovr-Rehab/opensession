@@ -103,6 +103,7 @@ import {
 	settleCreationFailed,
 	settleCreationSucceeded,
 	sessionKernel,
+	sessionRunStateSnapshot,
 	sessionTurn,
 	sessionTurnSnapshot,
 } from "./session-kernel";
@@ -828,6 +829,66 @@ export async function executeCreationOpeningEffect(
 				recovered.currentEffectId !== item.effectKey
 			)
 				throw new Error("Recovered local opening lost durable ownership");
+			const journals = activeRunRecords();
+			const expectedLineage =
+				openingJournal.firstJournaledAt || openingJournal.startedAt;
+			const exactOwner = journals.some(
+				(run) =>
+					run.runKey === openingJournal.runKey &&
+					run.osSessionId === openingJournal.osSessionId &&
+					(run.firstJournaledAt || run.startedAt) === expectedLineage,
+			);
+			const replacementOwner = journals.some(
+				(run) =>
+					run.osSessionId === item.sessionId &&
+					(run.runKey !== openingJournal.runKey ||
+						(run.firstJournaledAt || run.startedAt) !== expectedLineage),
+			);
+			if (!exactOwner && !replacementOwner) {
+				// Recovery owns journal retirement. If its terminal callback dies
+				// between retiring that owner and settling creation, the opening
+				// effect used to wait forever and permanently block every follow-up
+				// behind the create dispatch. The actor's exact generation + terminal
+				// event is durable proof; a process-local projection is not.
+				const run = await sessionRunStateSnapshot(item.sessionId);
+				if (
+					run.generation === item.payload.runGeneration &&
+					!run.currentRunId
+				) {
+					if (run.state === "idle" && run.lastEvent === "turn_end") {
+						await settleCreationSucceeded(
+							item.sessionId,
+							item.payload.creationIdentity,
+							sessionKernel(item.sessionId),
+							item.effectKey,
+						);
+					} else if (run.state === "failed") {
+						await settleCreationFailed(
+							item.sessionId,
+							item.payload.creationIdentity,
+							new Error("Recovered opening run failed before creation settlement"),
+							sessionKernel(item.sessionId),
+							item.effectKey,
+						);
+					} else if (run.state === "stopped") {
+						await settleCreationCancelled(
+							item.sessionId,
+							item.payload.creationIdentity,
+							sessionKernel(item.sessionId),
+							item.effectKey,
+						);
+					} else {
+						await Bun.sleep(100);
+						continue;
+					}
+					await acknowledgePromptDispatch(
+						item.sessionId,
+						item.payload.openingPromptEntryId,
+					);
+					if (run.state !== "failed") clearCreatePlan(item.sessionId);
+					return;
+				}
+			}
 			await Bun.sleep(100);
 		}
 	}
