@@ -396,7 +396,7 @@ describe("per-session session kernel storage", () => {
       },
     });
     expect(recovered.metrics().kernelStoreCacheMisses).toBe(cacheMisses);
-    expect(recovered.quarantinedSession("broken-session")).toBeUndefined();
+    expect(recovered.central.quarantinedSession("broken-session")).toBeUndefined();
     expect(recovered.storeForSession("healthy-session").runState("healthy-session").state)
       .toBe("running");
     recovered.close();
