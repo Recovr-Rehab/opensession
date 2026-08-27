@@ -62,6 +62,7 @@ import {
 	MOBILE_SEARCH_BTN,
 } from "./lib/app-header-classes";
 import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
+import { PR_PAGE_COLUMN } from "./lib/pr-list-classes";
 import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
 import { ToastHost, toast } from "./ui/toast";
 import { Modal } from "./ui/modal";
@@ -5664,7 +5665,12 @@ console.error("Rename failed:", e);
 								// pages, and a page keeps its name in its body. The bar picks
 								// that name up once it has scrolled out of sight, the way the
 								// chat header names the session. See hooks/useLargeTitle.ts.
-								<TopBarTitle className={DETAIL_TOPBAR_TITLE}>
+								<TopBarTitle
+									className={cn(
+										DETAIL_TOPBAR_TITLE,
+										route.view === "prs" && PR_PAGE_COLUMN,
+									)}
+								>
 									<span
 										className={DETAIL_TOPBAR_TITLE_TEXT}
 										data-shown={titleHandedOver || undefined}

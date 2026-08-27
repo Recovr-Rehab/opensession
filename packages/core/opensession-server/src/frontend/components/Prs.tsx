@@ -34,6 +34,7 @@ import { cn } from "../ui/cn";
 import {
   PR_GROUP_LABEL,
   PR_LIST,
+  PR_PAGE_COLUMN,
   PR_ROW,
   PR_SECTION_LABEL,
 } from "../lib/pr-list-classes";
@@ -599,7 +600,12 @@ setAddingToSidebar(false);
     // column at the shared width and padding, a PageHeader on top.
     <div data-page-scroll className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
       {topbarActionsEl ? createPortal(actions, topbarActionsEl) : null}
-      <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
+      <div
+        className={cn(
+          PR_PAGE_COLUMN,
+          "pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]",
+        )}
+      >
         {/* The page name and search live together in the top bar. The day's
             orientation figures take the same card row Analytics uses, while
             the pull-request sections remain the page's primary content. */}
