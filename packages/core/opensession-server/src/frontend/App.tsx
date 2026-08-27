@@ -5668,7 +5668,7 @@ console.error("Rename failed:", e);
 								<TopBarTitle
 									className={cn(
 										DETAIL_TOPBAR_TITLE,
-										route.view === "prs" && PR_PAGE_COLUMN,
+										(route.view === "prs" || route.view === "feed") && PR_PAGE_COLUMN,
 									)}
 								>
 									<span
@@ -5803,7 +5803,6 @@ console.error("Rename workspace failed:", error);
 							<Feed
 								sessions={sessions}
 								teamViewing={teamViewing}
-								headerActionsEl={topbarActionsEl}
 								onSelect={(id) => navigate({ view: "session", id })}
 							/>
 						) : route.view === "tasks" ? (
