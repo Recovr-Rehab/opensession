@@ -19,12 +19,16 @@
  * Kill switch: OPENSESSION_PR_WEBHOOKS=0 reverts to pure polling.
  */
 import { configuredRepos, type Repo } from "./config";
+import { sessionRefFromPrBody } from "./pr-cache";
 import { invalidatePrInfo } from "./pr-info";
+import { getReviewRequest, setReviewRequest } from "./review-requests";
+import { executeSessionProjection } from "./session-projection-executor";
 import {
 	applyPrWebhookToBulkCache,
 	cachedPrBranchByNumber,
 } from "./sessions";
 import { invalidateSessionsCache } from "./session-cache";
+import { githubLoginFor } from "./shared/user-mappings";
 import { scheduleSandboxEnvironmentInvalidation } from "./sandbox/environments";
 import { broadcastToAll } from "./ws-hub";
 
@@ -91,6 +95,26 @@ function branchesFor(
 const pendingBroadcasts = new Map<string, ReturnType<typeof setTimeout>>();
 const BROADCAST_DEBOUNCE_MS = 2_000;
 
+export function reviewerRemovalClearsSessionRequest(
+	payload: any,
+	requestTo: string,
+): boolean {
+	if (payload?.action !== "review_request_removed") return false;
+	const owner = String(payload?.repository?.owner?.login || "").toLowerCase();
+	const remaining = new Set<string>();
+	for (const reviewer of payload?.pull_request?.requested_reviewers || [])
+		if (reviewer?.login) remaining.add(String(reviewer.login).toLowerCase());
+	for (const team of payload?.pull_request?.requested_teams || []) {
+		if (!team?.slug) continue;
+		const slug = String(team.slug).toLowerCase();
+		remaining.add(slug);
+		if (owner) remaining.add(`${owner}/${slug}`);
+	}
+	const target = requestTo.toLowerCase();
+	const login = githubLoginFor(requestTo)?.toLowerCase();
+	return !remaining.has(target) && (!login || !remaining.has(login));
+}
+
 export function sandboxEnvironmentInvalidationNeeded(
 	event: string,
 	payload: any,
@@ -152,6 +176,28 @@ export function handlePrWebhookEvent(event: string, payload: any): void {
 		const prBranches = branches.filter((b) => b !== repo.defaultBranch);
 		if (!prBranches.length) return;
 		applyPrWebhookToBulkCache(ghRepo, event, payload);
+		// The sidebar picker mirrors its local request to GitHub. Treat removing
+		// that reviewer on GitHub as the same undo, rather than leaving the local
+		// request behind indefinitely. The PR footer gives us one exact session,
+		// so this never scans session actors.
+		if (event === "pull_request") {
+			const sessionId = sessionRefFromPrBody(payload?.pull_request?.body);
+			const request = sessionId ? getReviewRequest(sessionId) : undefined;
+			if (
+				sessionId &&
+				request &&
+				!request.accepted &&
+				reviewerRemovalClearsSessionRequest(payload, request.to)
+			) {
+				void executeSessionProjection(sessionId, "review_request", () =>
+					setReviewRequest(sessionId, null),
+				)
+					.then(() => invalidateSessionsCache())
+					.catch((e) =>
+						console.error("[pr-webhook] failed to clear review request:", e),
+					);
+			}
+		}
 		for (const branch of prBranches) {
 			invalidatePrInfo(ghRepo, branch);
 			scheduleBroadcast(repoId, ghRepo, branch, number);

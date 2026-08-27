@@ -22,6 +22,14 @@ test("workspace surfaces keep committed and uncommitted work separate", () => {
 	expect(infoSource).toContain("<CommitRow key={commit.sha} commit={commit} />");
 });
 
+test("an assigned reviewer can be changed or cleared from the summary", () => {
+	expect(summarySource).toContain("reviewRequestSessionId?: string");
+	expect(summarySource).toContain("Clear review request");
+	expect(summarySource).toContain(
+		"const owner = (previous && reviewRequestSessionId) || session.id",
+	);
+});
+
 test("popup review heading does not split from a lone PR band", () => {
 	expect(summarySource).toContain('"[&>.ws-summary-band:last-child]:mb-0"');
 	expect(summarySource).toContain(

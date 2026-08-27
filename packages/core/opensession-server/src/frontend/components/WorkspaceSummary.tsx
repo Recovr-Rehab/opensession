@@ -157,6 +157,8 @@ interface Props {
 	 * resolves it (see `effectiveReview`) and hands the answer down.
 	 */
 	reviewRequest?: UnifiedSession["reviewRequest"] | null;
+	/** The sibling session that owns `reviewRequest`, when it is not `session`. */
+	reviewRequestSessionId?: string;
 	/** Workspace-wide GitHub requests, including requests held by a sibling session. */
 	prReviewRequested?: string[];
 	/** Live run state, so the PR block refetches the moment a turn ends. */
@@ -487,6 +489,7 @@ export function WorkspaceSummaryBody({
 	onOpenSession,
 	onArchive,
 	reviewRequest,
+	reviewRequestSessionId,
 	prReviewRequested,
 	running,
 	send,
@@ -743,7 +746,10 @@ setFixBusy(false);
 		setSelectedReview(next);
 		setReviewError(null);
 		setReviewBusy(true);
-		setSessionReviewerApi(session.id, name, getCurrentUser())
+		// A workspace-level request can be stored on a sibling session. Change or
+		// clear that owner, while a brand-new request still belongs to this session.
+		const owner = (previous && reviewRequestSessionId) || session.id;
+		setSessionReviewerApi(owner, name, getCurrentUser())
 			.catch((error: any) => {
 				setSelectedReview(previous);
 				setReviewError(error?.message || "Failed to set reviewer");
@@ -1092,28 +1098,73 @@ setFixBusy(false);
 				</button>
 			))}
 
-			{humanReviewers.length > 0 &&
-				humanReviewers.map((reviewer) => (
-					<button
-						key={reviewer.key}
-						className={WS_SUMMARY_ROW}
-						onClick={() => go(() => onOpenPanelTab("info"))}
-						title={`${reviewer.name} · ${reviewer.state}`}
-					>
+			{humanReviewers.length > 0 && (
+				<Menu.Root>
+					<Menu.Trigger className={WS_SUMMARY_ROW} disabled={reviewBusy}>
 						<span className={WS_SUMMARY_RAIL}>
 							<UserAvatar
-								name={reviewer.name}
-								login={reviewer.login}
+								name={humanReviewers[0].name}
+								login={humanReviewers[0].login}
 								size={16}
 								edge={false}
 							/>
 						</span>
-						<span className={WS_SUMMARY_LABEL}>{reviewer.name}</span>
-						<span className={cn(WS_SUMMARY_STATE, reviewer.tone)}>
-							{reviewer.state}
+						<span className={WS_SUMMARY_LABEL}>{humanReviewers[0].name}</span>
+						<span className={cn(WS_SUMMARY_STATE, humanReviewers[0].tone)}>
+							{humanReviewers[0].state}
 						</span>
-					</button>
-				))}
+						<IconChevronDown size={14} className="shrink-0 text-faint" />
+					</Menu.Trigger>
+					<Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+						{people.map((person) => (
+							<Menu.Item key={person.name} onClick={() => pickReviewer(person.name)}>
+								<UserAvatar name={person.name} size={22} />
+								<span className="min-w-0 flex-1 truncate">{person.name}</span>
+								<Menu.Check
+									on={selectedReview?.to === person.name}
+									size={20}
+									className="text-dim"
+								/>
+							</Menu.Item>
+						))}
+						{reviewTeams.length > 0 && <Menu.Separator />}
+						{reviewTeams.map((team) => (
+							<Menu.Item
+								key={team.github}
+								onClick={() => pickReviewer(team.github, team.members)}
+							>
+								<span className="grid size-[22px] place-items-center text-dim">
+									<IconStack size={20} />
+								</span>
+								<span className="min-w-0 flex-1 truncate">{team.name}</span>
+								<Menu.Check
+									on={selectedReview?.to === team.github}
+									size={20}
+									className="text-dim"
+								/>
+							</Menu.Item>
+						))}
+						<Menu.Separator />
+						<Menu.Item className="text-dim" onClick={() => pickReviewer(null)}>
+							Clear review request
+						</Menu.Item>
+					</Menu.Popup>
+				</Menu.Root>
+			)}
+			{humanReviewers.slice(1).map((reviewer) => (
+				<button
+					key={reviewer.key}
+					className={WS_SUMMARY_ROW}
+					onClick={() => go(() => onOpenPanelTab("info"))}
+					title={`${reviewer.name} · ${reviewer.state}`}
+				>
+					<span className={WS_SUMMARY_RAIL}>
+						<UserAvatar name={reviewer.name} login={reviewer.login} size={16} edge={false} />
+					</span>
+					<span className={WS_SUMMARY_LABEL}>{reviewer.name}</span>
+					<span className={cn(WS_SUMMARY_STATE, reviewer.tone)}>{reviewer.state}</span>
+				</button>
+			))}
 			{humanReviewers.length === 0 && (
 				<Menu.Root>
 					<Menu.Trigger

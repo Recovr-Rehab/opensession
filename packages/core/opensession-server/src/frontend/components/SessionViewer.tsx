@@ -6652,6 +6652,7 @@ export function SessionViewer({
 							// request may live on a sibling), and already folded
 							// together with a GitHub review that completes it.
 							reviewRequest={effectiveReview?.req ?? null}
+							reviewRequestSessionId={effectiveReview?.ownerId}
 							prReviewRequested={effectiveReview?.prReviewRequested}
 							running={isRunningLive}
 							send={connected ? send : undefined}
@@ -6900,6 +6901,7 @@ export function SessionViewer({
 												onOpenSession={onOpenSession}
 												onArchive={handleArchive}
 												reviewRequest={effectiveReview?.req ?? null}
+												reviewRequestSessionId={effectiveReview?.ownerId}
 												prReviewRequested={effectiveReview?.prReviewRequested}
 												running={isRunningLive}
 												send={connected ? send : undefined}
