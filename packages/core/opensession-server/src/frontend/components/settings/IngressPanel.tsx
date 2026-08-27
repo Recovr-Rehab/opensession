@@ -141,7 +141,7 @@ function SetupStep({
 			<span className="flex size-6 items-center justify-center rounded-full bg-surface text-meta font-semibold text-dim">
 				{number}
 			</span>
-			<div className={cn("min-w-0 pt-0.5", controls && "desktop:grid desktop:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)] desktop:items-start desktop:gap-6")}>
+			<div className={cn("min-w-0 pt-0.5", controls && "desktop:grid desktop:grid-cols-[minmax(0,1fr)_18rem] desktop:items-start desktop:gap-6")}>
 				<div className="min-w-0">
 					<div className="font-medium text-fg">{title}</div>
 					{children && <div className="mt-1 grid gap-2 leading-relaxed">{children}</div>}
