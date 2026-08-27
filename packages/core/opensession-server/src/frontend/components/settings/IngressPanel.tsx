@@ -15,7 +15,6 @@ import {
 	configuredIngressDrafts,
 	customCaddyConfig,
 	customDnsRecords,
-	INGRESS_METHODS,
 	ingressHealthDot,
 	ingressHealthLabel,
 	ingressHostname,
@@ -49,7 +48,7 @@ import { ResponsiveDialog } from "../../ui/sheet";
 import { InlineAlert, LoadingState } from "../../ui/state";
 import { toast } from "../../ui/toast";
 import { BrandMark } from "../BrandTile";
-import { IconCopy, IconX } from "../icons";
+import { IconCopy, IconGlobe, IconServer, IconX } from "../icons";
 import { SetupRestart } from "../SetupRestart";
 
 const EMPTY_DRAFTS: Record<IngressExposure, string> = {
@@ -112,7 +111,7 @@ function SetupStep({
 }) {
 	return (
 		<li className="grid grid-cols-[24px_minmax(0,1fr)] gap-2.5 py-4 first:pt-0 last:pb-0">
-			<span className="flex size-6 items-center justify-center rounded-full bg-surface text-meta font-semibold text-dim">
+			<span className="flex size-6 items-center justify-center rounded-full bg-surface text-meta font-semibold text-fg">
 				{number}
 			</span>
 			<div className={cn("min-w-0 pt-0.5", controls && "desktop:grid desktop:grid-cols-[minmax(0,1fr)_18rem] desktop:items-start desktop:gap-6")}>
@@ -512,7 +511,6 @@ export function IngressPanel({
 		!url.trim() ||
 		method === "custom" && records.length === 0 ||
 		method === "cloudflare" && (!tunnelId.trim() || (!tunnelToken.trim() && !settings?.cloudflare.tokenConfigured));
-	const selectedMethod = INGRESS_METHODS.find((option) => option.value === method)!;
 	const selectedHealth = settings?.exposure === method ? settings.health : "not_configured";
 	const privateDomain = settings ? configuredAppDomain(settings) : "";
 	const domainUrl = settings?.app.publicBaseUrl || initialUrls?.app || "";
@@ -579,7 +577,7 @@ export function IngressPanel({
 						onClose={() => setSurface(null)}
 						phone={isPhone}
 						label={surface === "domain" ? "Configure domain" : "Configure public callback"}
-						modalClassName="h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(800px,calc(100vw-32px))] max-w-[800px]"
+						modalClassName="h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(760px,calc(100vw-32px))] max-w-[760px]"
 						sheetClassName="h-[94dvh]"
 					>
 						{(dismiss) => (
@@ -627,25 +625,22 @@ export function IngressPanel({
 							/>
 					) : (
 					<div className="grid items-start gap-4">
-						<SettingsForm className="m-0 min-w-0 gap-4 bg-raised p-6 desktop:flex-row desktop:items-center desktop:justify-between phone:p-4">
-							<div className="px-1">
-								<div className="text-item-title font-semibold text-fg">Connection method</div>
-								<p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">Choose how external services reach Open Session.</p>
-							</div>
+						<SettingsForm className="m-0 min-w-0 gap-4 bg-raised p-6 desktop:flex-row desktop:bg-panel desktop:items-center desktop:justify-between phone:p-4">
+							<div className="px-1 text-item-title font-semibold text-fg">Connection method</div>
 							<Segmented
 								label="Public callback method"
 								value={method}
 								onValueChange={(next) => setMethod(next as IngressExposure)}
-								className="shrink-0 phone:flex phone:w-full"
+								className="flex w-52 shrink-0 phone:w-full"
 							>
-								<SegmentedOption value="custom" disabled={!!busy || !settings.canManage} className="phone:flex-1 phone:justify-center">Caddy</SegmentedOption>
-								<SegmentedOption value="cloudflare" disabled={!!busy || !settings.canManage} className="phone:flex-1 phone:justify-center">Cloudflare</SegmentedOption>
+								<SegmentedOption value="custom" disabled={!!busy || !settings.canManage} className="flex flex-1 justify-center"><IconServer size={14} /> Caddy</SegmentedOption>
+								<SegmentedOption value="cloudflare" disabled={!!busy || !settings.canManage} className="flex flex-1 justify-center"><IconGlobe size={14} /> Cloudflare</SegmentedOption>
 							</Segmented>
 						</SettingsForm>
 
-						<SettingsForm className="m-0 min-w-0 gap-4 bg-raised p-6 phone:p-4">
+						<SettingsForm className="m-0 min-w-0 gap-4 bg-raised p-6 desktop:bg-panel phone:p-4">
 							<div className="flex items-center justify-between gap-4">
-								<div className="min-w-0 text-item-title font-semibold text-fg">Set up {selectedMethod.label}</div>
+								<div className="min-w-0 text-item-title font-semibold text-fg">{method === "custom" ? "Caddy" : "Cloudflare"}</div>
 								<div className="shrink-0">
 									<StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(selectedHealth)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(selectedHealth)} />
 								</div>
