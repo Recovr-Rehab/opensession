@@ -5,6 +5,7 @@ import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
 import { GithubManifestSetup } from "./GithubManifestSetup";
 export { GithubManifestSetup } from "./GithubManifestSetup";
+import { GithubAccounts } from "./Connections";
 import { IntegrationSetupDialog } from "./IntegrationSetupDialog";
 import { IconTile } from "./BrandTile";
 import {
@@ -182,10 +183,12 @@ export function IntegrationsList({
 export function GithubAuthCard({
 	github,
 	onboarding = false,
+	onPersonalSignIn,
 }: {
 	github: SetupGithub;
 	onSaved: (updated: SetupGithub, restartRequired: boolean) => void;
 	onboarding?: boolean;
+	onPersonalSignIn?: () => void;
 }) {
 	const state = githubAuthState(github);
 
@@ -210,6 +213,17 @@ export function GithubAuthCard({
 						}
 					/>
 				</SettingsSection>
+				{onboarding && github.clientIdConfigured && (
+					<div className="mt-6">
+						<GithubAccounts
+							personal
+							showHeading={false}
+							showHint={false}
+							onConnectRequest={onPersonalSignIn}
+							cardClassName="personal-github-card"
+						/>
+					</div>
+				)}
 			</div>
 		</div>
 	);

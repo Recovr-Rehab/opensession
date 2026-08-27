@@ -304,12 +304,18 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const [contentVisible, setContentVisible] = useState(true);
 	const [navigationVisible, setNavigationVisible] = useState(true);
 	const [finishing, setFinishing] = useState(false);
+	const [personalGithubVisited, setPersonalGithubVisited] = useState(false);
 	const [inviteCopied, setInviteCopied] = useState(false);
 	const [theme, setTheme] = useState(effectiveTheme);
 	const headingRef = useRef<HTMLHeadingElement>(null);
 	const reducedMotion = useReducedMotion();
 	const steps = STEPS;
 	const step = steps[index]!;
+	const githubIndex = steps.findIndex((item) => item.id === "github");
+	const personalGithubIndex = steps.findIndex(
+		(item) => item.id === "github-account",
+	);
+	const repositoriesIndex = steps.findIndex((item) => item.id === "repos");
 
 	useEffect(() => {
 		document.title = `Welcome to ${PRODUCT_NAME}`;
@@ -343,6 +349,37 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 		setNavigationVisible(false);
 		setIndex(nextIndex);
 		void refetch();
+	}
+
+	function openPersonalGithub() {
+		setPersonalGithubVisited(true);
+		void goTo(personalGithubIndex);
+	}
+
+	function goBack() {
+		if (step.id === "repos") {
+			void goTo(personalGithubVisited ? personalGithubIndex : githubIndex);
+			return;
+		}
+		void goTo(index - 1);
+	}
+
+	function goForward() {
+		if (step.id === "ready") {
+			void finish();
+			return;
+		}
+		if (step.id === "github") {
+			setPersonalGithubVisited(false);
+			void goTo(repositoriesIndex);
+			return;
+		}
+		if (step.id === "github-account") {
+			setPersonalGithubVisited(true);
+			void goTo(repositoriesIndex);
+			return;
+		}
+		void goTo(index + 1);
 	}
 
 	async function finish() {
@@ -391,7 +428,10 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					<button
 						key={item.id}
 						type="button"
-						onClick={() => goTo(stepIndex)}
+						onClick={() => {
+							if (item.id === "github-account") setPersonalGithubVisited(true);
+							void goTo(stepIndex);
+						}}
 						aria-label={`${item.label}, step ${stepIndex + 1} of ${steps.length}`}
 						aria-current={stepIndex === index ? "step" : undefined}
 						className="group focus-ring flex h-10 w-8 items-center justify-center rounded-control phone:h-11 phone:w-9"
@@ -469,7 +509,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										"mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:leading-[1.5] [&_[data-settings-hint]]:text-faint [&_[data-onboarding-caption]]:leading-[1.5]",
 										step.id === "ready" ? "max-w-[1160px]" : "max-w-[780px]",
 										step.id !== "github-account" &&
-											"[&_.bg-settings-plate]:border-0 [&_.bg-settings-plate]:bg-transparent! [&_.bg-settings-plate]:shadow-none [&_.bg-settings-plate]:[backdrop-filter:none]",
+											"[&_.bg-settings-plate:not(.personal-github-card)]:border-0 [&_.bg-settings-plate:not(.personal-github-card)]:bg-transparent! [&_.bg-settings-plate:not(.personal-github-card)]:shadow-none [&_.bg-settings-plate:not(.personal-github-card)]:[backdrop-filter:none]",
 										"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9",
 									)}
 								>
@@ -478,6 +518,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 											github={status.github}
 											onSaved={setup.applyGithub}
 											onboarding
+											onPersonalSignIn={openPersonalGithub}
 										/>
 									)}
 									{step.id === "github-account" && (
@@ -550,7 +591,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								<Button
 									variant="soft"
 									size="lg"
-									onClick={() => goTo(index - 1)}
+									onClick={goBack}
 									className="phone:min-h-11"
 								>
 									Back
@@ -572,10 +613,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 							<Button
 								variant="primary"
 								size="lg"
-								onClick={() => {
-									if (index === steps.length - 1) void finish();
-									else goTo(index + 1);
-								}}
+								onClick={goForward}
 								disabled={finishing}
 								className="px-4 phone:min-h-11"
 							>

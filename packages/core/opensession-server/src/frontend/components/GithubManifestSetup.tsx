@@ -232,15 +232,12 @@ export function GithubManifestSetup({
 								}))
 							}
 							placeholder="my-organization"
-							className="font-mono phone:min-h-11 phone:text-input-phone"
+							className="phone:min-h-11 phone:text-input-phone"
 							disabled={starting}
 							autoCapitalize="none"
 							autoComplete="off"
 							spellCheck={false}
 						/>
-						<span data-onboarding-caption="" className="text-meta text-faint">
-							The organization that will own and install the App.
-						</span>
 					</label>
 				)}
 			</div>

@@ -993,11 +993,17 @@ export function GithubAccounts({
   showHeading = true,
   showHint = true,
   loadingFallback = null,
+  onConnectRequest,
+  cardClassName,
 }: {
   personal?: boolean;
   showHeading?: boolean;
   showHint?: boolean;
   loadingFallback?: React.ReactNode;
+  /** Replace the first sign-in action while a parent flow moves the user to a
+   * dedicated authorization step. Reconnect actions stay local. */
+  onConnectRequest?: () => void;
+  cardClassName?: string;
 } = {}) {
   const [data, setData] = useState<GithubAuthData | null>(null);
   const [flow, setFlow] = useState<DeviceFlow | null>(null);
@@ -1245,7 +1251,7 @@ setError(e.message);
       <>
         {showHeading && <SectionHeading>GitHub</SectionHeading>}
         {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
-        <SettingCard>
+        <SettingCard className={cardClassName}>
           <SettingRow className="items-start gap-x-3">
             {connected ? (
               <span className="flex size-[30px] shrink-0 items-center justify-center">
@@ -1325,7 +1331,7 @@ setError(e.message);
                     <div className="flex flex-wrap items-center gap-2.5">
                       <Button
                         variant="primary"
-                        onClick={startConnect}
+                        onClick={onConnectRequest ?? startConnect}
                         disabled={flowState !== "idle"}
                       >
                         {flowState === "starting" ? "Starting…" : "Sign in with GitHub"}
@@ -1471,7 +1477,7 @@ setError(e.message);
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
-      <SettingCard>
+      <SettingCard className={cardClassName}>
         {/* The shared row primitives, not a local flex row: their `flex-wrap`
             plus the text column's min width is what drops the chip and button
             to their own line on a phone instead of squeezing the description
@@ -1546,7 +1552,7 @@ setError(e.message);
             {active && showConnect && flowState !== "waiting" && (
               <Button
                 size="sm"
-                onClick={startConnect}
+                onClick={onConnectRequest ?? startConnect}
                 disabled={flowState === "starting"}
               >
                 {flowState === "starting"

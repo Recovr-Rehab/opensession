@@ -144,7 +144,7 @@ describe("GitHub App onboarding actions", () => {
 		expect(markup).not.toContain("Client secret");
 	});
 
-	test("keeps personal sign-in out of the GitHub App step", () => {
+	test("marks the completed App creation step green", () => {
 		const markup = renderToStaticMarkup(
 			<GithubAuthCard
 				github={{ ...github, appSlug: "open-session-acme", clientIdConfigured: true }}
@@ -152,8 +152,6 @@ describe("GitHub App onboarding actions", () => {
 				onboarding
 			/>,
 		);
-		expect(markup).not.toContain("Optional. Sign in now");
-		expect(markup).not.toContain("connect later under Account");
 		expect(markup).toContain('class="text-green"');
 	});
 
