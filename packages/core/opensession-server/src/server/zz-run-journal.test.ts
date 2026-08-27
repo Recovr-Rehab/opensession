@@ -1595,6 +1595,13 @@ describe("restart recovery reattach", () => {
 			);
 			expect(agent.currentAgentRunToken(sessionId)).toBe(hostId);
 			expect(agent.currentAgentRunToken(snapshotRun.claudeSessionId!)).toBe(hostId);
+			expect(agent.activeAgentRecoveryRecord(sessionId)).toMatchObject(snapshotRun);
+			// Recovery can retire the journal before a fallback starts. Its live
+			// claim must remain observable so the creation executor does not launch
+			// the same opening turn again in this handoff window.
+			mod.journalClear(hostId);
+			expect(mod.activeRunRecords()).toEqual([]);
+			expect(agent.activeAgentRecoveryRecord(hostId)).toMatchObject(snapshotRun);
 			release.resolve();
 			await terminal.promise;
 		} finally {

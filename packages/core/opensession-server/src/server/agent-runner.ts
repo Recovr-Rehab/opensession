@@ -1083,6 +1083,15 @@ export function currentAgentRunToken(id: string): string | undefined {
   return activeRecoveryRuns.get(id)?.runKey;
 }
 
+/** The exact journal lineage currently owned by boot recovery. This remains
+ * available after recovery retires the journal before starting its fallback,
+ * closing the handoff window for other process-local owners. */
+export function activeAgentRecoveryRecord(
+  id: string,
+): ActiveRunRecord | undefined {
+  return activeRecoveryRuns.get(id);
+}
+
 /** Cancel one exact physical dispatch without crossing onto a successor that
  * reused its session or engine aliases. */
 function agentRunTokenPending(runToken: string): boolean {

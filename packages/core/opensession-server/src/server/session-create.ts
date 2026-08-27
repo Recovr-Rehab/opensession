@@ -22,7 +22,15 @@
 import type { ServerWebSocket } from "bun";
 import { randomUUIDv7 } from "bun";
 import { existsSync } from "node:fs";
-import { currentAgentRunToken, isAgentSessionCancelled, type StreamEvent, markSessionStarting, runAgent, unmarkSessionStarting, } from "./agent-runner";
+import {
+	activeAgentRecoveryRecord,
+	currentAgentRunToken,
+	isAgentSessionCancelled,
+	type StreamEvent,
+	markSessionStarting,
+	runAgent,
+	unmarkSessionStarting,
+} from "./agent-runner";
 import {
 	activeRunRecords,
 	journalClearIfLineage,
@@ -779,11 +787,21 @@ export async function executeCreationOpeningEffect(
 		state.currentEffectId !== item.effectKey
 	)
 		throw new Error("Opening effect no longer owns the creation lifecycle");
-	const openingJournal = activeRunRecords().find(
-		(run) =>
-			run.osSessionId === item.sessionId &&
-			run.promptEntryId === item.payload.openingPromptEntryId,
+	const openingRunKey = runnerOpeningHostId(
+		item.payload.runId,
+		item.payload.runGeneration,
 	);
+	const claimedRecovery = activeAgentRecoveryRecord(openingRunKey);
+	const openingJournal =
+		activeRunRecords().find(
+			(run) =>
+				run.osSessionId === item.sessionId &&
+				run.promptEntryId === item.payload.openingPromptEntryId,
+		) ??
+		(claimedRecovery?.osSessionId === item.sessionId &&
+		claimedRecovery.promptEntryId === item.payload.openingPromptEntryId
+			? claimedRecovery
+			: undefined);
 	if (openingJournal?.terminalFailure) {
 		await settleCreationFailed(
 			item.sessionId,
