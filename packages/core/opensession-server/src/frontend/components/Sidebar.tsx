@@ -6159,7 +6159,7 @@ fetchFeedItems("plain")
 											}
 											confirm({
 												title: `Delete workspace "${ws.name}"?`,
-												description: "Its sessions become standalone.",
+												description: "All sessions in this workspace will be permanently deleted.",
 												confirmLabel: "Delete",
 												destructive: true,
 												onConfirm: () => onDeleteWorkspace(ws.id),

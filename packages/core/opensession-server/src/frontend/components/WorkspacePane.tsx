@@ -682,7 +682,7 @@ export function WorkspacePane({
 								confirm({
 									title: `Delete workspace "${workspace.name}"?`,
 									description: workspaceSessions.length
-										? "Its sessions become standalone."
+										? "All sessions in this workspace will be permanently deleted."
 										: undefined,
 									confirmLabel: "Delete",
 									destructive: true,
