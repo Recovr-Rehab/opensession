@@ -37,16 +37,23 @@ immutable release worktree selected by `~/.opensession/deploy/current`. Other
 sessions may edit and stage files in the shared checkout at the same time.
 Uncommitted checkout edits never become live, including frontend edits.
 
-- Start every task by running `git fetch origin --prune` and checking
-  `git rev-list --left-right --count HEAD...origin/main`. Repeat immediately
-  before committing or pushing. Do not start or continue edits from a stale or
-  diverged `main`.
+- Start every task by pulling the latest remote history with
+  `git fetch origin --prune` and checking
+  `git rev-list --left-right --count HEAD...origin/main`. Do not start or
+  continue edits from a stale or diverged `main`.
+- **Do not commit until your branch includes the latest `origin/main`.**
+  Immediately before every `git commit`, run `git fetch origin --prune`. Then
+  run `git merge-base --is-ancestor origin/main HEAD`. If it fails, do not
+  commit: rebase the local commits onto `origin/main` and resolve every conflict
+  first. Fetch again immediately before pushing; if the remote moved after your
+  commit, rebase that commit onto the new `origin/main` before pushing.
 - Keep one session responsible for synchronizing the shared checkout at a time.
-  If `main` is behind or diverged, preserve every staged, unstaged, and untracked
-  change, rebase local-only commits onto `origin/main`, resolve conflicts, push,
-  fetch again, and verify the ahead/behind count is `0 0` before continuing.
-  Never use reset, clean, force-push, or an ordinary pull that creates a merge
-  commit to synchronize this checkout.
+  Preserve every staged, unstaged, and untracked change while rebasing. Never
+  use `git stash`, autostash, `git pull --rebase --autostash`, reset, clean,
+  force-push, or an ordinary pull that creates a merge commit in this checkout.
+  After pushing, fetch once more and verify
+  `git rev-list --left-right --count HEAD...origin/main` reports `0 0` before
+  continuing.
 - Never reset, revert, switch branches, or discard unrelated work.
 - Stage only your files. Use `git add -p` for shared high-traffic files.
 - Inspect `git diff --cached --name-only` and `git diff --cached` before every
