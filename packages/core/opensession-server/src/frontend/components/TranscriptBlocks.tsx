@@ -763,15 +763,10 @@ function IndexedTranscriptBlocks(props: Props) {
 		}
 		if (wanted.length) onLoad(wanted.reverse());
 	};
-	// SessionViewer enables range demand one frame after positioning the complete
-	// index. The first top check can happen before that gate opens, so replay it
-	// when the generation advances instead of waiting for a scroll event that a
-	// short opening page may not be able to produce.
-	const retryTopApproach = useEffectEvent(() => handleTopApproach());
-	useEffect(() => {
-		if (props.transcriptRangeRetryGeneration === undefined) return;
-		retryTopApproach();
-	}, [props.transcriptRangeRetryGeneration]);
+	// VirtualTranscriptList re-evaluates generation changes through its own
+	// viewport-proximity gate. Calling handleTopApproach directly here chained
+	// every completed response into another request even after the reader left
+	// the top, eventually hydrating most of a large transcript in the background.
 	const hydrationOutline = timeline.map((item, index) => ({
 		key: indexedItemKey(item, index),
 		ranges: indexedItemRanges(item),
