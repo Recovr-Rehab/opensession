@@ -11,6 +11,9 @@ import { InlineAlert } from "../ui/state";
 import { Tooltip } from "../ui/tooltip";
 import { IconTile } from "./BrandTile";
 import { IconCheckCircleFilled, IconQuestionCircle } from "./icons";
+import githubCreateAppGuide from "../assets/github-create-app.svg";
+import githubDeviceFlowGuide from "../assets/github-enable-device-flow.svg";
+import githubInstallAppGuide from "../assets/github-install-app.svg";
 import {
 	githubAppCreateOwner,
 	githubAppInstallUrlForSlug,
@@ -28,61 +31,81 @@ import {
 
 function GithubSetupStep({
 	label,
+	guide,
+	caption,
 	complete = false,
 	href,
 	disabled,
 	onClick,
 }: {
 	label: string;
+	guide: string;
+	caption: string;
 	complete?: boolean;
 	href?: string | null;
 	disabled?: boolean;
 	onClick?: () => void;
 }) {
+	const actionDisabled = disabled || (!href && !onClick);
+
 	return (
-		<div className="relative">
+		<div className="group relative min-h-11">
 			<Button
 				size="lg"
-				icon={
-					<IconCheckCircleFilled
-						size={20}
-						className={complete ? "text-green" : "text-faint"}
-					/>
-				}
 				className={cn(
-					"min-h-11 w-full justify-start pr-12",
+					"absolute inset-0 min-h-11 w-full",
 					complete && "disabled:opacity-100",
 				)}
-				disabled={disabled || (!href && !onClick)}
+				disabled={actionDisabled}
 				onClick={onClick}
 				{...(href
 					? { render: <a href={href} target="_blank" rel="noreferrer" /> }
 					: {})}
 			>
-				{label}
+				<span className="sr-only">{label}</span>
 			</Button>
-			<Tooltip
-				side="top"
-				align="end"
-				offset={6}
-				label={
-					<span
-						aria-label={`${label} screenshot placeholder`}
-						className="flex h-20 w-[100px] flex-col justify-end gap-1.5 rounded-md bg-white/10 p-2"
-					>
-						<span className="h-2 w-12 rounded-sm bg-white/20" />
-						<span className="h-1.5 w-16 rounded-sm bg-white/15" />
-					</span>
-				}
-			>
-				<button
-					type="button"
-					aria-label={`Preview ${label.toLowerCase()}`}
-					className="focus-ring absolute top-1/2 right-1 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] hover:bg-hover hover:text-fg phone:right-0 phone:size-11"
+			<div className="pointer-events-none relative z-10 flex min-h-11 items-center px-3.5 text-base font-medium text-dim">
+				<span
+					aria-hidden="true"
+					className={cn(
+						"flex items-center gap-2 transition-colors duration-[var(--dur-micro)] group-hover:text-fg",
+						actionDisabled && !complete && "opacity-40 group-hover:text-dim",
+					)}
 				>
-					<IconQuestionCircle size={20} />
-				</button>
-			</Tooltip>
+					<IconCheckCircleFilled
+						size={20}
+						className={complete ? "text-green" : "text-faint"}
+					/>
+					<span className="[text-box:trim-both_cap_alphabetic]">{label}</span>
+				</span>
+				<Tooltip
+					side="top"
+					align="start"
+					offset={6}
+					multiline
+					popupClassName="max-w-[424px]!"
+					label={
+						<span className="block w-[400px] max-w-[calc(100vw-32px)] whitespace-normal">
+							<img
+								src={guide}
+								alt=""
+								className="block h-auto w-full rounded-md"
+							/>
+							<span className="block px-1 pt-2 pb-1 text-left text-supporting leading-snug font-normal text-tooltip-fg/75">
+								{caption}
+							</span>
+						</span>
+					}
+				>
+					<button
+						type="button"
+						aria-label={`Show help for ${label.toLowerCase()}`}
+						className="focus-ring pointer-events-auto ml-1.5 flex size-6 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] hover:text-fg phone:size-8"
+					>
+						<IconQuestionCircle size={18} />
+					</button>
+				</Tooltip>
+			</div>
 		</div>
 	);
 }
@@ -265,14 +288,26 @@ export function GithubManifestSetup({
 			<div className="flex flex-col gap-2">
 				<GithubSetupStep
 					label="Create GitHub app"
+					guide={githubCreateAppGuide}
+					caption="Keep the suggested name, then create the GitHub App for your account or organization."
 					complete={github.clientIdConfigured}
 					disabled={
 						github.clientIdConfigured || !ownerReady || ownerSwitching || starting
 					}
 					onClick={() => void createApp()}
 				/>
-				<GithubSetupStep label="Enable Device Flow" href={settingsUrl} />
-				<GithubSetupStep label="Install GitHub app" href={installUrl} />
+				<GithubSetupStep
+					label="Enable Device Flow"
+					guide={githubDeviceFlowGuide}
+					caption="Leave OAuth during installation off, then turn on Enable Device Flow."
+					href={settingsUrl}
+				/>
+				<GithubSetupStep
+					label="Install GitHub app"
+					guide={githubInstallAppGuide}
+					caption="Choose all repositories or select the repositories Open Session can access, then click Install."
+					href={installUrl}
+				/>
 			</div>
 			{result === "created" && (
 				<SettingsHint className="m-0">

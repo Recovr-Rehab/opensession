@@ -45,6 +45,7 @@ export function Tooltip({
 	offset = 8,
 	shortcut,
 	multiline,
+	popupClassName,
 	children,
 }: {
 	label: React.ReactNode;
@@ -58,6 +59,8 @@ export function Tooltip({
 	shortcut?: string[];
 	/** Wrap long content instead of the default single nowrap line. */
 	multiline?: boolean;
+	/** Extend the shared popup surface for richer tooltip content. */
+	popupClassName?: string;
 	children: React.ReactElement;
 }) {
 	if (!label) return children;
@@ -91,6 +94,7 @@ export function Tooltip({
 							multiline
 								? "max-w-[360px] items-start whitespace-pre-wrap"
 								: "max-w-[280px] whitespace-nowrap",
+							popupClassName,
 						)}
 					>
 						<span
