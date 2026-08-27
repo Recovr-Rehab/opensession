@@ -29,7 +29,6 @@ import {
 	onDefaultRepoPrefChanged,
 	setDefaultRepoPref,
 } from "../../lib/default-repo-pref";
-import { AUTO_REPO } from "../../lib/session-repo";
 import {
 	getDeskVoicePref,
 	onDeskVoiceChanged,
@@ -104,7 +103,7 @@ import {
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
 import { RepoTile } from "../RepoTile";
 import { ModelMark } from "../ModelMark";
-import { IconRepo, IconSparkle } from "../icons";
+import { IconRepo } from "../icons";
 
 // ── Desk voice ─────────────────────────────────────────────────────────────
 
@@ -483,7 +482,7 @@ export function PreferencesPanel() {
 		[],
 	);
 	// Per-user default repo for NEW sessions ("" = no preference — the
-	// workspace's own default from GET /api/repos applies, which may be Auto).
+	// workspace's own default from GET /api/repos applies).
 	const [repoPref, setRepoPref] = useState<string>(getDefaultRepoPref);
 	const [repoOptions, setRepoOptions] = useState<RepoInfo[]>([]);
 	useEffect(
@@ -550,12 +549,11 @@ export function PreferencesPanel() {
 
 					<SettingRow
 						title="Default repository"
-						desc="Where a new session starts. On Auto it reads your prompt and picks."
+						desc="Where a new session starts."
 						control={
 							<Select
 								label="Default repository"
 								value={
-									repoPref === AUTO_REPO ||
 									repoOptions.some((r) => r.id === repoPref)
 										? repoPref
 										: ""
@@ -565,11 +563,6 @@ export function PreferencesPanel() {
 										value: "",
 										label: "Use the workspace default",
 										icon: <IconRepo size={16} />,
-									},
-									{
-										value: AUTO_REPO,
-										label: "Auto",
-										icon: <IconSparkle size={16} />,
 									},
 									...repoOptions.map((r) => ({
 										value: r.id,
