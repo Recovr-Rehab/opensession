@@ -323,19 +323,19 @@ function FirstMileSummary({
 							</div>
 						</div>
 						<div className="min-w-0">
-							<div className="text-item-title font-semibold text-fg">{tile.title}</div>
-							<div className="mt-1 text-supporting leading-snug text-dim">{tile.label}</div>
 							{"copyInvite" in tile && (
 								<Button
 									variant="soft"
 									size="sm"
 									onClick={onCopyInviteLink}
 									icon={inviteCopied ? <IconCheck size={15} /> : <IconLink size={15} />}
-									className="mt-3 min-h-10 w-full px-2.5 phone:min-h-11"
+									className="mb-3 min-h-10 w-full px-2.5 phone:min-h-11"
 								>
 									{inviteCopied ? "Invite link copied" : "Copy invite link"}
 								</Button>
 							)}
+							<div className="text-item-title font-semibold text-fg">{tile.title}</div>
+							<div className="mt-1 text-supporting leading-snug text-dim">{tile.label}</div>
 						</div>
 					</>
 				);
