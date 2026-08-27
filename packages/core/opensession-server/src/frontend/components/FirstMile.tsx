@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { BASE_PATH } from "../lib/base";
 import { DEFAULT_DOC_TITLE, PRODUCT_NAME } from "../lib/brand";
 import { useSetupStatus } from "../hooks/useSetupStatus";
@@ -333,7 +333,6 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const reducedMotion = useReducedMotion();
 	const steps = STEPS;
 	const step = steps[index]!;
-	const activeStepIdRef = useRef<FirstMileStep["id"]>(step.id);
 
 	useEffect(() => {
 		document.title = `Welcome to ${PRODUCT_NAME}`;
@@ -353,17 +352,16 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	// in which case Motion has no layout animation to complete.
 	useEffect(() => {
 		if (contentVisible) return;
-		const reveal = window.setTimeout(
-			() => setContentVisible(true),
-			(reducedMotion ? duration.micro : duration.large) * 1000,
-		);
+		const reveal = window.setTimeout(() => {
+			setContentVisible(true);
+			setNavigationVisible(true);
+		}, (reducedMotion ? duration.micro : duration.large) * 1000);
 		return () => window.clearTimeout(reveal);
 	}, [contentVisible, index, reducedMotion]);
 
 	async function goTo(next: number) {
 		const nextIndex = Math.min(Math.max(next, 0), steps.length - 1);
 		if (nextIndex === index) return;
-		activeStepIdRef.current = steps[nextIndex]!.id;
 		setContentVisible(false);
 		setNavigationVisible(false);
 		setIndex(nextIndex);
@@ -379,12 +377,6 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 		setNavigationVisible(true);
 	}
 
-	const revealTransition = (delay = 0) => ({
-		type: "tween" as const,
-		duration: reducedMotion ? duration.micro : duration.base,
-		ease,
-		delay: reducedMotion ? 0 : delay,
-	});
 	const backdropName =
 		theme === "dark" ? "onboarding-bg-dark" : "onboarding-bg";
 	const nextLabel =
@@ -401,7 +393,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	return (
 		<div
 			data-first-mile
-			className="relative grid h-[100dvh] w-full grid-rows-[44px_minmax(0,1fr)] gap-y-3 overflow-hidden bg-surface bg-cover bg-center p-6 text-fg phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-[max(12px,env(safe-area-inset-top))]"
+			className="relative grid h-[100dvh] w-full grid-rows-[44px_minmax(0,1fr)] gap-y-3 overflow-hidden bg-surface bg-cover bg-center p-6 text-fg phone:gap-y-0 phone:px-0 phone:pb-0 phone:pt-[max(12px,env(safe-area-inset-top))]"
 			// The vendored marketing artwork keeps first run independent of a CDN.
 			style={{ backgroundImage: `url(${BASE_PATH}/${backdropName}.webp)` }}
 		>
@@ -421,12 +413,12 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						<span
 							aria-hidden="true"
 							className={cn(
-								"h-1.5 rounded-full transition-[width,background-color,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+								"h-2 rounded-full transition-[width,background-color,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
 								stepIndex === index
 									? "w-6 bg-fg"
 									: stepIndex < index
-										? "w-1.5 bg-fg/45 group-hover:bg-fg/65"
-										: "w-1.5 bg-faint/35 group-hover:bg-faint/60",
+										? "w-2 bg-fg/45 group-hover:bg-fg/65"
+										: "w-2 bg-faint/35 group-hover:bg-faint/60",
 							)}
 						/>
 					</button>
@@ -442,7 +434,10 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			) : (
 				<motion.section
 					layout
-					onLayoutAnimationComplete={() => setContentVisible(true)}
+					onLayoutAnimationComplete={() => {
+						setContentVisible(true);
+						setNavigationVisible(true);
+					}}
 					transition={{
 						layout: {
 							type: "spring",
@@ -451,119 +446,101 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						},
 					}}
 					className={cn(
-						"relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-2xl bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
-						step.id === "welcome" ? "max-w-[560px]" : "max-w-[860px]",
+						"relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-2xl phone:h-full phone:max-h-none phone:max-w-none phone:self-stretch phone:rounded-none phone:[box-shadow:none]",
+						step.id === "welcome"
+							? "max-w-[560px] bg-transparent [backdrop-filter:none]"
+							: "max-w-[860px] bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
 					)}
 				>
-					<AnimatePresence initial={false} mode="popLayout">
-						<motion.div key={step.id} className="flex min-h-0 flex-col">
-							<header className="shrink-0 px-10 pb-2 pt-9 text-center phone:px-5 phone:pt-6">
-								{step.id === "welcome" && (
-									<motion.img
-										src={`${BASE_PATH}/mac-app-icon.png`}
-										alt=""
-										initial={{ opacity: 0 }}
-										animate={{
-											opacity: contentVisible ? 1 : 0,
-											transition: revealTransition(),
-										}}
-										exit={{ opacity: 0 }}
-										transition={revealTransition()}
-										className="mx-auto mb-7 size-20 scale-[1.13] [filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.16))] phone:mb-6 phone:size-16"
-									/>
-								)}
-								<motion.h1
-									ref={headingRef}
-									tabIndex={index > 0 ? -1 : undefined}
-									initial={{ opacity: 0 }}
-									animate={{
-										opacity: contentVisible ? 1 : 0,
-										transition: revealTransition(0.02),
-									}}
-									exit={{ opacity: 0 }}
-									transition={revealTransition()}
-									className="m-0 text-balance text-page-title font-title leading-[1.1] tracking-[-0.012em] text-fg outline-none phone:text-section-title"
-								>
-									{step.title}
-								</motion.h1>
-							</header>
-
-							<motion.div
-								initial={{ opacity: 0 }}
-								animate={{
-									opacity: contentVisible ? 1 : 0,
-									transition: revealTransition(0.11),
-								}}
-								exit={{ opacity: 0 }}
-								transition={revealTransition()}
-								onAnimationComplete={() => {
-									if (contentVisible && step.id === activeStepIdRef.current) {
-										setNavigationVisible(true);
-									}
-								}}
-								className={cn(
-									"min-h-0",
-									step.id === "welcome"
-										? "h-4 shrink-0"
-										: "overflow-y-auto overscroll-contain px-10 pb-9 pt-5 [scrollbar-width:thin] phone:px-4 phone:pb-6 phone:pt-4",
-								)}
+					<div
+						key={step.id}
+						aria-hidden={!contentVisible}
+						inert={!contentVisible}
+						className={cn(
+							"flex min-h-0 flex-col",
+							!contentVisible && "invisible",
+						)}
+					>
+						<header className="shrink-0 px-10 pb-2 pt-9 text-center phone:px-5 phone:pt-6">
+							{step.id === "welcome" && (
+								<img
+									src={`${BASE_PATH}/mac-app-icon.png`}
+									alt=""
+									className="mx-auto mb-7 size-16 [filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.16))] phone:mb-6"
+								/>
+							)}
+							<h1
+								ref={headingRef}
+								tabIndex={index > 0 ? -1 : undefined}
+								className="m-0 text-balance text-page-title font-title leading-[1.1] tracking-[-0.012em] text-fg outline-none phone:text-section-title"
 							>
-								{step.id !== "welcome" && (
-									<div
-										className={cn(
-											"mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:leading-[1.5] [&_[data-settings-hint]]:text-faint [&_[data-onboarding-caption]]:leading-[1.5]",
-											step.id === "ready" ? "max-w-[1160px]" : "max-w-[780px]",
-											"[&_.bg-settings-plate]:border-0 [&_.bg-settings-plate]:bg-transparent! [&_.bg-settings-plate]:shadow-none [&_.bg-settings-plate]:[backdrop-filter:none]",
-											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9",
-										)}
-									>
-										{step.id === "github" && (
-											<GithubAuthCard
-												github={status.github}
-												onSaved={setup.applyGithub}
-												onboarding
-											/>
-										)}
-										{step.id === "organization" && (
-											<OrganizationProfileSection
-												githubOrganization={connectedGithubOrganization(status)}
-												onboarding
-											/>
-										)}
-										{step.id === "team" && (
-											<TeamSection
-												onChanged={refetch}
-												title="Members"
-												showCount
-												onboarding
-												syncGithubOrganization={githubOrganizationImportEnabled(status)}
-												compact
-											/>
-										)}
-										{step.id === "ai" && (
-											<ProviderAccountsSection onboarding onChanged={refetch} />
-										)}
-										{step.id === "repos" && (
-											<ReposSection
-												repos={status.repos}
-												onChanged={refetch}
-												compact
-												showLifecycleStatus={false}
-											/>
-										)}
-										{step.id === "ready" && (
-											<FirstMileSummary
-												status={status}
-												onSelect={(stepId) =>
-													goTo(steps.findIndex((item) => item.id === stepId))
-												}
-											/>
-										)}
-									</div>
-								)}
-							</motion.div>
-						</motion.div>
-					</AnimatePresence>
+								{step.title}
+							</h1>
+						</header>
+
+						<div
+							className={cn(
+								"min-h-0",
+								step.id === "welcome"
+									? "h-4 shrink-0"
+									: "overflow-y-auto overscroll-contain px-10 pb-12 pt-5 [-webkit-mask-image:linear-gradient(to_bottom,#000_0,#000_calc(100%_-_36px),transparent_100%)] [mask-image:linear-gradient(to_bottom,#000_0,#000_calc(100%_-_36px),transparent_100%)] [scrollbar-width:thin] phone:px-4 phone:pb-12 phone:pt-4",
+							)}
+						>
+							{step.id !== "welcome" && (
+								<div
+									className={cn(
+										"mx-auto w-full [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:leading-[1.5] [&_[data-settings-hint]]:text-faint [&_[data-onboarding-caption]]:leading-[1.5]",
+										step.id === "ready" ? "max-w-[1160px]" : "max-w-[780px]",
+										"[&_.bg-settings-plate]:border-0 [&_.bg-settings-plate]:bg-transparent! [&_.bg-settings-plate]:shadow-none [&_.bg-settings-plate]:[backdrop-filter:none]",
+										"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9",
+									)}
+								>
+									{step.id === "github" && (
+										<GithubAuthCard
+											github={status.github}
+											onSaved={setup.applyGithub}
+											onboarding
+										/>
+									)}
+									{step.id === "organization" && (
+										<OrganizationProfileSection
+											githubOrganization={connectedGithubOrganization(status)}
+											onboarding
+										/>
+									)}
+									{step.id === "team" && (
+										<TeamSection
+											onChanged={refetch}
+											title="Members"
+											showCount
+											onboarding
+											syncGithubOrganization={githubOrganizationImportEnabled(status)}
+											compact
+										/>
+									)}
+									{step.id === "ai" && (
+										<ProviderAccountsSection onboarding onChanged={refetch} />
+									)}
+									{step.id === "repos" && (
+										<ReposSection
+											repos={status.repos}
+											onChanged={refetch}
+											compact
+											showLifecycleStatus={false}
+										/>
+									)}
+									{step.id === "ready" && (
+										<FirstMileSummary
+											status={status}
+											onSelect={(stepId) =>
+												goTo(steps.findIndex((item) => item.id === stepId))
+											}
+										/>
+									)}
+								</div>
+							)}
+						</div>
+					</div>
 
 					<motion.footer
 						layout="position"
@@ -573,7 +550,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						aria-hidden={!navigationVisible}
 						inert={!navigationVisible}
 						className={cn(
-							"relative z-20 shrink-0 px-6 py-4 phone:px-3 phone:py-3",
+							"relative z-20 shrink-0 px-6 py-4 phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-3",
 							!navigationVisible && "pointer-events-none",
 						)}
 					>

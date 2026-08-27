@@ -201,7 +201,14 @@ export function GithubAuthCard({
 					<GithubManifestSetup
 						github={github}
 						returnTo="welcome"
-						connectionStatus={onboarding ? state : undefined}
+						connectionStatus={
+							onboarding
+								? {
+										tone: state.tone,
+										label: state.tone === "on" ? "Connected" : state.label,
+									}
+								: undefined
+						}
 					/>
 				</SettingsSection>
 				{onboarding && github.clientIdConfigured && (

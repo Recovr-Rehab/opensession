@@ -123,7 +123,7 @@ export function GithubManifestSetup({
 				<div className="flex items-start justify-between gap-4">
 					<div className="min-w-0">
 						<IconTile name="github" size={40} />
-						<div className="mt-4 text-dialog-title font-semibold text-fg">
+						<div className="mt-6 text-dialog-title font-semibold text-fg">
 							How to connect
 						</div>
 					</div>
@@ -143,13 +143,13 @@ export function GithubManifestSetup({
 				>
 					<SegmentedOption
 						value="personal"
-						className="flex-1 justify-center phone:min-h-11"
+						className="flex-1 text-center phone:min-h-11 [&>span:last-child]:justify-center"
 					>
 						Personal account
 					</SegmentedOption>
 					<SegmentedOption
 						value="organization"
-						className="flex-1 justify-center phone:min-h-11"
+						className="flex-1 text-center phone:min-h-11 [&>span:last-child]:justify-center"
 					>
 						Organization
 					</SegmentedOption>
