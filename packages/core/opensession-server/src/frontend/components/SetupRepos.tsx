@@ -110,6 +110,7 @@ export function ReposSection({
 					<Button
 						size="sm"
 						variant="primary"
+						className="bg-fg text-bg hover:bg-fg/85"
 						icon={pendingRepo ? <Spinner /> : <IconPlus size={16} />}
 						disabled={pendingRepo !== null}
 						onClick={() => setPickerOpen(true)}
