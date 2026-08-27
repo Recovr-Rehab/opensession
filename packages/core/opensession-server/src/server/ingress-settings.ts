@@ -21,7 +21,11 @@ import { caddyIngressSnippet, upsertCaddyIngress } from "./sandbox/caddy-ingress
 import { stateDir } from "./paths";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { prepareEnvFileEdits } from "./env-file-edit";
-import { detectedTailnetIpv4, normalizeAppOrigin } from "./setup-access";
+import {
+  detectedTailnetIpv4,
+  normalizeAppOrigin,
+  setupAccessSnapshot,
+} from "./setup-access";
 import {
   configurePrivateAppDomain,
   privateAppCaddyUpstream,
@@ -85,6 +89,17 @@ export interface IngressStatus {
   custom: { caddyInstalled: boolean; generatedConfig: string };
 }
 
+/** The configured private app origin as persisted by the setup flow.
+ *
+ * `configuredServer()` intentionally gives the boot environment precedence,
+ * but that value remains stale until a requested restart. Settings status must
+ * use the freshly persisted config so a saved friendly domain does not
+ * disappear on the next poll.
+ */
+export function configuredPrivateAppOrigin(): string {
+  return setupAccessSnapshot().publicBaseUrl;
+}
+
 export function normalizeIngressOrigin(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) throw new Error("Public ingress URL is required");
@@ -115,7 +130,7 @@ export function normalizeIngressOrigin(value: string): string {
     throw new Error("Public ingress must be reachable from the public internet");
   }
   const appHost = (() => {
-    try { return new URL(configuredServer().publicBaseUrl).hostname.toLowerCase(); }
+    try { return new URL(configuredPrivateAppOrigin()).hostname.toLowerCase(); }
     catch { return ""; }
   })();
   if (host === appHost) {
@@ -472,7 +487,7 @@ export async function publicIngressStatus(
   options: { appBaseUrl?: string } = {},
 ): Promise<IngressStatus> {
   const configured = configuredIngress();
-  const appBaseUrl = options.appBaseUrl || configuredServer().publicBaseUrl;
+  const appBaseUrl = options.appBaseUrl || configuredPrivateAppOrigin();
   let appHostname = "";
   try { appHostname = new URL(appBaseUrl).hostname; } catch {}
   let hostname = "";
@@ -568,7 +583,7 @@ export async function setupPrivateAppDomain(input: {
 }
 
 export async function verifyPrivateAppDomain(): Promise<PrivateAppDomainStatus> {
-  return testPrivateAppDomain(configuredServer().publicBaseUrl, detectedTailnetIpv4());
+  return testPrivateAppDomain(configuredPrivateAppOrigin(), detectedTailnetIpv4());
 }
 
 export async function savePrivateAppOrigin(value: string): Promise<string> {
