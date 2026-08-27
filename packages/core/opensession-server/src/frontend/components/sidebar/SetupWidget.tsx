@@ -123,7 +123,7 @@ export function SetupWidget({
 		<aside
 			aria-labelledby="sidebar-setup-title"
 			className={cn(
-				"z-30 rounded-2xl border border-divider-soft bg-popup-glass p-2 [backdrop-filter:var(--popup-blur)] smooth-shadow-sm",
+				"z-30 rounded-2xl border border-divider-soft bg-panel/72 p-2 [backdrop-filter:var(--popup-blur)] smooth-shadow-sm",
 				placement === "desktop"
 					? "fixed right-4 bottom-20 w-72"
 					: "mx-3 mt-3 mb-20 flex-none",
