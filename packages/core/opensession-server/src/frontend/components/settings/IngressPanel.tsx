@@ -187,7 +187,7 @@ function PrivateAppSetup({
 	return (
 		<>
 			{!onboarding && (
-				<SettingCard>
+				<SettingCard className="bg-raised desktop:bg-panel">
 					<SettingRow>
 						<SettingRowText>
 							<SettingRowTitle>Current address</SettingRowTitle>
@@ -207,7 +207,7 @@ function PrivateAppSetup({
 					)}
 				</SettingCard>
 			)}
-			<SettingsForm className={onboarding ? "mt-0" : "mt-3"}>
+			<SettingsForm className={cn("bg-raised desktop:bg-panel", onboarding ? "mt-0" : "mt-3")}>
 				{status === "ready" && !settings.app.domain.credentialConfigured && (
 					<SettingsHint className="m-0">This address is already working. Its certificate is managed outside Open Session.</SettingsHint>
 				)}
