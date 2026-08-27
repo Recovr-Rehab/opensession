@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useReducedMotion } from "motion/react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SettingsHint } from "../ui/settings";
+import { duration } from "../ui/motion";
 import { InlineAlert } from "../ui/state";
 import { IconTile } from "./BrandTile";
 import {
@@ -49,6 +51,11 @@ export function GithubManifestSetup({
 	const [owner, setOwner] = useState<GithubAppOwnerType>(
 		githubAppSetupOwner(github),
 	);
+	// Keep the owner-specific form in place while the segmented knob travels.
+	// Once the click has visibly settled, the form can change the modal height
+	// without competing with that direct feedback.
+	const [formOwner, setFormOwner] = useState(owner);
+	const reducedMotion = useReducedMotion();
 	const [ownerDrafts, setOwnerDrafts] = useState<Record<GithubAppOwnerType, string>>({
 		personal: initialOwner.type === "personal" ? github.installationOwner ?? "" : "",
 		organization:
@@ -60,7 +67,18 @@ export function GithubManifestSetup({
 	const [starting, setStarting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const installationOwner = ownerDrafts[owner];
+	const formInstallationOwner = ownerDrafts[formOwner];
+	const ownerSwitching = owner !== formOwner;
 	const ownerReady = owner === "personal" || Boolean(installationOwner.trim());
+
+	useEffect(() => {
+		if (!ownerSwitching) return;
+		const reveal = window.setTimeout(
+			() => setFormOwner(owner),
+			(reducedMotion ? 0 : duration.base) * 1000,
+		);
+		return () => window.clearTimeout(reveal);
+	}, [owner, ownerSwitching, reducedMotion]);
 	const settingsUrl = githubAppSettingsUrlForSlug(
 		github.appSlug,
 		github.appOrg,
@@ -154,11 +172,11 @@ export function GithubManifestSetup({
 						Organization
 					</SegmentedOption>
 				</Segmented>
-				{owner === "organization" && (
+				{formOwner === "organization" && (
 					<label className="flex flex-col gap-1">
 						<span className="text-label font-medium text-dim">Organization login</span>
 						<Input
-							value={installationOwner}
+							value={formInstallationOwner}
 							onChange={(event) =>
 								setOwnerDrafts((current) => ({
 									...current,
@@ -178,7 +196,7 @@ export function GithubManifestSetup({
 					</label>
 				)}
 			</div>
-			<SetupSteps steps={githubManifestSteps(owner)} />
+			<SetupSteps steps={githubManifestSteps(formOwner)} />
 			{result === "created" && (
 				<SettingsHint className="m-0">
 					GitHub App created. Enable Device Flow before you install it.
@@ -193,7 +211,9 @@ export function GithubManifestSetup({
 					variant="primary"
 					size="lg"
 					className="min-h-11 w-full justify-center"
-					disabled={github.clientIdConfigured || !ownerReady || starting}
+					disabled={
+						github.clientIdConfigured || !ownerReady || ownerSwitching || starting
+					}
 					onClick={() => void createApp()}
 				>
 					{github.clientIdConfigured

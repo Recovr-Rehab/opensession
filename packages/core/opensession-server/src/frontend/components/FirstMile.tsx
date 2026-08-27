@@ -449,7 +449,10 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						"relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-2xl phone:h-full phone:max-h-none phone:max-w-none phone:self-stretch phone:rounded-none phone:[box-shadow:none]",
 						step.id === "welcome"
 							? "max-w-[560px] bg-transparent [backdrop-filter:none]"
-							: "max-w-[860px] bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
+							: cn(
+									step.id === "ready" ? "max-w-[900px]" : "max-w-[750px]",
+									"bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
+								),
 					)}
 				>
 					<div
