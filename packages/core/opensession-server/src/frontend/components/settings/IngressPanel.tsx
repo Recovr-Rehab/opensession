@@ -29,6 +29,7 @@ import { cn } from "../../ui/cn";
 import { CopyCheck, useCopy } from "../../ui/copy";
 import { Input } from "../../ui/input";
 import { Radio, RadioGroup } from "../../ui/radio";
+import { Segmented, SegmentedOption } from "../../ui/segmented";
 import {
 	SettingCard,
 	SettingCardSkeleton,
@@ -48,40 +49,13 @@ import {
 import { ResponsiveDialog } from "../../ui/sheet";
 import { InlineAlert, LoadingState } from "../../ui/state";
 import { toast } from "../../ui/toast";
-import { markTileClass, markTileGradient, markTileInk, markTileShadow, type MarkTone } from "../../lib/mark-tile";
-import { IconCopy, IconGlobe, IconServer, IconX } from "../icons";
+import { IconCopy, IconX } from "../icons";
 import { SetupRestart } from "../SetupRestart";
 
 const EMPTY_DRAFTS: Record<IngressExposure, string> = {
 	cloudflare: "",
 	custom: "",
 };
-
-/** Each method's plate, so a choice reads the same in the list and in the
- *  panel it opens — the leading mark is what ties the two halves together in
- *  the server setup this mirrors. */
-const METHOD_MARKS: Record<IngressExposure, { tone: MarkTone; icon: typeof IconGlobe }> = {
-	cloudflare: { tone: "sky", icon: IconGlobe },
-	custom: { tone: "orange", icon: IconServer },
-};
-
-function MethodMark({ method, size = 44 }: { method: IngressExposure; size?: number }) {
-	const { tone, icon: Icon } = METHOD_MARKS[method];
-	return (
-		<span
-			className={`${markTileClass(size)} plate-sheen`}
-			style={{
-				width: size,
-				height: size,
-				backgroundImage: markTileGradient(tone),
-				color: "#fff",
-				boxShadow: markTileShadow(markTileInk(tone)),
-			}}
-		>
-			<Icon size={Math.round(size * 0.5)} />
-		</span>
-	);
-}
 
 function CodeBlock({ children }: { children: string }) {
 	const { copied, copy } = useCopy();
@@ -650,49 +624,25 @@ export function IngressPanel({
 							/>
 					) : (
 					<div className="grid items-start gap-4">
-						<SettingsForm className="m-0 min-w-0 gap-4 p-6 phone:p-4">
+						<SettingsForm className="m-0 min-w-0 gap-4 bg-raised p-6 desktop:flex-row desktop:items-center desktop:justify-between phone:p-4">
 							<div className="px-1">
 								<div className="text-item-title font-semibold text-fg">Connection method</div>
 								<p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">Choose how external services reach Open Session.</p>
 							</div>
-							<RadioGroup
-								aria-label="Public callback method"
+							<Segmented
+								label="Public callback method"
 								value={method}
-								disabled={!!busy || !settings.canManage}
 								onValueChange={(next) => setMethod(next as IngressExposure)}
-								className="grid grid-cols-2 gap-2.5 phone:grid-cols-1"
+								className="shrink-0 phone:flex phone:w-full"
 							>
-								{INGRESS_METHODS.map((option) => (
-									<label
-										key={option.value}
-										className={cn(
-											"flex min-h-24 cursor-pointer items-center gap-3 rounded-xl bg-surface px-4 py-3 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed",
-											onboarding && "hover:bg-hover",
-										)}
-									>
-										<MethodMark method={option.value} />
-										<span className="min-w-0 flex-1">
-											<span className="block text-item-title font-medium text-fg">{option.label}</span>
-											<span className="mt-1 block text-meta leading-snug text-dim">{option.description}</span>
-										</span>
-										<Radio
-											value={option.value}
-											className={cn(
-												"shrink-0",
-												onboarding && "size-5 border-0 bg-fg/15 data-[checked]:bg-fg data-[checked]:hover:border-fg [&>span]:hidden",
-											)}
-										/>
-									</label>
-								))}
-							</RadioGroup>
+								<SegmentedOption value="custom" disabled={!!busy || !settings.canManage} className="phone:flex-1 phone:justify-center">Caddy</SegmentedOption>
+								<SegmentedOption value="cloudflare" disabled={!!busy || !settings.canManage} className="phone:flex-1 phone:justify-center">Cloudflare</SegmentedOption>
+							</Segmented>
 						</SettingsForm>
 
 						<SettingsForm className="m-0 min-w-0 gap-4 p-6 phone:p-4">
 							<div className="flex items-center justify-between gap-4">
-								<div className="flex min-w-0 items-center gap-3">
-									<MethodMark method={method} size={40} />
-									<div className="text-item-title font-semibold text-fg">Set up {selectedMethod.label}</div>
-								</div>
+								<div className="min-w-0 text-item-title font-semibold text-fg">Set up {selectedMethod.label}</div>
 								<div className="shrink-0">
 									<StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(selectedHealth)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(selectedHealth)} />
 								</div>
