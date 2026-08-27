@@ -83,13 +83,13 @@ function GithubSetupStep({
 					align="start"
 					offset={6}
 					multiline
-					popupClassName="max-w-[424px]!"
+					popupClassName="max-w-[424px]! p-2!"
 					label={
 						<span className="block w-[400px] max-w-[calc(100vw-32px)] whitespace-normal">
 							<img
 								src={guide}
 								alt=""
-								className="block h-auto w-full rounded-md"
+								className="block h-auto w-full rounded-md border border-[var(--tooltip-ring)]"
 							/>
 							<span className="block px-1 pt-2 pb-1 text-left text-supporting leading-snug font-normal text-tooltip-fg/75">
 								{caption}
@@ -100,7 +100,7 @@ function GithubSetupStep({
 					<button
 						type="button"
 						aria-label={`Show help for ${label.toLowerCase()}`}
-						className="focus-ring pointer-events-auto ml-1.5 flex size-6 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] hover:text-fg phone:size-8"
+						className="focus-ring pointer-events-auto ml-auto flex size-6 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] hover:text-fg phone:size-8"
 					>
 						<IconQuestionCircle size={18} />
 					</button>
