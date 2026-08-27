@@ -1251,7 +1251,7 @@ setError(e.message);
     // desktop. Three short stacked lines — what to do, the two controls, what
     // we're waiting for — never wrap badly and let the code be the thing the eye
     // lands on.
-    <div className="flex flex-col gap-2.5 px-5 py-3.5">
+    <div className="flex flex-col gap-4 px-5 py-3.5">
       <div className="text-supporting text-dim">
         Enter this code at{" "}
         <span className="font-medium text-fg">
