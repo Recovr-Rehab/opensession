@@ -75,8 +75,10 @@ class Driver implements AgentTurnDriver {
   cancelled = 0;
   private done!: (r: AgentTurnResult) => void;
   completion = new Promise<AgentTurnResult>((r) => (this.done = r));
-  run(_s: AgentTurnSpec, t: AgentHostOperationTransport) {
+  constructor(private readonly requestInitialOnRun = false) {}
+  async run(s: AgentTurnSpec, t: AgentHostOperationTransport) {
     this.transport = t;
+    if (this.requestInitialOnRun) await t.requestOperation(s.initialOperation);
     return this.completion;
   }
   async deliverOperationStream(s: { streamSeq: number }) {
@@ -166,19 +168,20 @@ async function setup(
   const dir = await mkdtemp(join(tmpdir(), "host-v4-")),
     socketPath = join(dir, "host.sock"),
     driver = new Driver(),
-    sig = signing();
+    sig = signing(),
+    hostIncarnation = `incarnation-${crypto.randomUUID()}`;
   const host = createAgentHost({
     socketPath,
     createDriver: () => driver,
     hostId: "agent-host-1",
     hostGeneration: 1,
-    hostIncarnation: `incarnation-${crypto.randomUUID()}`,
+    hostIncarnation,
     supervisionKeyring: sig.keyring,
     ...extra,
   });
   resources.push({ host, dir });
   await host.start();
-  return { socketPath, driver, ...sig };
+  return { host, socketPath, driver, hostIncarnation, ...sig };
 }
 async function peer(path: string) {
   return new Promise<Peer>((ok) => {
@@ -396,6 +399,143 @@ describe("Agent Host protocol v5", () => {
     send(second, { t: "turn_terminal_ack", version: 5, requestId: "terminal-replay-ack", fence, ackHostSeq: written.hostSeq, resultDigest: written.resultDigest, receiptsDigest: written.receiptsDigest });
     await wait();
     expect(second.socket.destroyed).toBe(true);
+  });
+
+  test("hydrates exact terminal replay before listener start", async () => {
+    const original = await setup({ reconnectGraceMs: 200 });
+    const first = await peer(original.socketPath);
+    await attach(first, original.receipt);
+    send(first, { t: "start_turn", version: 5, requestId: "start-hydrate", planHash, spec });
+    await wait();
+    first.messages.shift();
+    await original.driver.transport!.requestOperation(spec.initialOperation);
+    await wait();
+    const request = first.messages.find((message) => message.t === "operation_request");
+    const finalIntent = first.messages.at(-1);
+    send(first, { t: "operation_receipt", version: 5, requestId: "executing-hydrate", fence, ackHostSeq: request.hostSeq, operationId: "operation-1", receipt: receipt("executing") });
+    send(first, { t: "operation_receipt", version: 5, requestId: "settled-hydrate", fence, ackHostSeq: finalIntent.hostSeq, operationId: "operation-1", receipt: receipt("settled") });
+    send(first, { t: "consumption_ack", version: 5, requestId: "consumed-hydrate", fence, ackHostSeq: finalIntent.hostSeq, operations: [{ operationId: "operation-1", throughStreamSeq: 0 }] });
+    original.driver.finish();
+    await wait();
+    const active = (original.host as any).active;
+    const terminal = first.messages.find((message) => message.t === "turn_terminal");
+    expect(terminal).toBeDefined();
+    const snapshot = {
+      spec,
+      planHash,
+      supervisorEpoch: active.authority.supervisorEpoch,
+      requestId: active.requestId,
+      hostSeq: active.seq,
+      acknowledgedHostSeq: active.acknowledgedHostSeq,
+      replay: active.replay.map((frame: any) => JSON.parse(frame.bytes.toString("utf8"))),
+      operations: [...active.ops.values()].map((operation: any) => ({
+        request: operation.request,
+        receipt: operation.receipt,
+        sentHostSeqs: [...operation.sent],
+        throughStreamSeq: operation.through,
+        acknowledgedThroughStreamSeq: active.acknowledgedStreams.get(operation.request.operationId) ?? 0,
+        creditsBytes: operation.creditsBytes,
+        creditsChunks: operation.creditsChunks,
+        owedCreditBytes: operation.owedCreditBytes,
+        owedCreditChunks: operation.owedCreditChunks,
+      })),
+      result: active.result,
+      terminal: active.terminal,
+    };
+    await original.host.stop();
+
+    const restoredDriver = new Driver();
+    const restoredSocketPath = `${original.socketPath}.restored`;
+    const restored = createAgentHost({
+      socketPath: restoredSocketPath,
+      createDriver: () => restoredDriver,
+      hostId: "agent-host-1",
+      hostGeneration: 1,
+      hostIncarnation: original.hostIncarnation,
+      supervisionKeyring: original.keyring,
+      reconnectGraceMs: 200,
+    });
+    resources.unshift({ host: restored, dir: resources[0]!.dir });
+    await expect(
+      restored.hydrateV5({
+        ...snapshot,
+        terminal: { ...snapshot.terminal, hostIncarnation: "stale-incarnation" },
+      }),
+    ).rejects.toThrow("Invalid hydrated Agent Host terminal");
+    await restored.hydrateV5(snapshot);
+    await restored.start();
+    await expect(restored.hydrateV5(snapshot)).rejects.toThrow(
+      "hydration must precede start",
+    );
+    const second = await peer(restoredSocketPath);
+    expect((await attach(second, original.receipt, { lastHostSeq: terminal.hostSeq - 1, operations: [{ operationId: "operation-1", throughStreamSeq: 0 }] })).mode).toBe("resumed");
+    await wait();
+    const replayed = second.messages.filter((message) => message.t === "turn_terminal");
+    expect(replayed).toEqual([terminal]);
+    send(second, { t: "turn_terminal_ack", version: 5, requestId: "hydrated-terminal-ack", fence, ackHostSeq: terminal.hostSeq, resultDigest: terminal.resultDigest, receiptsDigest: terminal.receiptsDigest });
+    await wait();
+    expect(second.socket.destroyed).toBe(true);
+  });
+
+  test("hydrates active operation state and recovers through the existing Driver factory", async () => {
+    const original = await setup({ reconnectGraceMs: 200 });
+    const first = await peer(original.socketPath);
+    await attach(first, original.receipt);
+    send(first, { t: "start_turn", version: 5, requestId: "start-active-hydrate", planHash, spec });
+    await wait();
+    first.messages.shift();
+    await original.driver.transport!.requestOperation(spec.initialOperation);
+    await wait();
+    const request = first.messages.find((message) => message.t === "operation_request");
+    const finalIntent = first.messages.at(-1);
+    send(first, { t: "operation_receipt", version: 5, requestId: "executing-active-hydrate", fence, ackHostSeq: request.hostSeq, operationId: "operation-1", receipt: receipt("executing") });
+    send(first, { t: "consumption_ack", version: 5, requestId: "consumed-active-hydrate", fence, ackHostSeq: finalIntent.hostSeq, operations: [{ operationId: "operation-1", throughStreamSeq: 0 }] });
+    await wait();
+    const active = (original.host as any).active;
+    const snapshot = {
+      spec,
+      planHash,
+      supervisorEpoch: active.authority.supervisorEpoch,
+      requestId: active.requestId,
+      hostSeq: active.seq,
+      acknowledgedHostSeq: active.acknowledgedHostSeq,
+      replay: active.replay.map((frame: any) => JSON.parse(frame.bytes.toString("utf8"))),
+      operations: [...active.ops.values()].map((operation: any) => ({
+        request: operation.request,
+        receipt: operation.receipt,
+        sentHostSeqs: [...operation.sent],
+        throughStreamSeq: operation.through,
+        acknowledgedThroughStreamSeq: active.acknowledgedStreams.get(operation.request.operationId) ?? 0,
+        creditsBytes: operation.creditsBytes,
+        creditsChunks: operation.creditsChunks,
+        owedCreditBytes: operation.owedCreditBytes,
+        owedCreditChunks: operation.owedCreditChunks,
+      })),
+    };
+    await original.host.stop();
+
+    const restoredDriver = new Driver(true);
+    const restoredSocketPath = `${original.socketPath}.active-restored`;
+    const restored = createAgentHost({
+      socketPath: restoredSocketPath,
+      createDriver: () => restoredDriver,
+      hostId: "agent-host-1",
+      hostGeneration: 1,
+      hostIncarnation: original.hostIncarnation,
+      supervisionKeyring: original.keyring,
+      reconnectGraceMs: 200,
+    });
+    resources.unshift({ host: restored, dir: resources[0]!.dir });
+    await restored.hydrateV5(snapshot);
+    expect(restoredDriver.transport).toBeDefined();
+    expect((restored as any).active.ops.size).toBe(1);
+    expect((restored as any).active.replay.at(-1).seq).toBe(snapshot.hostSeq + 1);
+    await restored.start();
+    const second = await peer(restoredSocketPath);
+    const attached = await attach(second, original.receipt, { lastHostSeq: snapshot.hostSeq, operations: [{ operationId: "operation-1", throughStreamSeq: 0 }] });
+    expect(attached.mode).toBe("recovery_required");
+    await wait();
+    expect(second.messages.some((message) => message.t === "operation_query")).toBe(true);
   });
 
   test("keeps a detached driver alive through reconnect before terminal write and atomically resumes", async () => {

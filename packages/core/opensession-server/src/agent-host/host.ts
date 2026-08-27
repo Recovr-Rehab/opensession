@@ -29,12 +29,20 @@ import {
   decodeAgentHostAttach,
   decodeAgentHostConsumptionAck,
   decodeAgentHostHello,
+  decodeAgentHostOperationCancel,
   decodeAgentHostOperationCancelReceipt,
+  decodeAgentHostOperationQuery,
   decodeAgentHostOperationQueryReceipt,
   decodeAgentHostOperationReceipt,
+  decodeAgentHostOperationRequest,
   decodeAgentHostOperationStream,
+  decodeAgentHostOperationStreamAck,
   decodeAgentHostStartTurn,
+  decodeAgentHostTurnStarted,
+  decodeAgentHostTurnTerminal,
   decodeAgentHostTurnTerminalAck,
+  decodeAgentOperationReceiptV1,
+  decodeAgentTurnSpec,
   decodeAgentHostSupervisionPublicKeyringV2,
   decodeExecutorId,
   hashAgentTurnSpecV2,
@@ -98,6 +106,33 @@ export interface AgentHostOptions {
   clearTimeout?: typeof globalThis.clearTimeout;
   failpoint?: (point: AgentHostFailpoint) => void | Promise<void>;
 }
+export type AgentHostReplayMessageV5 = Extract<
+  AgentHostServerMessage,
+  { readonly hostSeq: number }
+>;
+export interface AgentHostHydratedOperationV5 {
+  readonly request: Readonly<AgentHostInitialOperationV4>;
+  readonly receipt?: Readonly<AgentOperationReceiptV1>;
+  readonly sentHostSeqs: readonly number[];
+  readonly throughStreamSeq: number;
+  readonly acknowledgedThroughStreamSeq: number;
+  readonly creditsBytes: number;
+  readonly creditsChunks: number;
+  readonly owedCreditBytes: number;
+  readonly owedCreditChunks: number;
+}
+export interface AgentHostHydratedTurnV5 {
+  readonly spec: Readonly<AgentTurnSpec>;
+  readonly planHash: string;
+  readonly supervisorEpoch: number;
+  readonly requestId: string;
+  readonly hostSeq: number;
+  readonly acknowledgedHostSeq: number;
+  readonly replay: readonly Readonly<AgentHostReplayMessageV5>[];
+  readonly operations: readonly Readonly<AgentHostHydratedOperationV5>[];
+  readonly result?: Readonly<AgentTurnResult>;
+  readonly terminal?: Readonly<AgentHostTurnTerminalV5>;
+}
 type Timer = ReturnType<typeof setTimeout>;
 interface Authority {
   fence: Readonly<AgentTurnFence>;
@@ -139,7 +174,7 @@ interface Turn {
   fence: Readonly<AgentTurnFence>;
   spec: AgentTurnSpec;
   driver: AgentTurnDriver;
-  owner: Peer;
+  owner?: Peer;
   authority: Authority;
   requestId: string;
   ops: Map<string, Op>;
@@ -221,6 +256,258 @@ export class AgentHost {
       this.stopping = undefined;
     });
     return this.stopping;
+  }
+  /** Restores one exact v5 turn before the inherited listener starts. The
+   * caller must derive this snapshot from authenticated durable Host state. */
+  async hydrateV5(snapshot: Readonly<AgentHostHydratedTurnV5>): Promise<void> {
+    if (this.active || this.starting || this.server || this.inheritedServer)
+      throw new Error("Agent Host hydration must precede start");
+    const admissionNow = Math.min(
+      this.now(),
+      snapshot.spec.initialOperation.deadlineMs - 1,
+      snapshot.spec.limits.turnDeadlineMs - 1,
+    );
+    const spec = decodeAgentTurnSpec(snapshot.spec, admissionNow);
+    if (!spec || (await hashAgentTurnSpecV2(spec, admissionNow)) !== snapshot.planHash)
+      throw new Error("Invalid hydrated Agent Host turn plan");
+    if (
+      !id(snapshot.requestId) ||
+      !Number.isSafeInteger(snapshot.supervisorEpoch) ||
+      snapshot.supervisorEpoch < 1 ||
+      !Number.isSafeInteger(snapshot.hostSeq) ||
+      snapshot.hostSeq < 1 ||
+      !Number.isSafeInteger(snapshot.acknowledgedHostSeq) ||
+      snapshot.acknowledgedHostSeq < 0 ||
+      snapshot.acknowledgedHostSeq > snapshot.hostSeq ||
+      !Array.isArray(snapshot.replay) ||
+      !Array.isArray(snapshot.operations) ||
+      snapshot.operations.length > spec.limits.maxInFlightOperations ||
+      (!!snapshot.terminal !== !!snapshot.result)
+    )
+      throw new Error("Invalid hydrated Agent Host turn state");
+    const replay: Frame[] = [];
+    let replayBytes = 0;
+    let previousSeq = 0;
+    for (const raw of snapshot.replay) {
+      const message = await this.decodeReplayMessage(raw, spec);
+      if (
+        !message ||
+        message.requestId !== snapshot.requestId ||
+        !sameFence(message.fence, spec.fence) ||
+        message.hostSeq <= previousSeq ||
+        message.hostSeq > snapshot.hostSeq
+      )
+        throw new Error("Invalid hydrated Agent Host replay");
+      const bytes = encodeNdjsonFrame(message, this.options.maxFrameBytes);
+      replay.push({ seq: message.hostSeq, bytes });
+      replayBytes += bytes.length;
+      previousSeq = message.hostSeq;
+    }
+    if (
+      replay.length > MAX_AGENT_HOST_REPLAY_FRAMES ||
+      replayBytes > MAX_AGENT_HOST_REPLAY_BYTES
+    )
+      throw new Error("Hydrated Agent Host replay exceeds bounds");
+    const operations = new Map<string, Op>();
+    const acknowledgedStreams = new Map<string, number>();
+    for (const hydrated of snapshot.operations) {
+      const request = hydrated.request;
+      if (
+        !request ||
+        operations.has(request.operationId) ||
+        request.deadlineMs > spec.limits.turnDeadlineMs ||
+        !Number.isSafeInteger(hydrated.throughStreamSeq) ||
+        hydrated.throughStreamSeq < 0 ||
+        !Number.isSafeInteger(hydrated.acknowledgedThroughStreamSeq) ||
+        hydrated.acknowledgedThroughStreamSeq < 0 ||
+        hydrated.acknowledgedThroughStreamSeq > hydrated.throughStreamSeq ||
+        !Number.isSafeInteger(hydrated.creditsBytes) ||
+        hydrated.creditsBytes < 0 ||
+        hydrated.creditsBytes > spec.limits.maxBufferedStreamBytes ||
+        !Number.isSafeInteger(hydrated.creditsChunks) ||
+        hydrated.creditsChunks < 0 ||
+        hydrated.creditsChunks > spec.limits.maxBufferedStreamChunks ||
+        !Number.isSafeInteger(hydrated.owedCreditBytes) ||
+        hydrated.owedCreditBytes < 0 ||
+        hydrated.owedCreditBytes > spec.limits.maxBufferedStreamBytes ||
+        !Number.isSafeInteger(hydrated.owedCreditChunks) ||
+        hydrated.owedCreditChunks < 0 ||
+        hydrated.owedCreditChunks > spec.limits.maxBufferedStreamChunks ||
+        !Array.isArray(hydrated.sentHostSeqs)
+      )
+        throw new Error("Invalid hydrated Agent Host operation");
+      const descriptor = await decodeAgentHostOperationRequest(
+        {
+          t: "operation_request",
+          version: AGENT_HOST_PROTOCOL_VERSION,
+          requestId: snapshot.requestId,
+          fence: spec.fence,
+          hostSeq: 1,
+          operationId: request.operationId,
+          descriptor: request.descriptor,
+          descriptorDigest: request.descriptorDigest,
+          deadlineMs: request.deadlineMs,
+        },
+        Math.min(this.now(), request.deadlineMs - 1),
+        spec.limits.turnDeadlineMs,
+      );
+      if (!descriptor) throw new Error("Invalid hydrated Agent Host operation descriptor");
+      const sent = new Set<number>();
+      for (const seq of hydrated.sentHostSeqs) {
+        if (!Number.isSafeInteger(seq) || seq < 1 || seq > snapshot.hostSeq || sent.has(seq))
+          throw new Error("Invalid hydrated Agent Host sent cursor");
+        sent.add(seq);
+      }
+      const receipt = hydrated.receipt
+        ? decodeAgentOperationReceiptV1(hydrated.receipt)
+        : undefined;
+      if (
+        hydrated.receipt &&
+        (!receipt ||
+          receipt.operationId !== request.operationId ||
+          receipt.descriptorDigest !== request.descriptorDigest ||
+          !sameFence(receipt.fence, spec.fence))
+      )
+        throw new Error("Invalid hydrated Agent Host receipt");
+      const operation: Op = {
+        request: Object.freeze({ ...request, descriptor: descriptor.descriptor }),
+        ...(receipt ? { receipt, receiptJson: JSON.stringify(receipt) } : {}),
+        sent,
+        through: hydrated.throughStreamSeq,
+        pending: 0,
+        creditsBytes: hydrated.creditsBytes,
+        creditsChunks: hydrated.creditsChunks,
+        terminal: !!receipt && terminal(receipt.state),
+        delivery: Promise.resolve(),
+        owedCreditBytes: hydrated.owedCreditBytes,
+        owedCreditChunks: hydrated.owedCreditChunks,
+      };
+      operations.set(request.operationId, operation);
+      acknowledgedStreams.set(
+        request.operationId,
+        hydrated.acknowledgedThroughStreamSeq,
+      );
+    }
+    for (const raw of snapshot.replay) {
+      if (raw.t === "turn_started" || raw.t === "turn_terminal") continue;
+      const operation = operations.get(raw.operationId);
+      if (!operation) throw new Error("Hydrated replay references an unknown operation");
+      if (
+        raw.t === "operation_request" &&
+        (raw.descriptorDigest !== operation.request.descriptorDigest ||
+          raw.deadlineMs !== operation.request.deadlineMs ||
+          JSON.stringify(raw.descriptor) !== JSON.stringify(operation.request.descriptor))
+      )
+        throw new Error("Hydrated replay operation identity changed");
+      if (
+        raw.t === "operation_query" &&
+        (!operation.receipt ||
+          raw.descriptorDigest !== operation.request.descriptorDigest ||
+          raw.payloadDigest !== operation.receipt.payloadDigest)
+      )
+        throw new Error("Hydrated replay query identity changed");
+      if (
+        raw.t === "operation_stream_ack" &&
+        raw.throughStreamSeq > operation.through
+      )
+        throw new Error("Hydrated replay stream cursor is ahead");
+    }
+    const driver = this.options.createDriver(spec);
+    const authority: Authority = {
+      fence: spec.fence,
+      planHash: snapshot.planHash,
+      supervisorEpoch: snapshot.supervisorEpoch,
+      envelope: null,
+    };
+    const turn: Turn = {
+      fence: spec.fence,
+      spec,
+      driver,
+      authority,
+      requestId: snapshot.requestId,
+      ops: operations,
+      seq: snapshot.hostSeq,
+      replay,
+      replayBytes,
+      runSettled: !!snapshot.result,
+      ...(snapshot.result ? { result: structuredClone(snapshot.result) } : {}),
+      cancelling: false,
+      cancelSettled: false,
+      acknowledgedHostSeq: snapshot.acknowledgedHostSeq,
+      acknowledgedStreams,
+      ...(snapshot.terminal ? { terminal: structuredClone(snapshot.terminal) } : {}),
+      completing: false,
+    };
+    if (snapshot.terminal) {
+      const terminalMessage = decodeAgentHostTurnTerminal(snapshot.terminal);
+      const projectedOperations = await projectAgentTurnTerminalOperationsV1(
+        [...operations].map(([operationId, operation]) => {
+          if (!operation.receipt || !operation.terminal)
+            throw new Error("Hydrated terminal has a nonterminal operation");
+          return {
+            operationId,
+            receipt: operation.receipt,
+            throughStreamSeq: operation.through,
+          };
+        }),
+      );
+      if (
+        !terminalMessage ||
+        !sameFence(terminalMessage.fence, spec.fence) ||
+        terminalMessage.hostSeq !== snapshot.hostSeq ||
+        terminalMessage.hostGeneration !== this.options.hostGeneration ||
+        terminalMessage.hostIncarnation !== this.options.hostIncarnation ||
+        terminalMessage.finalAckHostSeq !== snapshot.acknowledgedHostSeq ||
+        terminalMessage.result.status !== snapshot.result!.status ||
+        (await hashAgentTurnResultV1(snapshot.result!)) !== terminalMessage.resultDigest ||
+        (await hashAgentTurnTerminalReceiptsV1(projectedOperations)) !== terminalMessage.receiptsDigest ||
+        JSON.stringify(projectedOperations) !== JSON.stringify(terminalMessage.operations) ||
+        !snapshot.replay.some(
+          (message) =>
+            message.t === "turn_terminal" &&
+            JSON.stringify(message) === JSON.stringify(terminalMessage),
+        )
+      )
+        throw new Error("Invalid hydrated Agent Host terminal");
+    }
+    this.active = turn;
+    this.epochs.set(spec.fence.sessionId, snapshot.supervisorEpoch);
+    this.generations.set(spec.fence.sessionId, spec.fence.generation);
+    if (!snapshot.terminal) {
+      turn.deadline = this.set(
+        () => this.cancelTurn(turn, "turn_deadline"),
+        Math.max(0, spec.limits.turnDeadlineMs - this.now()),
+      );
+      for (const operation of operations.values())
+        if (!operation.terminal)
+          operation.timer = this.set(
+            () => void this.cancelOp(turn, {
+              operationId: operation.request.operationId,
+              cancelId: `deadline-${crypto.randomUUID()}`,
+              reason: "turn_deadline",
+            }).catch(() => {}),
+            Math.max(0, operation.request.deadlineMs - this.now()),
+          );
+      this.runDriver(turn);
+    }
+  }
+  private async decodeReplayMessage(
+    value: unknown,
+    spec: AgentTurnSpec,
+  ): Promise<AgentHostReplayMessageV5 | undefined> {
+    if (!rec(value) || typeof value.t !== "string") return undefined;
+    const decoded =
+      decodeAgentHostTurnStarted(value) ??
+      decodeAgentHostTurnTerminal(value) ??
+      (await decodeAgentHostOperationRequest(
+        value,
+        Math.min(this.now(), spec.limits.turnDeadlineMs - 1),
+        spec.limits.turnDeadlineMs,
+      )) ??
+      decodeAgentHostOperationQuery(value) ??
+      decodeAgentHostOperationCancel(value) ??
+      decodeAgentHostOperationStreamAck(value);
+    return decoded as AgentHostReplayMessageV5 | undefined;
   }
   private now() {
     return (this.options.now ?? Date.now)();
@@ -753,36 +1040,68 @@ export class AgentHost {
       requestId: m.requestId,
       fence: t.fence,
     } as never);
+    this.runDriver(t);
+  }
+  private runDriver(t: Turn) {
     const transport: AgentHostOperationTransport = {
-      requestOperation: (r) => this.requestOp(t, r),
-      queryOperation: (q) => this.queryOp(t, q),
-      cancelOperation: (c) => this.cancelOp(t, c),
+      requestOperation: (request) => this.requestOp(t, request),
+      queryOperation: (query) => this.queryOp(t, query),
+      cancelOperation: (cancel) => this.cancelOp(t, cancel),
     };
-    let run;
+    let run: Promise<AgentTurnResult>;
     try {
-      run = Promise.resolve(driver.run(m.spec, transport));
-    } catch (e) {
-      run = Promise.reject(e);
+      run = Promise.resolve(t.driver.run(t.spec, transport));
+    } catch (error) {
+      run = Promise.reject(error);
     }
     void run.then(
-      (r) => {
+      (result) => {
         t.runSettled = true;
-        t.result = r;
+        t.result = result;
         this.complete(t);
       },
-      (e) => {
+      (error) => {
         t.runSettled = true;
-        t.result = { status: "failed", error: String(e) };
+        t.result = { status: "failed", error: String(error) };
         this.complete(t);
       },
     );
   }
   private async requestOp(t: Turn, r: AgentHostOperationRequest) {
     if (this.active !== t || t.cancelling) throw Error("turn unavailable");
-    if (
-      t.ops.has(r.operationId) ||
-      t.ops.size >= Math.min(8, t.spec.limits.maxInFlightOperations)
-    )
+    const existing = t.ops.get(r.operationId);
+    if (existing) {
+      if (
+        existing.request.descriptorDigest !== r.descriptorDigest ||
+        existing.request.deadlineMs !== r.deadlineMs ||
+        JSON.stringify(existing.request.descriptor) !== JSON.stringify(r.descriptor)
+      )
+        throw Error("recovered operation identity changed");
+      if (existing.receipt)
+        await this.queryOp(t, {
+          operationId: r.operationId,
+          kind: r.descriptor.kind,
+          descriptorDigest: r.descriptorDigest,
+          payloadDigest: existing.receipt.payloadDigest,
+          afterStreamSeq: existing.through,
+        });
+      else {
+        existing.sent.add(
+          this.sequenced(t, {
+            t: "operation_request",
+            version: AGENT_HOST_PROTOCOL_VERSION,
+            requestId: t.requestId,
+            fence: t.fence,
+            operationId: r.operationId,
+            descriptor: r.descriptor,
+            descriptorDigest: r.descriptorDigest,
+            deadlineMs: r.deadlineMs,
+          } as never),
+        );
+      }
+      return;
+    }
+    if (t.ops.size >= Math.min(8, t.spec.limits.maxInFlightOperations))
       throw Error("operation limit");
     if (
       r.deadlineMs <= this.now() ||
@@ -880,14 +1199,14 @@ export class AgentHost {
     >,
   ) {
     const o = t.ops.get(m.operationId);
-    if (!o) return this.invalid(t.owner, m);
+    if (!o) return this.invalid(t.owner!, m);
     if (m.t === "operation_stream") return this.stream(t, o, m);
     if (
       !o.sent.has(m.ackHostSeq) ||
       !this.applyReceipt(o, m.receipt) ||
       (m.t === "operation_query_receipt" && m.fromStreamSeq !== o.through + 1)
     )
-      return this.invalid(t.owner, m);
+      return this.invalid(t.owner!, m);
     this.complete(t);
   }
   private applyReceipt(o: Op, r: AgentOperationReceiptV1) {
@@ -932,7 +1251,7 @@ export class AgentHost {
       n > o.creditsBytes ||
       o.creditsChunks < 1
     )
-      return this.close(t.owner);
+      return this.close(t.owner!);
     o.creditsBytes -= n;
     o.creditsChunks--;
     o.pending++;
@@ -1022,7 +1341,7 @@ export class AgentHost {
   private writeBuffered(t: Turn, seq: number) {
     const f = t.replay.find((x) => x.seq === seq);
     if (!f) throw Error("intent evicted before write");
-    this.sendBytes(t.owner, f.bytes);
+    if (t.owner) this.sendBytes(t.owner, f.bytes);
   }
   private sequenced(t: Turn, m: Omit<AgentHostServerMessage, "hostSeq">) {
     const s = this.buffer(t, m);
@@ -1169,7 +1488,7 @@ export class AgentHost {
     m: Extract<AgentHostClientMessage, { t: "consumption_ack" }>,
   ) {
     if (m.ackHostSeq < t.acknowledgedHostSeq || m.ackHostSeq > t.seq)
-      return this.invalid(t.owner, m);
+      return this.invalid(t.owner!, m);
     const cursors = new Map(
       m.operations.map((item) => [item.operationId, item.throughStreamSeq]),
     );
@@ -1181,7 +1500,7 @@ export class AgentHost {
         throughStreamSeq < previous ||
         throughStreamSeq > operation.through
       )
-        return this.invalid(t.owner, m);
+        return this.invalid(t.owner!, m);
     }
     t.acknowledgedHostSeq = m.ackHostSeq;
     for (const [operationId, throughStreamSeq] of cursors)
@@ -1199,13 +1518,13 @@ export class AgentHost {
       m.resultDigest !== terminal.resultDigest ||
       m.receiptsDigest !== terminal.receiptsDigest
     )
-      return this.invalid(t.owner, m);
+      return this.invalid(t.owner!, m);
     this.clear(t.deadline);
     this.clear(t.reconnect);
     for (const operation of t.ops.values()) this.clear(operation.timer);
     this.active = undefined;
     if (this.owner === t.owner) this.owner = undefined;
-    this.close(t.owner);
+    this.close(t.owner!);
   }
   private complete(t: Turn) {
     if (
