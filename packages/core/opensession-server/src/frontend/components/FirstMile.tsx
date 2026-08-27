@@ -609,7 +609,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			</nav>
 
 			{!status ? (
-				<div className="flex min-h-40 w-full max-w-[560px] self-center justify-self-center items-center justify-center rounded-2xl bg-palette-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
+				<div className="flex min-h-40 w-full max-w-[560px] self-center justify-self-center items-center justify-center rounded-3xl bg-palette-glass px-8 py-12 [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg">
 					<LoadingState>
 						{failed ? "Couldn't load setup." : "Preparing your workspace…"}
 					</LoadingState>
@@ -618,7 +618,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 				<section
 					ref={panelRef}
 					className={cn(
-						"relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-2xl phone:h-full phone:max-h-none phone:max-w-none phone:self-stretch phone:rounded-none phone:[box-shadow:none]",
+						"relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-3xl phone:h-full phone:max-h-none phone:max-w-none phone:self-stretch phone:rounded-none phone:[box-shadow:none]",
 						panelSize
 							? "max-w-none"
 							: step.id === "ready"
@@ -765,7 +765,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						aria-hidden={!navigationVisible}
 						inert={!navigationVisible}
 							className={cn(
-								"relative z-20 shrink-0 px-6 py-4 phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-3",
+								"relative z-20 shrink-0 px-6 pb-5 pt-4 phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-3",
 								!navigationVisible && "pointer-events-none",
 							)}
 						>
