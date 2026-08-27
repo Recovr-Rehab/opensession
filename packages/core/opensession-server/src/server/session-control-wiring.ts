@@ -29,7 +29,7 @@ import { creationAttachmentPath, parseImageDataUrls, prepareCreationAttachmentSo
 import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
 import { resolveInteractiveSandbox } from "./sandbox/defaults";
-import { findSession, getCachedSessions, getCachedSessionsAsync, invalidateSessionsCache, touchNativeSession } from "./session-cache";
+import { findSession, getCachedSessions, getCachedSessionsAsync, getSessionListSnapshotAsync, invalidateSessionsCache, touchNativeSession } from "./session-cache";
 import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
 import {
 	getSessionControl,
@@ -40,7 +40,7 @@ import {
 } from "./session-control";
 import { type ResolvedCreate, actorCreationSetupPlan, forkHandoffContext, runOpeningCreateOnce, resolveForkContext, resolvePinnedAccountId, waitForCreatedSessionProjection } from "./session-create";
 import { resolveSessionRepoContext, workspaceOwningWorktree } from "./session-repos";
-import { getAllSessions, mergedSessionTranscriptAsync } from "./sessions";
+import { mergedSessionTranscriptAsync } from "./sessions";
 import { rebuildIndex } from "./slack-links";
 import { handleSlashCommand } from "./slash-commands";
 import { type UnifiedSession } from "./types";
@@ -165,10 +165,14 @@ function listSessionSummaries(): SessionSummary[] {
 // --- Session control surface (powers the opensession-sessions MCP) ---
 // Wire the Slack thread index (thread replies → owning session). Re-run on
 // every hot reload (cheap) so the index stays fresh.
-rebuildIndex(getAllSessions());
-// rebuildIndex() clears the index, so replay the links the session files don't
-// hold: a human-ask DM thread belongs to the session that raised the ask.
-relinkAskThreads();
+void getSessionListSnapshotAsync()
+	.then((sessions) => {
+		rebuildIndex(sessions);
+		// rebuildIndex() clears the index, so replay the links the session files
+		// don't hold: a human-ask DM thread belongs to the session that raised it.
+		relinkAskThreads();
+	})
+	.catch((error) => console.warn("[slack-links] index rebuild failed:", error));
 
 // Wires the MCP's tools into the same in-process state and helpers the
 // WebSocket handlers use, so a management session steers/answers/creates the

@@ -15,10 +15,10 @@
  *
  * A stored session with ALL of:
  *
- * - **No session behind it.** Not in `getAllSessions()` (the native, linear
- *   and slack scanners, plus every alias id a dedupe folded away) and no
- *   session file of its own in the sessions dir. Both, because either source
- *   alone has a way of missing a real session.
+ * - **No session behind it.** Not in the durable session-list projection (the
+ *   native, linear and slack scanners, plus every alias id a dedupe folded
+ *   away) and no session file of its own in the sessions dir. Both, because
+ *   either source alone has a way of missing a real session.
  * - **A transcript made entirely of context-log records** (`isContextInjection`).
  *   This is the provable part: a session whose whole stored history is the
  *   harness's own bookkeeping never held a conversation, so there is nothing
@@ -122,21 +122,21 @@ function message(e: unknown): string {
 /**
  * Every session id that has something behind it. Two sources on purpose: the
  * sessions dir is the native store and a file there means a session exists
- * whatever a scanner made of it, while `getAllSessions()` is where the slack
- * and linear families live — along with the alias ids of sessions its dedupe
- * folded into another, which are exactly the ids that still own transcript
- * rows.
+ * whatever a scanner made of it, while the session-list projection is where
+ * the slack and linear families live — along with the alias ids of sessions
+ * its dedupe folded into another, which are exactly the ids that still own
+ * transcript rows.
  */
 async function knownSessionIdsFromDisk(): Promise<Set<string>> {
 	const known = new Set<string>();
 	for (const name of readdirSync(OPENSESSION_SESSIONS_DIR)) {
 		if (name.endsWith(".json")) known.add(name.slice(0, -5));
 	}
-	// Dynamic import: sessions.ts reaches run-rpc.ts, and this module must stay
+	// Dynamic import: session-cache.ts reaches run-rpc.ts, and this module must stay
 	// importable from a test (or any script) without binding the live socket.
 	// In the live process it resolves to the already-loaded module.
-	const { getAllSessions } = await import("./sessions");
-	for (const session of getAllSessions()) {
+	const { getSessionListSnapshotAsync } = await import("./session-cache");
+	for (const session of await getSessionListSnapshotAsync()) {
 		known.add(session.id);
 		for (const alias of session.aliasIds || []) known.add(alias);
 	}

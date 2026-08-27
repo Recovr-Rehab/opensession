@@ -15,6 +15,19 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe("single session ownership", () => {
+	test("runtime metadata readers do not run the synchronous full-history scanner", () => {
+		for (const file of [
+			"runner-portals.ts",
+			"session-control-wiring.ts",
+			"transcript-orphan-sweep.ts",
+			"routes/mention-palette.ts",
+			"routes/sessions.ts",
+			"routes/workspace.ts",
+		]) {
+			expect(read(file)).not.toContain("getAllSessions(");
+		}
+	});
+
 	test("production has no legacy gateway mailbox", () => {
 		const production = sourceFiles(serverDir).map((path) =>
       readFileSync(path, "utf8"),

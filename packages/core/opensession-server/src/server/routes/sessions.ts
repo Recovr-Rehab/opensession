@@ -61,6 +61,7 @@ import {
 	enrichSessionRuntime,
 	findSessionAsync,
 	getCachedSessionsAsync,
+	getSessionListSnapshotAsync,
 	invalidateSessionsCache,
 	maybePersistEffort,
 	maybePersistFastMode,
@@ -95,7 +96,6 @@ import { dropRunnerPortalRoutes } from "../runner-portals";
 import { cleanupRunnerWorkspace } from "../runner-ws";
 import {
 	deleteSession,
-	getAllSessions,
 	markCachedPrReviewRequestsCleared,
 	mergedSessionTranscriptAsync,
 	removeTombstonedSessionArtifacts,
@@ -1502,7 +1502,7 @@ export async function handleSessionsRoutes(
 	) {
 		const body = await req.json().catch(() => ({}));
 		const days = Math.max(1, parseInt(body.days) || 7);
-		const count = archiveOlderThan(getAllSessions(), days);
+		const count = archiveOlderThan(await getSessionListSnapshotAsync(), days);
 		invalidateSessionsCache();
 		return Response.json({ archived: count });
 	}
@@ -1575,7 +1575,7 @@ export async function handleSessionsRoutes(
 			// setArchived drops the plain id pin; also drop legacy alias-id pins,
 			// and the workspace pin once its last live session is archived (else the
 			// row resurfaces in Pinned when a new session joins the workspace).
-			unpinArchivedSessions([session], getAllSessions());
+			unpinArchivedSessions([session], await getSessionListSnapshotAsync());
 		}
 		return Response.json({ ok: true, stoppedRun });
 	}
@@ -1867,8 +1867,8 @@ export async function handleSessionsRoutes(
 			// sessions for the same PR.
 			if (session.workspaceId) {
 				const ws = getWorkspace(session.workspaceId);
-				const members = getAllSessions().filter(
-					(s) => s.workspaceId === session.workspaceId,
+				const members = (await getSessionListSnapshotAsync()).filter(
+					(s) => s.id !== session.id && s.workspaceId === session.workspaceId,
 				);
 				if (ws && !ws.key && members.length === 0)
 					deleteWorkspace(ws.id);
