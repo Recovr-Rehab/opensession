@@ -5372,7 +5372,7 @@ export class SessionKernelStore {
 				this.db.run(`
 					INSERT INTO session_kernel_placements
 						(session_id, placement, needs_scan, next_timer_at, next_outbox_at, updated_at)
-					VALUES (?, 'isolated', 1, ?, ?, ?)
+					VALUES (?, 'isolated', 0, ?, ?, ?)
 				`, [sessionId, nextTimerAt ?? null, nextOutboxAt ?? null, Date.now()]);
 				for (const table of SESSION_KERNEL_SESSION_TABLES)
 					this.db.query(`DELETE FROM ${table} WHERE session_id = ?`).run(sessionId);
@@ -5428,19 +5428,6 @@ export class SessionKernelStore {
 			...(row.next_outbox_at === null ? {} : { nextOutboxAt: Number(row.next_outbox_at) }),
 			updatedAt: Number(row.updated_at),
 		};
-	}
-
-	isolatedSessionPlacements(
-		limit = 100_000,
-		afterSessionId = "",
-	): DurableSessionPlacement[] {
-		return (this.db.query(`
-			SELECT session_id FROM session_kernel_placements
-			WHERE placement = 'isolated' AND session_id > ?
-			ORDER BY session_id LIMIT ?
-		`).all(afterSessionId, Math.max(1, limit)) as Array<{ session_id: string }>)
-			.map((row) => this.sessionPlacement(row.session_id)!)
-			.filter(Boolean);
 	}
 
   actorTranscriptSessionIds(
@@ -5508,7 +5495,7 @@ export class SessionKernelStore {
         const result = this.db.run(`
           UPDATE session_kernel_placements
           SET transcript_authority = 'actor', transcript_migration_receipt = ?,
-              transcript_published_at = ?, needs_scan = 1, updated_at = ?
+              transcript_published_at = ?, updated_at = ?
           WHERE session_id = ? AND placement = 'isolated'
             AND transcript_authority = 'shared'
         `, [migrationReceipt, now, now, sessionId]);
@@ -5535,7 +5522,7 @@ export class SessionKernelStore {
     const result = this.db.run(`
       UPDATE session_kernel_placements
       SET transcript_authority = 'actor', transcript_migration_receipt = ?,
-          transcript_published_at = ?, needs_scan = 1, updated_at = ?
+          transcript_published_at = ?, updated_at = ?
       WHERE session_id = ? AND placement = 'isolated'
         AND transcript_authority = 'shared'
     `, [migrationReceipt, Date.now(), Date.now(), sessionId]);
@@ -5551,7 +5538,7 @@ export class SessionKernelStore {
         const result = this.db.run(`
           UPDATE session_kernel_placements
           SET transcript_authority = 'shared', transcript_published_at = NULL,
-              needs_scan = 1, updated_at = ?
+              updated_at = ?
           WHERE session_id = ? AND placement = 'isolated'
             AND transcript_authority = 'actor'
         `, [now, sessionId]);
@@ -5566,7 +5553,7 @@ export class SessionKernelStore {
     const result = this.db.run(`
       UPDATE session_kernel_placements
       SET transcript_authority = 'shared', transcript_published_at = NULL,
-          needs_scan = 1, updated_at = ?
+          updated_at = ?
       WHERE session_id = ? AND placement = 'isolated'
         AND transcript_authority = 'actor'
     `, [Date.now(), sessionId]);
@@ -5581,7 +5568,7 @@ export class SessionKernelStore {
     this.db.run(`
       INSERT INTO session_kernel_placements
         (session_id, placement, transcript_authority, needs_scan, updated_at)
-      VALUES (?, 'isolated', 'shared', 1, ?)
+      VALUES (?, 'isolated', 'shared', 0, ?)
       ON CONFLICT(session_id) DO NOTHING
     `, [sessionId, Date.now()]);
     const placement = this.sessionPlacement(sessionId);
@@ -5603,7 +5590,7 @@ export class SessionKernelStore {
         this.db.run(`
           INSERT INTO session_kernel_placements
             (session_id, placement, transcript_authority, needs_scan, updated_at)
-          VALUES (?, 'isolated', 'shared', 1, ?)
+          VALUES (?, 'isolated', 'shared', 0, ?)
           ON CONFLICT(session_id) DO NOTHING
         `, [sessionId, now]);
         const placement = this.sessionPlacement(sessionId);
@@ -5628,8 +5615,14 @@ export class SessionKernelStore {
 		`, [sessionId, Date.now()]);
 		const placement = this.sessionPlacement(sessionId);
 		if (!placement) throw new Error("Session placement was not persisted");
-		if (this.sparseProjectionMigrationComplete())
-			this.settleIsolatedSessionProjection(sessionId, undefined, undefined);
+		// New actors always publish an empty projection eagerly. Historical
+		// projection repair is an offline migration; the online host must never
+		// discover it by walking every actor database.
+		this.settleIsolatedSessionProjection(sessionId, undefined, undefined);
+		if (
+			!this.sparseProjectionMigrationComplete() &&
+			this.isolatedProjectionPendingSessionIds(1).length === 0
+		) this.markSparseProjectionMigrationComplete();
 		return placement;
 	}
 
