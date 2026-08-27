@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { BASE_PATH } from "../lib/base";
+import { PHONE_QUERY } from "../lib/breakpoints";
 import { DEFAULT_DOC_TITLE, PRODUCT_NAME } from "../lib/brand";
 import { useSetupStatus } from "../hooks/useSetupStatus";
 import { copyToClipboard } from "../lib/share-link";
@@ -34,6 +35,27 @@ interface FirstMileStep {
 	title: string;
 	description: string;
 }
+
+type FirstMileStepId = FirstMileStep["id"];
+
+interface PanelSize {
+	phase: "measuring" | "animating" | "settled";
+	fromStep: FirstMileStepId;
+	width: number;
+	height: number;
+	targetWidth: number;
+	maxHeight: number;
+}
+
+const PANEL_MAX_WIDTH: Record<FirstMileStepId, number> = {
+	welcome: 560,
+	organization: 750,
+	ai: 750,
+	github: 750,
+	"github-account": 750,
+	repos: 750,
+	ready: 1144,
+};
 
 // Organization and model setup come first. GitHub App creation no longer
 // depends on a public callback origin: the manifest returns its credentials to
@@ -303,10 +325,15 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const [index, setIndex] = useState(initialFirstMileIndex);
 	const [contentVisible, setContentVisible] = useState(true);
 	const [navigationVisible, setNavigationVisible] = useState(true);
+	const [panelSize, setPanelSize] = useState<PanelSize | null>(null);
 	const [finishing, setFinishing] = useState(false);
 	const [personalGithubVisited, setPersonalGithubVisited] = useState(false);
 	const [inviteCopied, setInviteCopied] = useState(false);
 	const [theme, setTheme] = useState(effectiveTheme);
+	const rootRef = useRef<HTMLDivElement>(null);
+	const progressRef = useRef<HTMLElement>(null);
+	const panelRef = useRef<HTMLElement>(null);
+	const panelBodyRef = useRef<HTMLDivElement>(null);
 	const headingRef = useRef<HTMLHeadingElement>(null);
 	const reducedMotion = useReducedMotion();
 	const steps = STEPS;
@@ -327,24 +354,143 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	useEffect(() => onThemeChanged(() => setTheme(effectiveTheme())), []);
 
 	useEffect(() => {
-		if (index > 0) headingRef.current?.focus({ preventScroll: true });
-	}, [index]);
-
-	// Step content changes at its natural size, then fades in quickly. Avoid
-	// projecting the whole modal between unrelated layouts: async content can
-	// arrive mid-projection and briefly stretch the container.
-	useEffect(() => {
-		if (contentVisible) return;
-		const reveal = window.setTimeout(() => {
+		const releaseSize = () => {
+			setPanelSize(null);
 			setContentVisible(true);
 			setNavigationVisible(true);
-		}, (reducedMotion ? 0 : duration.micro) * 1000);
-		return () => window.clearTimeout(reveal);
-	}, [contentVisible, index, reducedMotion]);
+		};
+		window.addEventListener("resize", releaseSize);
+		return () => window.removeEventListener("resize", releaseSize);
+	}, []);
 
-	async function goTo(next: number) {
+	useEffect(() => {
+		if (contentVisible && index > 0) {
+			headingRef.current?.focus({ preventScroll: true });
+		}
+	}, [contentVisible, index]);
+
+	// The next step mounts invisibly at its final width while the shell keeps
+	// the previous step's exact dimensions. Once that layout has settled, the
+	// shell receives one width/height target and animates to it. Keeping the
+	// settled pixel size for the rest of the step means a late async row can
+	// become scrollable, but cannot make the dialog jump a second time.
+	useEffect(() => {
+		if (panelSize?.phase !== "measuring") return;
+		const body = panelBodyRef.current;
+		if (!body) {
+			setContentVisible(true);
+			setNavigationVisible(true);
+			setPanelSize(null);
+			return;
+		}
+
+		let done = false;
+		let quietTimer = 0;
+		const started = performance.now();
+		const unknownContentPending = () =>
+			Array.from(body.querySelectorAll('[role="status"]')).some(
+				(node) => !node.hasAttribute("aria-label"),
+			);
+		const finishMeasurement = () => {
+			if (done) return;
+			done = true;
+			window.clearTimeout(quietTimer);
+			const targetHeight = Math.min(
+				panelSize.maxHeight,
+				Math.ceil(body.getBoundingClientRect().height),
+			);
+			setPanelSize((current) =>
+				current?.phase === "measuring"
+					? {
+							...current,
+							phase: reducedMotion ? "settled" : "animating",
+							width: current.targetWidth,
+							height: targetHeight,
+						}
+					: current,
+			);
+			setContentVisible(true);
+			setNavigationVisible(true);
+		};
+		const scheduleMeasurement = () => {
+			window.clearTimeout(quietTimer);
+			quietTimer = window.setTimeout(() => {
+				// Loading marks without a reserved shape get a short chance to resolve.
+				// Skeletons carry aria-label and already describe their final geometry.
+				if (unknownContentPending() && performance.now() - started < 700) return;
+				finishMeasurement();
+			}, 100);
+		};
+		const observer = new ResizeObserver(scheduleMeasurement);
+		observer.observe(body);
+		const mutations = new MutationObserver(scheduleMeasurement);
+		mutations.observe(body, { childList: true, subtree: true });
+		const deadline = window.setTimeout(finishMeasurement, 700);
+		scheduleMeasurement();
+
+		return () => {
+			done = true;
+			window.clearTimeout(quietTimer);
+			window.clearTimeout(deadline);
+			observer.disconnect();
+			mutations.disconnect();
+		};
+	}, [panelSize?.phase, panelSize?.maxHeight, reducedMotion]);
+
+	useEffect(() => {
+		if (panelSize?.phase !== "animating") return;
+		const timer = window.setTimeout(() => {
+			setPanelSize((current) =>
+				current?.phase === "animating"
+					? { ...current, phase: "settled" }
+					: current,
+			);
+		}, duration.large * 1000);
+		return () => window.clearTimeout(timer);
+	}, [panelSize?.phase]);
+
+	function goTo(next: number) {
 		const nextIndex = Math.min(Math.max(next, 0), steps.length - 1);
-		if (nextIndex === index) return;
+		if (
+			nextIndex === index ||
+			panelSize?.phase === "measuring" ||
+			panelSize?.phase === "animating"
+		)
+			return;
+		const panel = panelRef.current;
+		const root = rootRef.current;
+		const progress = progressRef.current;
+		const phone = window.matchMedia(PHONE_QUERY).matches;
+		if (!panel || !root || !progress || phone) {
+			setPanelSize(null);
+			setIndex(nextIndex);
+			void refetch();
+			return;
+		}
+
+		const panelRect = panel.getBoundingClientRect();
+		const rootStyle = window.getComputedStyle(root);
+		const horizontalPadding =
+			parseFloat(rootStyle.paddingLeft) + parseFloat(rootStyle.paddingRight);
+		const verticalPadding =
+			parseFloat(rootStyle.paddingTop) + parseFloat(rootStyle.paddingBottom);
+		const rowGap = parseFloat(rootStyle.rowGap) || 0;
+		const nextStep = steps[nextIndex]!;
+		setPanelSize({
+			phase: "measuring",
+			fromStep: step.id,
+			width: panelRect.width,
+			height: panelRect.height,
+			targetWidth: Math.min(
+				PANEL_MAX_WIDTH[nextStep.id],
+				root.clientWidth - horizontalPadding,
+			),
+			maxHeight:
+				root.clientHeight -
+				verticalPadding -
+				progress.getBoundingClientRect().height -
+				rowGap,
+		});
 		setContentVisible(false);
 		setNavigationVisible(false);
 		setIndex(nextIndex);
@@ -413,14 +559,24 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					? "Review"
 					: "Next";
 
+	const panelTransitioning =
+		panelSize?.phase === "measuring" || panelSize?.phase === "animating";
+	const surfaceStep =
+		panelSize?.phase === "measuring" ? panelSize.fromStep : step.id;
+	const edgeSurface = surfaceStep === "welcome" || surfaceStep === "ready";
+	const stagedPanel =
+		panelSize?.phase === "measuring" || panelSize?.phase === "animating";
+
 	return (
 		<div
+			ref={rootRef}
 			data-first-mile
 			className="relative grid h-[100dvh] w-full grid-rows-[44px_minmax(0,1fr)] gap-y-3 overflow-hidden bg-surface bg-cover bg-center p-6 text-fg phone:gap-y-0 phone:px-0 phone:pb-0 phone:pt-[max(12px,env(safe-area-inset-top))]"
 			// The vendored marketing artwork keeps first run independent of a CDN.
 			style={{ backgroundImage: `url(${BASE_PATH}/${backdropName}.webp)` }}
 		>
 			<nav
+				ref={progressRef}
 				aria-label="Onboarding progress"
 				className="relative z-20 flex h-11 shrink-0 items-start justify-center"
 			>
@@ -428,9 +584,10 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					<button
 						key={item.id}
 						type="button"
+						disabled={panelTransitioning}
 						onClick={() => {
 							if (item.id === "github-account") setPersonalGithubVisited(true);
-							void goTo(stepIndex);
+							goTo(stepIndex);
 						}}
 						aria-label={`${item.label}, step ${stepIndex + 1} of ${steps.length}`}
 						aria-current={stepIndex === index ? "step" : undefined}
@@ -459,25 +616,58 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 				</div>
 			) : (
 				<section
+					ref={panelRef}
 					className={cn(
 						"relative z-10 flex max-h-full w-full self-center justify-self-center flex-col overflow-hidden rounded-2xl phone:h-full phone:max-h-none phone:max-w-none phone:self-stretch phone:rounded-none phone:[box-shadow:none]",
-						step.id === "welcome" || step.id === "ready"
-							? cn(
-									step.id === "ready" ? "max-w-[1144px]" : "max-w-[560px]",
-									"bg-transparent [backdrop-filter:none]",
-								)
-							: "max-w-[750px] bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
+						panelSize
+							? "max-w-none"
+							: step.id === "ready"
+								? "max-w-[1144px]"
+								: step.id === "welcome"
+									? "max-w-[560px]"
+									: "max-w-[750px]",
+						edgeSurface
+							? "bg-transparent [backdrop-filter:none]"
+							: "bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
+						panelSize?.phase === "animating" &&
+							"transition-[width,height] duration-[var(--dur-lg)] ease-[var(--ease)] motion-reduce:transition-none",
 					)}
+					style={
+						panelSize
+							? { width: panelSize.width, height: panelSize.height }
+							: undefined
+					}
 				>
 					<div
-						key={step.id}
-						aria-hidden={!contentVisible}
-						inert={!contentVisible}
+						ref={panelBodyRef}
 						className={cn(
-							"flex min-h-0 flex-col transition-opacity duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
-							!contentVisible && "opacity-0",
+							"flex min-h-0 max-h-full flex-col",
+							stagedPanel
+								? "absolute top-0 left-1/2 -translate-x-1/2"
+								: "h-full w-full",
 						)}
+						style={
+							stagedPanel
+								? {
+										width: panelSize.targetWidth,
+										maxHeight: panelSize.maxHeight,
+										height:
+											panelSize.phase === "animating"
+												? panelSize.height
+												: undefined,
+									}
+								: undefined
+						}
 					>
+						<div
+							key={step.id}
+							aria-hidden={!contentVisible}
+							inert={!contentVisible}
+							className={cn(
+								"flex min-h-0 flex-col transition-opacity duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
+								!contentVisible && "opacity-0",
+							)}
+						>
 						<header className="shrink-0 px-10 pb-2 pt-9 text-center phone:px-5 phone:pt-6">
 							{step.id === "welcome" && (
 								<img
@@ -566,19 +756,19 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								</div>
 							)}
 						</div>
-					</div>
+						</div>
 
-					<motion.footer
-						initial={false}
+						<motion.footer
+							initial={false}
 						animate={{ opacity: navigationVisible ? 1 : 0 }}
 						transition={{ type: "tween", duration: duration.micro, ease }}
 						aria-hidden={!navigationVisible}
 						inert={!navigationVisible}
-						className={cn(
-							"relative z-20 shrink-0 px-6 py-4 phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-3",
-							!navigationVisible && "pointer-events-none",
-						)}
-					>
+							className={cn(
+								"relative z-20 shrink-0 px-6 py-4 phone:px-3 phone:pb-[max(12px,env(safe-area-inset-bottom))] phone:pt-3",
+								!navigationVisible && "pointer-events-none",
+							)}
+						>
 						<div
 							className={cn(
 								"flex items-center gap-3",
@@ -624,8 +814,9 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 									</>
 								)}
 							</Button>
-						</div>
-					</motion.footer>
+							</div>
+						</motion.footer>
+					</div>
 				</section>
 			)}
 
