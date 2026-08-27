@@ -97,8 +97,11 @@ export const TAB_STRIP =
  */
 export const TAB_SCROLL =
 	// `flex-[1_1_auto]`, not `flex-1`: Tailwind's shorthand is `1 1 0%`, and a
-	// zero basis sizes the scroll from nothing rather than from its tabs.
-	"flex min-w-0 flex-[1_1_auto] items-center gap-[3px] overflow-x-auto overscroll-x-contain " +
+	// zero basis sizes the scroll from nothing rather than from its tabs. It is
+	// also the query container for TAB_BASE: at the narrow end of a split, a
+	// single long tab must shrink to this viewport instead of being permanently
+	// clipped behind the pinned + / history controls.
+	"flex min-w-0 flex-[1_1_auto] items-center gap-[3px] overflow-x-auto overscroll-x-contain [container-type:inline-size] " +
 	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
 	// Hug the content on desktop so the pinned "+" sits right after the last tab
 	// rather than being pushed to the far right. The group keeps its intrinsic
@@ -163,7 +166,7 @@ export const TAB_ACTIONS = "ml-auto flex flex-none items-center gap-[3px]";
  * instead of differing by a pixel.
  */
 const TAB_BASE =
-	"relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
+	"relative inline-flex max-w-[min(200px,100cqw)] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
 	`${TAB_SHAPE} border-0 px-2.5 py-1.5 text-label shadow-none ` +
 	"transition-[background-color,color] " +
 	`phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ` +
