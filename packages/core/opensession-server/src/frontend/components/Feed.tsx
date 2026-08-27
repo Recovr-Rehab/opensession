@@ -295,7 +295,7 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 	const visibleCompactMembers = compactMembers.slice(0, 5);
 	const hiddenCompactMembers = compactMembers.length - visibleCompactMembers.length;
 	const compactPicker = (
-		<div className="flex items-center gap-0.5" aria-label="Filter feed by person">
+		<div className="flex items-center gap-px" aria-label="Filter feed by person">
 			{visibleCompactMembers.map((member) => {
 				const selected = scope.kind === "person" && scope.key === member.key;
 				return (
@@ -303,8 +303,8 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 						key={member.key}
 						type="button"
 						className={cn(
-							"focus-ring flex min-h-10 items-center gap-1.5 rounded-control p-1 text-label font-medium text-fg hover:bg-hover",
-							selected && "bg-accent-soft pr-2 text-accent",
+							"focus-ring flex min-h-8 items-center gap-1 rounded-md p-1 text-supporting font-medium text-fg hover:bg-hover",
+							selected && "bg-accent-soft pr-1.5 text-accent",
 						)}
 						onClick={() =>
 							pick(
@@ -316,9 +316,9 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 						aria-pressed={selected}
 						aria-label={selected ? "Show everyone" : `Show ${member.person.name}`}
 					>
-						<UserAvatar name={member.person.name} size={30} edge={false} />
+						<UserAvatar name={member.person.name} size={24} edge={false} />
 						{selected && (
-							<span className="max-w-28 truncate pr-0.5">
+							<span className="max-w-24 truncate">
 								{member.isYou ? "You" : personLabel(member.key)}
 							</span>
 						)}
@@ -328,7 +328,7 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 			{hiddenCompactMembers > 0 && (
 				<button
 					type="button"
-					className="focus-ring flex size-10 min-h-10 items-center justify-center rounded-control bg-active text-label font-semibold text-dim hover:bg-hover"
+					className="focus-ring flex size-8 min-h-8 items-center justify-center rounded-md bg-active text-supporting font-semibold text-dim hover:bg-hover"
 					onClick={() => memberRowRef.current?.scrollIntoView({ block: "start" })}
 					aria-label={`Show ${hiddenCompactMembers} more people`}
 				>
