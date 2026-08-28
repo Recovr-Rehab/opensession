@@ -24,7 +24,7 @@ test("workspace surfaces keep committed and uncommitted work separate", () => {
 
 test("uncommitted work opens Changes without using the separate commit action", () => {
 	expect(summarySource).toContain("function openUncommittedChanges()");
-	expect(summarySource).toContain('go(() => onOpenPanelTab("changes"))');
+	expect(summarySource).toContain('onOpenPanelTab("changes")');
 	expect(summarySource).toContain("onClick={openUncommittedChanges}");
 	expect(summarySource).toContain("onClick={askCommit}");
 	expect(summarySource).toContain('title="View uncommitted changes"');

@@ -623,7 +623,7 @@ export function WorkspaceSummaryBody({
 	}
 
 	function openUncommittedChanges() {
-		go(() => onOpenPanelTab("changes"));
+		onOpenPanelTab("changes");
 	}
 
 	function askCommit() {
