@@ -311,22 +311,27 @@ import {
 	type Route,
 } from "./lib/app-route";
 
-function deferred<T extends React.ComponentType<any>>(
-	load: () => Promise<{ default: T }>,
+function deferred<Props extends object>(
+	load: () => Promise<{ default: React.ComponentType<Props> }>,
 	fallback: React.ReactNode = null,
-): T {
+): React.ComponentType<Props> {
 	const Component = React.lazy(load);
-	const Deferred = (props: React.ComponentProps<T>) => (
-		<React.Suspense fallback={fallback}>
-			<Component {...(props as any)} />
-		</React.Suspense>
-	);
-	return Deferred as T;
+	return function Deferred(props: Props) {
+		return (
+			<React.Suspense fallback={fallback}>
+				<Component {...props} />
+			</React.Suspense>
+		);
+	};
 }
 
-const Settings = deferred(() =>
-	import("./components/Settings").then((module) => ({ default: module.Settings })),
-);
+type SettingsProps = React.ComponentProps<
+	typeof import("./components/Settings").Settings
+>;
+const Settings = deferred<SettingsProps>(async () => {
+	const { Settings: SettingsComponent } = await import("./components/Settings");
+	return { default: SettingsComponent };
+});
 
 // Stable empty stack, so a session with no sub-agent open hands the same array
 // identity down every render (the transcript memo compares props by identity).
