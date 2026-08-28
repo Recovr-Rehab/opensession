@@ -3245,10 +3245,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// row carries the slide. The drag writes --swipe-x straight onto
 						// the node, so the transform reads it rather than a React style.
 						SIDEBAR_WS_ROW,
-						// The reserve follows the chips that actually appear: an
-						// unpinned row reveals snooze + archive, not the pin, so it
-						// gives up one chip less of its right end (26px + the 4px gap).
-						!pinned && "hover:pr-[68px]",
+						// The reserve follows the chips that actually appear. Keep sits
+						// rightmost after Archive, adding one chip; an unpinned row without
+						// it still reveals only Snooze + Archive.
+						pinned && canKeepInSidebar
+							? "hover:pr-[128px]"
+							: !pinned && !canKeepInSidebar
+								? "hover:pr-[68px]"
+								: null,
 						"z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))]",
 						SIDEBAR_HOVER_LAYER,
 						// "Needs you" paints no fill of its own: it is a question
@@ -3425,16 +3429,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						{stripPrTitlePrefix(row.name)}
 					</span>
 				)}
-				{/* A visible-but-unclaimed row gets the actionable inbox-plus mark.
-				    Once kept, an agent-started row returns to its passive robot origin. */}
-				{!editing &&
-					(canKeepInSidebar ? (
-						<KeepInSidebarMark
-							onKeep={() => onSetStatus(row.sessions, "mine")}
-						/>
-					) : rowWasAgentStarted(row) ? (
-						<AutoCreatedMark />
-					) : null)}
+				{/* Machine origin stays passive beside the title. Keep belongs with
+				    the row's other actions at the right edge. */}
+				{!editing && rowWasAgentStarted(row) && <AutoCreatedMark />}
 				{/* Where the work came from, when the whole row came from one place:
 				    a Slack thread, a Linear issue. Same slot and ink as the mark
 				    above (SidebarItem carries the session-row half). */}
@@ -3537,7 +3534,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					sessionIdsKey={row.sessions.map((session) => session.id).join("\0")}
 					pushed={showRunDuration || Boolean(snoozeIso)}
 				/>
-				{/* Hover actions stay in one predictable order: Pin, Snooze, Archive. */}
+				{/* Hover actions stay in one predictable order: Pin, Snooze, Archive, Keep. */}
 				<span
 					className={cn(
 						SIDEBAR_WS_ACTIONS,
@@ -3666,6 +3663,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</span>
 						</Tooltip>
 					) : null}
+					{canKeepInSidebar && (
+						<KeepInSidebarMark
+							className={SIDEBAR_WS_ACTION}
+							onKeep={() => onSetStatus(row.sessions, "mine")}
+						/>
+					)}
 				</span>
 				</button>
 			</div>
