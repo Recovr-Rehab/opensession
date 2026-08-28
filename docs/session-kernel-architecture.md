@@ -454,16 +454,21 @@ existing settlement protocols remain additive and mixed-version safe.
 
 Before every isolated mutation, the host durably marks that session's catalog
 wake record dirty. A crash can therefore leave an extra scan but cannot hide a
-committed timer or outbox item. Runtime reconciliation reads the authoritative
-session database, dispatches due work, and repairs its next-wake projection.
-Ordinary and opening-effect quotas share one bounded reconciliation pass of at
-most four actors, with capacity reserved for both newly dirty and already-due
-sessions. A runtime tick never opens the same actor batch once per effect pool.
-While a physical effect is active or waiting for an execution slot, the gateway
-keeps its durable item in a bounded memory queue and advances its catalog projection
-to a 30-second recovery horizon instead of rereading the same actor every
-second. A gateway crash drops that cache, and the horizon makes the durable
-effect discoverable again.
+committed timer or outbox item. Runtime reconciliation first asks the catalog
+for at most four dirty or due session ids. The service then enqueues one claim
+on each session's normal actor mailbox. That actor reads its authoritative
+database through its existing lane-local connection and repairs the catalog
+wake projection before ending the same turn. The catalog lane never opens an
+isolated actor database, and runtime discovery creates no fleet-wide mutation
+barrier.
+
+Ordinary and opening-effect quotas share that bounded reconciliation pass, so a
+runtime tick never opens the same actor once per effect pool. While a physical
+effect is active or waiting for an execution slot, the gateway keeps its durable
+item in a bounded memory queue and advances its catalog projection to a
+30-second recovery horizon instead of rereading the same actor every second. A
+gateway crash drops that cache, and the horizon makes the durable effect
+discoverable again.
 
 The gateway starts and handshakes the actor host before hydrating projections. A
 failed session-scoped critical settlement durably quarantines only that session,

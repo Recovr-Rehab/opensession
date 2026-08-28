@@ -79,6 +79,19 @@ describe("single session ownership", () => {
 		]) expect(routing).not.toContain(legacyGlobal);
 	});
 
+	test("runtime work claims on session lanes without a fleet barrier", () => {
+		const service = read("session-kernel/actor-service.ts");
+		const worker = read("session-kernel/actor-worker.ts");
+		const host = read("session-kernel/store-host.ts");
+		expect(service).toContain('request.t === "runtime_work"');
+		expect(service).toContain("runtimeWorkRequest(request");
+		expect(service).toContain("enqueueSession(sessionId");
+		expect(worker).toContain('request.t === "runtime_session_work"');
+		expect(host).toContain("runtimeCatalogWork(");
+		expect(host).toContain("runtimeSessionWork(");
+		expect(host).not.toContain("runtimeWork(");
+	});
+
 	test("run, queue, ask and session-file state delegate to SessionKernel", () => {
 		expect(read("run-state.ts")).toContain("sessionKernel(sessionId)");
 		expect(read("queue-state.ts")).toContain("new DeliveryOwnedMap");
