@@ -38,19 +38,42 @@ beforeAll(async () => {
 
 beforeEach(() => store.clear());
 
-describe("new-session checkout preference", () => {
-	test("uses the repository default until the person chooses otherwise", () => {
-		expect(pref.getSessionCheckoutPref()).toBe("default");
+describe("per-repository new-session checkout preferences", () => {
+	test("uses each repository's default until the person chooses otherwise", () => {
+		expect(pref.getSessionCheckoutPref("app")).toBe("default");
+		expect(pref.getSessionCheckoutPref("docs")).toBe("default");
 	});
 
-	test("stores and announces an explicit worktree choice", () => {
+	test("stores independent choices for repository ids with punctuation", () => {
+		pref.setSessionCheckoutPref("app", "worktree");
+		pref.setSessionCheckoutPref("compiler:legacy", "checkout");
+
+		expect(pref.getSessionCheckoutPrefs()).toEqual({
+			app: "worktree",
+			"compiler:legacy": "checkout",
+		});
+		expect(pref.getSessionCheckoutPref("app")).toBe("worktree");
+		expect(pref.getSessionCheckoutPref("compiler:legacy")).toBe("checkout");
+		expect(pref.getSessionCheckoutPref("docs")).toBe("default");
+	});
+
+	test("resetting one repository preserves the others and announces the change", () => {
+		pref.setSessionCheckoutPref("app", "worktree");
+		pref.setSessionCheckoutPref("docs", "checkout");
 		let changed = 0;
 		const unsubscribe = pref.onSessionCheckoutPrefChanged(() => changed++);
-		pref.setSessionCheckoutPref("worktree");
+		pref.setSessionCheckoutPref("app", "default");
 		unsubscribe();
 
-		expect(pref.getSessionCheckoutPref()).toBe("worktree");
-		expect(store.get("opensession-session-checkout")).toBe("worktree");
+		expect(pref.getSessionCheckoutPrefs()).toEqual({ docs: "checkout" });
 		expect(changed).toBe(1);
+	});
+
+	test("ignores malformed entries hydrated into the map", () => {
+		store.set(
+			"opensession-session-checkouts",
+			JSON.stringify({ app: "worktree", docs: "sometimes", empty: null }),
+		);
+		expect(pref.getSessionCheckoutPrefs()).toEqual({ app: "worktree" });
 	});
 });

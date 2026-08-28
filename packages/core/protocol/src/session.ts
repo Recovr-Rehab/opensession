@@ -397,7 +397,7 @@ export type ProtocolClientMessage =
       worktreeMode?: "share" | "stack" | "ask";
       /**
        * Where a new code workspace starts. `default` follows the repository's
-       * setting; the explicit choices are a per-user override.
+       * setting; the explicit choices are that user's override for this repo.
        */
       checkoutMode?: "default" | "checkout" | "worktree";
       model?: string;

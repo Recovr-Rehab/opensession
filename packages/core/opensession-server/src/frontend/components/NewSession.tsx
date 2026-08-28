@@ -37,7 +37,7 @@ import { isApple } from "../lib/platform";
 import { NO_REPO } from "../lib/session-repo";
 import { getDefaultRepoPref, setDefaultRepoPref } from "../lib/default-repo-pref";
 import {
-  getSessionCheckoutPref,
+  getSessionCheckoutPrefs,
   onSessionCheckoutPrefChanged,
 } from "../lib/session-checkout-pref";
 import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
@@ -547,14 +547,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // plain scratch dir when it doesn't.
   const mode: "ask" | "code" | "scratch" =
     permission === "ask" ? "ask" : repo === NO_REPO ? "scratch" : "code";
-  const [checkoutPref, setCheckoutPref] = useState(getSessionCheckoutPref);
+  const [checkoutPrefs, setCheckoutPrefs] = useState(getSessionCheckoutPrefs);
   useEffect(
     () =>
       onSessionCheckoutPrefChanged(() =>
-        setCheckoutPref(getSessionCheckoutPref()),
+        setCheckoutPrefs(getSessionCheckoutPrefs()),
       ),
     [],
   );
+  const checkoutPref = checkoutPrefs[repo] ?? "default";
   const repoOptions = (items: RepoInfo[]): RepoOption[] =>
     items.map((item) => ({
       id: item.id,
@@ -1512,8 +1513,9 @@ pendingDraftParks.delete(operation);
                 // so it can be the session's repo but never a second one.
                 singleOnly:
                   startPoint.kind === "new" &&
-                  (checkoutPref === "checkout" ||
-                    (checkoutPref === "default" && p.sharedCheckout)),
+                  ((checkoutPrefs[p.id] ?? "default") === "checkout" ||
+                    ((checkoutPrefs[p.id] ?? "default") === "default" &&
+                      p.sharedCheckout)),
               })),
               // Either mode can run without a repo, and the Ask toggle in the
               // footer says which one you get: Ask reads nothing, Code writes

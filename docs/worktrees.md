@@ -40,9 +40,9 @@ change in a browser. See [repo-lifecycle.md](repo-lifecycle.md).
 ## Modes
 
 **`code` sessions** have write access. This is the default. A new code workspace
-normally follows its repository setting, while each person can override that
-under **Preferences → Code workspace** with **Local checkout** or **Separate
-worktree**. Additional sessions in an existing workspace keep its worktree, and
+normally follows its repository setting, while each person can override each
+repository under **Preferences** with **Local checkout** or **Separate worktree**.
+Additional sessions in an existing workspace keep its worktree, and
 a deliberately selected branch or pull request stays isolated. Worktree sessions
 can commit and use the repository's configured pull-request flow.
 
