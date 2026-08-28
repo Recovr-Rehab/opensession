@@ -7580,6 +7580,7 @@ export function SessionViewer({
 										key="busy"
 										since={busySince}
 										stoppingSince={stopRequestedAt}
+										liveTurnStore={liveTurnStore}
 										onLayout={relayout}
 									/>
 								)}

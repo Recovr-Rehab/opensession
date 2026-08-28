@@ -132,10 +132,13 @@ export function makeTranscriptMotionScenario(rawSeed: number): TranscriptMotionS
 		nextDelay(25, 80),
 	);
 	push({ kind: "stream-start" }, nextDelay(20, 80));
+	const streamedParts = [
+		"I’ll exercise several changing transcript shapes before settling.",
+	];
 	push(
 		{
 			kind: "stream-append",
-			text: "I’ll exercise several changing transcript shapes before settling.",
+			text: streamedParts[0] ?? "",
 			blockId: `seed-${seed}-stream-intro`,
 		},
 		nextDelay(20, 80),
@@ -199,19 +202,32 @@ export function makeTranscriptMotionScenario(rawSeed: number): TranscriptMotionS
 				nextDelay(16, 150),
 			);
 		}
-		if (tool % 2 === 0)
+		if (tool % 2 === 0) {
+			const update = `\n\nTool ${tool + 1} has settled without replacing the live bubble.`;
+			streamedParts.push(update);
 			push(
 				{
 					kind: "stream-append",
-					text: `\n\nTool ${tool + 1} has settled without replacing the live bubble.`,
+					text: update,
 					blockId: `seed-${seed}-stream-${tool}`,
 				},
 				nextDelay(16, 100),
 			);
+		}
 	}
 
 	const answerId = `seed-${seed}-answer`;
-	const answer = `Scenario ${seed} completed ${toolCount} tool steps. The durable answer replaces the live tail without a jump.`;
+	const completion = `\n\nScenario ${seed} completed ${toolCount} tool steps. The durable answer replaces the live tail without a jump.`;
+	streamedParts.push(completion);
+	push(
+		{
+			kind: "stream-append",
+			text: completion,
+			blockId: `seed-${seed}-stream-final`,
+		},
+		nextDelay(16, 100),
+	);
+	const answer = streamedParts.join("");
 	push(
 		{
 			kind: "append-entry",

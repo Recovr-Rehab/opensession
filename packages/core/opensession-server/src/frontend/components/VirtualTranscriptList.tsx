@@ -307,10 +307,12 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 			observeElementRect,
 			observeElementOffset,
 			scrollToFn: elementScroll,
-			// The callback adjusts scrollTop and synchronously commits corrected row
-			// transforms. Deferring it through rAF exposes one paint of tool growth
-			// before that correction, which reads as a live-conversation flicker.
-			useAnimationFrameWithResizeObserver: false,
+			// Semantic transcript revisions are measured synchronously in
+			// componentDidUpdate. ResizeObserver is only the fallback for external
+			// geometry changes, so let TanStack coalesce those into the next frame;
+			// flushing React from inside observer delivery can resize another row and
+			// trigger the browser's undelivered-notifications warning.
+			useAnimationFrameWithResizeObserver: true,
 			onChange: this.requestRender,
 		};
 	}

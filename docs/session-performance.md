@@ -8,11 +8,11 @@ samples across all metric names, `recent` contains the latest 100 samples, and
 counters are cumulative with no reset API. Reload before measuring one run; for
 counters, before/after deltas can also isolate the run.
 
-Targets, not automated checks:
+Runtime targets:
 
-- input event p95: under 50 ms. The current `input_event_ms` telemetry cannot
-  validate this target: its Event Timing observer leaves the default 104 ms
-  duration threshold instead of requesting 16 ms.
+- input event p95: under 50 ms. The Event Timing observer requests the minimum
+  16 ms duration threshold, so `input_event_ms` includes responsive interactions
+  rather than only the browser's default 104 ms-and-slower tail.
 - first stream delta in a coalesced batch to the animation-frame flush p95
   (`first_delta_to_paint_ms`): under 50 ms. This is recorded before subscribers
   are notified and React renders, not after a browser paint.
@@ -28,9 +28,26 @@ Targets, not automated checks:
 Fixture generators live in
 `packages/core/opensession-server/src/frontend/lib/session-performance-fixtures.ts`.
 `makeSessionFixture` supports 200, 2,000, and 10,000 entries, and
-`makeStreamDeltas` defaults to 100 deltas/s for one second. They are currently
-unit-tested only as data generators; there is no runnable renderer harness or
-automated enforcement of these targets.
+`makeStreamDeltas` defaults to 100 deltas/s for one second.
+
+The production transcript stack also has a browser-rendered, network-free motion
+fixture at `/__fixtures/transcript-motion?seed=7&speed=1`. CI builds that bundle,
+launches headless Chrome, and runs 24 deterministic seeds across phone, desktop,
+reduced motion, 6x CPU throttling, and an in-flight phone viewport resize:
+
+```sh
+bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fixture-server.ts &
+OPENSESSION_URL=http://127.0.0.1:4899 \
+  bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fuzz.ts \
+    --seeds 24 --speed 8 --out /tmp/transcript-motion-report.json
+```
+
+That browser gate rejects API requests, runtime errors, ResizeObserver loop
+warnings, stale streaming rows, horizontal overflow, settled drift above 1 px,
+more than 64 mounted transcript rows, CLS above 0.15 (0.2 under 6x CPU), a frame
+above 300 ms (1,200 ms throttled), or a long task above the same whole-scenario
+budgets. These broader fixture budgets include initial React work and viewport
+changes; they do not replace the tighter 100-delta/s runtime target above.
 
 For a scoped run, compare the before/after deltas of `stream_frames_received` and
 `stream_paints`. Despite its name, `stream_paints` counts animation-frame-driven

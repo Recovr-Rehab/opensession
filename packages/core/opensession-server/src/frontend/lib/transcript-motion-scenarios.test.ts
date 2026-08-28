@@ -38,6 +38,18 @@ describe("transcript motion scenarios", () => {
 		}
 	});
 
+	test("lands the exact streamed answer so no live duplicate survives", () => {
+		for (let seed = 1; seed <= 50; seed++) {
+			const scenario = makeTranscriptMotionScenario(seed);
+			const streamed = scenario.events
+				.filter((event) => event.kind === "stream-append")
+				.map((event) => event.text)
+				.join("");
+			const landed = scenario.events.find((event) => event.kind === "stream-land");
+			expect(landed?.kind === "stream-land" ? landed.content : null).toBe(streamed);
+		}
+	});
+
 	test("updates growing entries without reordering their row", () => {
 		const scenario = makeTranscriptMotionScenario(7);
 		let state = scenario.initial;

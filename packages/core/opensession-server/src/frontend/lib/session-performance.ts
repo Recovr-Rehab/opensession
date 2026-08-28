@@ -81,7 +81,11 @@ export function startSessionPerfObservers() {
 				if (entry.duration >= 16) recordSessionPerf("input_event_ms", entry.duration);
 			}
 		});
-		events.observe({ type: "event", buffered: true });
+		events.observe({
+			type: "event",
+			buffered: true,
+			durationThreshold: 16,
+		} as PerformanceObserverInit & { durationThreshold: number });
 	} catch {
 		// Event Timing is progressive telemetry.
 	}

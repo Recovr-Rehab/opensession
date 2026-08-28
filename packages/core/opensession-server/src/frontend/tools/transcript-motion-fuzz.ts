@@ -22,8 +22,15 @@ const SEEDS = Math.max(1, Number(flag("seeds", "24")) || 24);
 const SPEED = Math.min(20, Math.max(0.1, Number(flag("speed", "8")) || 8));
 const OUT = flag("out", "");
 const APP = process.env.OPENSESSION_URL ?? "http://127.0.0.1:3850";
+const MAX_CLS = 0.15;
+const MAX_THROTTLED_CLS = 0.2;
+const MAX_MOUNTED_ROWS = 64;
+const MAX_LONG_TASK_MS = 300;
+const MAX_THROTTLED_LONG_TASK_MS = 1_200;
+const MAX_FRAME_MS = 300;
+const MAX_THROTTLED_FRAME_MS = 1_200;
 const INIT = `(() => {
-  const F = window.__transcriptMotionFuzz = { shifts: [], samples: [], errors: [] };
+  const F = window.__transcriptMotionFuzz = { shifts: [], longTasks: [], samples: [], errors: [] };
   addEventListener("error", event => F.errors.push(String(event.error?.stack || event.message)));
   addEventListener("unhandledrejection", event => F.errors.push(String(event.reason?.stack || event.reason)));
   try {
@@ -35,8 +42,17 @@ const INIT = `(() => {
       });
     }).observe({ type: "layout-shift", buffered: true });
   } catch {}
+  try {
+    new PerformanceObserver(list => {
+      for (const entry of list.getEntries()) F.longTasks.push({
+        t: Math.round(entry.startTime), duration: entry.duration,
+        event: Number(document.querySelector("[data-transcript-motion-event]")?.dataset.transcriptMotionEvent || 0),
+      });
+    }).observe({ type: "longtask", buffered: true });
+  } catch {}
   let previous = new Map();
-  const sample = () => {
+  let previousSampleAt = 0;
+  const sample = (now) => {
     const scroller = document.querySelector("[data-transcript-motion-scroller]");
     const root = document.querySelector("[data-virtual-transcript]");
     const eventIndex = Number(document.querySelector("[data-transcript-motion-event]")?.dataset.transcriptMotionEvent || 0);
@@ -47,12 +63,17 @@ const INIT = `(() => {
         return { key: node.dataset.transcriptKey || node.getAttribute("data-eid"), index: Number(node.dataset.index), top: rect.top - box.top, bottom: rect.bottom - box.top };
       });
       let maxJump = 0;
+      let maxContentJump = 0;
       for (const row of rows) {
         const old = previous.get(row.key);
-        if (old !== undefined) maxJump = Math.max(maxJump, Math.abs(row.top - old));
+        if (old !== undefined) {
+          maxJump = Math.max(maxJump, Math.abs(row.top - old.top));
+          maxContentJump = Math.max(maxContentJump, Math.abs(row.top + scroller.scrollTop - old.contentTop));
+        }
       }
-      previous = new Map(rows.map(row => [row.key, row.top]));
-      F.samples.push({ t: performance.now(), top: scroller.scrollTop, height: scroller.scrollHeight, client: scroller.clientHeight, count: Number(root.dataset.virtualCount || 0), maxJump });
+      previous = new Map(rows.map(row => [row.key, { top: row.top, contentTop: row.top + scroller.scrollTop }]));
+      F.samples.push({ t: now, frameMs: previousSampleAt ? now - previousSampleAt : 0, top: scroller.scrollTop, height: scroller.scrollHeight, client: scroller.clientHeight, count: Number(root.dataset.virtualCount || 0), maxJump, maxContentJump });
+      previousSampleAt = now;
     }
     requestAnimationFrame(sample);
   };
@@ -72,12 +93,19 @@ type Result = {
 	shiftCount: number;
 	shiftSources: string[];
 	maxSampledJump: number;
+	maxContentJump: number;
+	maxFrameMs: number;
+	maxLongTaskMs: number;
+	longTaskCount: number;
 	horizontalOverflow: number;
 	settledOverlap: number;
 	settledDrift: number;
 	distanceFromBottom: number;
 	virtualCount: number;
 	mountedRows: number;
+	streamingRows: number;
+	viewportResized: boolean;
+	failures: string[];
 	passed: boolean;
 };
 
@@ -140,13 +168,35 @@ try {
 			});
 			const deadline = performance.now() + 30_000;
 			let state = "";
+			let viewportResized = false;
 			while (performance.now() < deadline) {
 				const response = await send("Runtime.evaluate", {
-					expression:
-						'document.querySelector("[data-transcript-motion-state]")?.dataset.transcriptMotionState || ""',
+					expression: `(() => ({
+					state: document.querySelector("[data-transcript-motion-state]")?.dataset.transcriptMotionState || "",
+					event: Number(document.querySelector("[data-transcript-motion-event]")?.dataset.transcriptMotionEvent || 0),
+				}))()`,
 					returnByValue: true,
 				});
-				state = String(response.result.value ?? "");
+				const progress = response.result.value as { state?: string; event?: number };
+				state = String(progress.state ?? "");
+				if (!viewportResized && width <= 720 && (progress.event ?? 0) >= 3) {
+					viewportResized = true;
+					// Exercise the phone's keyboard/visual-viewport path while tools and
+					// stream rows are still changing, then restore the shipped viewport.
+					await send("Emulation.setDeviceMetricsOverride", {
+						width,
+						height: Math.max(480, height - 260),
+						deviceScaleFactor: 1,
+						mobile: false,
+					});
+					await Bun.sleep(80);
+					await send("Emulation.setDeviceMetricsOverride", {
+						width,
+						height,
+						deviceScaleFactor: 1,
+						mobile: false,
+					});
+				}
 				if (state === "done") break;
 				await Bun.sleep(40);
 			}
@@ -185,12 +235,17 @@ try {
             errors: F.errors,
             shifts: F.shifts,
             maxSampledJump: Math.max(0, ...F.samples.map(sample => sample.maxJump)),
+            maxContentJump: Math.max(0, ...F.samples.map(sample => sample.maxContentJump)),
+            maxFrameMs: Math.max(0, ...F.samples.map(sample => sample.frameMs)),
+            maxLongTaskMs: Math.max(0, ...F.longTasks.filter(task => task.event > 0).map(task => task.duration)),
+            longTaskCount: F.longTasks.filter(task => task.event > 0).length,
             horizontalOverflow: scroller ? Math.max(0, scroller.scrollWidth - scroller.clientWidth) : -1,
             settledOverlap: Math.max(0, overlap),
             positions,
             distanceFromBottom: scroller ? Math.max(0, scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) : -1,
             virtualCount: Number(root?.dataset.virtualCount || 0),
             mountedRows: rows.length,
+            streamingRows: document.querySelectorAll(".msg-streaming").length,
           };
         })()`,
 				returnByValue: true,
@@ -214,9 +269,39 @@ try {
 			const errors = value.errors.filter(
 				(error: string) => !error.startsWith("ResizeObserver loop completed"),
 			);
-			const shifts = value.shifts.filter(
-				(shift: { input: boolean }) => !shift.input,
+			const shifts = (value.shifts as Array<{
+				input: boolean;
+				value: number;
+				sources: string[];
+			}>).filter((shift) => !shift.input);
+			const cls = shifts.reduce(
+				(total: number, shift: { value: number }) => total + shift.value,
+				0,
 			);
+			const failures = [
+				...(apiRequests.length ? [`${apiRequests.length} API requests`] : []),
+				...(errors.length ? [`${errors.length} runtime errors`] : []),
+				...(resizeObserverWarnings ? [`${resizeObserverWarnings} ResizeObserver warnings`] : []),
+				...(cls > (cpuRate > 1 ? MAX_THROTTLED_CLS : MAX_CLS)
+					? [`CLS ${cls.toFixed(3)} > ${cpuRate > 1 ? MAX_THROTTLED_CLS : MAX_CLS}`]
+					: []),
+				...(value.maxLongTaskMs >
+				(cpuRate > 1 ? MAX_THROTTLED_LONG_TASK_MS : MAX_LONG_TASK_MS)
+					? [`long task ${Math.round(value.maxLongTaskMs)}ms`]
+					: []),
+				...(value.maxFrameMs >
+				(cpuRate > 1 ? MAX_THROTTLED_FRAME_MS : MAX_FRAME_MS)
+					? [`frame ${Math.round(value.maxFrameMs)}ms`]
+					: []),
+				...(value.horizontalOverflow > 1 ? [`${Math.round(value.horizontalOverflow)}px horizontal overflow`] : []),
+				...(value.settledOverlap > 11 ? [`${Math.round(value.settledOverlap)}px row overlap`] : []),
+				...(settledDrift > 1 ? [`${Math.round(settledDrift)}px settled drift`] : []),
+				...(value.virtualCount <= 0 ? ["no virtual rows"] : []),
+				...(value.streamingRows > 0 ? [`${value.streamingRows} stale streaming rows`] : []),
+				...(value.mountedRows > MAX_MOUNTED_ROWS
+					? [`${value.mountedRows} mounted rows > ${MAX_MOUNTED_ROWS}`]
+					: []),
+			];
 			const result: Result = {
 				seed,
 				width,
@@ -226,10 +311,7 @@ try {
 				apiRequests,
 				errors,
 				resizeObserverWarnings,
-				cls: shifts.reduce(
-					(total: number, shift: { value: number }) => total + shift.value,
-					0,
-				),
+				cls,
 				shiftCount: shifts.length,
 				shiftSources: [
 					...new Set(
@@ -237,19 +319,20 @@ try {
 					),
 				],
 				maxSampledJump: Math.round(value.maxSampledJump),
+				maxContentJump: Math.round(value.maxContentJump),
+				maxFrameMs: Math.round(value.maxFrameMs),
+				maxLongTaskMs: Math.round(value.maxLongTaskMs),
+				longTaskCount: value.longTaskCount,
 				horizontalOverflow: Math.round(value.horizontalOverflow),
 				settledOverlap: Math.round(value.settledOverlap),
 				settledDrift: Math.round(settledDrift),
 				distanceFromBottom: Math.round(value.distanceFromBottom),
 				virtualCount: value.virtualCount,
 				mountedRows: value.mountedRows,
-				passed:
-					apiRequests.length === 0 &&
-					errors.length === 0 &&
-					value.horizontalOverflow <= 1 &&
-					value.settledOverlap <= 11 &&
-					settledDrift <= 1 &&
-					value.virtualCount > 0,
+				streamingRows: value.streamingRows,
+				viewportResized,
+				failures,
+				passed: failures.length === 0,
 			};
 			results.push(result);
 			console.error(
@@ -269,12 +352,19 @@ try {
 				shiftCount: 0,
 				shiftSources: [],
 				maxSampledJump: 0,
+				maxContentJump: 0,
+				maxFrameMs: 0,
+				maxLongTaskMs: 0,
+				longTaskCount: 0,
 				horizontalOverflow: -1,
 				settledOverlap: -1,
 				settledDrift: -1,
 				distanceFromBottom: -1,
 				virtualCount: 0,
 				mountedRows: 0,
+				streamingRows: 0,
+				viewportResized: false,
+				failures: ["run failed"],
 				passed: false,
 			});
 		} finally {
@@ -305,6 +395,18 @@ const report = {
 		0,
 	),
 	maxSampledJump: Math.max(0, ...results.map((result) => result.maxSampledJump)),
+	maxContentJump: Math.max(0, ...results.map((result) => result.maxContentJump)),
+	maxFrameMs: Math.max(0, ...results.map((result) => result.maxFrameMs)),
+	maxLongTaskMs: Math.max(0, ...results.map((result) => result.maxLongTaskMs)),
+	budgets: {
+		maxCls: MAX_CLS,
+		maxThrottledCls: MAX_THROTTLED_CLS,
+		maxMountedRows: MAX_MOUNTED_ROWS,
+		maxLongTaskMs: MAX_LONG_TASK_MS,
+		maxThrottledLongTaskMs: MAX_THROTTLED_LONG_TASK_MS,
+		maxFrameMs: MAX_FRAME_MS,
+		maxThrottledFrameMs: MAX_THROTTLED_FRAME_MS,
+	},
 	results,
 };
 if (OUT) writeFileSync(OUT, `${JSON.stringify(report, null, 2)}\n`);

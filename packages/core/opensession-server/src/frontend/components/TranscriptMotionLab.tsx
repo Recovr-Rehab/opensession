@@ -197,6 +197,7 @@ function TranscriptMotionPlayer({
 							key="busy"
 							since={busySince}
 							stoppingSince={null}
+							liveTurnStore={liveTurnStore}
 							onLayout={relayout}
 						/>
 					)}
