@@ -501,7 +501,11 @@ export class DaytonaProvider implements SandboxProvider {
         );
       };
       try {
-        sbx = await create(template?.artifactId || cfg.daytona?.snapshot);
+        sbx = await create(
+          sourceVerification
+            ? undefined
+            : template?.artifactId || cfg.daytona?.snapshot,
+        );
         preparedWorkspace = Boolean(template);
       } catch (error) {
         if (!template || !daytonaNotFound(error)) throw error;
