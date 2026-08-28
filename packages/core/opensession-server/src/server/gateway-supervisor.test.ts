@@ -94,6 +94,35 @@ describe("gateway supervisor", () => {
     expect(supervisor.activeGateway()).toBe(candidate.gateway);
   });
 
+  test("parks a coordinated candidate until protocol peers are replaced", async () => {
+    const old = controlledGateway(1, "/releases/old");
+    const candidate = controlledGateway(2, "/releases/new", true);
+    const order: string[] = [];
+    const supervisor = new GatewaySupervisor(old.gateway, {
+      spawn: () => candidate.gateway,
+      async waitReady() { order.push("ready"); },
+      validateRelease: (root) => root,
+      promoteCurrent(root) { order.push(`promote:${root}`); },
+    });
+    const preparing = supervisor.prepareCoordinated({
+      type: "prepare_coordinated",
+      releaseRoot: "/releases/new",
+      sha: "e".repeat(40),
+    });
+    candidate.preload();
+    await Bun.sleep(0);
+    expect(old.events).toEqual(["kill:15"]);
+    old.finish(0);
+    expect((await preparing).ok).toBe(true);
+    expect(candidate.events).toEqual([]);
+    expect(supervisor.activeGateway()).toBe(candidate.gateway);
+    expect(order).toEqual(["promote:/releases/new"]);
+
+    expect((await supervisor.activateCoordinated()).ok).toBe(true);
+    expect(candidate.events[0]?.startsWith("activate:")).toBe(true);
+    expect(order).toEqual(["promote:/releases/new", "ready"]);
+  });
+
   test("restores pointer and previous release when an activated candidate fails", async () => {
     const old = controlledGateway(1, "/releases/old");
     const candidate = controlledGateway(2, "/releases/new", true);

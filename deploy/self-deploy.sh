@@ -594,6 +594,42 @@ do_deploy() {
     exit 1
   fi
 
+  # Coordinated peer releases keep the supervisor's public TCP listener alive
+  # too. It preloads and parks the target gateway after the old child exits;
+  # this deploy unit replaces the executor and SessionKernel, then releases the
+  # candidate only after both peers are ready. Older supervisors reject the
+  # prepare command without effects and fall through to the cold compatibility
+  # path below.
+  if [ -S /run/opensession-gateway/control.sock ]; then
+    write_marker
+    if "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+      prepare-coordinated "$release_dir" "$target_sha"; then
+      record_kernel_schema_floor
+      if refresh_executor && refresh_session_kernel \
+        && "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+          activate-coordinated \
+        && poll_health; then
+        log "healthy after coordinated zero-downtime handoff — deployed ${target_sha:0:10}"
+        write_result true deploy "$target_sha" "$current" \
+          "deployed with a coordinated single-active handoff"
+        echo 0 > "$FAIL_COUNT_FILE"
+        exit 0
+      fi
+      log "ERROR: coordinated handoff failed; aborting candidate and rolling back"
+      "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+        abort-coordinated || true
+      if rollback_to_pin; then
+        write_result false deploy "$(release_cmd current-sha)" "$current" \
+          "coordinated deploy of $target_sha failed; rolled back and healthy again"
+      else
+        write_result false deploy "$(release_cmd current-sha 2>/dev/null || echo unknown)" "$current" \
+          "coordinated deploy of $target_sha failed; rollback failed"
+      fi
+      exit 1
+    fi
+    log "installed supervisor does not support coordinated handoff; using compatibility restart"
+  fi
+
   # Open the watchdog recovery window before the first destructive lifecycle
   # action. If this transient deploy unit is killed outright, the external
   # watchdog can still recover instead of observing an unmarked stopped unit.

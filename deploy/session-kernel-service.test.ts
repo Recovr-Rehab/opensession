@@ -123,6 +123,21 @@ describe("session kernel service deployment", () => {
     expect(failureExit).toBeGreaterThan(failure);
   });
 
+  test("coordinated deploys replace peers while the supervisor listener stays live", async () => {
+    const selfDeploy = await Bun.file(
+      resolve(repoRoot, "deploy/self-deploy.sh"),
+    ).text();
+    const prepare = selfDeploy.indexOf("prepare-coordinated");
+    const executor = selfDeploy.indexOf("refresh_executor", prepare);
+    const kernel = selfDeploy.indexOf("refresh_session_kernel", executor);
+    const activate = selfDeploy.indexOf("activate-coordinated", kernel);
+    expect(prepare).toBeGreaterThan(0);
+    expect(executor).toBeGreaterThan(prepare);
+    expect(kernel).toBeGreaterThan(executor);
+    expect(activate).toBeGreaterThan(kernel);
+    expect(selfDeploy.slice(prepare, activate)).not.toContain("stop_gateway");
+  });
+
   test("gateway-only deploys leave pointer promotion inside the supervisor transaction", async () => {
     const selfDeploy = await Bun.file(
       resolve(repoRoot, "deploy/self-deploy.sh"),

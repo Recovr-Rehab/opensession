@@ -31,9 +31,13 @@ type GatewayIpcMessage = {
 };
 
 type HandoffRequest = {
-  type: "handoff";
+  type: "handoff" | "prepare_coordinated";
   releaseRoot: string;
   sha: string;
+};
+
+type CoordinatedRequest = {
+  type: "activate_coordinated" | "abort_coordinated";
 };
 
 type ControlResponse = {
@@ -74,6 +78,12 @@ function timeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T
 export class GatewaySupervisor {
   private handoffPromise: Promise<ControlResponse> | null = null;
   private standby: ManagedGateway | null = null;
+  private coordinated: {
+    candidate: ManagedGateway;
+    previous: ManagedGateway;
+    nonce: string;
+    timeout: ReturnType<typeof setTimeout>;
+  } | null = null;
   private shuttingDown = false;
 
   constructor(
@@ -106,7 +116,7 @@ export class GatewaySupervisor {
     if (this.shuttingDown) {
       return Promise.resolve({ ok: false, message: "gateway supervisor is shutting down" });
     }
-    if (this.handoffPromise) {
+    if (this.handoffPromise || this.coordinated) {
       return Promise.resolve({ ok: false, message: "a gateway handoff is already in progress" });
     }
     this.handoffPromise = this.performHandoff(request).finally(() => {
@@ -115,9 +125,98 @@ export class GatewaySupervisor {
     return this.handoffPromise;
   }
 
+  prepareCoordinated(request: HandoffRequest): Promise<ControlResponse> {
+    if (this.shuttingDown || this.handoffPromise || this.coordinated) {
+      return Promise.resolve({ ok: false, message: "a gateway handoff is already in progress" });
+    }
+    this.handoffPromise = this.performCoordinatedPrepare(request).finally(() => {
+      this.handoffPromise = null;
+    });
+    return this.handoffPromise;
+  }
+
+  async activateCoordinated(): Promise<ControlResponse> {
+    const pending = this.coordinated;
+    if (!pending) return { ok: false, message: "no coordinated handoff is prepared" };
+    clearTimeout(pending.timeout);
+    try {
+      pending.candidate.activate!(pending.nonce);
+      await timeout(
+        this.dependencies.waitReady(pending.candidate),
+        READY_TIMEOUT_MS,
+        "candidate gateway did not become ready in time",
+      );
+      this.standby = null;
+      this.coordinated = null;
+      return { ok: true, message: "coordinated gateway activated", pid: pending.candidate.pid };
+    } catch (error) {
+      return this.restorePreviousAfterCoordinatedFailure(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  async abortCoordinated(): Promise<ControlResponse> {
+    if (!this.coordinated) return { ok: true, message: "no coordinated handoff was pending" };
+    return this.restorePreviousAfterCoordinatedFailure("coordinated rollout aborted");
+  }
+
+  private async restorePreviousAfterCoordinatedFailure(message: string): Promise<ControlResponse> {
+    const pending = this.coordinated;
+    if (!pending) return { ok: false, message };
+    clearTimeout(pending.timeout);
+    pending.candidate.kill(9);
+    await pending.candidate.exited.catch(() => 0);
+    this.dependencies.promoteCurrent(pending.previous.releaseRoot);
+    const rollback = this.dependencies.spawn(pending.previous.releaseRoot, "active");
+    this.selectActive(rollback);
+    this.standby = null;
+    this.coordinated = null;
+    try {
+      await timeout(this.dependencies.waitReady(rollback), READY_TIMEOUT_MS, "rollback gateway did not become ready");
+      return { ok: false, message: `${message}; previous gateway restored`, pid: rollback.pid };
+    } catch (error) {
+      this.dependencies.onUnexpectedExit?.(rollback, 1);
+      return { ok: false, message: `${message}; rollback gateway failed` };
+    }
+  }
+
+  private async performCoordinatedPrepare(request: HandoffRequest): Promise<ControlResponse> {
+    const releaseRoot = this.dependencies.validateRelease(request.releaseRoot, request.sha);
+    const previous = this.active;
+    const nonce = crypto.randomUUID();
+    const candidate = this.dependencies.spawn(releaseRoot, "standby", nonce);
+    this.standby = candidate;
+    try {
+      await timeout(candidate.preloaded!, PRELOAD_TIMEOUT_MS, "candidate gateway did not preload in time");
+      previous.kill(15);
+      await timeout(previous.exited, EXIT_TIMEOUT_MS, "active gateway did not exit in time");
+      this.dependencies.promoteCurrent(releaseRoot);
+      this.selectActive(candidate);
+      const expiry = setTimeout(() => {
+        // Pointer authority already names the target. Do not guess that the old
+        // gateway is still protocol-compatible after an abandoned peer update;
+        // exit the supervisor so systemd boots the selected release cleanly.
+        candidate.kill(9);
+        void candidate.exited.finally(() => {
+          this.dependencies.onUnexpectedExit?.(candidate, 75);
+        });
+      }, 180_000);
+      expiry.unref?.();
+      this.coordinated = { candidate, previous, nonce, timeout: expiry };
+      return { ok: true, message: "coordinated gateway prepared", pid: candidate.pid };
+    } catch (error) {
+      candidate.kill(9);
+      await candidate.exited.catch(() => 0);
+      this.standby = null;
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   async shutdown(): Promise<void> {
     if (this.shuttingDown) return;
     this.shuttingDown = true;
+    if (this.coordinated) clearTimeout(this.coordinated.timeout);
     const children = new Set([this.active, this.standby].filter(Boolean) as ManagedGateway[]);
     for (const child of children) child.kill(child === this.active ? 15 : 9);
     await Promise.all([...children].map((child) => child.exited.catch(() => 0)));
@@ -387,9 +486,15 @@ function serveControl(supervisor: GatewaySupervisor): ReturnType<typeof Bun.list
         void (async () => {
           let response: ControlResponse;
           try {
-            const request = JSON.parse(value.slice(0, newline)) as HandoffRequest;
-            if (request.type !== "handoff") throw new Error("unknown supervisor request");
-            response = await supervisor.handoff(request);
+            const request = JSON.parse(value.slice(0, newline)) as HandoffRequest | CoordinatedRequest;
+            if (request.type === "handoff") response = await supervisor.handoff(request);
+            else if (request.type === "prepare_coordinated") {
+              response = await supervisor.prepareCoordinated(request);
+            } else if (request.type === "activate_coordinated") {
+              response = await supervisor.activateCoordinated();
+            } else if (request.type === "abort_coordinated") {
+              response = await supervisor.abortCoordinated();
+            } else throw new Error("unknown supervisor request");
           } catch (error) {
             response = { ok: false, message: error instanceof Error ? error.message : String(error) };
           }
@@ -405,7 +510,9 @@ function serveControl(supervisor: GatewaySupervisor): ReturnType<typeof Bun.list
   return listener;
 }
 
-async function requestHandoff(releaseRoot: string, sha: string): Promise<ControlResponse> {
+async function requestSupervisor(
+  request: HandoffRequest | CoordinatedRequest,
+): Promise<ControlResponse> {
   return new Promise((resolveResponse, reject) => {
     let body = "";
     const timer = setTimeout(() => reject(new Error("gateway supervisor request timed out")), 190_000);
@@ -413,7 +520,7 @@ async function requestHandoff(releaseRoot: string, sha: string): Promise<Control
       unix: GATEWAY_CONTROL_SOCKET,
       socket: {
         open(socket) {
-          socket.write(`${JSON.stringify({ type: "handoff", releaseRoot, sha })}\n`);
+          socket.write(`${JSON.stringify(request)}\n`);
         },
         data(socket, chunk) {
           body += Buffer.from(chunk).toString("utf8");
@@ -487,10 +594,18 @@ async function runSupervisor(): Promise<void> {
 }
 
 if (import.meta.main) {
-  if (process.argv[2] === "handoff") {
+  if (["handoff", "prepare-coordinated", "activate-coordinated", "abort-coordinated"].includes(process.argv[2] || "")) {
+    const action = process.argv[2];
     const releaseRoot = resolve(process.argv[3] || "");
     const sha = process.argv[4] || "";
-    const response = await requestHandoff(releaseRoot, sha);
+    const request: HandoffRequest | CoordinatedRequest = action === "handoff"
+      ? { type: "handoff", releaseRoot, sha }
+      : action === "prepare-coordinated"
+        ? { type: "prepare_coordinated", releaseRoot, sha }
+        : action === "activate-coordinated"
+          ? { type: "activate_coordinated" }
+          : { type: "abort_coordinated" };
+    const response = await requestSupervisor(request);
     console.log(JSON.stringify(response));
     process.exit(response.ok ? 0 : 1);
   }

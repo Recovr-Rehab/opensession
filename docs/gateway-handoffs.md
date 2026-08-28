@@ -32,8 +32,11 @@ strict path classifier then chooses one of three flows:
 - Frontend only: restart-free frontend pointer promotion.
 - Gateway only: preload candidate, drain old child, observe exit, atomically
   move `current`, activate, then require `/ready`.
-- Anything else: stop the gateway and replace the executor and SessionKernel as
-  one coordinated release.
+- Protocol, executor, or SessionKernel changes: park the preloaded candidate,
+  replace both peers while the supervisor keeps the public listener bound, then
+  activate only after peer readiness.
+- Supervisor, service-unit, or privileged deploy machinery changes: use the
+  root compatibility rollout because the stable front door itself is changing.
 
 During a gateway handoff, the old process continues serving while it performs
 its bounded shutdown drain. The supervisor keeps the public TCP listener bound
@@ -59,3 +62,14 @@ handshake.
 
 The regular watchdog and last-known-good pin remain armed after a successful
 handoff and can perform a coordinated rollback if later health probes fail.
+
+## Coordinated peer handoff
+
+For dependency and protocol releases, `prepare-coordinated` preloads the target,
+drains the old gateway, atomically promotes `current`, and leaves the candidate
+behind its activation barrier. The deploy controller restarts the executor and
+SessionKernel while the public TCP proxy accepts and pauses new connections.
+Only after both peers pass readiness does `activate-coordinated` release the
+candidate. A three-minute deadline terminates an abandoned preparation and the
+supervisor, so systemd boots the already-selected target release rather than
+guessing that the previous gateway remains protocol-compatible.
