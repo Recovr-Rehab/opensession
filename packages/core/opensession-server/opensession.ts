@@ -121,6 +121,9 @@ import {
 	type RouteContext,
 } from "./src/server/routes";
 
+// Under the stable supervisor, PORT/HOST remain the public address while the
+// child binds the private backend override. Direct and dev launches keep the
+// original PORT/HOST behavior.
 const PORT = parseInt(
 	process.env.OPENSESSION_GATEWAY_BACKEND_PORT || process.env.PORT || "3850",
 );
