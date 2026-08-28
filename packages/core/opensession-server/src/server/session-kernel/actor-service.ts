@@ -889,6 +889,7 @@ export async function startSessionKernelService(
             actorVersion: SESSION_KERNEL_ACTOR_VERSION,
             transportVersion: SESSION_KERNEL_TRANSPORT_VERSION,
             generation: RUNTIME_GENERATION,
+            component: "session-kernel",
             workers: {
               ready: sessionSlots.filter((slot) => slot.ready).length,
               capacity: sessionSlots.length,
