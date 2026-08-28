@@ -1501,7 +1501,7 @@ function ZoomableMedia({
 								</button>
 								<div
 									className={cn(
-										"absolute top-1/2 flex w-[min(260px,70vw)] -translate-y-1/2 items-center gap-1 rounded-popup bg-black/70 p-1.5 pl-3 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_10px_30px_rgb(0_0_0/0.38)] backdrop-blur-xl transition-[opacity,scale] duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
+										"absolute top-1/2 flex w-[min(260px,56vw)] -translate-y-1/2 items-center gap-1 rounded-popup bg-black/70 p-1.5 pl-3 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_10px_30px_rgb(0_0_0/0.38)] backdrop-blur-xl transition-[opacity,scale] duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
 										opensLeft ? "right-full mr-1 origin-right" : "left-full ml-1 origin-left",
 										open
 											? "pointer-events-auto scale-100 opacity-100"
