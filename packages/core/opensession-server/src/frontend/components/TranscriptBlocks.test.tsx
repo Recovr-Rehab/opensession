@@ -546,7 +546,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		setTurnPrefs(null);
 	});
 
-	test("never folds model output before or between tool runs", () => {
+	test("never folds ordinary model output before or between tool runs", () => {
 		setTurnPrefs("running", "folded");
 		const running = renderToStaticMarkup(
 			<TranscriptBlocks live entries={liveNarratedTurn} />,
@@ -563,27 +563,33 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		setTurnPrefs(null);
 	});
 
-	test("renders reasoning headings as quiet regular text", () => {
+	test("keeps reasoning quiet inside one work disclosure", () => {
+		const entries: TranscriptEntry[] = [
+			{ id: "prompt", type: "user", content: "Check it", timestamp: "2026-08-28T06:00:00Z" },
+			{ id: "reasoning", type: "assistant", content: "**Checking deployment status**\n\n**Inspecting the release**", isReasoning: true, timestamp: "2026-08-28T06:00:01Z" },
+			{ id: "tool", type: "tool_use", toolUseId: "tool-call", toolName: "bash", toolInput: { command: "git status" }, content: "Using bash", timestamp: "2026-08-28T06:00:02Z" },
+			{ id: "legacy-reasoning", type: "assistant", content: "**Verifying the release**", timestamp: "2026-08-28T06:00:03Z" },
+			{ id: "tool-2", type: "tool_use", toolUseId: "tool-call-2", toolName: "bash", toolInput: { command: "git diff" }, content: "Using bash", timestamp: "2026-08-28T06:00:04Z" },
+			{ id: "answer", type: "assistant", content: "Done.", timestamp: "2026-08-28T06:00:05Z" },
+		];
 		setTurnPrefs("folded", "folded");
-		const html = renderToStaticMarkup(
-			<TranscriptBlocks
-				entries={[
-					{ id: "prompt", type: "user", content: "Check it", timestamp: "2026-08-28T06:00:00Z" },
-					{ id: "reasoning", type: "assistant", content: "**Checking deployment status**\n\n**Inspecting the release**", isReasoning: true, timestamp: "2026-08-28T06:00:01Z" },
-					{ id: "tool", type: "tool_use", toolUseId: "tool-call", toolName: "bash", toolInput: { command: "git status" }, content: "Using bash", timestamp: "2026-08-28T06:00:02Z" },
-					{ id: "legacy-reasoning", type: "assistant", content: "**Verifying the release**", timestamp: "2026-08-28T06:00:03Z" },
-					{ id: "tool-2", type: "tool_use", toolUseId: "tool-call-2", toolName: "bash", toolInput: { command: "git diff" }, content: "Using bash", timestamp: "2026-08-28T06:00:04Z" },
-					{ id: "answer", type: "assistant", content: "Done.", timestamp: "2026-08-28T06:00:05Z" },
-				]}
-			/>,
-		);
+		const folded = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+		expect(folded.match(/>Worked<\/span>/g)).toHaveLength(1);
+		expect(folded).toContain("2 steps");
+		expect(folded).not.toContain("Checking deployment status");
 
+		setTurnPrefs("open", "folded");
+		const html = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
 		expect(html.match(/data-reasoning=""/g)).toHaveLength(2);
 		expect(html).toContain("Checking deployment status\nInspecting the release");
 		expect(html).toContain("Verifying the release");
 		expect(html).not.toContain("<strong>Checking deployment status</strong>");
 		expect(html).not.toContain("<strong>Inspecting the release</strong>");
 		expect(html).not.toContain("<strong>Verifying the release</strong>");
+
+		setTurnPrefs("running", "folded");
+		const running = renderToStaticMarkup(<TranscriptBlocks live entries={entries} />);
+		expect(running).toContain('aria-expanded="true"');
 		setTurnPrefs(null);
 	});
 });

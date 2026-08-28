@@ -14,7 +14,8 @@ import { ClampedBody, EntryImages, EntryVideos } from "./MessageBubble";
 import { IconChevronDown, IconStack } from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";
-import { msgBody } from "../lib/msg-classes";
+import { msgReasoningBody, msgReasoningTitle } from "../lib/msg-classes";
+import { reasoningDisplay } from "../lib/reasoning-display";
 import { formatDuration } from "../lib/time";
 import {
   getTurnActivityPrefs,
@@ -29,8 +30,8 @@ import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
 import { turnScrollAnchor } from "../lib/transcript-block-identity";
 
 interface Props {
-  /** One consecutive run of tool calls. Assistant entries are accepted only
-   * defensively and always render outside the fold. */
+  /** One run of tool calls and the provider reasoning that narrates them.
+   * Ordinary assistant output is never passed here. */
   items: TranscriptEntry[];
   toolResults: Map<string, TranscriptEntry>;
   live: boolean; // this is the active block of a running stream
@@ -43,9 +44,10 @@ interface Props {
 }
 
 /**
- * One run of tool calls, folded into a single calm line — "Worked · 12m 4s
- * · 51 steps" — closed by default so the session reads as question → answer.
- * Expanding shows the complete tool run. Model output never enters this fold.
+ * One run of tool calls and provider reasoning, folded into a single calm line
+ * — "Worked · 12m 4s · 51 steps" — closed by default so the session reads as
+ * question → answer. It stays open while working, showing reasoning alongside
+ * the tools it describes. Ordinary model output never enters this fold.
  *
  * The collapsed line carries what a folded turn can't otherwise say: duration,
  * step count, and the ±lines it moved when the turn wrote files. Line changes
@@ -266,7 +268,13 @@ export const TurnBlock = function TurnBlock({
             className="absolute inset-y-0 -left-2 w-4 cursor-pointer border-0 bg-transparent p-0 after:absolute after:inset-y-0 after:left-1/2 after:border-l after:border-transparent after:transition-colors hover:after:border-line-strong focus-visible:after:border-line-strong"
           />
           {sections.map((sec) =>
-            sec.kind === "msg" ? null : (
+            sec.kind === "msg" ? (
+              <TurnMessage
+                key={sec.entry.id}
+                entry={sec.entry}
+                sessionId={sessionId}
+              />
+            ) : (
               // Tool icons align with the fold chevron on desktop. Phones use
               // the 1px optical correction for the icon's inset glyph.
               <div
@@ -291,14 +299,7 @@ export const TurnBlock = function TurnBlock({
         </div>
       </Fold>
 
-      {/* Defensive only: TranscriptBlocks splits every assistant entry out
-          before constructing a TurnBlock. If another caller ever passes one,
-          it still remains visible rather than inheriting this disclosure. */}
-      {messages.map((entry) => (
-        <TurnMessage key={entry.id} entry={entry} sessionId={sessionId} />
-      ))}
-
-      {/* Aligned with the fold's own rows (see TurnMessage on the 7px). */}
+      {/* Explicitly surfaced media survives the work fold. */}
       {(featured.images.length > 0 || featured.videos.length > 0) && (
         <div className="pl-[7px] pr-1">
           <EntryImages images={featured.images} sessionId={sessionId} />
@@ -640,7 +641,7 @@ function sameRunInputs(
   return true;
 }
 
-/** Intermediate reasoning stays readable while the turn itself provides the fold. */
+/** A reasoning update inside the work rail, stripped of provider bold chrome. */
 function TurnMessage({
   entry,
   sessionId,
@@ -648,22 +649,18 @@ function TurnMessage({
   entry: TranscriptEntry;
   sessionId?: string;
 }) {
+  const { title, body } = reasoningDisplay(entry.content);
   return (
-    <div
-      // 7px, not the row's 4px: the fold header and the tool rows both pad by
-      // 4 and then draw a glyph inset ~5px into its own box, so text padded to
-      // 4 starts left of every other line in the turn. 7 sits just inside the
-      // chevron's ink — the glyph's own side bearing makes a true 9 read as an
-      // indent rather than an alignment.
-      className="mx-auto my-2 w-full max-w-[var(--session-col)] pr-1 pl-[7px]"
-      data-eid={entry.id}
-    >
-      <ClampedBody
-        className={cn(msgBody, "markdown text-fg")}
-        content={entry.content}
-        entry={entry}
-        sessionId={sessionId}
-      />
+    <div className="my-2 px-1" data-eid={entry.id} data-reasoning="">
+      {title && <div className={msgReasoningTitle}>{title}</div>}
+      {body && (
+        <ClampedBody
+          className={cn(msgReasoningBody, "markdown")}
+          content={body}
+          entry={entry}
+          sessionId={sessionId}
+        />
+      )}
       <EntryImages images={entry.images} sessionId={sessionId} />
     </div>
   );

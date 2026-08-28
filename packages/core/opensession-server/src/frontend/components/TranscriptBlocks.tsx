@@ -344,32 +344,32 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 		if (turn.length === 0) return;
 		const last = turn[turn.length - 1];
 		const final = last.type === "assistant" ? last : null;
-		let tools: TranscriptEntry[] = [];
+		// Preserve the turn-level preference: narration anywhere in the active
+		// turn opens each of its work disclosures while the run is live.
 		const expandWhileRunning = turn.some((entry) => entry.type === "assistant");
-		const flushTools = () => {
-			if (tools.length === 0) return;
-			blocks.push({ kind: "turn", items: tools, expandWhileRunning });
-			tools = [];
+		let work: TranscriptEntry[] = [];
+		const flushWork = () => {
+			if (work.length === 0) return;
+			blocks.push({ kind: "turn", items: work, expandWhileRunning });
+			work = [];
 		};
 		for (const entry of turn) {
-			if (entry.type === "tool_use") {
-				tools.push(entry);
+			const reasoning =
+				entry.type === "assistant" &&
+				(entry.isReasoning ||
+					(entry !== final && isLegacyReasoningHeading(entry.content)));
+			if (entry.type === "tool_use" || reasoning) {
+				// Reasoning describes the mechanical work around it. Keep both in one
+				// disclosure so a run reads as one open Working group instead of an
+				// alternating ladder of one-line summaries and one-step groups.
+				work.push(entry);
 				continue;
 			}
-			flushTools();
-			// Model output is conversation, not work chrome. Keeping every message
-			// as its own block makes it impossible for a tool disclosure to hide it.
-			// Bold-only intermediate rows are the reasoning-summary shape persisted
-			// before `isReasoning` existed; keep their presentation quiet too.
-			blocks.push({
-				kind: "entry",
-				entry,
-				reasoning:
-					entry.isReasoning ||
-					(entry !== final && isLegacyReasoningHeading(entry.content)),
-			});
+			flushWork();
+			// Ordinary model output remains conversation and never enters work chrome.
+			blocks.push({ kind: "entry", entry });
 		}
-		flushTools();
+		flushWork();
 		// Quiet actions under the settled answer, the files the turn wrote, and
 		// scratch files that have no other direct route from the transcript.
 		if (final && !(live && trailing)) {
@@ -1093,6 +1093,7 @@ function ReviewTurnSteps({
 			<MessageBubble
 				key={section.entry.id}
 				entry={section.entry}
+				reasoning={isLegacyReasoningHeading(section.entry.content)}
 				owner={owner}
 				sessionId={sessionId}
 			/>
