@@ -1,6 +1,7 @@
 import { stripBasePath } from "./base";
 import type { TranscriptEntry } from "./types";
 import type { OptimisticTranscriptEntry } from "./transcript-state";
+import { makeSessionFixture, makeStreamDeltas } from "./session-performance-fixtures";
 
 export type TranscriptMotionScenarioState = {
 	entries: TranscriptEntry[];
@@ -132,10 +133,13 @@ export function makeTranscriptMotionScenario(rawSeed: number): TranscriptMotionS
 		nextDelay(25, 80),
 	);
 	push({ kind: "stream-start" }, nextDelay(20, 80));
+	const streamedParts = [
+		"I’ll exercise several changing transcript shapes before settling.",
+	];
 	push(
 		{
 			kind: "stream-append",
-			text: "I’ll exercise several changing transcript shapes before settling.",
+			text: streamedParts[0] ?? "",
 			blockId: `seed-${seed}-stream-intro`,
 		},
 		nextDelay(20, 80),
@@ -199,19 +203,32 @@ export function makeTranscriptMotionScenario(rawSeed: number): TranscriptMotionS
 				nextDelay(16, 150),
 			);
 		}
-		if (tool % 2 === 0)
+		if (tool % 2 === 0) {
+			const update = `\n\nTool ${tool + 1} has settled without replacing the live bubble.`;
+			streamedParts.push(update);
 			push(
 				{
 					kind: "stream-append",
-					text: `\n\nTool ${tool + 1} has settled without replacing the live bubble.`,
+					text: update,
 					blockId: `seed-${seed}-stream-${tool}`,
 				},
 				nextDelay(16, 100),
 			);
+		}
 	}
 
 	const answerId = `seed-${seed}-answer`;
-	const answer = `Scenario ${seed} completed ${toolCount} tool steps. The durable answer replaces the live tail without a jump.`;
+	const completion = `\n\nScenario ${seed} completed ${toolCount} tool steps. The durable answer replaces the live tail without a jump.`;
+	streamedParts.push(completion);
+	push(
+		{
+			kind: "stream-append",
+			text: completion,
+			blockId: `seed-${seed}-stream-final`,
+		},
+		nextDelay(16, 100),
+	);
+	const answer = streamedParts.join("");
 	push(
 		{
 			kind: "append-entry",
@@ -235,6 +252,28 @@ export function makeTranscriptMotionScenario(rawSeed: number): TranscriptMotionS
 		initial: { entries, optimisticEntries: [], busy: false },
 		events,
 		durationMs: atMs,
+	};
+}
+
+export function makeTranscriptStreamPerformanceScenario(): TranscriptMotionScenario {
+	const entries = makeSessionFixture(10_000);
+	const deltas = makeStreamDeltas(100, 1);
+	return {
+		seed: 0,
+		initial: { entries, optimisticEntries: [], busy: true },
+		events: [
+			{ atMs: 50, kind: "stream-start" },
+			...deltas.map(
+				(delta): TranscriptMotionScenarioEvent => ({
+					atMs: 100 + delta.atMs,
+					kind: "stream-append",
+					text: delta.text,
+					blockId: "stream-performance-block",
+				}),
+			),
+			{ atMs: 1_100, kind: "stream-finish" },
+		],
+		durationMs: 1_100,
 	};
 }
 
@@ -280,7 +319,7 @@ export function applyTranscriptMotionEvent(
 export function transcriptMotionFixtureOptions(
 	pathname: string,
 	search: string,
-): { seed: number; speed: number } | null {
+): { seed: number; speed: number; profile: "motion" | "stream" } | null {
 	if (stripBasePath(pathname) !== "/__fixtures/transcript-motion") return null;
 	const params = new URLSearchParams(search);
 	const seed = Number(params.get("seed") ?? 1);
@@ -288,5 +327,6 @@ export function transcriptMotionFixtureOptions(
 	return {
 		seed: Number.isFinite(seed) ? Math.max(1, Math.floor(seed)) : 1,
 		speed: Number.isFinite(speed) ? Math.min(20, Math.max(0.1, speed)) : 1,
+		profile: params.get("profile") === "stream" ? "stream" : "motion",
 	};
 }

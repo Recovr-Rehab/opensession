@@ -4,7 +4,6 @@ import { existsSync } from "fs";
 import type { TranscriptEntry } from "./types";
 import {
   classifyEntries,
-  dropContextInjections,
   parseAnsweredAskData,
 } from "@tellahq/opensession-protocol/notices";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
@@ -1207,6 +1206,35 @@ function stripStoredUserContext(entries: TranscriptEntry[]): TranscriptEntry[] {
   return changed ? shown : entries;
 }
 
+/** Hide model-only context while preserving the one structural fact a reader
+ * needs: a background wait starts another agent turn. The payload stays
+ * private; clients receive only a content-free boundary carrying the original
+ * sequence identity, so old stored waits gain the fix without migration. */
+function projectContextForWire(entries: TranscriptEntry[]): TranscriptEntry[] {
+  const projected: TranscriptEntry[] = [];
+  for (const entry of entries) {
+    const contextRecord =
+      entry.noticeKind === "context-injection" ||
+      entry.noticeKind === "standing-context";
+    if (!contextRecord) {
+      projected.push(entry);
+      continue;
+    }
+    if (entry.contextInjection?.source === "background-wait") {
+      projected.push({
+        id: entry.id,
+        type: "user",
+        content: "",
+        timestamp: entry.timestamp,
+        turnBoundary: true,
+        ...(entry.seq !== undefined ? { seq: entry.seq } : {}),
+        ...(entry.changeSeq !== undefined ? { changeSeq: entry.changeSeq } : {}),
+      });
+    }
+  }
+  return projected;
+}
+
 /**
  * Everything a batch of entries needs before it leaves the server: strip
  * injected context, classify how each entry reads (notices.ts), say what each
@@ -1225,7 +1253,7 @@ export function prepareEntriesForWire(
   entries: TranscriptEntry[]
 ): TranscriptEntry[] {
   return withToolPresentations(
-    classifyEntries(stripStoredUserContext(dropContextInjections(entries)))
+    classifyEntries(stripStoredUserContext(projectContextForWire(entries)))
   );
 }
 

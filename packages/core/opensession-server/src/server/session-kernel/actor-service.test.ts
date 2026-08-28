@@ -531,6 +531,7 @@ describe("session kernel actor service", () => {
     expect(live.status).toBe(200);
     expect(await ready.json()).toMatchObject({
       ready: true,
+      component: "session-kernel",
       actorVersion: SESSION_KERNEL_ACTOR_VERSION,
       transportVersion: SESSION_KERNEL_TRANSPORT_VERSION,
     });

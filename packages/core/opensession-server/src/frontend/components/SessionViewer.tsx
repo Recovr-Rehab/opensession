@@ -21,6 +21,7 @@ import { TranscriptViewStore } from "../lib/transcript-view-store";
 import {
 	measureSessionPerf,
 	recordSessionPerf,
+	scheduleTranscriptDomNodeSample,
 } from "../lib/session-performance";
 import { AGENT_NAME, DEFAULT_DOC_TITLE, sessionSourceName } from "../lib/brand";
 import { brandLogo } from "../brand-logos";
@@ -559,7 +560,7 @@ interface Props {
 	    sidebar's review bands flip immediately instead of waiting for a poll. */
 	onReviewChange?: (
 		id: string,
-		req: { to: string; by: string; at: string; accepted?: { by: string; at: string } } | null,
+		req: NonNullable<UnifiedSession["reviewRequest"]> | null,
 	) => void;
 	/**
 	 * Whether the Review pane is foregrounded — driven by the top tab strip's
@@ -1113,12 +1114,8 @@ export function SessionViewer({
 				entries: transcriptViewStore.getSnapshot().length,
 			});
 			transcriptCommitCount.current++;
-			if (phase === "mount" || transcriptCommitCount.current % 20 === 0) {
-				recordSessionPerf(
-					"transcript_dom_nodes",
-					document.querySelectorAll(".viewer-messages [data-eid]").length,
-				);
-			}
+			if (phase === "mount" || transcriptCommitCount.current % 20 === 0)
+				scheduleTranscriptDomNodeSample();
 		},
 		[transcriptViewStore],
 	);
@@ -5855,20 +5852,21 @@ export function SessionViewer({
 				const keepInSidebarAction = (inMenu: boolean) =>
 					canKeepInSidebar &&
 					(inMenu ? (
-						<Menu.Item onClick={keepInSidebar} title="Keep this workspace in your sidebar">
-							<KeepInSidebarIcon muted className={MENU_ICON} />
-							<span className="grow">Keep in sidebar</span>
+						<Menu.Item onClick={keepInSidebar} title="Add to sidebar">
+							<KeepInSidebarIcon className={MENU_ICON} />
+							<span className="grow">Add to sidebar</span>
 						</Menu.Item>
 					) : (
 						<Button
 							size="md"
 							variant="default"
-							className="mr-1.5"
-							icon={<KeepInSidebarIcon muted className="text-dim" />}
+							className="mr-1.5 text-fg"
+							icon={<KeepInSidebarIcon />}
+							iconTone="full"
 							onClick={keepInSidebar}
-							title="Keep this workspace in your sidebar"
+							title="Add to sidebar"
 						>
-							Keep in sidebar
+							Add to sidebar
 						</Button>
 					));
 				// Share rides inline on a wide header but tucks into the ⋯ overflow
@@ -6694,6 +6692,7 @@ export function SessionViewer({
 							// together with a GitHub review that completes it.
 							reviewRequest={effectiveReview?.req ?? null}
 							reviewRequestSessionId={effectiveReview?.ownerId}
+							onReviewChange={onReviewChange}
 							prReviewRequested={effectiveReview?.prReviewRequested}
 							running={isRunningLive}
 							send={connected ? send : undefined}
@@ -6943,6 +6942,7 @@ export function SessionViewer({
 												onArchive={handleArchive}
 												reviewRequest={effectiveReview?.req ?? null}
 												reviewRequestSessionId={effectiveReview?.ownerId}
+												onReviewChange={onReviewChange}
 												prReviewRequested={effectiveReview?.prReviewRequested}
 												running={isRunningLive}
 												send={connected ? send : undefined}
@@ -7575,6 +7575,7 @@ export function SessionViewer({
 										key="busy"
 										since={busySince}
 										stoppingSince={stopRequestedAt}
+										liveTurnStore={liveTurnStore}
 										onLayout={relayout}
 									/>
 								)}

@@ -1,6 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
-import { nextReviewDebounce, reviewDebounceDelay } from "./review-debounce";
+import {
+  nextReviewDebounce,
+  reviewBurstStart,
+  reviewDebounceDelay,
+  reviewRetryDelay,
+} from "./review-debounce";
 import { homedir, tmpdir } from "os";
 import { join } from "path";
 
@@ -153,5 +158,16 @@ describe("review debounce timing", () => {
     const capped = nextReviewDebounce(first.firstPushAt, 9_500, 4_000, 10_000);
     expect(capped).toEqual({ firstPushAt: 1_000, dueAt: 11_000 });
     expect(reviewDebounceDelay(capped.dueAt, 12_000)).toBe(0);
+  });
+
+  test("starts a fresh burst after work was attempted", () => {
+    expect(reviewBurstStart({ firstPushAt: 1_000, attempts: 0 }, 8_000)).toBe(1_000);
+    expect(reviewBurstStart({ firstPushAt: 1_000, attempts: 1 }, 8_000)).toBe(8_000);
+  });
+
+  test("backs retries off exponentially with a cap", () => {
+    expect(reviewRetryDelay(1, 15_000, 300_000)).toBe(15_000);
+    expect(reviewRetryDelay(4, 15_000, 300_000)).toBe(120_000);
+    expect(reviewRetryDelay(10, 15_000, 300_000)).toBe(300_000);
   });
 });

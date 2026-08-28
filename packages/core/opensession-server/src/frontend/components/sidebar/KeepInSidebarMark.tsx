@@ -2,23 +2,14 @@ import { cn } from "../../ui/cn";
 import { Tooltip } from "../../ui/tooltip";
 import { IconInbox, IconPlus } from "../icons";
 
-/** Inbox-plus mark, accented in the sidebar and muted in the top bar. */
-export function KeepInSidebarIcon({
-	muted = false,
-	className,
-}: {
-	muted?: boolean;
-	className?: string;
-}) {
+/** Inbox-plus mark shared by sidebar rows and the top bar. */
+export function KeepInSidebarIcon({ className }: { className?: string }) {
 	return (
 		<span className={cn("relative inline-flex shrink-0", className)}>
 			<IconInbox size={20} />
 			<span
 				aria-hidden="true"
-				className={cn(
-					"absolute -right-1 -bottom-1 flex size-3 items-center justify-center rounded-full ring-2 ring-panel",
-					muted ? "bg-dim text-panel" : "bg-accent text-on-accent",
-				)}
+				className="absolute -right-1 -bottom-1 flex size-3 items-center justify-center rounded-full bg-accent text-on-accent ring-2 ring-panel"
 			>
 				<IconPlus size={9} />
 			</span>

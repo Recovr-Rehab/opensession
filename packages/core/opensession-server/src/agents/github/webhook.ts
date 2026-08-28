@@ -3,11 +3,13 @@
  * `POST /github/webhook` and forwards PR events here for review, auto-fix, and
  * simplify behaviors.
  *
- * Defensive: never throws into the webhook handler; all behaviors are fired
- * fire-and-forget (GitHub's 10s webhook timeout).
+ * Long-running behaviors are fire-and-forget, but synchronous admission errors
+ * propagate so intake never acknowledges work that was not durably recorded.
  */
 import { listAutomations, fireAutomationsForEvent } from "../../server/automations";
 import { defaultRepo, isGithubBotLogin } from "../../server/config";
+import { getPrAutomationDetails, type PrAutomationDetails } from "../../server/pr-info";
+import { ghBackoffUntil } from "../../server/github-limit";
 import { isTrustedGithubLogin } from "../../server/shared/user-mappings";
 import {
   PR_EVENT_KEY,
@@ -15,7 +17,6 @@ import {
   DOCS_SYNC_BRANCH_PREFIX,
   REVIEW_AUTOMATION_NAME,
   repoForFullName,
-  prKey,
   LABEL_REVIEW,
   LABEL_AUTOFIX,
   LABEL_SIMPLIFY,
@@ -28,9 +29,10 @@ import {
   isLockHeld,
   readPrState,
   updatePrState,
+  updatePrStateIf,
   type GithubPrState,
 } from "./state";
-import { nextReviewDebounce, reviewDebounceDelay } from "./review-debounce";
+import { DesiredReviewScheduler } from "./desired-review";
 import { loadReviewOptions, titleHasSkipKeyword } from "./review-options";
 import { DEFAULT_REVIEW_PROMPT } from "./prompts";
 import { automaticReviewEventAllowed } from "./public-review";
@@ -161,6 +163,7 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
       const label: string = payload.label?.name || "";
       const requestedBy: string = payload.sender?.login || "";
       if (labelMatches(label, LABEL_REVIEW)) {
+        desiredReviews.cancel(ref);
         void fireReview(ref, true);
       } else if (externalFork) {
         console.warn(
@@ -188,7 +191,7 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
     // Closed (merged or not): a pending debounced review would fire against a
     // dead PR — cancel it, and drop any handoff round tracking.
     if (action === "closed") {
-      cancelPendingReview(ref);
+      desiredReviews.cancel(ref);
       clearHandoff(pr.number, ghRepo);
     }
 
@@ -277,21 +280,33 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
         // Pushes debounce (hot PRs got one review per push — #4913: 20 pushes
         // ≈ $131/day of review spend on 2026-07-17); first reviews of a PR
         // stay immediate.
-        if (action === "synchronize") scheduleDebouncedReview(ref);
-        else void fireReview(ref, false);
+        if (action === "synchronize") desiredReviews.admit(ref);
+        else {
+          desiredReviews.cancel(ref);
+          void fireReview(ref, false);
+        }
       }
     }
   } catch (e) {
     console.error("[github] handleGithubPrEvent error:", e);
+    throw e;
   }
 }
 
 export async function fireReview(
   ref: PrRef,
   _byLabel: boolean,
+  preflightDetails?: PrAutomationDetails,
 ): Promise<ReviewResult | null> {
   const { config } = resolveReviewConfig();
-  const result = await runReview(ref, config, onSessionInvalidate).catch((e) => {
+  const result = await runReview(
+    ref,
+    config,
+    onSessionInvalidate,
+    false,
+    undefined,
+    preflightDetails,
+  ).catch((e) => {
     console.error(`[github] runReview failed for PR #${ref.number}:`, e);
     return null;
   });
@@ -301,158 +316,32 @@ export async function fireReview(
   return result;
 }
 
-// ── Push → review debounce ───────────────────────────────────────────────────
-// Each `synchronize` (re)arms a quiet-period timer per PR, so a burst of pushes
-// costs one review while a continuous pusher is still reviewed within the
-// max-wait cap. The accepted intent is persisted before the webhook returns;
-// only the timer lives in memory. Startup restores that timer, closing the gap
-// where a deployment could acknowledge a push and then forget to review it.
-const REVIEW_DEBOUNCE_MS = parseInt(process.env.OPENSESSION_REVIEW_DEBOUNCE_MS || "240000");
-const REVIEW_DEBOUNCE_MAX_WAIT_MS = parseInt(
-  process.env.OPENSESSION_REVIEW_DEBOUNCE_MAX_MS || "900000",
+// ── Push → desired review ────────────────────────────────────────────────────
+// The durable marker is authoritative; timers only wake the keyed latest-head
+// worker. A generation fence prevents an older run from settling a newer push.
+function nonNegativeEnvMs(name: string, fallback: number): number {
+  const value = Number.parseInt(process.env[name] || "", 10);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+const desiredReviews = new DesiredReviewScheduler(
+  {
+    readState: readPrState,
+    updateState: updatePrState,
+    updateStateIf: updatePrStateIf,
+    resolvePr: (prNumber, ghRepo) => getPrAutomationDetails(String(prNumber), ghRepo),
+    runReview: (ref, details) => fireReview(ref, false, details),
+    isReviewLocked: (prNumber, ghRepo) => isLockHeld("review", prNumber, ghRepo),
+    restBackoffUntil: () => ghBackoffUntil("rest"),
+  },
+  {
+    debounceMs: nonNegativeEnvMs("OPENSESSION_REVIEW_DEBOUNCE_MS", 240_000),
+    maxWaitMs: nonNegativeEnvMs("OPENSESSION_REVIEW_DEBOUNCE_MAX_MS", 900_000),
+  },
 );
-const REVIEW_DEBOUNCE_RETRY_MS = 15_000;
-const PENDING_REVIEW_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-type PendingReview = {
-  timer: ReturnType<typeof setTimeout>;
-  firstPushAt: number;
-};
-const pendingReviewDebounce: Map<string, PendingReview> = ((globalThis as any)
-  .__githubReviewDebounce ??= new Map());
-
-/** Is a debounced review pending for this PR key? (reconcile.ts probe — a
- *  pending fire means the webhook path owns this PR's next review.) */
-export function hasPendingDebouncedReview(key: string): boolean {
-  return pendingReviewDebounce.has(key);
-}
-
-function persistPendingReview(ref: PrRef, firstPushAt: number, dueAt: number): void {
-  updatePrState(
-    ref.number,
-    ref.headRef,
-    (s) => {
-      s.pendingReview = {
-        headRef: ref.headRef,
-        headSha: ref.headSha,
-        title: ref.title,
-        firstPushAt: new Date(firstPushAt).toISOString(),
-        dueAt: new Date(dueAt).toISOString(),
-      };
-    },
-    ref.ghRepo,
-  );
-}
-
-function clearPersistedPendingReview(ref: PrRef, expectedHeadSha?: string): void {
-  const state = readPrState(ref.number, ref.ghRepo);
-  if (!state?.pendingReview) return;
-  updatePrState(
-    ref.number,
-    ref.headRef,
-    (s) => {
-      if (expectedHeadSha && s.pendingReview?.headSha !== expectedHeadSha) return;
-      s.pendingReview = undefined;
-    },
-    ref.ghRepo,
-  );
-}
-
-function cancelPendingReview(ref: PrRef): void {
-  const key = prKey(ref.number, ref.ghRepo);
-  const pending = pendingReviewDebounce.get(key);
-  if (pending) clearTimeout(pending.timer);
-  pendingReviewDebounce.delete(key);
-  clearPersistedPendingReview(ref);
-}
-
-function armDebouncedReview(ref: PrRef, firstPushAt: number, dueAt: number): void {
-  const key = prKey(ref.number, ref.ghRepo);
-  const existing = pendingReviewDebounce.get(key);
-  if (existing) clearTimeout(existing.timer);
-
-  let pending: PendingReview;
-  const timer = setTimeout(() => {
-    if (pendingReviewDebounce.get(key) !== pending) return;
-    if (isLockHeld("review", ref.number, ref.ghRepo)) {
-      armDebouncedReview(ref, firstPushAt, Date.now() + REVIEW_DEBOUNCE_RETRY_MS);
-      return;
-    }
-
-    console.log(`[github] debounced review firing for PR #${ref.number}`);
-    void fireReview(ref, false).then(
-      (result) => {
-        if (pendingReviewDebounce.get(key) !== pending) return;
-        const reviewed = readPrState(ref.number, ref.ghRepo)?.reviewedShas.includes(
-          ref.headSha,
-        );
-        if (!result && !reviewed) {
-          armDebouncedReview(ref, firstPushAt, Date.now() + REVIEW_DEBOUNCE_RETRY_MS);
-          return;
-        }
-        pendingReviewDebounce.delete(key);
-        clearPersistedPendingReview(ref, ref.headSha);
-      },
-      (error) => {
-        console.error(`[github] debounced review failed for PR #${ref.number}:`, error);
-        if (pendingReviewDebounce.get(key) === pending)
-          armDebouncedReview(ref, firstPushAt, Date.now() + REVIEW_DEBOUNCE_RETRY_MS);
-      },
-    );
-  }, reviewDebounceDelay(dueAt, Date.now()));
-
-  pending = { timer, firstPushAt };
-  pendingReviewDebounce.set(key, pending);
-}
-
-function scheduleDebouncedReview(ref: PrRef): void {
-  const key = prKey(ref.number, ref.ghRepo);
-  const inMemory = pendingReviewDebounce.get(key);
-  const persistedFirstPushAt = Date.parse(
-    readPrState(ref.number, ref.ghRepo)?.pendingReview?.firstPushAt || "",
-  );
-  const now = Date.now();
-  const firstPushAt =
-    inMemory?.firstPushAt ??
-    (Number.isFinite(persistedFirstPushAt) ? persistedFirstPushAt : undefined);
-  const timing = nextReviewDebounce(
-    firstPushAt,
-    now,
-    REVIEW_DEBOUNCE_MS,
-    REVIEW_DEBOUNCE_MAX_WAIT_MS,
-  );
-  persistPendingReview(ref, timing.firstPushAt, timing.dueAt);
-  armDebouncedReview(ref, timing.firstPushAt, timing.dueAt);
-}
-
-/** Restore accepted synchronize events without scanning GitHub or depending on
- * the optional fleet-wide reconcile sweep. */
-export function restorePendingDebouncedReviews(states: GithubPrState[]): void {
-  const now = Date.now();
-  for (const state of states) {
-    const marker = state.pendingReview;
-    if (!marker) continue;
-    const ref: PrRef = {
-      number: state.prNumber,
-      headRef: marker.headRef || state.headRef,
-      headSha: marker.headSha,
-      title: marker.title || `PR #${state.prNumber}`,
-      ...(state.ghRepo ? { ghRepo: state.ghRepo } : {}),
-    };
-    const firstPushAt = Date.parse(marker.firstPushAt);
-    const dueAt = Date.parse(marker.dueAt);
-    if (
-      !Number.isFinite(firstPushAt) ||
-      !Number.isFinite(dueAt) ||
-      now - firstPushAt > PENDING_REVIEW_MAX_AGE_MS ||
-      state.reviewedShas.includes(marker.headSha)
-    ) {
-      clearPersistedPendingReview(ref, marker.headSha);
-      continue;
-    }
-    armDebouncedReview(ref, firstPushAt, dueAt);
-    console.log(`[github] restored pending review for PR #${state.prNumber}`);
-  }
+export function restoreDesiredReviews(states: GithubPrState[]): void {
+  desiredReviews.restore(states);
 }
 
 export async function fireAutoFix(ref: PrRef, requestedBy: string): Promise<void> {

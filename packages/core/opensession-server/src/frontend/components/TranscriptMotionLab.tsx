@@ -10,6 +10,7 @@ import { LiveTurnStore } from "../lib/live-turn-store";
 import {
 	applyTranscriptMotionEvent,
 	makeTranscriptMotionScenario,
+	makeTranscriptStreamPerformanceScenario,
 	type TranscriptMotionScenario,
 	type TranscriptMotionScenarioEvent,
 } from "../lib/transcript-motion-scenarios";
@@ -19,19 +20,35 @@ import { Button } from "../ui/button";
 import { SessionTranscript } from "./SessionTranscript";
 import { BusyInline } from "./session-viewer/busy-indicators";
 
+type TranscriptMotionControl = {
+	paused: boolean;
+	followLatest: () => void;
+};
+
+declare global {
+	interface Window {
+		__transcriptMotionControl?: TranscriptMotionControl;
+	}
+}
+
 export function TranscriptMotionLab({
 	initialSeed,
 	speed,
+	profile,
 }: {
 	initialSeed: number;
 	speed: number;
+	profile: "motion" | "stream";
 }) {
 	const [seed, setSeed] = useState(initialSeed);
 	const [run, setRun] = useState(0);
 	const [status, setStatus] = useState<"running" | "settling" | "done">(
 		"running",
 	);
-	const scenario = makeTranscriptMotionScenario(seed);
+	const scenario =
+		profile === "stream"
+			? makeTranscriptStreamPerformanceScenario()
+			: makeTranscriptMotionScenario(seed);
 
 	return (
 		<main
@@ -39,6 +56,7 @@ export function TranscriptMotionLab({
 			data-transcript-motion-state={status}
 			data-transcript-motion-seed={seed}
 			data-transcript-motion-speed={speed}
+			data-transcript-motion-profile={profile}
 		>
 			<header className="flex min-h-14 shrink-0 items-center justify-between gap-4 px-4 desktop:px-6">
 				<div className="min-w-0">
@@ -46,7 +64,7 @@ export function TranscriptMotionLab({
 						Transcript motion lab
 					</h1>
 					<p className="truncate text-label text-faint">
-						No network · seed {seed} · {speed}×
+						No network · {profile === "stream" ? "10k · 100 deltas/s" : `seed ${seed}`} · {speed}×
 					</p>
 				</div>
 				<div className="flex shrink-0 items-center gap-2">
@@ -60,17 +78,19 @@ export function TranscriptMotionLab({
 					>
 						Replay
 					</Button>
-					<Button
-						variant="soft"
-						className="phone:min-h-11"
-						onClick={() => {
-							setStatus("running");
-							setSeed((value) => value + 1);
-							setRun((value) => value + 1);
-						}}
-					>
-						Next seed
-					</Button>
+					{profile === "motion" && (
+						<Button
+							variant="soft"
+							className="phone:min-h-11"
+							onClick={() => {
+								setStatus("running");
+								setSeed((value) => value + 1);
+								setRun((value) => value + 1);
+							}}
+						>
+							Next seed
+						</Button>
+					)}
 				</div>
 			</header>
 			<TranscriptMotionPlayer
@@ -105,6 +125,7 @@ function TranscriptMotionPlayer({
 		endTurn,
 		relayout,
 		onScroll,
+		scrollToLatest,
 	} = useSessionScroll(true);
 
 	const applyEvent = useEffectEvent((event: TranscriptMotionScenarioEvent) => {
@@ -129,11 +150,26 @@ function TranscriptMotionPlayer({
 	});
 
 	useEffect(() => {
+		const control: TranscriptMotionControl = {
+			paused: false,
+			followLatest: () => scrollToLatest("auto"),
+		};
+		window.__transcriptMotionControl = control;
+		return () => {
+			if (window.__transcriptMotionControl === control)
+				delete window.__transcriptMotionControl;
+		};
+	}, [scrollToLatest]);
+
+	useEffect(() => {
 		let frame = 0;
 		let next = 0;
-		const startedAt = performance.now();
+		let elapsed = 0;
+		let previousAt = performance.now();
 		const tick = (now: number) => {
-			const elapsed = (now - startedAt) * speed;
+			if (!window.__transcriptMotionControl?.paused)
+				elapsed += (now - previousAt) * speed;
+			previousAt = now;
 			while (
 				next < scenario.events.length &&
 				(scenario.events[next]?.atMs ?? Number.POSITIVE_INFINITY) <= elapsed
@@ -197,6 +233,7 @@ function TranscriptMotionPlayer({
 							key="busy"
 							since={busySince}
 							stoppingSince={null}
+							liveTurnStore={liveTurnStore}
 							onLayout={relayout}
 						/>
 					)}

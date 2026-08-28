@@ -17,8 +17,9 @@ machinery, or service units use the coordinated rollout instead.
    before acquiring the lease or producing effects.
 4. The supervisor sends activation only after the old child has exited.
 5. After the old child exits, the supervisor atomically moves the immutable
-   runtime pointer before activation. Gateway, executor, and SessionKernel must
-   then report the exact same immutable generation before effects are admitted.
+   runtime pointer before activation. Coordinated releases require all three
+   processes to report the target generation. Gateway-only releases carry the
+   peers' retained generation separately from the gateway's own release.
 6. Coordinated rollback parks the target gateway first, restores the pointer
    and both peers, and only then admits the previous gateway. Mixed generations
    never run during recovery.
@@ -36,8 +37,9 @@ generated import-closure manifest then chooses one of three flows:
 - Gateway only: preload candidate, drain old child, observe exit, atomically
   move `current`, activate, then require `/ready`.
 - Protocol, executor, or SessionKernel changes: park the preloaded candidate,
-  replace both peers while the supervisor keeps the public listener bound, then
-  activate only after peer readiness.
+  replace only peers whose generated import closures changed while the
+  supervisor keeps the public listener bound, then activate after each peer
+  reports its selected generation.
 - Supervisor, service-unit, or privileged deploy machinery changes: use the
   root rollout. The systemd-owned socket remains bound while the supervisor is
   replaced.
@@ -71,9 +73,10 @@ handoff and can perform a coordinated rollback if later health probes fail.
 
 For dependency and protocol releases, `prepare-coordinated` preloads the target,
 drains the old gateway, atomically promotes `current`, and leaves the candidate
-behind its activation barrier. The deploy controller restarts the executor and
-SessionKernel while the public TCP proxy accepts and pauses new connections.
-Only after both peers report the target generation does `activate-coordinated`
+behind its activation barrier. The deploy controller restarts changed peers in
+parallel while the public TCP proxy accepts and pauses new connections. A peer
+whose closure did not change keeps running at its previous generation. Only
+after both peers report their selected generations does `activate-coordinated`
 release the candidate. The controller commits after the external health gate;
 until then it can park the target for a fail-closed peer rollback. Every phase is
 atomically journaled in `gateway-handoff.json`, allowing a restarted supervisor
@@ -82,6 +85,12 @@ deadline terminates an abandoned preparation and supervisor rather than
 guessing protocol compatibility.
 
 Each deploy also writes its generated dependency-impact manifest and runs a
-continuous HTTP/WebSocket canary. Supervisor status reports accepted, queued,
+continuous HTTP/WebSocket canary. Sequential requests wait for a 15-second quiet
+window and collapse to the newest explicitly requested commit. Root deployment
+refuses already-current, stale, non-main, and ordinary unprivileged targets.
+Supervisor status reports accepted, queued,
 retried and timed-out connections plus maximum backend wait, so handoff latency
-and loss are directly observable.
+and loss are directly observable. New proxy connections are quiesced before a
+child drain; root rollouts use the same coordinated transaction, and supervisor
+source changes explicitly transfer acceptance back to the systemd socket before
+the supervisor process is replaced.

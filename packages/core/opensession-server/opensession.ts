@@ -138,14 +138,17 @@ function isLoopbackHostname(hostname: string): boolean {
 	return normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost";
 }
 
+// Gateway-only candidates validate the already-running peer generations before
+// the supervisor drains the active child. A mismatch then rejects the candidate
+// with no user-visible cut-over. Coordinated candidates cannot precheck changed
+// peers because those peers start only after the old gateway is fenced.
+const precheckRuntimePeers = process.env.OPENSESSION_GATEWAY_PRECHECK_PEERS === "1";
+if (precheckRuntimePeers) await waitForRuntimePeerGeneration({ timeoutMs: 5_000 });
 // A supervised standby is allowed to preload this import graph, but it cannot
 // proceed into even the earliest shared-state, socket, Worker, timer, or
 // integration effect until its parent explicitly activates the exact nonce.
 await waitForGatewayActivationIfStandby();
-// A release generation is admitted only when both protocol peers identify as
-// the exact same immutable release. This runs before the ownership lease and
-// every shared-state effect, so crash recovery cannot create a mixed cluster.
-await waitForRuntimePeerGeneration();
+if (!precheckRuntimePeers) await waitForRuntimePeerGeneration();
 // The OS lock is the final ownership fence. A supervisor crash or stale parent
 // can leave an old child serving, but no replacement may cross into effects
 // until that process has exited and released this lease.
@@ -1065,14 +1068,19 @@ if (!g.__opensessionBooted) {
 		// here on (the next boot delivers them) instead of starting turns that
 		// race the drain deadline.
 		beginShutdown();
-		stopSessionKernelRuntime();
-		stopSessionOwnershipWatchdog();
 		// With poisoned timers (see run-ws.ts tripwire)
 		// every `await sleep` and Promise.race timeout below would wedge forever
 		// and systemd would SIGKILL us at TimeoutStopSec (observed: an 80s
 		// "restart"). Nothing timer-driven can drain anyway, so skip straight to
 		// snapshot → stop → exit; the journal resumes/reattaches runs on boot.
 		const timersDead = !!(globalThis as any).__timersPoisonedAt;
+		// Announce and yield before any shutdown bookkeeping. The session snapshot
+		// and runtime teardown can block the event loop for seconds under load,
+		// which used to make a real restart look like unexplained UI slowness.
+		broadcastToAll({ type: "server_restarting" });
+		if (!timersDead) await new Promise((r) => setTimeout(r, 50));
+		stopSessionKernelRuntime();
+		stopSessionOwnershipWatchdog();
 		console.log(
 			`[shutdown] ${signal} — stopping intake and draining in-flight runs…` +
 				(timersDead ? " (timers poisoned: skipping every timed wait)" : ""),
@@ -1083,9 +1091,6 @@ if (!g.__opensessionBooted) {
 		// instances skip it (nothing resumes them, and a snapshot must never
 		// make the production boot try to wake dev sessions).
 		if (!devInstance) snapshotActiveSessions();
-		// Tell connected UIs we're going down so they can show a "restarting" modal
-		// and auto-refresh once the new instance is up (instead of silently queuing
-		// messages that would be lost). Brief pause to let the frames flush.
 		// Best-effort attribution: a session-triggered `systemctl restart` shows
 		// up as an in-flight run in this checkout (sharedCheckoutEditors). The
 		// marker file lets the NEXT boot's hello frame name the culprit in the
@@ -1100,8 +1105,10 @@ if (!g.__opensessionBooted) {
 				);
 			}
 		} catch {}
-		broadcastToAll({ type: "server_restarting", ...(restartBy ? { by: restartBy } : {}) });
-		if (!timersDead) await new Promise((r) => setTimeout(r, 150));
+		// Update the already-visible notice when attribution is available, then
+		// yield once more so that frame flushes before agent teardown.
+		if (restartBy) broadcastToAll({ type: "server_restarting", by: restartBy });
+		if (!timersDead) await new Promise((r) => setTimeout(r, 100));
 		// Stop agents from accepting new work (Slack socket, webhook intake, …).
 		// BOUNDED: an agent shutdown that awaits a flaky network call (e.g. the
 		// Slack socket close during a Slack outage) used to hang here for the

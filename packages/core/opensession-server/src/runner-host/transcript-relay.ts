@@ -11,8 +11,9 @@
  * committed by the previously attached server. This keeps the disconnect tail
  * (including terminal tool results and final answers) recoverable without
  * letting the host grow without limit (`overflowed` reports truncation once).
- * WS-mode hosts do not need this: their frames ride the sequenced ring
- * buffer and replay after the server's ack (ws-buffer.ts).
+ * WS hosts normally replay through their sequenced ring buffer. A full server
+ * restart intentionally mints a fresh replay epoch, however, so only this
+ * idempotent transcript history may cross that unknown event watermark.
  */
 
 export interface TranscriptBatch {

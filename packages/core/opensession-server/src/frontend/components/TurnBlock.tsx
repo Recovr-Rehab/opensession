@@ -15,11 +15,15 @@ import { IconChevronDown, IconStack } from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";
 import {
+  msgBody,
   msgReasoningBody,
   msgReasoningShimmer,
   msgReasoningTitle,
 } from "../lib/msg-classes";
-import { reasoningDisplay } from "../lib/reasoning-display";
+import {
+  isLegacyReasoningHeading,
+  reasoningDisplay,
+} from "../lib/reasoning-display";
 import { formatDuration } from "../lib/time";
 import {
   getTurnActivityPrefs,
@@ -34,8 +38,8 @@ import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
 import { turnScrollAnchor } from "../lib/transcript-block-identity";
 
 interface Props {
-  /** One run of tool calls and the provider reasoning that narrates them.
-   * Ordinary assistant output is never passed here. */
+  /** One turn's tool calls, provider reasoning, and intermediate narration.
+   * The final assistant output is never passed here. */
   items: TranscriptEntry[];
   toolResults: Map<string, TranscriptEntry>;
   live: boolean; // this is the active block of a running stream
@@ -48,10 +52,10 @@ interface Props {
 }
 
 /**
- * One run of tool calls and provider reasoning, folded into a single calm line
- * — "Worked · 12m 4s · 51 steps" — closed by default so the session reads as
- * question → answer. It stays open while working, showing reasoning alongside
- * the tools it describes. Ordinary model output never enters this fold.
+ * One turn's work, folded into a single calm line — "Worked · 12m 4s · 51
+ * steps" — closed by default so the session reads as question → answer. It
+ * stays open while working, showing intermediate narration and reasoning beside
+ * the tools they describe. The final assistant output never enters this fold.
  *
  * The collapsed line carries what a folded turn can't otherwise say: duration,
  * step count, and the ±lines it moved when the turn wrote files. Line changes
@@ -81,7 +85,9 @@ export const TurnBlock = function TurnBlock({
   const pathRoots = useToolPathRoots();
   const tools = items.filter((it) => it.type === "tool_use");
   const messages = items.filter((it) => it.type === "assistant");
-  const activeReasoning = live ? messages[messages.length - 1] : undefined;
+  const lastMessage = messages[messages.length - 1];
+  const activeReasoning =
+    live && lastMessage && reasoningEntry(lastMessage) ? lastMessage : undefined;
   const hasNarration = messages.length > 0;
 
   // Default fold state follows the two preferences (Settings → Preferences),
@@ -160,19 +166,27 @@ export const TurnBlock = function TurnBlock({
   // line collapses by dropping characters off its tail instead of overflowing.
   const metaLabel = [!live && duration, countsLabel].filter(Boolean).join(" · ");
 
-  // Interleave tool runs and reasoning runs. Consecutive summary events are
-  // status revisions, not separate moments in the work: keep only their latest
-  // heading while retaining any prose and media they carried. A tool call is
-  // the boundary that makes the next reasoning update a new visible step.
+  // Interleave tools, intermediate narration, and provider reasoning. Adjacent
+  // reasoning summaries are status revisions rather than separate moments:
+  // keep their latest heading while retaining prose and media. Narration stays
+  // as ordinary readable output inside the work rail.
   const sections: Array<
     | { kind: "tools"; items: TranscriptEntry[] }
     | { kind: "reasoning"; items: TranscriptEntry[] }
+    | { kind: "narration"; entry: TranscriptEntry }
   > = [];
-  for (const it of items) {
-    const kind = it.type === "tool_use" ? "tools" : "reasoning";
-    const last = sections[sections.length - 1];
-    if (last?.kind === kind) last.items.push(it);
-    else sections.push({ kind, items: [it] });
+  for (const entry of items) {
+    if (entry.type === "tool_use") {
+      const last = sections[sections.length - 1];
+      if (last?.kind === "tools") last.items.push(entry);
+      else sections.push({ kind: "tools", items: [entry] });
+    } else if (reasoningEntry(entry)) {
+      const last = sections[sections.length - 1];
+      if (last?.kind === "reasoning") last.items.push(entry);
+      else sections.push({ kind: "reasoning", items: [entry] });
+    } else {
+      sections.push({ kind: "narration", entry });
+    }
   }
   // Survives the fold: a marked screenshot is the answer to "show me", so
   // closing the turn takes the steps and leaves the picture. Only while the
@@ -273,12 +287,18 @@ export const TurnBlock = function TurnBlock({
           />
           {sections.map((sec) =>
             sec.kind === "reasoning" ? (
-              <TurnMessage
+              <ReasoningMessage
                 key={sec.items[0].id}
                 entries={sec.items}
                 active={
                   activeReasoning !== undefined && sec.items.includes(activeReasoning)
                 }
+                sessionId={sessionId}
+              />
+            ) : sec.kind === "narration" ? (
+              <NarrationMessage
+                key={sec.entry.id}
+                entry={sec.entry}
                 sessionId={sessionId}
               />
             ) : (
@@ -515,7 +535,10 @@ function isCompactTool(
   result: TranscriptEntry | undefined
 ): boolean {
   const name = entry.toolName || "Tool";
-  if (!COMPACT_TOOL_FAMILIES.has(toolFamily(name))) return false;
+  const routine =
+    canonicalToolName(name) === "ListAgents" ||
+    COMPACT_TOOL_FAMILIES.has(toolFamily(name));
+  if (!routine) return false;
   if (assetToolPath(name, entry.toolInput)) return false;
   return !result?.featuredMedia?.length;
 }
@@ -650,9 +673,36 @@ function sameRunInputs(
   return true;
 }
 
+function reasoningEntry(entry: TranscriptEntry): boolean {
+  return Boolean(entry.isReasoning || isLegacyReasoningHeading(entry.content));
+}
+
+/** Ordinary intermediate output inside the work rail. It keeps answer styling
+ * so grouping changes placement only, never the meaning or readability. */
+function NarrationMessage({
+  entry,
+  sessionId,
+}: {
+  entry: TranscriptEntry;
+  sessionId?: string;
+}) {
+  return (
+    <div className="my-2 px-1" data-eid={entry.id} data-narration="">
+      <ClampedBody
+        className={cn(msgBody, "markdown text-fg")}
+        content={entry.content}
+        entry={entry}
+        sessionId={sessionId}
+      />
+      <EntryImages images={entry.images} sessionId={sessionId} />
+      <EntryVideos videos={entry.videos} />
+    </div>
+  );
+}
+
 /** One visible reasoning step inside the work rail. Adjacent provider events
  * revise its heading instead of producing a ladder of near-identical traces. */
-function TurnMessage({
+function ReasoningMessage({
   entries,
   active,
   sessionId,

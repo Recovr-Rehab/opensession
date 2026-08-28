@@ -136,10 +136,19 @@ export async function waitForRuntimePeerGeneration(options: {
   timeoutMs?: number;
 } = {}): Promise<void> {
   const env = options.env ?? process.env;
-  const expected = env.OPENSESSION_RELEASE_GENERATION?.trim();
-  if (!expected || expected === "development") return;
-  if (!/^[0-9a-f]{40,64}$/.test(expected)) {
-    throw new Error("Invalid OPENSESSION_RELEASE_GENERATION");
+  const fallback = (
+    env.OPENSESSION_PEER_GENERATION ?? env.OPENSESSION_RELEASE_GENERATION
+  )?.trim();
+  const expectedKernel = (env.OPENSESSION_KERNEL_GENERATION ?? fallback)?.trim();
+  const expectedExecutor = (env.OPENSESSION_EXECUTOR_GENERATION ?? fallback)?.trim();
+  if (
+    (!expectedKernel || expectedKernel === "development") &&
+    (!expectedExecutor || expectedExecutor === "development")
+  ) return;
+  for (const expected of [expectedKernel, expectedExecutor]) {
+    if (!expected || !/^[0-9a-f]{40,64}$/.test(expected)) {
+      throw new Error("Invalid runtime peer generation");
+    }
   }
   const fetchReady = options.fetchReady ?? ((url: string) =>
     fetch(url, { signal: AbortSignal.timeout(1_000) }));
@@ -160,11 +169,17 @@ export async function waitForRuntimePeerGeneration(options: {
         Promise.resolve().then(() => readReadyFile(executorReadyFile)),
       ]);
       const executor = JSON.parse(executorText) as { generation?: string };
-      if (kernel?.generation === expected && executor.generation === expected) return;
+      if (
+        kernel?.generation === expectedKernel &&
+        executor.generation === expectedExecutor
+      ) return;
     } catch {}
     await sleep(100);
   }
-  throw new Error(`Runtime peers did not reach release generation ${expected.slice(0, 10)}`);
+  throw new Error(
+    `Runtime peers did not reach kernel ${expectedKernel!.slice(0, 10)} / ` +
+    `executor ${expectedExecutor!.slice(0, 10)}`,
+  );
 }
 
 export async function waitForGatewayActivationIfStandby(options: {

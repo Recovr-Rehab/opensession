@@ -160,6 +160,11 @@ interface Props {
 	reviewRequest?: UnifiedSession["reviewRequest"] | null;
 	/** The sibling session that owns `reviewRequest`, when it is not `session`. */
 	reviewRequestSessionId?: string;
+	/** Mirror a reviewer change into the app-level session list immediately. */
+	onReviewChange?: (
+		sessionId: string,
+		request: NonNullable<UnifiedSession["reviewRequest"]> | null,
+	) => void;
 	/** Workspace-wide GitHub requests, including requests held by a sibling session. */
 	prReviewRequested?: string[];
 	/** Live run state, so the PR block refetches the moment a turn ends. */
@@ -494,6 +499,7 @@ export function WorkspaceSummaryBody({
 	onArchive,
 	reviewRequest,
 	reviewRequestSessionId,
+	onReviewChange,
 	prReviewRequested,
 	running,
 	send,
@@ -756,9 +762,11 @@ setFixBusy(false);
 		// A workspace-level request can be stored on a sibling session. Change or
 		// clear that owner, while a brand-new request still belongs to this session.
 		const owner = (previous && reviewRequestSessionId) || session.id;
+		onReviewChange?.(owner, next);
 		setSessionReviewerApi(owner, name, getCurrentUser())
 			.catch((error: any) => {
 				setSelectedReview(previous);
+				onReviewChange?.(owner, previous);
 				setReviewError(error?.message || "Failed to set reviewer");
 			})
 			.finally(() => setReviewBusy(false));
@@ -1036,9 +1044,9 @@ setFixBusy(false);
 							? "h-11"
 							: cn(
 									"h-7",
-									// Match the sibling group wrappers, then reach into Review. The PR
-									// band already closes the group, so do not add a second visual break.
-									"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-0",
+									// Match the sibling group wrappers, then reach into Review. Keep a
+									// small breath after the PR without splitting the two groups apart.
+									"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-1",
 								),
 					)}
 				>

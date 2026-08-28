@@ -116,6 +116,7 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	private topApproachCallback: (() => void) | undefined;
 	private topApproachTimer: number | undefined;
 	private topApproachTouchY: number | null = null;
+	private topApproachScrollTop: number | null = null;
 	private topApproachGate = new TranscriptTopApproachGate();
 	private rowObserver: ResizeObserver | null = null;
 	private rowRefs = new Map<string, (node: HTMLDivElement | null) => void>();
@@ -307,10 +308,12 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 			observeElementRect,
 			observeElementOffset,
 			scrollToFn: elementScroll,
-			// The callback adjusts scrollTop and synchronously commits corrected row
-			// transforms. Deferring it through rAF exposes one paint of tool growth
-			// before that correction, which reads as a live-conversation flicker.
-			useAnimationFrameWithResizeObserver: false,
+			// Semantic transcript revisions are measured synchronously in
+			// componentDidUpdate. ResizeObserver is only the fallback for external
+			// geometry changes, so let TanStack coalesce those into the next frame;
+			// flushing React from inside observer delivery can resize another row and
+			// trigger the browser's undelivered-notifications warning.
+			useAnimationFrameWithResizeObserver: true,
 			onChange: this.requestRender,
 		};
 	}
@@ -436,6 +439,27 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	};
 
 	private onTopApproachScroll = () => {
+		const scrollTop = this.topApproachContainer?.scrollTop;
+		if (scrollTop !== undefined) {
+			const viewportHeight = this.topApproachContainer?.clientHeight ?? 0;
+			const movedTowardHistory = didScrollTranscriptTowardHistory(
+				this.topApproachScrollTop ?? scrollTop,
+				scrollTop,
+				viewportHeight,
+				this.topApproachContainer?.scrollHeight ?? 0,
+			);
+			this.topApproachScrollTop = scrollTop;
+			if (movedTowardHistory) {
+				this.topApproachGate.request();
+				// A scrollbar/Home jump can arrive as one top-edge scroll event. Fire
+				// from that event rather than requiring a second gesture to retry the
+				// debounced proximity check.
+				if (scrollTop <= viewportHeight) {
+					this.evaluateTopApproach();
+					return;
+				}
+			}
+		}
 		if (this.topApproachTimer !== undefined) return;
 		this.topApproachTimer = window.setTimeout(() => {
 			this.topApproachTimer = undefined;
@@ -476,6 +500,7 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		);
 		this.topApproachContainer = null;
 		this.topApproachTouchY = null;
+		this.topApproachScrollTop = null;
 		if (this.topApproachTimer !== undefined) {
 			window.clearTimeout(this.topApproachTimer);
 			this.topApproachTimer = undefined;
@@ -492,6 +517,7 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		if (containerChanged) this.topApproachGate.reset();
 		if (!container || !callback) return;
 		this.topApproachContainer = container;
+		this.topApproachScrollTop = container.scrollTop;
 		container.addEventListener("scroll", this.onTopApproachScroll, { passive: true });
 		container.addEventListener("wheel", this.onTopApproachWheel, { passive: true });
 		container.addEventListener("touchstart", this.onTopApproachTouchStart, {
@@ -657,6 +683,24 @@ export function shouldTransitionTranscriptItemPosition(
 	// A prompt may move when its optimistic row becomes a durable transcript
 	// range. That identity handoff must be visually inert, not a delayed glide.
 	return !item.arrivalAliases?.length;
+}
+
+export function didScrollTranscriptTowardHistory(
+	previousOffset: number,
+	nextOffset: number,
+	viewportHeight = 0,
+	contentHeight = 0,
+): boolean {
+	if (nextOffset < previousOffset - 0.5) return true;
+	// A child virtualizer can subscribe before its parent restores the live edge,
+	// leaving the sampled offset at zero. A one-step Home key or scrollbar jump
+	// then reports zero again. Treat that top-edge event as intent only when the
+	// mounted window is genuinely scrollable and movement was not toward latest.
+	return (
+		contentHeight > viewportHeight * 2 &&
+		nextOffset <= viewportHeight &&
+		nextOffset <= previousOffset + 0.5
+	);
 }
 
 export function shouldAdjustTranscriptScroll(

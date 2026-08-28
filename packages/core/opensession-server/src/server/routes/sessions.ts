@@ -23,17 +23,15 @@ import {
 	pendingAskAwaitingAnswerSync,
 	pendingAskIdsAwaitingAnswer,
 } from "../asks";
-import { transcriptMatchSnippet } from "../jsonl-parser";
 import {
-	classifyEntries,
-	classifyEntry,
-	dropContextInjections,
-} from "@tellahq/opensession-protocol/notices";
+	prepareEntriesForWire,
+	transcriptMatchSnippet,
+} from "../jsonl-parser";
+import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import {
 	inWorkspaceGroup,
 	type WorkspaceGroup,
 } from "@tellahq/opensession-protocol/workspace-group";
-import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import {
   deleteSessionTranscript,
   transcript,
@@ -1289,12 +1287,9 @@ export async function handleSessionsRoutes(
 		// sessions from before transcript persistence, and migrated
 		// sessions whose history spans engines). Classified on the way out,
 		// like every other send site — this is what the native clients read.
-		const entries = withToolPresentations(
-			classifyEntries(
-				dropContextInjections(await mergedSessionTranscriptAsync(session)),
-			),
+		return Response.json(
+			prepareEntriesForWire(await mergedSessionTranscriptAsync(session)),
 		);
-		return Response.json(entries);
 	}
 
 	// One transcript entry, unclamped. The WS wire clamps giant entry contents
@@ -1686,21 +1681,29 @@ export async function handleSessionsRoutes(
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
 		const by = requestUser(ctx, body?.by).slice(0, 40);
+		// A unified session can inherit a request stored before deduplication under
+		// one of its historical ids. Every mutation must resolve and remove those
+		// keys too, or clearing the canonical id leaves the sidebar request alive.
+		const reviewAliases = [
+			...(session.aliasIds || []),
+			...(session.id === sessionId ? [] : [sessionId]),
+		];
 
 		// Accept / reopen the current request (the reviewer signing off). Keeps
 		// the reviewer assignment intact but flips it to a "Reviewed" state that
 		// the asker sees in their sidebar. Distinct from setting/clearing a
 		// reviewer below, so it never touches GitHub's Reviewers list.
 		if (typeof body?.accept === "boolean") {
-			const existing = getReviewRequest(sessionId);
+			const existing = getReviewRequest(session.id, reviewAliases);
 			if (!existing)
 				return Response.json(
 					{ error: "No review request to accept" },
 					{ status: 400 },
 				);
 			setReviewAccepted(
-				sessionId,
+				session.id,
 				body.accept ? { by: by || "someone", at: new Date().toISOString() } : null,
+				reviewAliases,
 			);
 			invalidateSessionsCache();
 			// Buzz whoever asked for the review that it landed (not on self-review).
@@ -1728,7 +1731,7 @@ export async function handleSessionsRoutes(
 			typeof body?.reviewer === "string"
 				? body.reviewer.trim().slice(0, 120)
 				: "";
-		const prevReviewer = getReviewRequest(sessionId)?.to;
+		const prevReviewer = getReviewRequest(session.id, reviewAliases)?.to;
 		const reviewTeam = reviewTeamFor(reviewer);
 		const previousReviewTeam = reviewTeamFor(prevReviewer);
 		// Mirror the request onto GitHub's own Reviewers list before committing the
@@ -1803,7 +1806,7 @@ export async function handleSessionsRoutes(
 		}
 		await executeSessionProjection(sessionId, "review_request", () =>
 			setReviewRequest(
-				sessionId,
+				session.id,
 				reviewer
 					? {
 							to: reviewTeam?.github || reviewer,
@@ -1812,6 +1815,7 @@ export async function handleSessionsRoutes(
 							at: new Date().toISOString(),
 						}
 					: null,
+				reviewAliases,
 			),
 		);
 		// The chip's GitHub fallback reads the bulk PR cache, which the throttled

@@ -6231,6 +6231,7 @@ if (!embeddedDemo) {
 				<TranscriptMotionLab
 					initialSeed={transcriptMotionFixture.seed}
 					speed={transcriptMotionFixture.speed}
+					profile={transcriptMotionFixture.profile}
 				/>
 			) : previewWaitSessionId ? (
 				<PreviewWait sessionId={previewWaitSessionId} />

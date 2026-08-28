@@ -101,6 +101,10 @@ const HOSTED_KERNEL_RETRY_ATTEMPTS = 3;
 // Wait just beyond it so a retry reaches the recovered lane instead of failing
 // immediately against the same open breaker.
 const HOSTED_KERNEL_RETRY_DELAY_MS = 10_100;
+// Hosts from before the catchup_complete frame resend transcript history
+// immediately after an ended hello. Keep that rolling-deploy path open long
+// enough to consume the local replay instead of closing on the hello itself.
+const ENDED_HELLO_CATCHUP_FALLBACK_MS = 2_000;
 
 export async function retryHostedKernelCall<T>(
   call: () => T | Promise<T>,
@@ -923,6 +927,8 @@ export class HostHandle {
   private endedClean = false;
   private sawTerminal = false;
   private terminalEvent?: StreamEvent;
+  private pendingEndedHello = false;
+  private endedHelloFallback?: ReturnType<typeof setTimeout>;
   private connectedBefore = false;
   private reportedSelectedModel?: string;
   private effectiveModel?: string;
@@ -1286,16 +1292,43 @@ export class HostHandle {
     });
   }
 
+  private deferEndedHelloFinish(): void {
+    this.pendingEndedHello = true;
+    if (this.endedHelloFallback) clearTimeout(this.endedHelloFallback);
+    this.endedHelloFallback = setTimeout(() => {
+      this.endedHelloFallback = undefined;
+      // Older hosts have no catchup_complete marker. Their socket replay is
+      // synchronous, so an idle window after the last transcript frame is the
+      // compatibility fence. Still serialize cleanup behind every projection
+      // received before that window closed. A frame arriving while those
+      // projections drain re-arms the timer and cancels this cleanup attempt.
+      this.enqueueProjectionFrame(() => {
+        if (this.pendingEndedHello && !this.endedHelloFallback) this.finish();
+      }, true);
+    }, ENDED_HELLO_CATCHUP_FALLBACK_MS);
+  }
+
+  private clearEndedHelloFallback(): void {
+    if (this.endedHelloFallback) clearTimeout(this.endedHelloFallback);
+    this.endedHelloFallback = undefined;
+    this.pendingEndedHello = false;
+  }
+
   private handleMsg(msg: HostToClientMsg): void {
+    if (msg.t === "transcript" && this.pendingEndedHello) {
+      this.deferEndedHelloFinish();
+    }
     if (
       msg.t !== "transcript" &&
       (this.projectionTail || this.projectionFailure)
     ) {
-      // End is cleanup, not another projection. It must close the stream even
-      // when the transcript projection ahead of it failed. Every other frame
-      // remains fenced after the failed tail settles: projectionFailure is a
-      // permanent authority failure for this handle, not just queue state.
-      this.enqueueProjectionFrame(() => this.handleMsgNow(msg), msg.t === "end");
+      // Terminal frames are cleanup, not another projection. They must close
+      // the stream even when the transcript projection ahead of them failed.
+      // Every other frame remains fenced after the failed tail settles:
+      // projectionFailure is a permanent authority failure for this handle,
+      // not just queue state.
+      const cleanupFrame = msg.t === "end" || msg.t === "catchup_complete";
+      this.enqueueProjectionFrame(() => this.handleMsgNow(msg), cleanupFrame);
       return;
     }
     this.handleMsgNow(msg);
@@ -1340,7 +1373,11 @@ export class HostHandle {
             this.terminalEvent = msg.done;
             this.queue.push(msg.done);
           }
-          this.finish();
+          // A detached host sends hello before replaying transcript frames.
+          // Finishing here closes the socket and discards summaries produced
+          // while the gateway was down. catchup_complete is the exact fence;
+          // the timer only supports hosts from before that frame existed.
+          this.deferEndedHelloFinish();
         }
         break;
       }
@@ -1413,6 +1450,9 @@ export class HostHandle {
         this.finish();
         break;
       }
+      case "catchup_complete":
+        if (this.pendingEndedHello) this.finish();
+        break;
     }
   }
 
@@ -1455,6 +1495,7 @@ export class HostHandle {
   abandon(): void {
     if (this.endedClean) return;
     this.endedClean = true;
+    this.clearEndedHelloFallback();
     this.queue.end();
     this.settleSteerRetractions();
     unregisterHostRun(this.ctl);
@@ -1466,6 +1507,7 @@ export class HostHandle {
   private finish(): void {
     if (this.endedClean) return;
     this.endedClean = true;
+    this.clearEndedHelloFallback();
     this.send({ t: "shutdown" });
     this.queue.end();
     this.settleSteerRetractions();

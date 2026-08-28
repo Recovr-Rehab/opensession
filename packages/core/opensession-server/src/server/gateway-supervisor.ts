@@ -26,7 +26,10 @@ const PUBLIC_PORT = Number(process.env.PORT || 3850);
 const BACKEND_HOST = "127.0.0.1";
 let nextBackendPort = Number(process.env.OPENSESSION_GATEWAY_BACKEND_PORT_BASE || 0);
 const PRELOAD_TIMEOUT_MS = 30_000;
-const EXIT_TIMEOUT_MS = 90_000;
+const FAST_HANDOFF_EXIT_TIMEOUT_MS = 2_500;
+// Heavy recovery can keep /ready false well after the backend is serving
+// liveness traffic. Peer mismatches are rejected by the pre-cut-over check;
+// do not destroy a healthy candidate merely because recovery takes a minute.
 const READY_TIMEOUT_MS = 60_000;
 
 export function inheritedGatewaySocketFd(
@@ -48,6 +51,13 @@ type HandoffRequest = {
   type: "handoff" | "prepare_coordinated";
   releaseRoot: string;
   sha: string;
+  kernelGeneration?: string;
+  executorGeneration?: string;
+};
+
+type PeerGenerations = {
+  kernel: string;
+  executor: string;
 };
 
 type CoordinatedRequest = {
@@ -88,6 +98,7 @@ export interface ManagedGateway {
   pid: number;
   releaseRoot: string;
   backendPort: number;
+  peerGenerations?: PeerGenerations;
   exited: Promise<number>;
   kill(signal?: number): void;
   activate?(nonce: string): void;
@@ -95,13 +106,20 @@ export interface ManagedGateway {
 }
 
 export interface GatewaySupervisorDependencies {
-  spawn(releaseRoot: string, role: "active" | "standby", nonce?: string): ManagedGateway;
+  spawn(
+    releaseRoot: string,
+    role: "active" | "standby",
+    nonce?: string,
+    peerGenerations?: PeerGenerations,
+    precheckPeers?: boolean,
+  ): ManagedGateway;
   waitReady(gateway: ManagedGateway): Promise<void>;
   validateRelease(releaseRoot: string, sha: string): string;
   promoteCurrent(releaseRoot: string): void;
   onUnexpectedExit?(gateway: ManagedGateway, code: number): void;
   recordTransaction?(transaction: GatewayHandoffTransaction): void;
   clearTransaction?(): void;
+  quiescePublicListener?(): void;
 }
 
 function timeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -127,6 +145,7 @@ export class GatewaySupervisor {
     failure?: string;
   } | null = null;
   private shuttingDown = false;
+  private routeToActive = true;
 
   constructor(
     private active: ManagedGateway,
@@ -156,8 +175,17 @@ export class GatewaySupervisor {
     this.watchActive(gateway);
   }
 
+  private peerGenerations(gateway: ManagedGateway): PeerGenerations {
+    const fallback = releaseGeneration(gateway.releaseRoot);
+    return gateway.peerGenerations ?? { kernel: fallback, executor: fallback };
+  }
+
   activeGateway(): ManagedGateway {
     return this.active;
+  }
+
+  backendPort(): number {
+    return this.routeToActive ? this.active.backendPort : 0;
   }
 
   handoff(request: HandoffRequest): Promise<ControlResponse> {
@@ -243,8 +271,14 @@ export class GatewaySupervisor {
       };
     }
     this.dependencies.promoteCurrent(pending.previous.releaseRoot);
-    const rollback = this.dependencies.spawn(pending.previous.releaseRoot, "active");
+    const rollback = this.dependencies.spawn(
+      pending.previous.releaseRoot,
+      "active",
+      undefined,
+      this.peerGenerations(pending.previous),
+    );
     this.selectActive(rollback);
+    this.routeToActive = true;
     try {
       await timeout(
         this.dependencies.waitReady(rollback),
@@ -284,11 +318,17 @@ export class GatewaySupervisor {
     }
     this.shuttingDown = true;
     const gateway = this.active;
+    // Stop accepting from the inherited descriptor first. PID 1 keeps its copy
+    // open and queues new clients while already-accepted requests get a brief
+    // chance to attach to the still-active backend.
+    this.dependencies.quiescePublicListener?.();
+    await Bun.sleep(50);
+    this.routeToActive = false;
     gateway.kill(12);
     try {
       await timeout(
         gateway.exited,
-        15_000,
+        FAST_HANDOFF_EXIT_TIMEOUT_MS,
         "active gateway did not complete its fast supervisor drain",
       );
     } catch {
@@ -333,8 +373,19 @@ export class GatewaySupervisor {
     const releaseRoot = this.dependencies.validateRelease(request.releaseRoot, request.sha);
     const previous = this.active;
     const nonce = crypto.randomUUID();
-    const candidate = this.dependencies.spawn(releaseRoot, "standby", nonce);
+    const targetGeneration = request.sha;
+    const peerGenerations = {
+      kernel: request.kernelGeneration || targetGeneration,
+      executor: request.executorGeneration || targetGeneration,
+    };
+    for (const generation of Object.values(peerGenerations)) {
+      if (!/^[0-9a-f]{40,64}$/.test(generation)) {
+        return { ok: false, message: "invalid coordinated peer generation" };
+      }
+    }
+    const candidate = this.dependencies.spawn(releaseRoot, "standby", nonce, peerGenerations);
     this.standby = candidate;
+    let previousExited = false;
     try {
       await timeout(candidate.preloaded!, PRELOAD_TIMEOUT_MS, "candidate gateway did not preload in time");
       this.dependencies.recordTransaction?.({
@@ -344,10 +395,23 @@ export class GatewaySupervisor {
         candidatePid: candidate.pid,
         updatedAt: new Date().toISOString(),
       });
+      this.routeToActive = false;
       previous.kill(12);
-      await timeout(previous.exited, EXIT_TIMEOUT_MS, "active gateway did not exit in time");
+      try {
+        await timeout(
+          previous.exited,
+          FAST_HANDOFF_EXIT_TIMEOUT_MS,
+          "active gateway did not complete its fast coordinated drain",
+        );
+      } catch {
+        console.warn("[gateway-supervisor] fast coordinated drain expired; forcing the fenced gateway down");
+        previous.kill(9);
+        await timeout(previous.exited, 5_000, "active gateway survived SIGKILL");
+      }
+      previousExited = true;
       this.dependencies.promoteCurrent(releaseRoot);
       this.selectActive(candidate);
+      this.routeToActive = true;
       const expiry = setTimeout(() => {
         // Pointer authority already names the target. Do not guess that the old
         // gateway is still protocol-compatible after an abandoned peer update;
@@ -376,6 +440,7 @@ export class GatewaySupervisor {
       candidate.kill(9);
       await candidate.exited.catch(() => 0);
       this.standby = null;
+      if (!previousExited) this.routeToActive = true;
       this.dependencies.clearTransaction?.();
       return { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
@@ -385,6 +450,7 @@ export class GatewaySupervisor {
     if (this.shuttingDown) return;
     this.shuttingDown = true;
     if (this.coordinated) clearTimeout(this.coordinated.timeout);
+    this.routeToActive = false;
     const children = new Set([this.active, this.standby].filter(Boolean) as ManagedGateway[]);
     for (const child of children) child.kill(child === this.active ? 15 : 9);
     await Promise.all([...children].map((child) => child.exited.catch(() => 0)));
@@ -398,7 +464,13 @@ export class GatewaySupervisor {
 
     const previous = this.active;
     const nonce = crypto.randomUUID();
-    const candidate = this.dependencies.spawn(releaseRoot, "standby", nonce);
+    const candidate = this.dependencies.spawn(
+      releaseRoot,
+      "standby",
+      nonce,
+      this.peerGenerations(previous),
+      true,
+    );
     this.standby = candidate;
     let previousExited = false;
     try {
@@ -419,12 +491,13 @@ export class GatewaySupervisor {
       });
 
       if (this.shuttingDown) throw new Error("gateway supervisor is shutting down");
+      this.routeToActive = false;
       previous.kill(12);
       try {
         await timeout(
           previous.exited,
-          EXIT_TIMEOUT_MS,
-          "active gateway did not exit before the handoff deadline",
+          FAST_HANDOFF_EXIT_TIMEOUT_MS,
+          "active gateway did not exit before the fast handoff deadline",
         );
       } catch {
         console.warn("[gateway-supervisor] active gateway missed its exit deadline; forcing the fenced process down");
@@ -451,6 +524,7 @@ export class GatewaySupervisor {
       });
       candidate.activate(nonce);
       this.selectActive(candidate);
+      this.routeToActive = true;
       await timeout(
         this.dependencies.waitReady(candidate),
         READY_TIMEOUT_MS,
@@ -477,8 +551,14 @@ export class GatewaySupervisor {
       }
 
       this.dependencies.promoteCurrent(previous.releaseRoot);
-      const rollback = this.dependencies.spawn(previous.releaseRoot, "active");
+      const rollback = this.dependencies.spawn(
+        previous.releaseRoot,
+        "active",
+        undefined,
+        this.peerGenerations(previous),
+      );
       this.selectActive(rollback);
+      this.routeToActive = true;
       try {
         await timeout(
           this.dependencies.waitReady(rollback),
@@ -526,16 +606,63 @@ function allocateBackendPort(): number {
   return port;
 }
 
+function releaseGeneration(releaseRoot: string): string {
+  const marker = join(releaseRoot, ".opensession-release");
+  return existsSync(marker) ? readFileSync(marker, "utf8").trim() : "development";
+}
+
+export async function discoverRuntimePeerGenerations(options: {
+  fetchReady?: () => Promise<Response>;
+  readExecutorReady?: () => string;
+  sleep?: (ms: number) => Promise<void>;
+  attempts?: number;
+} = {}): Promise<PeerGenerations> {
+  const fetchReady = options.fetchReady ?? (() => fetch(
+    new URL(
+      "/ready",
+      process.env.OPENSESSION_SESSION_KERNEL_URL ?? "http://127.0.0.1:3849",
+    ),
+    { signal: AbortSignal.timeout(1_000) },
+  ));
+  const readExecutorReady = options.readExecutorReady ?? (() => readFileSync(
+    process.env.OPENSESSION_EXECUTOR_READY_FILE ?? "/run/opensession-executor/ready",
+    "utf8",
+  ));
+  const sleep = options.sleep ?? Bun.sleep;
+  for (let attempt = 0; attempt < (options.attempts ?? 30); attempt += 1) {
+    try {
+      const [kernelResponse, executorText] = await Promise.all([
+        fetchReady(),
+        Promise.resolve().then(readExecutorReady),
+      ]);
+      const kernel = kernelResponse.ok
+        ? await kernelResponse.json() as { generation?: string }
+        : null;
+      const executor = JSON.parse(executorText) as { generation?: string };
+      if (
+        kernel?.generation && executor.generation &&
+        /^[0-9a-f]{40,64}$/.test(kernel.generation) &&
+        /^[0-9a-f]{40,64}$/.test(executor.generation)
+      ) {
+        return { kernel: kernel.generation, executor: executor.generation };
+      }
+    } catch {}
+    await sleep(100);
+  }
+  throw new Error("runtime peer generations are unavailable");
+}
+
 export function spawnGateway(
   releaseRoot: string,
   role: "active" | "standby",
   nonce?: string,
+  peerGenerations?: PeerGenerations,
+  precheckPeers = false,
   entry = "packages/core/opensession-server/opensession.ts",
 ): ManagedGateway {
   const preloaded = deferred();
   const backendPort = allocateBackendPort();
-  const marker = join(releaseRoot, ".opensession-release");
-  const generation = existsSync(marker) ? readFileSync(marker, "utf8").trim() : "development";
+  const generation = releaseGeneration(releaseRoot);
   let expectedNonce = nonce;
   const child = Bun.spawn(
     [process.execPath, "run", entry],
@@ -548,6 +675,9 @@ export function spawnGateway(
         OPENSESSION_GATEWAY_BACKEND_HOST: BACKEND_HOST,
         OPENSESSION_GATEWAY_BACKEND_PORT: String(backendPort),
         OPENSESSION_RELEASE_GENERATION: generation,
+        OPENSESSION_KERNEL_GENERATION: peerGenerations?.kernel ?? generation,
+        OPENSESSION_EXECUTOR_GENERATION: peerGenerations?.executor ?? generation,
+        OPENSESSION_GATEWAY_PRECHECK_PEERS: precheckPeers ? "1" : "0",
         ...(nonce ? { OPENSESSION_GATEWAY_NONCE: nonce } : {}),
       },
       stdin: "ignore",
@@ -576,6 +706,7 @@ export function spawnGateway(
     pid: child.pid,
     releaseRoot,
     backendPort,
+    peerGenerations: peerGenerations ?? { kernel: generation, executor: generation },
     exited,
     kill(signal = 15) {
       child.kill(signal);
@@ -791,8 +922,13 @@ async function runSupervisor(): Promise<void> {
       `current selects ${releaseRoot}`,
     );
   }
-  const active = spawnGateway(releaseRoot, "active");
+  // Peer generations can intentionally differ after a selective rollout. Never
+  // guess from `current`: a guessed generation caused a two-minute crash loop
+  // after an executor was correctly retained on its previous release.
+  const peerGenerations = await discoverRuntimePeerGenerations();
+  const active = spawnGateway(releaseRoot, "active", undefined, peerGenerations);
   const proxyMetrics = createGatewayTcpProxyMetrics();
+  let publicListener: ReturnType<typeof startGatewayTcpProxy> | undefined;
   let stopping = false;
   const supervisor = new GatewaySupervisor(active, {
     spawn: spawnGateway,
@@ -801,6 +937,9 @@ async function runSupervisor(): Promise<void> {
     promoteCurrent: promoteGatewayCurrent,
     recordTransaction: writeGatewayHandoffTransaction,
     clearTransaction: clearGatewayHandoffTransaction,
+    quiescePublicListener() {
+      publicListener?.stop(false);
+    },
     onUnexpectedExit(gateway, code) {
       if (stopping) return;
       console.error(`[gateway-supervisor] active gateway ${gateway.pid} exited unexpectedly (${code})`);
@@ -808,10 +947,10 @@ async function runSupervisor(): Promise<void> {
     },
   }, proxyMetrics);
   const controlListener = serveControl(supervisor);
-  const publicListener = startGatewayTcpProxy({
+  publicListener = startGatewayTcpProxy({
     hostname: PUBLIC_HOST,
     port: PUBLIC_PORT,
-    backendPort: () => supervisor.activeGateway().backendPort,
+    backendPort: () => supervisor.backendPort(),
     metrics: proxyMetrics,
     listenFd: inheritedGatewaySocketFd(),
   });
@@ -830,7 +969,7 @@ async function runSupervisor(): Promise<void> {
     if (stopping) return;
     stopping = true;
     controlListener.stop();
-    publicListener.stop();
+    publicListener?.stop();
     await supervisor.shutdown();
     process.exit(0);
   };
@@ -857,7 +996,13 @@ if (import.meta.main) {
     const request: HandoffRequest | CoordinatedRequest = action === "handoff"
       ? { type: "handoff", releaseRoot, sha }
       : action === "prepare-coordinated"
-        ? { type: "prepare_coordinated", releaseRoot, sha }
+        ? {
+            type: "prepare_coordinated",
+            releaseRoot,
+            sha,
+            kernelGeneration: process.argv[5] || undefined,
+            executorGeneration: process.argv[6] || undefined,
+          }
         : action === "activate-coordinated"
           ? { type: "activate_coordinated" }
           : action === "park-coordinated"

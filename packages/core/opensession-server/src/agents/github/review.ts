@@ -192,6 +192,7 @@ export async function runReview(
   onSessionCreated?: (bksId: string) => void,
   force = false,
   steer?: string,
+  preflightDetails?: PrAutomationDetails,
 ): Promise<ReviewResult | null> {
   if (isShuttingDown()) {
     console.log(`[github] PR #${pr.number} review parked during shutdown`);
@@ -264,10 +265,14 @@ export async function runReview(
 
     // Look up by number before publishing progress. Fork identity comes from
     // GitHub, never from the contributor-controlled branch name.
-    const details = await getPrAutomationDetails(
-      pr.number ? String(pr.number) : pr.headRef,
-      pr.ghRepo || undefined,
-    );
+    const details =
+      preflightDetails?.number === pr.number &&
+      (!pr.headSha || preflightDetails.headRefOid === pr.headSha)
+        ? preflightDetails
+        : await getPrAutomationDetails(
+            pr.number ? String(pr.number) : pr.headRef,
+            pr.ghRepo || undefined,
+          );
     if (!details) {
       console.warn(`[github] no PR details for #${pr.number} (${pr.headRef}); review not started`);
       return null;

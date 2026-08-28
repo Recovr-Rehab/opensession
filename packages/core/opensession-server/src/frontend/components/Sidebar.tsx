@@ -1470,7 +1470,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// the complete live list at the bottom. The server's sidebar projection adds
 	// every live or just-finished run to `sessions`; the directory boundary here
 	// turns only real teammates into headings and files unowned automations under
-	// the Agent person.
+	// the Agent person. A session kept in a personal lane leaves Team, so every
+	// row here can always offer “Add to your sidebar” without rendering twice.
 	const activePersonGroups = sidebarPersonSessions(
 		sessions,
 		roster,
@@ -1481,6 +1482,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				name,
 				overview.owner,
 			]),
+		),
+		new Set(
+			sessions.filter((session) => isClaimed(session)).map((session) => session.id),
 		),
 	);
 
@@ -2768,9 +2772,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		}
 	}
 
-	// Repo, review, project and support groups are open by default (grouping is
-	// itself the point), so we track their *collapsed* state under a
-	// "collapsed:" key; every other group is closed by default and tracked
+	// Repo, review, project, support and person groups are open by default
+	// (grouping is itself the point), so we track their *collapsed* state under
+	// a "collapsed:" key; every other group is closed by default and tracked
 	// directly. This list must match isOpen's — a key toggled here but read
 	// bare there (or vice versa) makes its chevron a no-op.
 	const collapseKey = (key: string) =>
@@ -2779,7 +2783,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		key.startsWith("project:") ||
 		key.startsWith("support:") ||
 		key.startsWith("lifecycle:") ||
-		key.startsWith("inbox:")
+		key.startsWith("inbox:") ||
+		key.startsWith("person:")
 			? `collapsed:${key}`
 			: key;
 
@@ -2803,7 +2808,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			key.startsWith("support:") ||
 			key.startsWith("lifecycle:") ||
 			key.startsWith("project:") ||
-			key.startsWith("inbox:")
+			key.startsWith("inbox:") ||
+			key.startsWith("person:")
 		)
 			return !expanded.has(`collapsed:${key}`);
 		return expanded.has(key);
@@ -6124,8 +6130,8 @@ fetchFeedItems("plain")
 				)}
 
 			{/* ── People: teammates with a running or just-finished session. Each
-			    person starts with only that active window visible; their chevron
-			    expands the same heading to every matching session they own. ── */}
+			    member is an independent, open-by-default disclosure so a busy
+			    teammate can be folded without hiding everybody else. ── */}
 			{activePersonGroups.length > 0 && (
 				<div className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2 pb-7")}>
 					<div
@@ -6166,95 +6172,83 @@ fetchFeedItems("plain")
 						<div className={SIDEBAR_INDEPENDENT_SCROLL}>
 							{activePersonGroups.map((group) => {
 								const groupKey = `person:${group.key}`;
-								const hasMore =
-									group.allSessions.length > group.activeSessions.length;
-								const showAll = hasMore && isOpen(groupKey);
-								const visibleSessions = showAll
-									? group.allSessions
-									: group.activeSessions;
-								const personHeaderBody = (
-									<>
-										<span className={SIDEBAR_RAIL}>
-											<UserAvatar name={group.label} size={20} />
-										</span>
-										<span className={SIDEBAR_GROUP_NAME}>{group.label}</span>
-										<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
-											{group.allSessions.length}
-										</span>
-										{hasMore && (
+								const personOpen = isOpen(groupKey);
+								return (
+									<React.Fragment key={group.key}>
+										<button
+											className={cn(
+												SIDEBAR_GROUP_HEADER,
+												SIDEBAR_GROUP_HEADER_INSET,
+												SIDEBAR_HEADER_ROW,
+											)}
+											onClick={(event) => {
+												const header = event.currentTarget;
+												toggleGroup(groupKey);
+												requestAnimationFrame(() =>
+													header.scrollIntoView({ block: "nearest", inline: "nearest" }),
+												);
+											}}
+											aria-expanded={personOpen}
+											title={`${personOpen ? "Collapse" : "Expand"} ${group.label}'s sessions`}
+										>
+											<span className={SIDEBAR_RAIL}>
+												<UserAvatar name={group.label} size={20} />
+											</span>
+											<span className={SIDEBAR_GROUP_NAME}>{group.label}</span>
+											<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
+												{group.activeSessions.length}
+											</span>
 											<IconChevronDown
 												className={cn(
 													SIDEBAR_GROUP_CHEVRON,
-													!showAll && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+													!personOpen && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
 												)}
 												size={22}
 												style={{
-													transform: showAll ? "none" : "rotate(-90deg)",
+													transform: personOpen ? "none" : "rotate(-90deg)",
 												}}
 											/>
+										</button>
+										{personOpen && (
+											<div className={SIDEBAR_AUTOMATION_RUNS}>
+												{group.activeSessions.map((session) => {
+													const pin = sessionPinState(session);
+													return (
+														<SidebarItem
+															key={session.id}
+															session={session}
+															selected={session.id === selectedId}
+															unread={
+																session.id !== selectedId &&
+																isUnread(session.id, session.lastActivity, reads)
+															}
+															mention={
+																session.id !== selectedId
+																	? mentionFor(session.id)?.by
+																	: undefined
+															}
+															mine={false}
+															showOwner={false}
+															alwaysShowAddToSidebar
+															onClick={() => onSelect(session)}
+															onArchive={(current) =>
+																archiveWithNext(session, current)
+															}
+															pinned={pin.pinned}
+															onTogglePin={pin.toggle}
+															shipsDirectlyToMain={shipsDirectlyToMain(
+																session.repo,
+																session.branch,
+															)}
+															onRename={(title) => onRename(session, title)}
+															onSetStatus={(status) =>
+																onSetStatus([session], status)
+															}
+														/>
+													);
+												})}
+											</div>
 										)}
-									</>
-								);
-								const personHeaderClass = cn(
-									SIDEBAR_GROUP_HEADER,
-									SIDEBAR_GROUP_HEADER_INSET,
-									SIDEBAR_HEADER_ROW,
-								);
-								return (
-									<React.Fragment key={group.key}>
-										{hasMore ? (
-											<button
-												className={personHeaderClass}
-												onClick={() => toggleGroup(groupKey)}
-												aria-expanded={showAll}
-												title={
-													showAll
-														? `Show only ${group.label}'s active sessions`
-														: `Show all ${group.label}'s sessions`
-												}
-											>
-												{personHeaderBody}
-											</button>
-										) : (
-											<div className={personHeaderClass}>{personHeaderBody}</div>
-										)}
-										<div className={SIDEBAR_AUTOMATION_RUNS}>
-											{visibleSessions.map((session) => {
-												const pin = sessionPinState(session);
-												return (
-													<SidebarItem
-														key={session.id}
-														session={session}
-														selected={session.id === selectedId}
-														unread={
-															session.id !== selectedId &&
-															isUnread(session.id, session.lastActivity, reads)
-														}
-														mention={
-															session.id !== selectedId
-																? mentionFor(session.id)?.by
-																: undefined
-														}
-														mine={false}
-														showOwner={false}
-														onClick={() => onSelect(session)}
-														onArchive={(current) =>
-															archiveWithNext(session, current)
-														}
-														pinned={pin.pinned}
-														onTogglePin={pin.toggle}
-														shipsDirectlyToMain={shipsDirectlyToMain(
-															session.repo,
-															session.branch,
-														)}
-														onRename={(title) => onRename(session, title)}
-														onSetStatus={(status) =>
-															onSetStatus([session], status)
-														}
-													/>
-												);
-											})}
-										</div>
 									</React.Fragment>
 								);
 							})}

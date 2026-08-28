@@ -87,6 +87,20 @@ executor_ready() {
     && printf '%s' "$ready" | grep -Fq "\"generation\":\"$generation\""
 }
 
+supervisor_generation() {
+  local pid
+  pid="$(systemctl show -p MainPID --value opensession.service 2>/dev/null || true)"
+  [ -n "$pid" ] || return 1
+  cat "/proc/$pid/cwd/.opensession-release" 2>/dev/null
+}
+
+drain_gateway_for_supervisor_restart() {
+  [ -S /run/opensession-gateway/control.sock ] || return 1
+  "$SERVICE_BUN" \
+    "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+    drain-supervisor
+}
+
 session_kernel_ready() {
   local generation body
   generation="$(cat "$CURRENT_LINK/.opensession-release" 2>/dev/null || true)"
@@ -105,7 +119,27 @@ fi
 echo "[deploy] fetching ${TARGET_SHA}; the WIP checkout will not be changed"
 run_as_service_user git -C "$SOURCE_DIR" fetch --prune origin
 TARGET_COMMIT="$(run_as_service_user git -C "$SOURCE_DIR" rev-parse "${TARGET_SHA}^{commit}")"
+REMOTE_HEAD="$(run_as_service_user git -C "$SOURCE_DIR" rev-parse 'origin/main^{commit}')"
 PREVIOUS_HEAD="$(run_release current-sha 2>/dev/null || true)"
+if [ -n "$PREVIOUS_HEAD" ] && [ "${OPENSESSION_ROOT_DEPLOY_OVERRIDE:-0}" != "1" ]; then
+  if [ "$TARGET_COMMIT" = "$PREVIOUS_HEAD" ]; then
+    echo "[deploy] ERROR: ${TARGET_COMMIT:0:10} is already current; refusing a duplicate root rollout" >&2
+    exit 1
+  fi
+  if [ "$TARGET_COMMIT" != "$REMOTE_HEAD" ]; then
+    echo "[deploy] ERROR: root deploy target ${TARGET_COMMIT:0:10} is not latest origin/main ${REMOTE_HEAD:0:10}" >&2
+    echo "[deploy] Use deploy_self for ordinary releases. Set OPENSESSION_ROOT_DEPLOY_OVERRIDE=1 only for explicit recovery." >&2
+    exit 1
+  fi
+  ROOT_IMPACT="$(run_as_service_user git -C "$SOURCE_DIR" diff --no-renames --name-only "$PREVIOUS_HEAD" "$TARGET_COMMIT" -- \
+    | grep -E '^(deploy/(deploy|self-deploy|release-checkout|install-executor-credential|install-session-kernel-credential|install-run-host-helper|install-resource-control)\.sh|deploy/opensession-run-host|deploy/systemd/|opensession(\.socket|-executor\.service|-session-kernel\.service|\.service)$)' \
+    || true)"
+  if [ -z "$ROOT_IMPACT" ]; then
+    echo "[deploy] ERROR: ${TARGET_COMMIT:0:10} changes no root-owned deployment artifacts" >&2
+    echo "[deploy] Refusing a disruptive root rollout; use deploy_self so frontend and component impact classification applies." >&2
+    exit 1
+  fi
+fi
 if [ -n "$PREVIOUS_HEAD" ] && [ "$TARGET_COMMIT" != "$PREVIOUS_HEAD" ] \
   && ! run_as_service_user git -C "$SOURCE_DIR" merge-base --is-ancestor "$PREVIOUS_HEAD" "$TARGET_COMMIT"; then
   if [ "${OPENSESSION_DEPLOY_ALLOW_DIVERGED:-0}" != "1" ]; then
@@ -135,6 +169,13 @@ stop_canary() {
       echo "[deploy] canary: $(tr '\n' ' ' < "$CANARY_FILE")"
     fi
   fi
+}
+start_canary() {
+  [ -z "${CANARY_PID:-}" ] || return 0
+  setsid runuser -u "$SERVICE_USER" -- \
+    "$SERVICE_BUN" "$REPO_DIR/scripts/deploy-canary.ts" \
+    "${HEALTH_URL%/ready}/live" "$CANARY_FILE" &
+  CANARY_PID=$!
 }
 trap stop_canary EXIT
 
@@ -424,9 +465,27 @@ if [ "$TARGET_SCHEMA" -gt "$SCHEMA_FLOOR" ]; then
   mv "$DEPLOY_STATE/minimum-kernel-schema.tmp" "$DEPLOY_STATE/minimum-kernel-schema"
 fi
 
+GATEWAY_COORDINATED=0
 if [ "$RESTART_KERNEL" = "1" ]; then
-  echo "[deploy] stopping gateway before replacing its actor protocol peer"
-  systemctl stop opensession.service
+  echo "[deploy] preparing gateway before replacing its actor protocol peer"
+  if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "0" ] \
+    && [ "$SOCKET_ACTIVE" = "1" ] \
+    && [ -S /run/opensession-gateway/control.sock ] \
+    && "$SERVICE_BUN" \
+      "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+      prepare-coordinated "$RELEASE_DIR" "$TARGET_COMMIT"; then
+    GATEWAY_COORDINATED=1
+  else
+    if ! drain_gateway_for_supervisor_restart; then
+      echo "[deploy] installed supervisor lacks fast service drain; using compatibility stop"
+    fi
+    # An HTTP canary against the systemd socket would immediately activate a
+    # replacement gateway while protocol peers are intentionally offline.
+    # Pause it for this rare compatibility path; PID 1 still retains the
+    # listener and real clients queue until the selected release starts.
+    stop_canary
+    systemctl stop opensession.service
+  fi
   if [ "$SOCKET_ACTIVE" = "0" ]; then
     echo "[deploy] activating the persistent gateway socket"
     systemctl enable --now opensession.socket
@@ -536,12 +595,45 @@ if systemctl cat caddy.service >/dev/null 2>&1 \
   fi
 fi
 
-systemctl restart opensession.service
+# The target supervisor is normally socket-activated while peers restart. Keep
+# it when both unit and supervisor code already match; replacing it again only
+# resets accepted proxy connections. Changed supervisor code or units get one
+# fast drain before systemd transfers the inherited listener.
+if [ "$GATEWAY_COORDINATED" = "1" ]; then
+  "$SERVICE_BUN" \
+    "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+    activate-coordinated
+fi
+if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "1" ] \
+  || [ "$(supervisor_generation || true)" != "$TARGET_COMMIT" ]; then
+  if [ "$GATEWAY_COORDINATED" = "1" ]; then
+    "$SERVICE_BUN" \
+      "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+      commit-coordinated
+    GATEWAY_COORDINATED=0
+  fi
+  drain_gateway_for_supervisor_restart
+  systemctl restart opensession.service
+  start_canary
+  # The replacement reconciles the durable transaction journal against the
+  # selected generation; the old in-memory transaction no longer exists.
+  GATEWAY_COORDINATED=0
+elif ! systemctl is-active --quiet opensession.service; then
+  systemctl start opensession.service
+  start_canary
+else
+  echo "[deploy] target supervisor already active; retaining accepted connections"
+fi
 
 # Post-restart health gate — fail the deploy if it doesn't come back.
 for _ in $(seq 1 30); do
   sleep 2
   if curl -fs --max-time 4 "$HEALTH_URL" >/dev/null 2>&1; then
+    if [ "$GATEWAY_COORDINATED" = "1" ]; then
+      "$SERVICE_BUN" \
+        "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+        commit-coordinated
+    fi
     echo "[deploy] healthy after restart"
     exit 0
   fi

@@ -28,6 +28,7 @@ import { LABEL_AUTOFIX, LABEL_REVIEW, labelMatches, prKey } from "./constants";
 import { isLockHeld, readPrState, updatePrState } from "./state";
 import { loadReviewOptions, titleHasSkipKeyword } from "./review-options";
 import type { PrRef } from "./review";
+import { desiredReviewOutstanding } from "./desired-review";
 
 const RECONCILE_MS = parseInt(process.env.OPENSESSION_REVIEW_RECONCILE_MS || String(10 * 60 * 1000));
 /** Only PRs updated this recently are eligible — a stall is always recent. */
@@ -47,9 +48,7 @@ export function reconcileEnabled(): boolean {
 /** One sweep pass over every configured repo. Exported for tests/manual runs. */
 export async function reconcileOpenPrs(): Promise<void> {
   if (!reconcileEnabled() || ghRateLimited("rest")) return;
-  const { resolveReviewConfig, fireReview, fireAutoFix, hasPendingDebouncedReview } = await import(
-    "./webhook"
-  );
+  const { resolveReviewConfig, fireReview, fireAutoFix } = await import("./webhook");
   const { autoEnabled } = resolveReviewConfig();
   let fires = 0;
 
@@ -69,13 +68,12 @@ export async function reconcileOpenPrs(): Promise<void> {
         !!pr.headRepoFullName &&
         pr.headRepoFullName.toLowerCase() !== repo.ghRepo.toLowerCase();
 
-      const key = prKey(pr.number, repo.ghRepo);
       const state = readPrState(pr.number, repo.ghRepo);
       // Anything in flight (or already scheduled) owns this PR — never race it.
       const busy =
         isLockHeld("review", pr.number, repo.ghRepo) ||
         isLockHeld("code", pr.number, repo.ghRepo) ||
-        hasPendingDebouncedReview(key) ||
+        desiredReviewOutstanding(state) ||
         !!state?.activeRun ||
         !!state?.activeMention ||
         !!state?.autoFix?.active;

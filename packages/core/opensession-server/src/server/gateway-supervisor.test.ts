@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 import {
+  discoverRuntimePeerGenerations,
   GatewaySupervisor,
   inheritedGatewaySocketFd,
   type ManagedGateway,
@@ -55,6 +56,16 @@ describe("gateway supervisor", () => {
     expect(inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "0" }, 42)).toBeUndefined();
   });
 
+  test("discovers independently selected peer generations on supervisor boot", async () => {
+    const peers = await discoverRuntimePeerGenerations({
+      fetchReady: async () => Response.json({ generation: "a".repeat(40) }),
+      readExecutorReady: () => JSON.stringify({ generation: "b".repeat(40) }),
+      sleep: async () => {},
+      attempts: 1,
+    });
+    expect(peers).toEqual({ kernel: "a".repeat(40), executor: "b".repeat(40) });
+  });
+
   test("fast-drains the child before a supervisor service restart", async () => {
     const active = controlledGateway(1, "/releases/current");
     active.gateway.kill = (signal = 15) => {
@@ -66,10 +77,12 @@ describe("gateway supervisor", () => {
       waitReady: async () => {},
       validateRelease: (root) => root,
       promoteCurrent() {},
+      quiescePublicListener() { active.events.push("listener-quiesced"); },
     });
     const result = await supervisor.drainForSupervisorRestart();
     expect(result.ok).toBe(true);
-    expect(active.events).toEqual(["kill:12"]);
+    expect(active.events).toEqual(["listener-quiesced", "kill:12"]);
+    expect(supervisor.backendPort()).toBe(0);
   });
 
   test("activates a preloaded candidate only after observing the old exit", async () => {
@@ -105,6 +118,7 @@ describe("gateway supervisor", () => {
     await Bun.sleep(0);
     expect(old.events).toEqual(["kill:12"]);
     expect(candidate.events).toEqual([]);
+    expect(supervisor.backendPort()).toBe(0);
 
     order.push("old-exited");
     old.finish(0);
@@ -118,14 +132,19 @@ describe("gateway supervisor", () => {
       "ready",
     ]);
     expect(supervisor.activeGateway()).toBe(candidate.gateway);
+    expect(supervisor.backendPort()).toBe(candidate.gateway.backendPort);
   });
 
   test("parks a coordinated candidate until protocol peers are replaced", async () => {
     const old = controlledGateway(1, "/releases/old");
     const candidate = controlledGateway(2, "/releases/new", true);
     const order: string[] = [];
+    let selectedPeers: { kernel: string; executor: string } | undefined;
     const supervisor = new GatewaySupervisor(old.gateway, {
-      spawn: () => candidate.gateway,
+      spawn(_root, _role, _nonce, peerGenerations) {
+        selectedPeers = peerGenerations;
+        return candidate.gateway;
+      },
       async waitReady() { order.push("ready"); },
       validateRelease: (root) => root,
       promoteCurrent(root) { order.push(`promote:${root}`); },
@@ -134,6 +153,8 @@ describe("gateway supervisor", () => {
       type: "prepare_coordinated",
       releaseRoot: "/releases/new",
       sha: "e".repeat(40),
+      kernelGeneration: "a".repeat(40),
+      executorGeneration: "b".repeat(40),
     });
     candidate.preload();
     await Bun.sleep(0);
@@ -141,6 +162,10 @@ describe("gateway supervisor", () => {
     old.finish(0);
     expect((await preparing).ok).toBe(true);
     expect(candidate.events).toEqual([]);
+    expect(selectedPeers).toEqual({
+      kernel: "a".repeat(40),
+      executor: "b".repeat(40),
+    });
     expect(supervisor.activeGateway()).toBe(candidate.gateway);
     expect(order).toEqual(["promote:/releases/new"]);
 
@@ -229,16 +254,26 @@ describe("gateway supervisor", () => {
     expect(supervisor.activeGateway()).toBe(rollback.gateway);
   });
 
-  test("keeps the old gateway active when candidate preload fails", async () => {
+  test("keeps the old gateway active when peer precheck fails", async () => {
     const old = controlledGateway(1, "/releases/old");
+    old.gateway.peerGenerations = {
+      kernel: "a".repeat(40),
+      executor: "b".repeat(40),
+    };
     let fail!: (error: Error) => void;
+    let selectedPeers: { kernel: string; executor: string } | undefined;
+    let precheckPeers = false;
     const candidate = controlledGateway(2, "/releases/new", true);
     candidate.gateway.preloaded = new Promise<void>((_, reject) => {
       fail = reject;
     });
     candidate.gateway.exited = Promise.resolve(1);
     const supervisor = new GatewaySupervisor(old.gateway, {
-      spawn: () => candidate.gateway,
+      spawn(_root, _role, _nonce, peers, precheck) {
+        selectedPeers = peers;
+        precheckPeers = Boolean(precheck);
+        return candidate.gateway;
+      },
       waitReady: async () => {},
       validateRelease: (root) => root,
       promoteCurrent() {},
@@ -252,6 +287,8 @@ describe("gateway supervisor", () => {
     const result = await handoff;
     expect(result.ok).toBe(false);
     expect(result.message).toContain("before cut-over");
+    expect(selectedPeers).toEqual(old.gateway.peerGenerations);
+    expect(precheckPeers).toBe(true);
     expect(old.events).toEqual([]);
     expect(supervisor.activeGateway()).toBe(old.gateway);
   });
@@ -269,7 +306,14 @@ describe("gateway supervisor", () => {
       `await new Promise(() => {});`,
     ].join("\n"));
 
-    const candidate = spawnGateway(root, "standby", "integration-nonce", entry);
+    const candidate = spawnGateway(
+      root,
+      "standby",
+      "integration-nonce",
+      undefined,
+      false,
+      entry,
+    );
     await candidate.preloaded!;
     expect(existsSync(marker)).toBe(false);
     candidate.activate!("integration-nonce");

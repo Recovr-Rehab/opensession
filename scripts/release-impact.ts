@@ -2,7 +2,13 @@
 
 import { isFrontendOnlyRelease, requiresRootDeploy } from "../packages/core/opensession-server/src/server/self-deploy";
 
-export type ReleaseImpact = "frontend-only" | "gateway-handoff" | "coordinated" | "root";
+export type ReleaseImpact =
+  | "frontend-only"
+  | "gateway-handoff"
+  | "supervisor-restart"
+  | "coordinated"
+  | "coordinated-supervisor-restart"
+  | "root";
 
 const ENTRIES = {
   gateway: "packages/core/opensession-server/opensession.ts",
@@ -56,20 +62,71 @@ async function combinedClosure(
   return new Set([...before, ...after]);
 }
 
+export type RuntimeComponents = {
+  gateway: boolean;
+  supervisor: boolean;
+  kernel: boolean;
+  executor: boolean;
+};
+
+export function classifyRuntimeComponents(
+  runtimePaths: string[],
+  closures: { gateway: Set<string>; kernel: Set<string>; executor: Set<string> },
+): RuntimeComponents {
+  const components: RuntimeComponents = {
+    gateway: runtimePaths.length > 0,
+    supervisor: runtimePaths.includes(
+      "packages/core/opensession-server/src/server/gateway-supervisor.ts",
+    ),
+    kernel: false,
+    executor: false,
+  };
+  for (const path of runtimePaths) {
+    if (
+      path === "package.json" || path === "bun.lock" ||
+      path.startsWith("packages/core/protocol/")
+    ) {
+      components.kernel = true;
+      components.executor = true;
+      continue;
+    }
+    const known = path === "packages/core/opensession-server/src/server/gateway-supervisor.ts" ||
+      closures.gateway.has(path) || closures.kernel.has(path) || closures.executor.has(path);
+    components.kernel ||= closures.kernel.has(path);
+    components.executor ||= closures.executor.has(path);
+    if (!known) {
+      // Unknown runtime ownership stays fail-closed.
+      components.kernel = true;
+      components.executor = true;
+    }
+  }
+  return components;
+}
+
 export function classifyRuntimeImpact(
   runtimePaths: string[],
   closures: { gateway: Set<string>; kernel: Set<string>; executor: Set<string> },
-): "gateway-handoff" | "coordinated" {
-  if (runtimePaths.some((path) =>
-    path === "package.json" || path === "bun.lock" || path.startsWith("packages/core/protocol/"))) {
-    return "coordinated";
+): "gateway-handoff" | "supervisor-restart" | "coordinated" | "coordinated-supervisor-restart" {
+  const components = classifyRuntimeComponents(runtimePaths, closures);
+  if (components.kernel || components.executor) {
+    return components.supervisor ? "coordinated-supervisor-restart" : "coordinated";
   }
-  if (runtimePaths.some((path) => closures.kernel.has(path) || closures.executor.has(path))) {
-    return "coordinated";
-  }
-  return runtimePaths.every((path) => closures.gateway.has(path))
-    ? "gateway-handoff"
-    : "coordinated";
+  return components.supervisor ? "supervisor-restart" : "gateway-handoff";
+}
+
+export function releaseRuntimePaths(paths: string[]): string[] {
+  const deploySupportPaths = new Set([
+    "scripts/deploy-canary.ts",
+    "scripts/release-impact.ts",
+    "scripts/validate-frontend-build.ts",
+  ]);
+  return paths.filter((path) =>
+    path !== "AGENTS.md" &&
+    !path.startsWith("docs/") &&
+    !path.endsWith(".test.ts") &&
+    !path.endsWith(".spec.ts") &&
+    !deploySupportPaths.has(path) &&
+    !path.startsWith("packages/core/opensession-server/src/frontend/"));
 }
 
 export async function classifyReleaseImpact(options: {
@@ -78,18 +135,28 @@ export async function classifyReleaseImpact(options: {
   checkout: string;
   fromSha: string;
   toSha: string;
-}): Promise<{ impact: ReleaseImpact; paths: string[]; closures: Record<string, number> }> {
+}): Promise<{
+  impact: ReleaseImpact;
+  paths: string[];
+  closures: Record<string, number>;
+  components?: RuntimeComponents;
+}> {
   const paths = await changedPaths(options.checkout, options.fromSha, options.toSha);
   if (requiresRootDeploy(paths)) return { impact: "root", paths, closures: {} };
   if (isFrontendOnlyRelease(paths)) return { impact: "frontend-only", paths, closures: {} };
 
-  const runtimePaths = paths.filter((path) =>
-    path !== "AGENTS.md" &&
-    !path.startsWith("docs/") &&
-    !path.endsWith(".test.ts") &&
-    !path.endsWith(".spec.ts") &&
-    !path.startsWith("packages/core/opensession-server/src/frontend/"));
-  if (runtimePaths.length === 0) return { impact: "frontend-only", paths, closures: {} };
+  const runtimePaths = releaseRuntimePaths(paths);
+  // Non-runtime support files still need `current` to advance, but no protocol
+  // peer changed. The shell controller handles this as a cheap gateway handoff;
+  // true frontend-only releases were returned above and are promoted in-process.
+  if (runtimePaths.length === 0) {
+    return {
+      impact: "gateway-handoff",
+      paths,
+      closures: {},
+      components: { gateway: true, supervisor: false, kernel: false, executor: false },
+    };
+  }
 
   const [gateway, kernel, executor] = await Promise.all([
     combinedClosure(options.fromRoot, options.toRoot, ENTRIES.gateway),
@@ -97,10 +164,12 @@ export async function classifyReleaseImpact(options: {
     combinedClosure(options.fromRoot, options.toRoot, ENTRIES.executor),
   ]);
   const closureSizes = { gateway: gateway.size, kernel: kernel.size, executor: executor.size };
+  const components = classifyRuntimeComponents(runtimePaths, { gateway, kernel, executor });
   return {
     impact: classifyRuntimeImpact(runtimePaths, { gateway, kernel, executor }),
     paths,
     closures: closureSizes,
+    components,
   };
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { duration, ease } from "../../ui/motion";
 import { TranscriptSkeleton } from "../../ui/state";
@@ -8,6 +8,7 @@ import { PulseDot } from "../../ui/status";
 import { cn } from "../../ui/cn";
 import { busyActivityStatus } from "../../lib/busy-activity";
 import { msgActivityShimmer, msgRow } from "../../lib/msg-classes";
+import type { LiveTurnStore } from "../../lib/live-turn-store";
 
 /** The chat canvas while a new session's worktree is being prepared. The
  * opening message stays visible in the composer queue until it can move into
@@ -171,20 +172,35 @@ function BusyStopping({ since }: { since: number }) {
 	);
 }
 
+const getFalse = () => false;
+
 export function BusyInline({
 	since,
 	stoppingSince,
+	liveTurnStore,
 	onLayout,
 }: {
 	since: number | null;
 	stoppingSince: number | null;
+	liveTurnStore: LiveTurnStore;
 	onLayout?: () => void;
 }) {
 	const reducedMotion = useReducedMotion();
+	const hasPaintedText = useSyncExternalStore(
+		liveTurnStore.subscribe,
+		liveTurnStore.hasPaintedText,
+		getFalse,
+	);
+	// Once words are visible, the stream itself and its caret are the progress
+	// indicator. Keeping a second status row under a growing answer makes every
+	// line wrap relocate that row, and under reduced motion those relocations are
+	// intentionally instant. Collapse it once instead; stopping always remains
+	// explicit even when streamed text is still present.
+	const shown = !hasPaintedText || stoppingSince != null;
 	return (
 		<motion.div
 			initial={reducedMotion ? false : { height: 0, opacity: 0 }}
-			animate={{ height: "auto", opacity: 1 }}
+			animate={{ height: shown ? "auto" : 0, opacity: shown ? 1 : 0 }}
 			exit={{ height: 0, opacity: 0 }}
 			transition={{
 				type: "tween",

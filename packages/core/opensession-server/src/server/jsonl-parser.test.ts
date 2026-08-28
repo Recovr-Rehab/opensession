@@ -125,6 +125,41 @@ describe("entriesForWire", () => {
       ]),
     ).toEqual([]);
   });
+
+  it("projects a background wait as a private turn boundary", () => {
+    expect(
+      entriesForWire([
+        {
+          id: "ordinary-context",
+          type: "system",
+          content: "private handoff",
+          timestamp: TS,
+          noticeKind: "context-injection",
+          contextInjection: { source: "handoff", turnId: "turn-1" },
+        },
+        {
+          id: "wait-context",
+          type: "system",
+          content: "private wait instructions",
+          timestamp: TS,
+          noticeKind: "context-injection",
+          contextInjection: { source: "background-wait", turnId: "turn-2" },
+          seq: 9,
+          changeSeq: 12,
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "wait-context",
+        type: "user",
+        content: "",
+        timestamp: TS,
+        turnBoundary: true,
+        seq: 9,
+        changeSeq: 12,
+      },
+    ]);
+  });
 });
 
 describe("parseTranscript", () => {

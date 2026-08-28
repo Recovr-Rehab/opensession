@@ -3,6 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
 	committedTranscriptMeasureKeys,
+	didScrollTranscriptTowardHistory,
 	VirtualTranscriptList,
 	shouldAdjustTranscriptScroll,
 	shouldTransitionTranscriptItemPosition,
@@ -20,10 +21,30 @@ function item(index: number): VirtualTranscriptItem {
 	};
 }
 
+const source = await Bun.file(
+	new URL("./VirtualTranscriptList.tsx", import.meta.url),
+).text();
+
 describe("VirtualTranscriptList", () => {
+	test("defers observer fallback while keeping semantic measurement pre-paint", () => {
+		expect(source).toContain("useAnimationFrameWithResizeObserver: true");
+		expect(source).toContain("this.measureCommittedRows(prevProps)");
+	});
 	test("keeps the live-edge tail in the same virtual coordinate space", () => {
 		expect(virtualTranscriptRange([10, 11], 40, 3)).toEqual([10, 11, 37, 38, 39]);
 		expect(virtualTranscriptRange([0, 1], 2, 24)).toEqual([0, 1]);
+	});
+
+	test("treats every upward scroll path as history intent", () => {
+		expect(didScrollTranscriptTowardHistory(1_000, 700)).toBe(true);
+		expect(didScrollTranscriptTowardHistory(700, 700)).toBe(false);
+		expect(didScrollTranscriptTowardHistory(700, 1_000)).toBe(false);
+		expect(didScrollTranscriptTowardHistory(700, 699.75)).toBe(false);
+		// A child can sample zero before its parent restores the live edge. A
+		// one-step scrollbar/Home jump back to zero must still request history.
+		expect(didScrollTranscriptTowardHistory(0, 0, 745, 6_226)).toBe(true);
+		expect(didScrollTranscriptTowardHistory(0, 500, 745, 6_226)).toBe(false);
+		expect(didScrollTranscriptTowardHistory(0, 0, 745, 900)).toBe(false);
 	});
 
 	test("keeps the viewport stable when measured rows above it resize", () => {

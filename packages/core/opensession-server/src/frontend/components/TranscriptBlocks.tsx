@@ -127,9 +127,9 @@ function reviewBlockRole(block: RenderBlock): ReviewBlockRole {
 		: { kind: "other" };
 }
 
-/** A review handoff and the tool work it triggers form one quiet phase. Human
- * requests and model output both stay outside the phase, so a disclosure can
- * never hide either side of the conversation. */
+/** A review handoff and the work it triggers form one quiet phase. Human
+ * requests and final model output stay outside; intermediate narration already
+ * belongs to the grouped turn work. */
 function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
 	const grouped: RenderBlock[] = [];
 	for (let i = 0; i < blocks.length; i++) {
@@ -145,8 +145,8 @@ function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
 		while (i + 1 < blocks.length) {
 			const next = blocks[i + 1];
 			const nextRole = reviewBlockRole(next);
-			// Notes, walkthroughs, and model output have their own placement and must
-			// never vanish inside an automation disclosure.
+			// Notes, walkthroughs, and final model output have their own placement and
+			// must never vanish inside an automation disclosure.
 			if (
 				next.kind === "note" ||
 				next.kind === "walkthrough" ||
@@ -257,10 +257,9 @@ function renderBlockEstimate(block: RenderBlock): number {
 }
 
 /**
- * Groups a flat transcript into tool-work folds and message bubbles, then
- * renders them. Only consecutive tool calls may enter a TurnBlock. Every model
- * message stays in the transcript itself, including intermediate reasoning and
- * narration before or between tools.
+ * Groups a flat transcript into per-turn work folds and message bubbles, then
+ * renders them. Tool calls and intermediate assistant narration share one
+ * TurnBlock; the turn's final assistant output always stays outside the fold.
  * Shared by the main session view and the sub-agent sidebar so both render
  * identically.
  */
@@ -324,7 +323,9 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 	const pendingDeliveryEntryIds = new Set(pendingDeliveryIds ?? []);
 	const renderedEntries = normalizeLegacyVoiceToolEntries(entries)
 		.map(classifyEntry)
-		.filter((entry) => !isRenderlessUserEntry(entry));
+		.filter(
+			(entry) => entry.turnBoundary || !isRenderlessUserEntry(entry),
+		);
 	const shareAfterEntryIds = new Set<string>();
 	if (slackShare) {
 		for (let i = 0; i < renderedEntries.length; i++) {
@@ -347,41 +348,32 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 
 	const blocks: RenderBlock[] = [];
 	// The current assistant turn: consecutive assistant/tool_use entries between
-	// user/system boundaries. Messages and tools accumulate together so the
-	// footer can still summarize the whole turn, but only consecutive tool calls
-	// are emitted into folds.
+	// user/system boundaries. Everything except the final ordinary assistant
+	// entry is work; keeping it in one block prevents narration from splitting a
+	// run into a ladder of one-step disclosures.
 	let turn: TranscriptEntry[] = [];
 
 	const flushTurn = (trailing = false) => {
 		if (turn.length === 0) return;
 		const last = turn[turn.length - 1];
-		const final = last.type === "assistant" ? last : null;
-		// Preserve the turn-level preference: narration anywhere in the active
-		// turn opens each of its work disclosures while the run is live.
-		const expandWhileRunning = turn.some((entry) => entry.type === "assistant");
-		let work: TranscriptEntry[] = [];
-		const flushWork = () => {
-			if (work.length === 0) return;
-			blocks.push({ kind: "turn", items: work, expandWhileRunning });
-			work = [];
-		};
-		for (const entry of turn) {
-			const reasoning =
-				entry.type === "assistant" &&
-				(entry.isReasoning ||
-					(entry !== final && isLegacyReasoningHeading(entry.content)));
-			if (entry.type === "tool_use" || reasoning) {
-				// Reasoning describes the mechanical work around it. Keep both in one
-				// disclosure so a run reads as one open Working group instead of an
-				// alternating ladder of one-line summaries and one-step groups.
-				work.push(entry);
-				continue;
-			}
-			flushWork();
-			// Ordinary model output remains conversation and never enters work chrome.
-			blocks.push({ kind: "entry", entry });
+		// Provider-tagged reasoning is work even when it is the last persisted
+		// entry. An ordinary last assistant entry is the only safe final-output
+		// candidate, so it always remains outside the fold. As a live turn grows,
+		// an earlier candidate moves into work only once a later step proves it was
+		// intermediate narration.
+		const final =
+			last.type === "assistant" && !last.isReasoning ? last : null;
+		const work = final ? turn.slice(0, -1) : turn;
+		if (work.length > 0) {
+			blocks.push({
+				kind: "turn",
+				items: work,
+				expandWhileRunning: work.some(
+					(entry) => entry.type === "assistant",
+				),
+			});
 		}
-		flushWork();
+		if (final) blocks.push({ kind: "entry", entry: final });
 		// Quiet actions under the settled answer, the files the turn wrote, and
 		// scratch files that have no other direct route from the transcript.
 		if (final && !(live && trailing)) {
@@ -405,7 +397,9 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 			turn.push(entry);
 		} else {
 			flushTurn();
-			blocks.push({ kind: "entry", entry });
+			// Hidden system-triggered turns exist only to keep the completed output
+			// before them out of later work. They are structural, never a blank row.
+			if (!entry.turnBoundary) blocks.push({ kind: "entry", entry });
 		}
 	}
 	flushTurn(true);
@@ -464,8 +458,8 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 		const key = renderBlockKey(block, i);
 		const entriesInBlock = renderBlockEntries(block);
 		if (block.kind === "review-loop") {
-			// Assistant output deliberately sits outside the review disclosure. It
-			// does not make the review loop historical while that same turn is live.
+			// Final assistant output deliberately sits outside the review disclosure.
+			// It does not make the loop historical while that same turn is live.
 			const isLive = Boolean(
 				live &&
 					!groupedBlocks
