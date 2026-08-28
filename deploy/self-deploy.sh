@@ -529,9 +529,9 @@ do_deploy() {
 
   # Materialize the exact commit before any lifecycle action. A dirty or
   # diverged WIP tree is irrelevant: git worktree reads objects, not its files.
-  if ! release_cmd prepare "$target_sha" >/dev/null; then
-    log "ERROR: could not prepare release ${target_sha:0:10}"
-    write_result false deploy "$current" "$current" "release preparation failed for $target_sha"
+  if ! release_cmd prepare-frontend "$target_sha" >/dev/null; then
+    log "ERROR: could not prepare release and frontend ${target_sha:0:10}"
+    write_result false deploy "$current" "$current" "release or frontend preparation failed for $target_sha"
     exit 1
   fi
 

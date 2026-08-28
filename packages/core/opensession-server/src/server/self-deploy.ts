@@ -187,6 +187,29 @@ async function git(cwd: string, args: string[]): Promise<{ code: number; out: st
 }
 
 const FRONTEND_PREFIX = "packages/core/opensession-server/src/frontend/";
+const ROOT_DEPLOY_PATHS = new Set([
+	"deploy/deploy.sh",
+	"deploy/self-deploy.sh",
+	"deploy/release-checkout.sh",
+	"deploy/install-executor-credential.sh",
+	"deploy/install-session-kernel-credential.sh",
+	"deploy/install-run-host-helper.sh",
+	"deploy/install-resource-control.sh",
+	"deploy/opensession-run-host",
+	"opensession.service",
+	"opensession-executor.service",
+	"opensession-session-kernel.service",
+]);
+
+/** Files the unprivileged self-deploy path cannot install. Letting one of these
+ * fall through to an ordinary source restart reports a healthy deployment while
+ * the root-owned live artifact remains on the previous release. */
+export function requiresRootDeploy(paths: string[]): boolean {
+	return paths.some(
+		(path) =>
+			ROOT_DEPLOY_PATHS.has(path) || path.startsWith("deploy/systemd/"),
+	);
+}
 
 /** Strict allowlist: if any runtime path outside the web frontend changes, use
  * the health-gated service rollout. Documentation may ride with a UI commit. */
@@ -456,11 +479,24 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 						}
 					}
 					if (currentSha && currentSha !== targetSha) {
-						const changed = await git(checkout, ["diff", "--name-only", "-z", currentSha, targetSha, "--"]);
+						const changed = await git(checkout, [
+							"diff",
+							"--no-renames",
+							"--name-only",
+							"-z",
+							currentSha,
+							targetSha,
+							"--",
+						]);
 						if (changed.code !== 0) {
 							return text(`Refusing: cannot classify target diff: ${changed.err.slice(0, 300)}`);
 						}
 						const paths = changed.out.split("\0").filter(Boolean);
+						if (requiresRootDeploy(paths)) {
+							return text(
+								`Refusing unprivileged self-deploy for ${targetSha.slice(0, 10)}: the target changes root-owned deploy or service artifacts. Run the documented full root deploy for this release.`,
+							);
+						}
 						if (isFrontendOnlyRelease(paths)) {
 							const promoted = await promoteFrontendRelease(targetSha, currentSha, ctx.user);
 							return text(

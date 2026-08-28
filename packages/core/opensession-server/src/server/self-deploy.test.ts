@@ -8,6 +8,7 @@ import {
 	formatDeployStatus,
 	isFrontendOnlyRelease,
 	markerAgeMs,
+	requiresRootDeploy,
 	parseDeployResult,
 	readDeployState,
 	WATCHDOG_WINDOW_MS,
@@ -166,6 +167,35 @@ describe("formatDeployStatus", () => {
 	});
 });
 
+describe("requiresRootDeploy", () => {
+	test("requires the privileged rollout for installed deploy and service artifacts", () => {
+		for (const path of [
+			"deploy/deploy.sh",
+			"deploy/self-deploy.sh",
+			"deploy/release-checkout.sh",
+			"deploy/install-executor-credential.sh",
+			"deploy/install-session-kernel-credential.sh",
+			"deploy/install-run-host-helper.sh",
+			"deploy/install-resource-control.sh",
+			"deploy/opensession-run-host",
+			"deploy/systemd/opensession-session-kernel.service.d/capacity.conf",
+			"opensession.service",
+			"opensession-executor.service",
+			"opensession-session-kernel.service",
+		]) {
+			expect(requiresRootDeploy([path])).toBe(true);
+		}
+	});
+
+	test("does not escalate ordinary source, frontend, or documentation changes", () => {
+		expect(requiresRootDeploy([
+			"packages/core/opensession-server/src/server/routes/system.ts",
+			"packages/core/opensession-server/src/frontend/App.tsx",
+			"docs/self-development.md",
+		])).toBe(false);
+	});
+});
+
 describe("isFrontendOnlyRelease", () => {
 	test("accepts frontend source plus documentation", () => {
 		expect(isFrontendOnlyRelease([
@@ -225,6 +255,9 @@ describe("deploy/self-deploy.sh", () => {
 		expect(source).toContain("queue and coalesce to the newest fast-forward target");
 		expect(source).toContain("strictly frontend-only diff");
 		expect(source).toContain("without restarting any service");
+		expect(source).toContain('"--no-renames"');
+		expect(source).toContain("requiresRootDeploy(paths)");
+		expect(source).toContain("Refusing unprivileged self-deploy");
 		expect(source).toContain("only rebuilds the already pinned source");
 		expect(source).toContain("No separate human approval is required");
 		expect(source).toContain("nextDeployUnitName()");
@@ -246,6 +279,48 @@ describe("deploy/self-deploy.sh", () => {
 });
 
 describe("deploy/release-checkout.sh", () => {
+	test("builds and validates the candidate frontend before returning it", () => {
+		const source = join(dir, "source");
+		const state = join(dir, "state");
+		const fakeBun = join(dir, "bun");
+		const calls = join(dir, "bun-calls");
+		mkdirSync(source);
+		mkdirSync(state);
+		writeFileSync(
+			fakeBun,
+			`#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(calls)}\nexit 0\n`,
+		);
+		chmodSync(fakeBun, 0o755);
+		for (const args of [
+			["init", "-q"],
+			["config", "user.email", "release-test@example.invalid"],
+			["config", "user.name", "Release Test"],
+		]) {
+			expect(Bun.spawnSync(["git", "-C", source, ...args]).exitCode).toBe(0);
+		}
+		writeFileSync(join(source, "app.txt"), "committed\n");
+		expect(Bun.spawnSync(["git", "-C", source, "add", "app.txt"]).exitCode).toBe(0);
+		expect(Bun.spawnSync(["git", "-C", source, "commit", "-qm", "initial"]).exitCode).toBe(0);
+		const sha = new TextDecoder().decode(
+			Bun.spawnSync(["git", "-C", source, "rev-parse", "HEAD"]).stdout,
+		).trim();
+		const script = resolve(import.meta.dir, "../../../../../deploy/release-checkout.sh");
+		const prepared = Bun.spawnSync(["bash", script, "prepare-frontend", sha], {
+			env: {
+				...process.env,
+				OPENSESSION_DEPLOY_CHECKOUT: source,
+				OPENSESSION_DEPLOY_STATE: state,
+				OPENSESSION_BUN_BIN: fakeBun,
+			},
+		});
+		expect(prepared.exitCode).toBe(0);
+		expect(readFileSync(calls, "utf8").trim().split("\n")).toEqual([
+			"install --frozen-lockfile",
+			"run scripts/build-frontend.ts",
+			"run scripts/validate-frontend-build.ts",
+		]);
+	});
+
 	test("prepares and atomically selects a commit without changing dirty WIP", () => {
 		const source = join(dir, "source");
 		const state = join(dir, "state");

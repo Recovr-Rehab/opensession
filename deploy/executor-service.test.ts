@@ -24,7 +24,7 @@ describe("executor deployment", () => {
 
   test("deploys one pinned gateway, kernel, and executor release", async () => {
     const deploy = await Bun.file(resolve(import.meta.dir, "deploy.sh")).text();
-    expect(deploy).toContain('RELEASE_DIR="$(run_release prepare "$TARGET_COMMIT")"');
+    expect(deploy).toContain('RELEASE_DIR="$(run_release prepare-frontend "$TARGET_COMMIT")"');
     expect(deploy).toContain('run_release switch "$TARGET_COMMIT"');
     expect(deploy).toContain('workdir="$CURRENT_LINK"');
     expect(deploy).toContain("Environment=OPENSESSION_PREBUILT_FRONTEND=0");

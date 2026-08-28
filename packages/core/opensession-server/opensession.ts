@@ -101,6 +101,7 @@ import { hydratePersistedQueueState } from "./src/server/queue-state";
 import { hydrateScheduledPromptTimers } from "./src/server/scheduled-prompts";
 import { beginShutdown } from "./src/server/shutdown-state";
 import { setServiceReadiness } from "./src/server/service-readiness";
+import { waitForGatewayActivationIfStandby } from "./src/server/gateway-activation";
 import {
 	reconcileSessionKernelOwnership,
 	sessionKernel,
@@ -126,6 +127,11 @@ function isLoopbackHostname(hostname: string): boolean {
 	const normalized = hostname.replace(/^\[|\]$/g, "").toLowerCase();
 	return normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost";
 }
+
+// A supervised standby is allowed to preload this import graph, but it cannot
+// proceed into even the earliest shared-state, socket, Worker, timer, or
+// integration effect until its parent explicitly activates the exact nonce.
+await waitForGatewayActivationIfStandby();
 
 // A dev instance (OPENSESSION_DEV=1, src/server/dev-mode.ts) sharing the live
 // state is the fleet-outage class bug: the run-rpc unix socket lives under the

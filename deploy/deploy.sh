@@ -105,7 +105,7 @@ if [ -n "$PREVIOUS_HEAD" ] && [ "$TARGET_COMMIT" != "$PREVIOUS_HEAD" ] \
   fi
   echo "[deploy] WARNING: operator override permits history change ${PREVIOUS_HEAD:0:10} -> ${TARGET_COMMIT:0:10}"
 fi
-RELEASE_DIR="$(run_release prepare "$TARGET_COMMIT")"
+RELEASE_DIR="$(run_release prepare-frontend "$TARGET_COMMIT")"
 # From here on, every source artifact comes from the exact prepared commit.
 # SOURCE_DIR remains only the git object source and the place agents do WIP.
 REPO_DIR="$RELEASE_DIR"

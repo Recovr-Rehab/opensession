@@ -67,6 +67,7 @@ describe("session kernel service deployment", () => {
     ).text();
     expect(deploy).toContain("install-session-kernel-credential.sh");
     expect(deploy).toContain("opensession-session-kernel.service");
+    const prepareFrontend = deploy.indexOf('run_release prepare-frontend "$TARGET_COMMIT"');
     const stopGateway = deploy.indexOf("systemctl stop opensession.service");
     const restartActor = deploy.indexOf(
       "systemctl restart opensession-session-kernel.service",
@@ -74,6 +75,8 @@ describe("session kernel service deployment", () => {
     const publishGateway = deploy.indexOf(
       'cp "$GATEWAY_UNIT_RENDERED"',
     );
+    expect(prepareFrontend).toBeGreaterThan(0);
+    expect(prepareFrontend).toBeLessThan(stopGateway);
     expect(stopGateway).toBeGreaterThan(0);
     expect(restartActor).toBeGreaterThan(stopGateway);
     expect(publishGateway).toBeGreaterThan(restartActor);
@@ -91,6 +94,8 @@ describe("session kernel service deployment", () => {
     expect(selfDeploy.lastIndexOf("write_marker"))
       .toBeLessThan(selfDeploy.lastIndexOf("stop_gateway"));
     expect(selfDeploy).toContain("stop_gateway");
+    expect(selfDeploy.lastIndexOf('prepare-frontend "$target_sha"'))
+      .toBeLessThan(selfDeploy.lastIndexOf("write_marker"));
     expect(selfDeploy.lastIndexOf("stop_gateway"))
       .toBeLessThan(selfDeploy.lastIndexOf("refresh_session_kernel"));
     expect(selfDeploy.lastIndexOf("refresh_session_kernel"))
