@@ -1,18 +1,28 @@
 import React from "react";
+import type { ImageAttachmentComment } from "../lib/image-attachment-comment";
 import type { ImageRegion } from "../lib/image-region-comment";
-import { openLightbox } from "./MediaLightbox";
+import {
+  openLightbox,
+  type ImageRegionAnnotation,
+} from "./MediaLightbox";
 import { IconX } from "./icons";
 
 interface Props {
   /** Attached images as `data:` URLs. */
   images: string[];
   onRemove: (index: number) => void;
-  /** Add a region comment to the draft that owns these attachments. */
+  comments?: ImageAttachmentComment[];
+  /** Add or edit a region comment in the draft that owns these attachments. */
   onComment?: (
     index: number,
     region: ImageRegion,
     text: string,
     keepOpen: boolean,
+    existing?: ImageRegionAnnotation,
+  ) => void | Promise<void>;
+  onDeleteComment?: (
+    index: number,
+    annotation: ImageRegionAnnotation,
   ) => void | Promise<void>;
   disabled?: boolean;
   /**
@@ -29,7 +39,9 @@ interface Props {
 export function ImageThumbs({
   images,
   onRemove,
+  comments = [],
   onComment,
+  onDeleteComment,
   disabled,
   pending = 0,
   onRemovePending,
@@ -49,13 +61,36 @@ export function ImageThumbs({
                 images.map((image, imageIndex) => ({
                   kind: "image" as const,
                   src: image,
+                  regionAnnotations: comments
+                    .filter((comment) => comment.imageIndex === imageIndex)
+                    .map(({ id, region, text }) => ({ id, region, text })),
                   ...(onComment
                     ? {
-                        onRegionComment: ({ region, text, keepOpen }: {
+                        onRegionComment: ({
+                          region,
+                          text,
+                          keepOpen,
+                          existing,
+                        }: {
                           region: ImageRegion;
                           text: string;
                           keepOpen: boolean;
-                        }) => onComment(imageIndex, region, text, keepOpen),
+                          existing?: ImageRegionAnnotation;
+                        }) =>
+                          onComment(
+                            imageIndex,
+                            region,
+                            text,
+                            keepOpen,
+                            existing,
+                          ),
+                      }
+                    : {}),
+                  ...(onDeleteComment
+                    ? {
+                        onDeleteRegionComment: (
+                          annotation: ImageRegionAnnotation,
+                        ) => onDeleteComment(imageIndex, annotation),
                       }
                     : {}),
                 })),

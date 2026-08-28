@@ -13,7 +13,10 @@ import type { ModelOption, FileMention, ProviderAccountOption } from "../lib/api
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import {
   appendImageAttachmentComment,
+  deleteImageAttachmentComment,
+  parseImageAttachmentComments,
   rebaseImageAttachmentReferences,
+  updateImageAttachmentComment,
 } from "../lib/image-attachment-comment";
 import { clearDraft, loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
 import { appendDictation } from "../lib/dictation";
@@ -38,6 +41,7 @@ import {
 import { useSessionNameProjection } from "../hooks/useSessionNameProjection";
 import { usePeople } from "../lib/people";
 import { ImageThumbs } from "./ImageThumbs";
+import type { ImageRegionAnnotation } from "./MediaLightbox";
 import { FileChips } from "./FileChips";
 import { QuoteContext } from "./QuoteContext";
 import { PastedTextContext } from "./PastedTextContext";
@@ -709,6 +713,9 @@ export function Composer({
   const isSendDisabled = sendBlockedFor(text);
   const imgs = images || [];
   const fls = files || [];
+  // The draft is the source of truth for annotation dots. Editing or deleting
+  // their plain-text references directly therefore updates the next preview.
+  const imageComments = parseImageAttachmentComments(text);
   // Notes accept images but not arbitrary files: images remain team-visible,
   // while files are agent-readable workspace context and belong to prompts.
   const canAttachImages = !!onImagesChange;
@@ -1000,21 +1007,28 @@ export function Composer({
     setText(next);
   }
 
+  function writeAnnotationDraft(next: string) {
+    textRef.current = next;
+    if (!isControlled && draftKey) saveDraft(draftKey, { text: next });
+    setText(next);
+  }
+
   function commentOnImage(
     i: number,
     region: { x: number; y: number; width: number; height: number },
     comment: string,
     keepOpen: boolean,
+    existing?: ImageRegionAnnotation,
   ) {
-    const next = appendImageAttachmentComment(
-      textRef.current,
-      i,
-      region,
-      comment,
-    );
-    textRef.current = next;
-    if (!isControlled && draftKey) saveDraft(draftKey, { text: next });
-    setText(next);
+    const next = existing
+      ? updateImageAttachmentComment(
+          textRef.current,
+          { ...existing, imageIndex: i },
+          region,
+          comment,
+        )
+      : appendImageAttachmentComment(textRef.current, i, region, comment);
+    writeAnnotationDraft(next);
     if (!keepOpen) {
       // The lightbox restores focus to its thumbnail first. Run after that
       // cleanup so the newly added reference is ready to edit or send.
@@ -1024,6 +1038,15 @@ export function Composer({
         if (field) field.selectionStart = field.selectionEnd = field.value.length;
       }, 0);
     }
+  }
+
+  function deleteCommentOnImage(i: number, annotation: ImageRegionAnnotation) {
+    writeAnnotationDraft(
+      deleteImageAttachmentComment(textRef.current, {
+        ...annotation,
+        imageIndex: i,
+      }),
+    );
   }
 
   function removeFile(i: number) {
@@ -1646,7 +1669,9 @@ export function Composer({
           images={imgs}
           pending={activeStaging.images}
           onRemove={removeImage}
+          comments={imageComments}
           onComment={canAttachImages ? commentOnImage : undefined}
+          onDeleteComment={canAttachImages ? deleteCommentOnImage : undefined}
           onRemovePending={staging ? onRemovePendingImage : localUploads.cancelPendingImage}
           disabled={disabled}
         />
