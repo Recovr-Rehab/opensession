@@ -990,9 +990,7 @@ async function runSupervisor(): Promise<void> {
     port: PUBLIC_PORT,
     backendPort: () => supervisor.backendPort(),
     metrics: proxyMetrics,
-    fallbackHttp: (request) => supervisor.backendPort() === 0
-      ? stableFrontendHttpResponse(deployStateRoot(), request)
-      : null,
+    fallbackHttp: (request) => stableFrontendHttpResponse(deployStateRoot(), request),
     listenFd: inheritedGatewaySocketFd(),
   });
   console.log(
