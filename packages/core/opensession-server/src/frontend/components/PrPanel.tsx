@@ -600,6 +600,9 @@ export function PrPanel({
   useLayoutEffect(() => {
     activeLoadTargetRef.current = loadTargetKey;
   }, [loadTargetKey]);
+  const loadRepo = active?.repo;
+  const loadBranch = active?.branch;
+  const loadLinked = active?.linked;
 
   const load = useCallback(
     (force = false): Promise<void> => {
@@ -627,7 +630,7 @@ export function PrPanel({
       const prRequest = (
         previewRepo && previewBranch
       ? fetchPrPreview(previewRepo, previewBranch)
-      : fetchPr(sessionId, active?.repo, active?.branch)
+      : fetchPr(sessionId, loadRepo, loadBranch)
     )
       .then((data) => {
         prSettled = true;
@@ -651,7 +654,7 @@ export function PrPanel({
       const diffRequest = (
         previewRepo && previewBranch
       ? fetchPrPreviewDiff(previewRepo, previewBranch)
-      : fetchPrDiff(sessionId, active?.repo, active?.branch)
+      : fetchPrDiff(sessionId, loadRepo, loadBranch)
     )
       .then((data) => {
         diffSettled = true;
@@ -668,9 +671,9 @@ export function PrPanel({
       });
     // A linked PR has no local worktree in this session — no git state.
       const gitRequest = (
-        previewRepo || active?.linked
+        previewRepo || loadLinked
       ? Promise.resolve(null)
-      : fetchGitStatus(sessionId, active?.repo)
+      : fetchGitStatus(sessionId, loadRepo)
     )
       .then((data) => {
         if (isCurrent()) setGit(data);
@@ -680,16 +683,15 @@ export function PrPanel({
       });
       const reviewThreadsRequest = prRequest.then(async () => {
         if (!prResult) return;
-        await (async () => {
-const threads = await fetchPrReviewThreads(
-            active?.repo,
+        try {
+          const threads = await fetchPrReviewThreads(
+            loadRepo,
             prResult.number,
           );
           if (isCurrent()) setReviewThreads({ key: loadTargetKey, threads });
-})().catch(async () => {
-// Resolved threads are supporting context. A provider or credential
-          // failure must not block the diff itself.
-});
+        } catch {
+          // Resolved threads are supporting context and never block the diff.
+        }
       });
 
       const promise = Promise.allSettled([
@@ -705,7 +707,7 @@ const threads = await fetchPrReviewThreads(
       });
       return promise;
     },
-    [sessionId, loadTargetKey, previewRepo, previewBranch, active?.repo, active?.branch, active?.linked],
+    [sessionId, loadTargetKey, previewRepo, previewBranch, loadRepo, loadBranch, loadLinked],
   );
 
   useEffect(() => {
@@ -820,24 +822,35 @@ const threads = await fetchPrReviewThreads(
   // A guide belongs to one target's head commit: the key is what makes a
   // guide from the PR the panel just left read as absent rather than current.
   const guideKey = diff ? `${loadTargetKey}\0${diff.headRefOid}` : "";
+  const guideRepo = active?.repo;
+  const guideBranch = active?.branch;
   const loadGuide = useCallback(async () => {
     if (!guideKey) return;
     const generation = ++guideGenerationRef.current;
+    const isCurrent = () => generation === guideGenerationRef.current;
     setGuideLoading(true);
     setGuideFailed(false);
-    await (async () => {
-const data = previewRepo && previewBranch
-        ? await fetchPrPreviewGuide(previewRepo, previewBranch)
-        : await fetchReviewGuide(sessionId, active?.repo, active?.branch);
-      if (generation !== guideGenerationRef.current) return;
-      if (data) setGuide({ key: guideKey, data });
-      else setGuideFailed(true);
-})().catch(async () => {
-if (generation === guideGenerationRef.current) setGuideFailed(true);
-}).finally(async () => {
-if (generation === guideGenerationRef.current) setGuideLoading(false);
-});
-  }, [guideKey, sessionId, previewRepo, previewBranch, active?.repo, active?.branch]);
+    try {
+      const data =
+        previewRepo && previewBranch
+          ? await fetchPrPreviewGuide(previewRepo, previewBranch)
+          : await fetchReviewGuide(sessionId, guideRepo, guideBranch);
+      if (isCurrent()) {
+        if (data) setGuide({ key: guideKey, data });
+        else setGuideFailed(true);
+      }
+    } catch {
+      if (isCurrent()) setGuideFailed(true);
+    }
+    if (isCurrent()) setGuideLoading(false);
+  }, [
+    guideKey,
+    sessionId,
+    previewRepo,
+    previewBranch,
+    guideRepo,
+    guideBranch,
+  ]);
 
   const prPatchVersion = diff?.diffVersion || "";
   const codeFlowKey =
