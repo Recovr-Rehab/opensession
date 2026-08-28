@@ -1717,7 +1717,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// rule "it came back because it needed me, and stays back until I hide it
 	// again" instead of flickering as questions get asked and answered.
 	//
-	// Otherwise the viewer offers "Add to sidebar" when you open a hidden
+	// Otherwise the viewer offers "Keep in sidebar" when you open a hidden
 	// session through a link or ⌘K. There is no Hidden band: hiding is removal
 	// from your sidebar, not a folder to browse.
 	const { hiddenKeys: hiddenRowKeys, resurfaced: resurfacedRows } = (partitionHidden(allWsRows, hides));

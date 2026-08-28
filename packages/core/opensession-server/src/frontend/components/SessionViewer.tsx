@@ -2482,11 +2482,11 @@ export function SessionViewer({
 	const naturallyInSidebar = claimSessions.some(
 		(c) => !c.spawnedBy && !c.automation && ownedBy(c, currentUser),
 	);
-	const canAddToMyWorkspaces =
+	const canKeepInSidebar =
 		!session.archived &&
 		!!onSetStatus &&
 		(hiddenFromSidebar || (!claimed && !naturallyInSidebar));
-	function addToMyWorkspaces() {
+	function keepInSidebar() {
 		unhideForSession(session);
 		if (!claimed && !naturallyInSidebar) onSetStatus?.(claimSessions, "mine");
 	}
@@ -5853,12 +5853,12 @@ export function SessionViewer({
 			</Modal.Root>
 			{!hideHeader && (() => {
 				const workspaceScopedMenu = Boolean(session.workspaceId);
-				const addToMyWorkspacesAction = (inMenu: boolean) =>
-					canAddToMyWorkspaces &&
+				const keepInSidebarAction = (inMenu: boolean) =>
+					canKeepInSidebar &&
 					(inMenu ? (
-						<Menu.Item onClick={addToMyWorkspaces} title="Add this workspace to your workspaces">
+						<Menu.Item onClick={keepInSidebar} title="Keep this workspace in your sidebar">
 							<IconInbox size={20} className={MENU_ICON} />
-							<span className="grow">Add to my workspaces</span>
+							<span className="grow">Keep in sidebar</span>
 						</Menu.Item>
 					) : (
 						<Button
@@ -5866,10 +5866,10 @@ export function SessionViewer({
 							variant="default"
 							className="mr-1.5"
 							icon={<IconInbox size={20} />}
-							onClick={addToMyWorkspaces}
-							title="Add this workspace to your workspaces"
+							onClick={keepInSidebar}
+							title="Keep this workspace in your sidebar"
 						>
-							Add to my workspaces
+							Keep in sidebar
 						</Button>
 					));
 				// Share rides inline on a wide header but tucks into the ⋯ overflow
@@ -6312,7 +6312,7 @@ export function SessionViewer({
 								    conditional, so the rules between them collapse themselves
 								    rather than being predicted here (VIEWER_MENU_SEP). */}
 								{placementActions}
-								{isPhone && addToMyWorkspacesAction(true)}
+								{isPhone && keepInSidebarAction(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
 								<Menu.Separator className={VIEWER_MENU_SEP} />
 								{newSessionAction}
@@ -6599,7 +6599,7 @@ export function SessionViewer({
 				</TopBarLeading>
 				<TopBarActions className={VIEWER_HEADER_ACTIONS} ref={headerActionsRef}>
 					{!isPhone && secondaryActions(false)}
-					{!isPhone && addToMyWorkspacesAction(false)}
+					{!isPhone && keepInSidebarAction(false)}
 					{/* Whoever ELSE has the session open, right before Share. Your
 					    own face used to sit here too, which meant every session
 					    you opened showed a face permanently — the one thing a
