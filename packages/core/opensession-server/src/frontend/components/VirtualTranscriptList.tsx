@@ -443,7 +443,12 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		if (scrollTop !== undefined) {
 			if (
 				this.topApproachScrollTop !== null &&
-				didScrollTranscriptTowardHistory(this.topApproachScrollTop, scrollTop)
+				didScrollTranscriptTowardHistory(
+					this.topApproachScrollTop,
+					scrollTop,
+					this.topApproachContainer?.clientHeight ?? 0,
+					this.topApproachContainer?.scrollHeight ?? 0,
+				)
 			)
 				this.topApproachGate.request();
 			this.topApproachScrollTop = scrollTop;
@@ -506,13 +511,6 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		if (!container || !callback) return;
 		this.topApproachContainer = container;
 		this.topApproachScrollTop = container.scrollTop;
-		// The child mounts before SessionViewer's layout effect restores the live
-		// edge. Sample again after layout so a one-step Home key or scrollbar jump
-		// compares against that restored offset rather than the pre-layout zero.
-		requestAnimationFrame(() => {
-			if (this.topApproachContainer === container)
-				this.topApproachScrollTop = container.scrollTop;
-		});
 		container.addEventListener("scroll", this.onTopApproachScroll, { passive: true });
 		container.addEventListener("wheel", this.onTopApproachWheel, { passive: true });
 		container.addEventListener("touchstart", this.onTopApproachTouchStart, {
@@ -683,8 +681,19 @@ export function shouldTransitionTranscriptItemPosition(
 export function didScrollTranscriptTowardHistory(
 	previousOffset: number,
 	nextOffset: number,
+	viewportHeight = 0,
+	contentHeight = 0,
 ): boolean {
-	return nextOffset < previousOffset - 0.5;
+	if (nextOffset < previousOffset - 0.5) return true;
+	// A child virtualizer can subscribe before its parent restores the live edge,
+	// leaving the sampled offset at zero. A one-step Home key or scrollbar jump
+	// then reports zero again. Treat that top-edge event as intent only when the
+	// mounted window is genuinely scrollable and movement was not toward latest.
+	return (
+		contentHeight > viewportHeight * 2 &&
+		nextOffset <= viewportHeight &&
+		nextOffset <= previousOffset + 0.5
+	);
 }
 
 export function shouldAdjustTranscriptScroll(

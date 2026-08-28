@@ -40,6 +40,11 @@ describe("VirtualTranscriptList", () => {
 		expect(didScrollTranscriptTowardHistory(700, 700)).toBe(false);
 		expect(didScrollTranscriptTowardHistory(700, 1_000)).toBe(false);
 		expect(didScrollTranscriptTowardHistory(700, 699.75)).toBe(false);
+		// A child can sample zero before its parent restores the live edge. A
+		// one-step scrollbar/Home jump back to zero must still request history.
+		expect(didScrollTranscriptTowardHistory(0, 0, 745, 6_226)).toBe(true);
+		expect(didScrollTranscriptTowardHistory(0, 500, 745, 6_226)).toBe(false);
+		expect(didScrollTranscriptTowardHistory(0, 0, 745, 900)).toBe(false);
 	});
 
 	test("keeps the viewport stable when measured rows above it resize", () => {
