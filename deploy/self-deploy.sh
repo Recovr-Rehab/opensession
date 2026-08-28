@@ -189,8 +189,18 @@ release_cmd() {
 # A failed actor migration/readiness check must degrade the deploy, not leave
 # an explicitly stopped unit that Restart=always will never recover.
 GATEWAY_STOPPED_BY_DEPLOY=0
+CANARY_PID=""
+CANARY_FILE=""
 restore_gateway_on_exit() {
   local rc=$?
+  if [ -n "$CANARY_PID" ]; then
+    kill -TERM "$CANARY_PID" 2>/dev/null || true
+    wait "$CANARY_PID" 2>/dev/null || true
+    CANARY_PID=""
+    if [ -s "$CANARY_FILE" ]; then
+      log "deploy canary: $(tr '\n' ' ' < "$CANARY_FILE")"
+    fi
+  fi
   if [ "$GATEWAY_STOPPED_BY_DEPLOY" = "1" ]; then
     log "deploy exiting with gateway stopped — starting ${SERVICE_NAME}"
     run_systemctl start "$SERVICE_NAME" || true
@@ -206,7 +216,7 @@ stop_gateway() {
   run_systemctl stop "$SERVICE_NAME"
 }
 
-preflight_session_kernel() {
+session_kernel_unit_available() {
   local load_state
   load_state="$(run_systemctl show --property=LoadState --value \
     "$SESSION_KERNEL_SERVICE_NAME" 2>/dev/null || true)"
@@ -214,8 +224,33 @@ preflight_session_kernel() {
     log "ERROR: installed session kernel unit is unavailable; run the root deploy before this revision"
     return 1
   fi
+}
+
+current_release_sha() {
+  release_cmd current-sha 2>/dev/null || true
+}
+
+session_kernel_ready_for_current() {
+  local expected body
+  expected="$(current_release_sha)"
+  body="$(curl -fs --max-time 2 "$SESSION_KERNEL_READY_URL" 2>/dev/null || true)"
+  [ -n "$expected" ] && printf '%s' "$body" | grep -Fq "\"generation\":\"$expected\""
+}
+
+executor_ready_for_current() {
+  local expected pid body
+  expected="$(current_release_sha)"
+  pid="$(run_systemctl show -p MainPID --value "$EXECUTOR_SERVICE_NAME" 2>/dev/null || true)"
+  body="$(cat "$EXECUTOR_READY_FILE" 2>/dev/null || true)"
+  [ -n "$expected" ] \
+    && printf '%s' "$body" | grep -Fq "\"pid\":$pid" \
+    && printf '%s' "$body" | grep -Fq "\"generation\":\"$expected\""
+}
+
+preflight_session_kernel() {
+  session_kernel_unit_available || return 1
   if ! run_systemctl is-active --quiet "$SESSION_KERNEL_SERVICE_NAME" \
-    || ! curl -fs --max-time 2 "$SESSION_KERNEL_READY_URL" >/dev/null 2>&1; then
+    || ! session_kernel_ready_for_current; then
     log "ERROR: installed session kernel is not healthy; refusing to stop the gateway"
     return 1
   fi
@@ -246,8 +281,7 @@ refresh_executor() {
   for i in $(seq 1 30); do
     if run_systemctl is-active --quiet "$EXECUTOR_SERVICE_NAME" \
       && [ -s "$EXECUTOR_READY_FILE" ] \
-      && [ "$(cat "$EXECUTOR_READY_FILE" 2>/dev/null || true)" = \
-        "$(run_systemctl show -p MainPID --value "$EXECUTOR_SERVICE_NAME" 2>/dev/null || true)" ]; then
+      && executor_ready_for_current; then
       return
     fi
     sleep 1
@@ -257,10 +291,15 @@ refresh_executor() {
 }
 
 refresh_session_kernel() {
+  local allow_unhealthy="${1:-0}"
   # Like the executor, this privileged unit is installed only through the root
   # deploy path. Self-deploy restarts the fixed unit but never copies a unit or
   # credential out of the user-writable checkout.
-  preflight_session_kernel || return 1
+  if [ "$allow_unhealthy" = "1" ]; then
+    session_kernel_unit_available || return 1
+  else
+    preflight_session_kernel || return 1
+  fi
   run_systemctl stop "$SESSION_KERNEL_SERVICE_NAME"
   log "migrating legacy session-kernel rows offline"
   local -a migration_env
@@ -277,13 +316,24 @@ refresh_session_kernel() {
   local i
   for i in $(seq 1 30); do
     if run_systemctl is-active --quiet "$SESSION_KERNEL_SERVICE_NAME" \
-      && curl -fs --max-time 2 "$SESSION_KERNEL_READY_URL" >/dev/null 2>&1; then
+      && session_kernel_ready_for_current; then
       return
     fi
     sleep 1
   done
   log "ERROR: installed session kernel service did not become healthy"
   return 1
+}
+
+refresh_protocol_peers() {
+  local allow_unhealthy_kernel="${1:-0}" executor_pid kernel_pid failed=0
+  refresh_executor &
+  executor_pid=$!
+  refresh_session_kernel "$allow_unhealthy_kernel" &
+  kernel_pid=$!
+  if ! wait "$executor_pid"; then failed=1; fi
+  if ! wait "$kernel_pid"; then failed=1; fi
+  return "$failed"
 }
 
 git_repo() { git -C "$REPO_DIR" "$@"; }
@@ -435,6 +485,37 @@ rollback_to_pin() {
   return 1
 }
 
+rollback_coordinated_to_pin() {
+  local controller="$1" pin head_now
+  ROLLBACK_HEALTHY=0
+  if [ ! -f "$PIN_FILE" ]; then
+    log "ERROR: no last-known-good pin at $PIN_FILE — cannot roll back"
+    return 1
+  fi
+  pin="$(cat "$PIN_FILE")"
+  head_now="$(current_release_sha)"
+  rollback_schema_compatible "$pin" || return 1
+
+  # The target gateway is already fenced. Restore pointer and protocol peers
+  # while the stable proxy parks connections, then admit the previous gateway.
+  if [ "$head_now" != "$pin" ]; then
+    log "rolling back coordinated pointer: ${head_now:0:10} -> ${pin:0:10}"
+    release_cmd switch "$pin"
+  fi
+  refresh_protocol_peers 1 || return 1
+  if ! "$BUN_BIN" "$controller" abort-coordinated; then
+    log "ERROR: supervisor refused previous gateway after peer rollback"
+    return 1
+  fi
+  if poll_rollback_health; then
+    ROLLBACK_HEALTHY=1
+    log "healthy after fail-closed coordinated rollback"
+    return 0
+  fi
+  log "ERROR: previous generation remained unhealthy after coordinated rollback"
+  return 1
+}
+
 do_deploy() {
   # Everything below logs to the state dir as well as stdout (standalone runs
   # get a persistent trail; the transient unit's own append log catches any
@@ -536,6 +617,11 @@ do_deploy() {
     exit 1
   fi
 
+  CANARY_FILE="$RESULTS_DIR/$(date -u +%Y%m%dT%H%M%SZ)-canary-${target_sha:0:10}.json"
+  "$BUN_BIN" "$release_dir/scripts/deploy-canary.ts" \
+    "${HEALTH_URL%/ready}/live" "$CANARY_FILE" &
+  CANARY_PID=$!
+
   # Validate privileged service installation while the current gateway is
   # still serving. Self-deploy deliberately does not rewrite root artifacts;
   # changes to units/helpers must go through deploy/deploy.sh.
@@ -551,10 +637,20 @@ do_deploy() {
   # observed. Peer/protocol/dependency changes stay on the coordinated path.
   local release_impact="coordinated"
   if [ -S /run/opensession-gateway/control.sock ]; then
+    local impact_manifest="$RESULTS_DIR/$(date -u +%Y%m%dT%H%M%SZ)-impact-${target_sha:0:10}.json"
     release_impact="$(
+      OPENSESSION_RELEASE_IMPACT_MANIFEST="$impact_manifest" \
       "$BUN_BIN" "$release_dir/scripts/release-impact.ts" \
-        "$REPO_DIR" "$current" "$target_sha" 2>/dev/null || echo coordinated
+        "$CURRENT_LINK" "$release_dir" "$REPO_DIR" "$current" "$target_sha" \
+        2>/dev/null || echo coordinated
     )"
+    log "generated release impact: $release_impact ($impact_manifest)"
+  fi
+  if [ "$release_impact" = "root" ]; then
+    log "ERROR: release changes root-owned lifecycle artifacts; use deploy/deploy.sh"
+    write_result false deploy "$current" "$current" \
+      "refused unprivileged deployment of root-owned lifecycle artifacts"
+    exit 1
   fi
   if [ "$release_impact" = "gateway-handoff" ]; then
     write_marker
@@ -574,6 +670,8 @@ do_deploy() {
       fi
       if poll_health; then
         log "healthy after gateway handoff — deployed ${target_sha:0:10}"
+        "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+          status || true
         write_result true deploy "$target_sha" "$current" "deployed with a single-active gateway handoff"
         echo 0 > "$FAIL_COUNT_FILE"
         exit 0
@@ -602,28 +700,28 @@ do_deploy() {
   # path below.
   if [ -S /run/opensession-gateway/control.sock ]; then
     write_marker
-    if "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
-      prepare-coordinated "$release_dir" "$target_sha"; then
+    local supervisor_controller="$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts"
+    if "$BUN_BIN" "$supervisor_controller" prepare-coordinated "$release_dir" "$target_sha"; then
       record_kernel_schema_floor
-      if refresh_executor && refresh_session_kernel \
-        && "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
-          activate-coordinated \
-        && poll_health; then
+      if refresh_protocol_peers \
+        && "$BUN_BIN" "$supervisor_controller" activate-coordinated \
+        && poll_health \
+        && "$BUN_BIN" "$supervisor_controller" commit-coordinated; then
         log "healthy after coordinated zero-downtime handoff — deployed ${target_sha:0:10}"
+        "$BUN_BIN" "$supervisor_controller" status || true
         write_result true deploy "$target_sha" "$current" \
-          "deployed with a coordinated single-active handoff"
+          "deployed with a generation-checked coordinated handoff"
         echo 0 > "$FAIL_COUNT_FILE"
         exit 0
       fi
-      log "ERROR: coordinated handoff failed; aborting candidate and rolling back"
-      "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
-        abort-coordinated || true
-      if rollback_to_pin; then
+      log "ERROR: coordinated handoff failed; parking target before peer rollback"
+      "$BUN_BIN" "$supervisor_controller" park-coordinated || true
+      if rollback_coordinated_to_pin "$supervisor_controller"; then
         write_result false deploy "$(release_cmd current-sha)" "$current" \
-          "coordinated deploy of $target_sha failed; rolled back and healthy again"
+          "coordinated deploy of $target_sha failed; fail-closed rollback is healthy"
       else
         write_result false deploy "$(release_cmd current-sha 2>/dev/null || echo unknown)" "$current" \
-          "coordinated deploy of $target_sha failed; rollback failed"
+          "coordinated deploy of $target_sha failed; fail-closed rollback failed"
       fi
       exit 1
     fi

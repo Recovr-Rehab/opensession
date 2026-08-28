@@ -5,6 +5,7 @@ import {
   renderSessionKernelLauncher,
   renderSessionKernelPlist,
   renderSessionKernelUnit,
+  renderSocketUnit,
   renderUnit,
 } from "../scripts/lib/service";
 
@@ -13,9 +14,13 @@ const repoRoot = resolve(import.meta.dir, "..");
 describe("session kernel service deployment", () => {
   test("orders the authenticated actor before the gateway without coupling their stop lifecycle", async () => {
     const gateway = await renderUnit("system");
+    const socket = await renderSocketUnit("system");
     const actor = await Bun.file(
       resolve(repoRoot, "opensession-session-kernel.service"),
     ).text();
+    expect(gateway).toContain("Requires=opensession.socket");
+    expect(gateway).toContain("Sockets=opensession.socket");
+    expect(socket).toContain("ListenStream=127.0.0.1:3850");
     expect(gateway).toContain(
       "Wants=opensession-session-kernel.service opensession-executor.service",
     );
@@ -131,13 +136,11 @@ describe("session kernel service deployment", () => {
       resolve(repoRoot, "deploy/self-deploy.sh"),
     ).text();
     const prepare = selfDeploy.indexOf("prepare-coordinated");
-    const executor = selfDeploy.indexOf("refresh_executor", prepare);
-    const kernel = selfDeploy.indexOf("refresh_session_kernel", executor);
-    const activate = selfDeploy.indexOf("activate-coordinated", kernel);
+    const peers = selfDeploy.indexOf("refresh_protocol_peers", prepare);
+    const activate = selfDeploy.indexOf("activate-coordinated", peers);
     expect(prepare).toBeGreaterThan(0);
-    expect(executor).toBeGreaterThan(prepare);
-    expect(kernel).toBeGreaterThan(executor);
-    expect(activate).toBeGreaterThan(kernel);
+    expect(peers).toBeGreaterThan(prepare);
+    expect(activate).toBeGreaterThan(peers);
     expect(selfDeploy.slice(prepare, activate)).not.toContain("stop_gateway");
   });
 

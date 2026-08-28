@@ -21,9 +21,11 @@ import { READ_METHODS } from "./store-routing";
 import { workerEntry } from "../../runner-host/exe";
 import { chooseSessionLane, type LaneLoad } from "./lane-placement";
 import type { SessionKernelStoreHostMetrics } from "./store-host";
+import { runtimeGeneration } from "../runtime-generation";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3849;
+const RUNTIME_GENERATION = runtimeGeneration();
 // Must remain below the gateway transport's 8s fail-stop budget, including
 // quarantine/restart bookkeeping after an ambiguous lane turn.
 const ACTOR_RESPONSE_TIMEOUT_MS = 5_000;
@@ -886,6 +888,7 @@ export async function startSessionKernelService(
             ready,
             actorVersion: SESSION_KERNEL_ACTOR_VERSION,
             transportVersion: SESSION_KERNEL_TRANSPORT_VERSION,
+            generation: RUNTIME_GENERATION,
             workers: {
               ready: sessionSlots.filter((slot) => slot.ready).length,
               capacity: sessionSlots.length,

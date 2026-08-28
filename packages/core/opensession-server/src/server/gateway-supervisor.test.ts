@@ -11,9 +11,12 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   GatewaySupervisor,
+  inheritedGatewaySocketFd,
   type ManagedGateway,
   promoteGatewayCurrent,
+  readGatewayHandoffTransaction,
   spawnGateway,
+  writeGatewayHandoffTransaction,
   validateGatewayRelease,
 } from "./gateway-supervisor";
 
@@ -46,6 +49,12 @@ function controlledGateway(pid: number, releaseRoot: string, standby = false) {
 }
 
 describe("gateway supervisor", () => {
+  test("accepts only systemd descriptors addressed to this supervisor", () => {
+    expect(inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "1" }, 42)).toBe(3);
+    expect(inheritedGatewaySocketFd({ LISTEN_PID: "41", LISTEN_FDS: "1" }, 42)).toBeUndefined();
+    expect(inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "0" }, 42)).toBeUndefined();
+  });
+
   test("activates a preloaded candidate only after observing the old exit", async () => {
     const old = controlledGateway(1, "/releases/old");
     const candidate = controlledGateway(2, "/releases/new", true);
@@ -77,7 +86,7 @@ describe("gateway supervisor", () => {
 
     candidate.preload();
     await Bun.sleep(0);
-    expect(old.events).toEqual(["kill:15"]);
+    expect(old.events).toEqual(["kill:12"]);
     expect(candidate.events).toEqual([]);
 
     order.push("old-exited");
@@ -111,7 +120,7 @@ describe("gateway supervisor", () => {
     });
     candidate.preload();
     await Bun.sleep(0);
-    expect(old.events).toEqual(["kill:15"]);
+    expect(old.events).toEqual(["kill:12"]);
     old.finish(0);
     expect((await preparing).ok).toBe(true);
     expect(candidate.events).toEqual([]);
@@ -121,9 +130,53 @@ describe("gateway supervisor", () => {
     expect((await supervisor.activateCoordinated()).ok).toBe(true);
     expect(candidate.events[0]?.startsWith("activate:")).toBe(true);
     expect(order).toEqual(["promote:/releases/new", "ready"]);
+    expect(supervisor.commitCoordinated().ok).toBe(true);
   });
 
-  test("restores pointer and previous release when an activated candidate fails", async () => {
+  test("parks a failed coordinated candidate until previous peers are restored", async () => {
+    const old = controlledGateway(1, "/releases/old");
+    const candidate = controlledGateway(2, "/releases/new", true);
+    const rollback = controlledGateway(3, "/releases/old");
+    candidate.gateway.kill = (signal = 15) => {
+      candidate.events.push(`kill:${signal}`);
+      candidate.finish(1);
+    };
+    const promotions: string[] = [];
+    const supervisor = new GatewaySupervisor(old.gateway, {
+      spawn(_root, role) {
+        return role === "standby" ? candidate.gateway : rollback.gateway;
+      },
+      async waitReady(gateway) {
+        if (gateway === candidate.gateway) throw new Error("target generation failed");
+      },
+      validateRelease: (root) => root,
+      promoteCurrent(root) { promotions.push(root); },
+    });
+    const preparing = supervisor.prepareCoordinated({
+      type: "prepare_coordinated",
+      releaseRoot: "/releases/new",
+      sha: "f".repeat(40),
+    });
+    candidate.preload();
+    await Bun.sleep(0);
+    old.finish(0);
+    expect((await preparing).ok).toBe(true);
+
+    const activation = await supervisor.activateCoordinated();
+    expect(activation.ok).toBe(false);
+    expect(activation.phase).toBe("rollback-parked");
+    expect(promotions).toEqual(["/releases/new"]);
+    expect(supervisor.activeGateway()).toBe(candidate.gateway);
+
+    // The deploy controller restores old peers while no gateway is active,
+    // then the supervisor may safely admit the old gateway.
+    const aborted = await supervisor.abortCoordinated();
+    expect(aborted.ok).toBe(true);
+    expect(promotions).toEqual(["/releases/new", "/releases/old"]);
+    expect(supervisor.activeGateway()).toBe(rollback.gateway);
+  });
+
+  test("restores pointer and previous release when an activated gateway-only candidate fails", async () => {
     const old = controlledGateway(1, "/releases/old");
     const candidate = controlledGateway(2, "/releases/new", true);
     const rollback = controlledGateway(3, "/releases/old");
@@ -209,6 +262,21 @@ describe("gateway supervisor", () => {
     expect(existsSync(marker)).toBe(true);
     candidate.kill(9);
     await candidate.exited;
+  });
+
+  test("durably journals handoff authority with atomic replacement", () => {
+    const state = mkdtempSync(join(tmpdir(), "gateway-transaction-"));
+    writeGatewayHandoffTransaction({
+      phase: "parked",
+      targetRelease: "/releases/new",
+      previousRelease: "/releases/old",
+      candidatePid: 42,
+      updatedAt: new Date().toISOString(),
+    }, state);
+    expect(readGatewayHandoffTransaction(state)).toMatchObject({
+      phase: "parked",
+      candidatePid: 42,
+    });
   });
 
   test("atomically promotes the runtime pointer inside the handoff transaction", () => {

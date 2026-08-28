@@ -102,7 +102,11 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
     expect(unit).toContain("IPAddressDeny=169.254.169.254/32");
     expect(unit).toMatch(/^TimeoutStopSec=\d+$/m);
     expect(unit).toContain("[Install]");
-    expect(unit).toContain("Wants=opensession-executor.service");
+    expect(unit).toContain(
+      "Wants=opensession-session-kernel.service opensession-executor.service",
+    );
+    expect(unit).toContain("Requires=opensession.socket");
+    expect(unit).toContain("Sockets=opensession.socket");
     expect(unit).not.toContain("Requires=opensession-executor.service");
     expect(unit).toContain(
       "LoadCredential=executor-token:/etc/opensession/executor-token",

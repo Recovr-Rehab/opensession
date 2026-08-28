@@ -7,7 +7,6 @@ import {
 	deployStateDir,
 	formatDeployStatus,
 	isFrontendOnlyRelease,
-	isGatewayHandoffRelease,
 	markerAgeMs,
 	requiresRootDeploy,
 	parseDeployResult,
@@ -181,6 +180,7 @@ describe("requiresRootDeploy", () => {
 			"deploy/opensession-run-host",
 			"deploy/systemd/opensession-session-kernel.service.d/capacity.conf",
 			"opensession.service",
+			"opensession.socket",
 			"opensession-executor.service",
 			"opensession-session-kernel.service",
 		]) {
@@ -191,46 +191,6 @@ describe("requiresRootDeploy", () => {
 	test("does not escalate ordinary source, frontend, or documentation changes", () => {
 		expect(requiresRootDeploy([
 			"packages/core/opensession-server/src/server/routes/system.ts",
-			"packages/core/opensession-server/src/frontend/App.tsx",
-			"docs/self-development.md",
-		])).toBe(false);
-	});
-});
-
-describe("isGatewayHandoffRelease", () => {
-	test("accepts gateway runtime, frontend, tests, and documentation", () => {
-		expect(isGatewayHandoffRelease([
-			"packages/core/opensession-server/opensession.ts",
-			"packages/core/opensession-server/src/server/routes/system.ts",
-			"packages/core/opensession-server/src/frontend/App.tsx",
-			"packages/core/opensession-server/src/server/routes/system.test.ts",
-			"docs/self-development.md",
-		])).toBe(true);
-	});
-
-	test("fails closed for every protocol peer and dependency surface", () => {
-		for (const path of [
-			"package.json",
-			"bun.lock",
-			"packages/core/protocol/src/session.ts",
-			"packages/core/opensession-server/package.json",
-			"packages/core/opensession-server/src/executor/main.ts",
-			"packages/core/opensession-server/src/runner-host/host.ts",
-			"packages/core/opensession-server/src/session-kernel-service.ts",
-			"packages/core/opensession-server/src/server/session-kernel/runtime.ts",
-			"packages/core/opensession-server/src/server/run-rpc-protocol.ts",
-			"packages/core/opensession-server/src/server/paths.ts",
-			"packages/core/opensession-server/src/server/gateway-supervisor.ts",
-		]) {
-			expect(isGatewayHandoffRelease([
-				"packages/core/opensession-server/src/server/routes/system.ts",
-				path,
-			])).toBe(false);
-		}
-	});
-
-	test("requires an actual gateway runtime change", () => {
-		expect(isGatewayHandoffRelease([
 			"packages/core/opensession-server/src/frontend/App.tsx",
 			"docs/self-development.md",
 		])).toBe(false);

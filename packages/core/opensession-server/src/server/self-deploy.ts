@@ -197,6 +197,7 @@ const ROOT_DEPLOY_PATHS = new Set([
 	"deploy/install-resource-control.sh",
 	"deploy/opensession-run-host",
 	"opensession.service",
+	"opensession.socket",
 	"opensession-executor.service",
 	"opensession-session-kernel.service",
 ]);
@@ -224,40 +225,6 @@ export function isFrontendOnlyRelease(paths: string[]): boolean {
 		return false;
 	}
 	return hasFrontend;
-}
-
-const GATEWAY_PACKAGE = "packages/core/opensession-server/";
-const GATEWAY_HANDOFF_FILES = new Set([
-	`${GATEWAY_PACKAGE}opensession.ts`,
-	`${GATEWAY_PACKAGE}src/server/run-rpc.ts`,
-	`${GATEWAY_PACKAGE}src/server/self-deploy.ts`,
-	`${GATEWAY_PACKAGE}src/server/service-readiness.ts`,
-	`${GATEWAY_PACKAGE}src/server/shutdown-state.ts`,
-	`${GATEWAY_PACKAGE}src/server/ws-handlers.ts`,
-	`${GATEWAY_PACKAGE}src/server/ws-hub.ts`,
-]);
-
-/** A gateway-only release may overlap an old kernel/executor while the
- * supervisor drains the previous gateway. This is deliberately an allowlist:
- * helpers outside these gateway-owned surfaces may also be imported by a peer,
- * so uncertainty falls back to the coordinated rollout. */
-export function isGatewayHandoffRelease(paths: string[]): boolean {
-	let hasGatewayRuntime = false;
-	for (const path of paths) {
-		if (
-			path === "AGENTS.md" ||
-			path.startsWith("docs/") ||
-			path.endsWith(".test.ts") ||
-			path.endsWith(".spec.ts") ||
-			path.startsWith(`${GATEWAY_PACKAGE}src/frontend/`)
-		) continue;
-		if (
-			!GATEWAY_HANDOFF_FILES.has(path) &&
-			!path.startsWith(`${GATEWAY_PACKAGE}src/server/routes/`)
-		) return false;
-		hasGatewayRuntime = true;
-	}
-	return hasGatewayRuntime;
 }
 
 async function run(

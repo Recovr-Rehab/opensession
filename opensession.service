@@ -8,8 +8,9 @@ Description=Open Session - agent session dashboard
 # Wants (not Requires) lets the stable TCP supervisor remain bound while a
 # coordinated rollout replaces protocol peers; child readiness still fails
 # closed until the SessionKernel returns.
+Requires=opensession.socket
 Wants=opensession-session-kernel.service opensession-executor.service
-After=network.target opensession-session-kernel.service opensession-executor.service
+After=network.target opensession.socket opensession-session-kernel.service opensession-executor.service
 
 [Service]
 # Keep latency-sensitive HTTP, WebSocket, and orchestration work ahead of
@@ -21,6 +22,7 @@ Slice=opensession-control.slice
 # it explicitly.
 Environment="PATH=/home/ubuntu/.cargo/bin:/home/ubuntu/.bun/bin:/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Type=simple
+Sockets=opensession.socket
 User=ubuntu
 RuntimeDirectory=opensession-gateway
 RuntimeDirectoryMode=0700

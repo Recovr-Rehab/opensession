@@ -104,6 +104,7 @@ import { setServiceReadiness } from "./src/server/service-readiness";
 import {
 	acquireGatewayActivationLease,
 	waitForGatewayActivationIfStandby,
+	waitForRuntimePeerGeneration,
 } from "./src/server/gateway-activation";
 import {
 	reconcileSessionKernelOwnership,
@@ -141,6 +142,10 @@ function isLoopbackHostname(hostname: string): boolean {
 // proceed into even the earliest shared-state, socket, Worker, timer, or
 // integration effect until its parent explicitly activates the exact nonce.
 await waitForGatewayActivationIfStandby();
+// A release generation is admitted only when both protocol peers identify as
+// the exact same immutable release. This runs before the ownership lease and
+// every shared-state effect, so crash recovery cannot create a mixed cluster.
+await waitForRuntimePeerGeneration();
 // The OS lock is the final ownership fence. A supervisor crash or stale parent
 // can leave an old child serving, but no replacement may cross into effects
 // until that process has exited and released this lease.
@@ -1048,6 +1053,9 @@ if (!g.__opensessionBooted) {
 	// not lost work. Must stay below the unit's TimeoutStopSec (80s), or
 	// systemd SIGKILLs the process mid-drain.
 	const DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_MS || "10000");
+	const HANDOFF_DRAIN_TIMEOUT_MS = parseInt(
+		process.env.HANDOFF_SHUTDOWN_DRAIN_MS || "1000",
+	);
 	let shuttingDown = false;
 	const gracefulShutdown = async (signal: string) => {
 		if (shuttingDown) return;
@@ -1128,7 +1136,10 @@ if (!g.__opensessionBooted) {
 				activeAutomationPreparationCount(),
 				Math.max(0, activeAgentRunCount() - activeDetachedAgentRunCount()),
 			);
-		const deadline = timersDead ? 0 : Date.now() + DRAIN_TIMEOUT_MS;
+		const drainTimeoutMs = signal === "SIGUSR2"
+			? HANDOFF_DRAIN_TIMEOUT_MS
+			: DRAIN_TIMEOUT_MS;
+		const deadline = timersDead ? 0 : Date.now() + drainTimeoutMs;
 		let n = undrainable();
 		while (n > 0 && Date.now() < deadline) {
 			console.log(`[shutdown] waiting on ${n} in-flight run(s)…`);
@@ -1137,7 +1148,7 @@ if (!g.__opensessionBooted) {
 		}
 		if (n > 0) {
 			console.log(
-				`[shutdown] ${n} run(s) still active after ${DRAIN_TIMEOUT_MS}ms — the journal will resume them on restart`,
+				`[shutdown] ${n} run(s) still active after ${drainTimeoutMs}ms — the journal will resume them on restart`,
 			);
 		} else {
 			console.log("[shutdown] all in-flight runs drained cleanly");
@@ -1158,6 +1169,7 @@ if (!g.__opensessionBooted) {
 	};
 	process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
 	process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
+	process.on("SIGUSR2", () => void gracefulShutdown("SIGUSR2"));
 	// The run-ws timer-poison tripwire calls this when timer death is confirmed:
 	// same snapshot+exit path as a signal, and the
 	// timersDead branch above keeps it free of timed waits. systemd's

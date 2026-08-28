@@ -5,6 +5,7 @@ import {
   acquireGatewayActivationLease,
   gatewayRole,
   waitForGatewayActivationIfStandby,
+  waitForRuntimePeerGeneration,
   type GatewayPreloadedMessage,
 } from "./gateway-activation";
 
@@ -79,9 +80,11 @@ describe("gateway activation preload barrier", () => {
   test("entrypoint waits before every production boot effect", async () => {
     const entry = await Bun.file(resolve(import.meta.dir, "../../opensession.ts")).text();
     const barrier = entry.indexOf("await waitForGatewayActivationIfStandby()");
+    const peers = entry.indexOf("await waitForRuntimePeerGeneration()");
     const lease = entry.indexOf("await acquireGatewayActivationLease");
     expect(barrier).toBeGreaterThan(0);
-    expect(lease).toBeGreaterThan(barrier);
+    expect(peers).toBeGreaterThan(barrier);
+    expect(lease).toBeGreaterThan(peers);
     expect(entry).not.toContain("}, 1500);");
     for (const effect of [
       "devInstanceBootError()",
@@ -94,6 +97,18 @@ describe("gateway activation preload barrier", () => {
     ]) {
       expect(entry.indexOf(effect)).toBeGreaterThan(lease);
     }
+  });
+
+  test("admits effects only when both peers report the exact release generation", async () => {
+    const generation = "a".repeat(40);
+    await expect(waitForRuntimePeerGeneration({
+      env: { OPENSESSION_RELEASE_GENERATION: generation },
+      fetchReady: async () => Response.json({ generation }),
+      readReadyFile: () => JSON.stringify({ pid: 7, generation }),
+    })).resolves.toBeUndefined();
+    await expect(waitForRuntimePeerGeneration({
+      env: { OPENSESSION_RELEASE_GENERATION: "not-a-sha" },
+    })).rejects.toThrow("Invalid OPENSESSION_RELEASE_GENERATION");
   });
 
   test("holds an OS lease until explicit release", async () => {

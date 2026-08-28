@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { startGatewayTcpProxy } from "./gateway-tcp-proxy";
+import {
+  createGatewayTcpProxyMetrics,
+  startGatewayTcpProxy,
+} from "./gateway-tcp-proxy";
 
 const servers: Array<{ stop(closeActiveConnections?: boolean): void }> = [];
 
@@ -54,12 +57,14 @@ describe("gateway TCP proxy", () => {
   test("keeps the public listener while the selected backend changes", async () => {
     const first = backend("first");
     let backendPort = first.port!;
+    const metrics = createGatewayTcpProxyMetrics();
     const proxy = startGatewayTcpProxy({
       hostname: "127.0.0.1",
       port: 0,
       backendPort: () => backendPort,
       retryMs: 5,
       connectDeadlineMs: 1_000,
+      metrics,
     });
     servers.push(proxy);
 
@@ -74,5 +79,9 @@ describe("gateway TCP proxy", () => {
 
     expect(await waiting).toBe("second");
     expect(proxy.port).toBeGreaterThan(0);
+    expect(metrics.accepted).toBe(2);
+    expect(metrics.connected).toBe(2);
+    expect(metrics.retries).toBeGreaterThan(0);
+    expect(metrics.maxConnectWaitMs).toBeGreaterThan(0);
   });
 });

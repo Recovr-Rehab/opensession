@@ -1,4 +1,4 @@
-import { mkdirSync } from "fs";
+import { mkdirSync, readFileSync } from "fs";
 import { dirname } from "path";
 
 /**
@@ -126,6 +126,45 @@ export async function acquireGatewayActivationLease(options: {
       await lease.exited;
     },
   };
+}
+
+export async function waitForRuntimePeerGeneration(options: {
+  env?: GatewayEnvironment;
+  fetchReady?: (url: string) => Promise<Response>;
+  readReadyFile?: (path: string) => string;
+  sleep?: (ms: number) => Promise<void>;
+  timeoutMs?: number;
+} = {}): Promise<void> {
+  const env = options.env ?? process.env;
+  const expected = env.OPENSESSION_RELEASE_GENERATION?.trim();
+  if (!expected || expected === "development") return;
+  if (!/^[0-9a-f]{40,64}$/.test(expected)) {
+    throw new Error("Invalid OPENSESSION_RELEASE_GENERATION");
+  }
+  const fetchReady = options.fetchReady ?? ((url: string) =>
+    fetch(url, { signal: AbortSignal.timeout(1_000) }));
+  const readReadyFile = options.readReadyFile ?? ((path: string) => readFileSync(path, "utf8"));
+  const sleep = options.sleep ?? Bun.sleep;
+  const deadline = Date.now() + (options.timeoutMs ?? 60_000);
+  const kernelUrl = new URL(
+    "/ready",
+    env.OPENSESSION_SESSION_KERNEL_URL ?? "http://127.0.0.1:3849",
+  ).toString();
+  const executorReadyFile = env.OPENSESSION_EXECUTOR_READY_FILE ?? "/run/opensession-executor/ready";
+
+  while (Date.now() < deadline) {
+    try {
+      const [kernel, executorText] = await Promise.all([
+        fetchReady(kernelUrl).then(async (response) =>
+          response.ok ? await response.json() as { generation?: string } : null),
+        Promise.resolve().then(() => readReadyFile(executorReadyFile)),
+      ]);
+      const executor = JSON.parse(executorText) as { generation?: string };
+      if (kernel?.generation === expected && executor.generation === expected) return;
+    } catch {}
+    await sleep(100);
+  }
+  throw new Error(`Runtime peers did not reach release generation ${expected.slice(0, 10)}`);
 }
 
 export async function waitForGatewayActivationIfStandby(options: {

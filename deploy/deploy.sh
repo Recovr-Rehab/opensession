@@ -78,10 +78,20 @@ run_release() {
 }
 
 executor_ready() {
-  local ready_pid main_pid
-  ready_pid="$(cat /run/opensession-executor/ready 2>/dev/null || true)"
+  local ready main_pid generation
+  ready="$(cat /run/opensession-executor/ready 2>/dev/null || true)"
   main_pid="$(systemctl show -p MainPID --value opensession-executor.service 2>/dev/null || true)"
-  [ -n "$ready_pid" ] && [ "$ready_pid" = "$main_pid" ]
+  generation="$(cat "$CURRENT_LINK/.opensession-release" 2>/dev/null || true)"
+  [ -n "$main_pid" ] \
+    && printf '%s' "$ready" | grep -Fq "\"pid\":$main_pid" \
+    && printf '%s' "$ready" | grep -Fq "\"generation\":\"$generation\""
+}
+
+session_kernel_ready() {
+  local generation body
+  generation="$(cat "$CURRENT_LINK/.opensession-release" 2>/dev/null || true)"
+  body="$(curl -fs --max-time 2 http://127.0.0.1:3849/ready 2>/dev/null || true)"
+  [ -n "$generation" ] && printf '%s' "$body" | grep -Fq "\"generation\":\"$generation\""
 }
 
 run_as_service_user mkdir -p "$DEPLOY_STATE"
@@ -109,6 +119,24 @@ RELEASE_DIR="$(run_release prepare-frontend "$TARGET_COMMIT")"
 # From here on, every source artifact comes from the exact prepared commit.
 # SOURCE_DIR remains only the git object source and the place agents do WIP.
 REPO_DIR="$RELEASE_DIR"
+CANARY_DIR="$DEPLOY_STATE/results"
+CANARY_FILE="$CANARY_DIR/$(date -u +%Y%m%dT%H%M%SZ)-root-canary-${TARGET_COMMIT:0:10}.json"
+install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0700 "$CANARY_DIR"
+run_as_service_user "$SERVICE_BUN" "$REPO_DIR/scripts/deploy-canary.ts" \
+  "${HEALTH_URL%/ready}/live" "$CANARY_FILE" &
+CANARY_PID=$!
+stop_canary() {
+  if [ -n "${CANARY_PID:-}" ]; then
+    kill -TERM "$CANARY_PID" 2>/dev/null || true
+    wait "$CANARY_PID" 2>/dev/null || true
+    CANARY_PID=""
+    if [ -s "$CANARY_FILE" ]; then
+      echo "[deploy] canary: $(tr '\n' ' ' < "$CANARY_FILE")"
+    fi
+  fi
+}
+trap stop_canary EXIT
+
 if [ -z "$PREVIOUS_HEAD" ]; then
   # Bootstrap the stable path before installing helpers that validate it. No
   # running service points here yet, so this is not the lifecycle cut-over.
@@ -145,6 +173,18 @@ if ! cmp -s "$GATEWAY_UNIT_RENDERED" /etc/systemd/system/opensession.service; th
   GATEWAY_UNIT_NEEDS_SYNC=1
   RESTART_GATEWAY=1
 fi
+
+# Install the socket unit before cut-over. On the bootstrap release it can only
+# be started after the legacy supervisor releases port 3850; afterwards PID 1
+# retains this listener across every service restart.
+SOCKET_UNIT_SOURCE="$REPO_DIR/opensession.socket"
+SOCKET_UNIT_PATH="/etc/systemd/system/opensession.socket"
+if ! cmp -s "$SOCKET_UNIT_SOURCE" "$SOCKET_UNIT_PATH"; then
+  install -o root -g root -m 0644 "$SOCKET_UNIT_SOURCE" "$SOCKET_UNIT_PATH"
+  systemctl daemon-reload
+fi
+SOCKET_ACTIVE=0
+if systemctl is-active --quiet opensession.socket; then SOCKET_ACTIVE=1; fi
 
 EXECUTOR_TOKEN_PATH="/etc/opensession/executor-token"
 "$REPO_DIR/deploy/install-executor-credential.sh" "$EXECUTOR_TOKEN_PATH"
@@ -376,6 +416,11 @@ fi
 if [ "$RESTART_KERNEL" = "1" ]; then
   echo "[deploy] stopping gateway before replacing its actor protocol peer"
   systemctl stop opensession.service
+  if [ "$SOCKET_ACTIVE" = "0" ]; then
+    echo "[deploy] activating the persistent gateway socket"
+    systemctl enable --now opensession.socket
+    SOCKET_ACTIVE=1
+  fi
   systemctl stop opensession-session-kernel.service
   echo "[deploy] migrating legacy session-kernel rows offline"
   run_as_service_user env \
@@ -418,13 +463,13 @@ elif ! systemctl is-active --quiet opensession-session-kernel.service; then
 fi
 for _ in $(seq 1 30); do
   if systemctl is-active --quiet opensession-session-kernel.service \
-    && curl -fs --max-time 2 http://127.0.0.1:3849/ready >/dev/null 2>&1; then
+    && session_kernel_ready; then
     break
   fi
   sleep 1
 done
 if ! systemctl is-active --quiet opensession-session-kernel.service \
-  || ! curl -fs --max-time 2 http://127.0.0.1:3849/ready >/dev/null 2>&1; then
+  || ! session_kernel_ready; then
   echo "[deploy] ERROR: session kernel actor service did not become healthy" >&2
   rollback_release || true
   exit 1
