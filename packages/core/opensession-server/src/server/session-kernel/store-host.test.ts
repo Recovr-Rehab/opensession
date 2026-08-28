@@ -980,15 +980,15 @@ describe("per-session session kernel storage", () => {
       }]);
     }
 
-    const first = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
-    const second = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
+    const passes = Array.from(
+      { length: 12 },
+      () => host.runtimeWork(Date.now(), ["known_timer"], [], 100),
+    );
 
-    expect(first.timers).toHaveLength(16);
-    expect(second.timers).toHaveLength(16);
-    expect(new Set([
-      ...first.timers.map((timer) => timer.sessionId),
-      ...second.timers.map((timer) => timer.sessionId),
-    ]).size).toBe(24);
+    expect(passes.every((pass) => pass.timers.length === 4)).toBe(true);
+    expect(new Set(
+      passes.flatMap((pass) => pass.timers.map((timer) => timer.sessionId)),
+    ).size).toBe(24);
     host.close();
   }, 30_000);
 

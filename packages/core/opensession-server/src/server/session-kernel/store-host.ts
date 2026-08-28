@@ -21,7 +21,7 @@ const CENTRAL_STORE_FAILURE = "SESSION_KERNEL_CENTRAL_STORE_FAILURE";
 // commands. Keep every turn small: the cursor makes progress across calls,
 // while a bounded slice prevents startup recovery from opening hundreds of
 // SQLite databases behind one global barrier.
-const RUNTIME_WAKE_CANDIDATE_BATCH = 16;
+const RUNTIME_WAKE_CANDIDATE_BATCH = 4;
 
 export type SessionKernelStoreHostMetrics = {
   kernelStoreCacheMisses: number;
