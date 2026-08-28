@@ -55,7 +55,17 @@ export function NewSessionPrPicker({
 
 	useEffect(() => {
 		if (!open || repo === NO_REPO) return;
-		const frame = requestAnimationFrame(() => searchRef.current?.focus());
+		let frame = 0;
+		let attempts = 0;
+		const focusSearch = () => {
+			if (searchRef.current) {
+				searchRef.current.focus();
+				return;
+			}
+			attempts += 1;
+			if (attempts < 5) frame = requestAnimationFrame(focusSearch);
+		};
+		frame = requestAnimationFrame(focusSearch);
 		return () => cancelAnimationFrame(frame);
 	}, [open, repo]);
 
