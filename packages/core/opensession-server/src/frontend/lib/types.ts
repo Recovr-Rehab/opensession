@@ -847,7 +847,18 @@ export type WSClientMessage =
   // showing this person's face to teammates.
   | { type: "away"; away: boolean }
   // Short-lived composer activity. The server expires it unless refreshed.
-  | { type: "typing"; sessionId: string; typing: boolean };
+  | { type: "typing"; sessionId: string; typing: boolean }
+  // Interactive shell frames. The terminal tab multiplexes PTYs by termId.
+  | {
+      type: "term_start";
+      sessionId: string;
+      termId: string;
+      cols: number;
+      rows: number;
+    }
+  | { type: "term_input"; termId: string; data: string }
+  | { type: "term_resize"; termId: string; cols: number; rows: number }
+  | { type: "term_stop"; termId: string };
 
 export type WSServerMessage =
   // The protocol core: hello/pong/error/notice, the transcript frames (init/
