@@ -1693,6 +1693,7 @@ pendingDraftParks.delete(operation);
                 worth being loud about. */}
             {!workspaceId && forceMode !== "scratch" && (
               <NewSessionPrPicker
+                repo={repo}
                 selected={selectedPullRequest}
                 disabled={busy}
                 onSelect={(pullRequest) => {
