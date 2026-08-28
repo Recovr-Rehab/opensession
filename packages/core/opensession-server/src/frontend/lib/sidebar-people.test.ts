@@ -99,6 +99,24 @@ describe("sidebar person sessions", () => {
 		]);
 	});
 
+	test("excludes sessions already kept in personal sidebar lanes", () => {
+		const groups = sidebarPersonSessions(
+			[session("available"), session("kept")],
+			roster,
+			"Kent",
+			NOW,
+			new Map(),
+			new Set(["kept"]),
+		);
+
+		expect(groups[0]?.activeSessions.map((item) => item.id)).toEqual([
+			"available",
+		]);
+		expect(groups[0]?.allSessions.map((item) => item.id)).toEqual([
+			"available",
+		]);
+	});
+
 	test("uses the directory boundary and excludes the signed-in person", () => {
 		const groups = sidebarPersonSessions(
 			[

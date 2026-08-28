@@ -45,7 +45,9 @@ export function sessionIsRecentlyActive(
  * their configured teammate.
  *
  * Sessions retain the incoming order, which lets the caller choose one sort
- * for both the compact and expanded lists.
+ * for both the compact and expanded lists. Sessions already kept in personal
+ * lanes are omitted so Team remains the place to discover work that is not yet
+ * in your sidebar.
  */
 export function sidebarPersonSessions(
 	sessions: UnifiedSession[],
@@ -53,13 +55,15 @@ export function sidebarPersonSessions(
 	currentUser: string,
 	nowMs: number,
 	automationOwners: ReadonlyMap<string, string | undefined> = new Map(),
+	keptSessionIds: ReadonlySet<string> = new Set(),
 ): SidebarPersonSessions[] {
 	const canonical = canonicalNames(roster);
 	const currentUserKey = ownerKey(currentUser, canonical);
 	const groups = new Map<string, SidebarPersonSessions>();
 
 	for (const session of sessions) {
-		if (session.archived || session.desk) continue;
+		if (session.archived || session.desk || keptSessionIds.has(session.id))
+			continue;
 
 		let key: string;
 		let label: string | null;

@@ -1470,7 +1470,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// the complete live list at the bottom. The server's sidebar projection adds
 	// every live or just-finished run to `sessions`; the directory boundary here
 	// turns only real teammates into headings and files unowned automations under
-	// the Agent person.
+	// the Agent person. A session kept in a personal lane leaves Team, so every
+	// row here can always offer “Add to your sidebar” without rendering twice.
 	const activePersonGroups = sidebarPersonSessions(
 		sessions,
 		roster,
@@ -1481,6 +1482,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				name,
 				overview.owner,
 			]),
+		),
+		new Set(
+			sessions.filter((session) => isClaimed(session)).map((session) => session.id),
 		),
 	);
 

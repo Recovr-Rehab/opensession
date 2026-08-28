@@ -1189,6 +1189,20 @@ export function IconInbox(p: IconProps) {
   );
 }
 
+export function IconInboxPlus(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M5.25 10.25L7.05 5.85C7.357 5.121 8.07 4.75 8.861 4.75H15.139C15.93 4.75 16.643 5.121 16.95 5.85L18.75 10.25V17.25C18.75 18.3546 17.8546 19.25 16.75 19.25H7.25C6.14543 19.25 5.25 18.3546 5.25 17.25V10.25Z"
+      />
+      <path {...stroke} d="M5.25 10.25H9.25L10.25 12.25H13.75L14.75 10.25H18.75" />
+      <path {...stroke} d="M15 12.75V17.25" />
+      <path {...stroke} d="M12.75 15H17.25" />
+    </Svg>
+  );
+}
+
 export function IconStack(p: IconProps) {
   return (
     <Svg {...p}>
