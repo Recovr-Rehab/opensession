@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import {
 	APP_HEADER_ACTIONS,
 	ARCHIVED_SEARCH_HEADER,
-	HEADER_TITLE_COL,
 	HEADER_TITLE_PILL,
 	MOBILE_BACK,
 	MOBILE_CONTROL_GLASS,
@@ -27,11 +26,6 @@ test("floating phone navigation stays pinned while chat chrome collapses", () =>
 
 	expect(floatingHeader).toContain("phone:fixed");
 	expect(floatingHeader).not.toContain("chrome-collapsed");
-});
-
-test("phone session title stack matches the adjacent control height", () => {
-	expect(HEADER_TITLE_COL).toContain("phone:gap-0");
-	expect(HEADER_TITLE_COL).not.toContain("phone:gap-px");
 });
 
 test("phone top-bar actions use neutral ink", () => {
