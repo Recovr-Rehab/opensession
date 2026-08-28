@@ -128,8 +128,12 @@ describe("gateway supervisor", () => {
     const old = controlledGateway(1, "/releases/old");
     const candidate = controlledGateway(2, "/releases/new", true);
     const order: string[] = [];
+    let selectedPeers: { kernel: string; executor: string } | undefined;
     const supervisor = new GatewaySupervisor(old.gateway, {
-      spawn: () => candidate.gateway,
+      spawn(_root, _role, _nonce, peerGenerations) {
+        selectedPeers = peerGenerations;
+        return candidate.gateway;
+      },
       async waitReady() { order.push("ready"); },
       validateRelease: (root) => root,
       promoteCurrent(root) { order.push(`promote:${root}`); },
@@ -138,6 +142,8 @@ describe("gateway supervisor", () => {
       type: "prepare_coordinated",
       releaseRoot: "/releases/new",
       sha: "e".repeat(40),
+      kernelGeneration: "a".repeat(40),
+      executorGeneration: "b".repeat(40),
     });
     candidate.preload();
     await Bun.sleep(0);
@@ -145,6 +151,10 @@ describe("gateway supervisor", () => {
     old.finish(0);
     expect((await preparing).ok).toBe(true);
     expect(candidate.events).toEqual([]);
+    expect(selectedPeers).toEqual({
+      kernel: "a".repeat(40),
+      executor: "b".repeat(40),
+    });
     expect(supervisor.activeGateway()).toBe(candidate.gateway);
     expect(order).toEqual(["promote:/releases/new"]);
 

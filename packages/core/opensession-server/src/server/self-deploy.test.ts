@@ -250,6 +250,9 @@ describe("deploy/self-deploy.sh", () => {
 		expect(script).toContain("DEPLOY_COALESCE_SECS:-15");
 		expect(script).toContain("DEPLOY_COALESCE_MAX_SECS:-60");
 		expect(script).toContain('quiet_deadline=$((now + DEPLOY_COALESCE_SECS))');
+		expect(script).toContain('restart_kernel=1 restart_executor_peer=1');
+		expect(script).toContain('refresh_protocol_peers "$restart_executor_peer" "$restart_kernel"');
+		expect(script).toContain('"$release_dir" "$target_sha" "$kernel_generation" "$executor_generation"');
 	});
 
 	test("the server launches through the fixed privileged helper", async () => {

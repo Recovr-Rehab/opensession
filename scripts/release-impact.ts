@@ -62,24 +62,55 @@ async function combinedClosure(
   return new Set([...before, ...after]);
 }
 
+export type RuntimeComponents = {
+  gateway: boolean;
+  supervisor: boolean;
+  kernel: boolean;
+  executor: boolean;
+};
+
+export function classifyRuntimeComponents(
+  runtimePaths: string[],
+  closures: { gateway: Set<string>; kernel: Set<string>; executor: Set<string> },
+): RuntimeComponents {
+  const components: RuntimeComponents = {
+    gateway: runtimePaths.length > 0,
+    supervisor: runtimePaths.includes(
+      "packages/core/opensession-server/src/server/gateway-supervisor.ts",
+    ),
+    kernel: false,
+    executor: false,
+  };
+  for (const path of runtimePaths) {
+    if (
+      path === "package.json" || path === "bun.lock" ||
+      path.startsWith("packages/core/protocol/")
+    ) {
+      components.kernel = true;
+      components.executor = true;
+      continue;
+    }
+    const known = closures.gateway.has(path) || closures.kernel.has(path) || closures.executor.has(path);
+    components.kernel ||= closures.kernel.has(path);
+    components.executor ||= closures.executor.has(path);
+    if (!known) {
+      // Unknown runtime ownership stays fail-closed.
+      components.kernel = true;
+      components.executor = true;
+    }
+  }
+  return components;
+}
+
 export function classifyRuntimeImpact(
   runtimePaths: string[],
   closures: { gateway: Set<string>; kernel: Set<string>; executor: Set<string> },
 ): "gateway-handoff" | "supervisor-restart" | "coordinated" | "coordinated-supervisor-restart" {
-  if (runtimePaths.some((path) =>
-    path === "package.json" || path === "bun.lock" || path.startsWith("packages/core/protocol/"))) {
-    return "coordinated";
+  const components = classifyRuntimeComponents(runtimePaths, closures);
+  if (components.kernel || components.executor) {
+    return components.supervisor ? "coordinated-supervisor-restart" : "coordinated";
   }
-  const changesSupervisor = runtimePaths.includes(
-    "packages/core/opensession-server/src/server/gateway-supervisor.ts",
-  );
-  if (runtimePaths.some((path) => closures.kernel.has(path) || closures.executor.has(path))) {
-    return changesSupervisor ? "coordinated-supervisor-restart" : "coordinated";
-  }
-  if (changesSupervisor) return "supervisor-restart";
-  return runtimePaths.every((path) => closures.gateway.has(path))
-    ? "gateway-handoff"
-    : "coordinated";
+  return components.supervisor ? "supervisor-restart" : "gateway-handoff";
 }
 
 export async function classifyReleaseImpact(options: {
@@ -88,7 +119,12 @@ export async function classifyReleaseImpact(options: {
   checkout: string;
   fromSha: string;
   toSha: string;
-}): Promise<{ impact: ReleaseImpact; paths: string[]; closures: Record<string, number> }> {
+}): Promise<{
+  impact: ReleaseImpact;
+  paths: string[];
+  closures: Record<string, number>;
+  components?: RuntimeComponents;
+}> {
   const paths = await changedPaths(options.checkout, options.fromSha, options.toSha);
   if (requiresRootDeploy(paths)) return { impact: "root", paths, closures: {} };
   if (isFrontendOnlyRelease(paths)) return { impact: "frontend-only", paths, closures: {} };
@@ -107,10 +143,12 @@ export async function classifyReleaseImpact(options: {
     combinedClosure(options.fromRoot, options.toRoot, ENTRIES.executor),
   ]);
   const closureSizes = { gateway: gateway.size, kernel: kernel.size, executor: executor.size };
+  const components = classifyRuntimeComponents(runtimePaths, { gateway, kernel, executor });
   return {
     impact: classifyRuntimeImpact(runtimePaths, { gateway, kernel, executor }),
     paths,
     closures: closureSizes,
+    components,
   };
 }
 

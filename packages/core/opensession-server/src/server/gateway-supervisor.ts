@@ -48,6 +48,13 @@ type HandoffRequest = {
   type: "handoff" | "prepare_coordinated";
   releaseRoot: string;
   sha: string;
+  kernelGeneration?: string;
+  executorGeneration?: string;
+};
+
+type PeerGenerations = {
+  kernel: string;
+  executor: string;
 };
 
 type CoordinatedRequest = {
@@ -99,7 +106,7 @@ export interface GatewaySupervisorDependencies {
     releaseRoot: string,
     role: "active" | "standby",
     nonce?: string,
-    peerGeneration?: string,
+    peerGenerations?: PeerGenerations,
   ): ManagedGateway;
   waitReady(gateway: ManagedGateway): Promise<void>;
   validateRelease(releaseRoot: string, sha: string): string;
@@ -351,7 +358,17 @@ export class GatewaySupervisor {
     const releaseRoot = this.dependencies.validateRelease(request.releaseRoot, request.sha);
     const previous = this.active;
     const nonce = crypto.randomUUID();
-    const candidate = this.dependencies.spawn(releaseRoot, "standby", nonce);
+    const targetGeneration = request.sha;
+    const peerGenerations = {
+      kernel: request.kernelGeneration || targetGeneration,
+      executor: request.executorGeneration || targetGeneration,
+    };
+    for (const generation of Object.values(peerGenerations)) {
+      if (!/^[0-9a-f]{40,64}$/.test(generation)) {
+        return { ok: false, message: "invalid coordinated peer generation" };
+      }
+    }
+    const candidate = this.dependencies.spawn(releaseRoot, "standby", nonce, peerGenerations);
     this.standby = candidate;
     let previousExited = false;
     try {
@@ -436,7 +453,10 @@ export class GatewaySupervisor {
       releaseRoot,
       "standby",
       nonce,
-      releaseGeneration(previous.releaseRoot),
+      {
+        kernel: releaseGeneration(previous.releaseRoot),
+        executor: releaseGeneration(previous.releaseRoot),
+      },
     );
     this.standby = candidate;
     let previousExited = false;
@@ -577,7 +597,7 @@ export function spawnGateway(
   releaseRoot: string,
   role: "active" | "standby",
   nonce?: string,
-  peerGeneration?: string,
+  peerGenerations?: PeerGenerations,
   entry = "packages/core/opensession-server/opensession.ts",
 ): ManagedGateway {
   const preloaded = deferred();
@@ -595,7 +615,8 @@ export function spawnGateway(
         OPENSESSION_GATEWAY_BACKEND_HOST: BACKEND_HOST,
         OPENSESSION_GATEWAY_BACKEND_PORT: String(backendPort),
         OPENSESSION_RELEASE_GENERATION: generation,
-        OPENSESSION_PEER_GENERATION: peerGeneration ?? generation,
+        OPENSESSION_KERNEL_GENERATION: peerGenerations?.kernel ?? generation,
+        OPENSESSION_EXECUTOR_GENERATION: peerGenerations?.executor ?? generation,
         ...(nonce ? { OPENSESSION_GATEWAY_NONCE: nonce } : {}),
       },
       stdin: "ignore",
@@ -909,7 +930,13 @@ if (import.meta.main) {
     const request: HandoffRequest | CoordinatedRequest = action === "handoff"
       ? { type: "handoff", releaseRoot, sha }
       : action === "prepare-coordinated"
-        ? { type: "prepare_coordinated", releaseRoot, sha }
+        ? {
+            type: "prepare_coordinated",
+            releaseRoot,
+            sha,
+            kernelGeneration: process.argv[5] || undefined,
+            executorGeneration: process.argv[6] || undefined,
+          }
         : action === "activate-coordinated"
           ? { type: "activate_coordinated" }
           : action === "park-coordinated"

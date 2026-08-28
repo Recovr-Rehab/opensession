@@ -334,13 +334,18 @@ refresh_session_kernel() {
 }
 
 refresh_protocol_peers() {
-  local allow_unhealthy_kernel="${1:-0}" executor_pid kernel_pid failed=0
-  refresh_executor &
-  executor_pid=$!
-  refresh_session_kernel "$allow_unhealthy_kernel" &
-  kernel_pid=$!
-  if ! wait "$executor_pid"; then failed=1; fi
-  if ! wait "$kernel_pid"; then failed=1; fi
+  local refresh_executor_peer="${1:-1}" refresh_kernel_peer="${2:-1}"
+  local allow_unhealthy_kernel="${3:-0}" executor_pid="" kernel_pid="" failed=0
+  if [ "$refresh_executor_peer" = "1" ]; then
+    refresh_executor &
+    executor_pid=$!
+  fi
+  if [ "$refresh_kernel_peer" = "1" ]; then
+    refresh_session_kernel "$allow_unhealthy_kernel" &
+    kernel_pid=$!
+  fi
+  if [ -n "$executor_pid" ] && ! wait "$executor_pid"; then failed=1; fi
+  if [ -n "$kernel_pid" ] && ! wait "$kernel_pid"; then failed=1; fi
   return "$failed"
 }
 
@@ -510,7 +515,7 @@ rollback_coordinated_to_pin() {
     log "rolling back coordinated pointer: ${head_now:0:10} -> ${pin:0:10}"
     release_cmd switch "$pin"
   fi
-  refresh_protocol_peers 1 || return 1
+  refresh_protocol_peers 1 1 1 || return 1
   if ! "$BUN_BIN" "$controller" abort-coordinated; then
     log "ERROR: supervisor refused previous gateway after peer rollback"
     return 1
@@ -662,9 +667,9 @@ do_deploy() {
   # candidate preloads behind IPC, the old process drains while it still owns
   # the listener and OS lease, and activation is sent only after its exit is
   # observed. Peer/protocol/dependency changes stay on the coordinated path.
-  local release_impact="coordinated"
+  local release_impact="coordinated" restart_kernel=1 restart_executor_peer=1
+  local impact_manifest="$RESULTS_DIR/$(date -u +%Y%m%dT%H%M%SZ)-impact-${target_sha:0:10}.json"
   if [ -S /run/opensession-gateway/control.sock ]; then
-    local impact_manifest="$RESULTS_DIR/$(date -u +%Y%m%dT%H%M%SZ)-impact-${target_sha:0:10}.json"
     release_impact="$(
       OPENSESSION_RELEASE_IMPACT_MANIFEST="$impact_manifest" \
       "$BUN_BIN" "$release_dir/scripts/release-impact.ts" \
@@ -672,6 +677,12 @@ do_deploy() {
         2>/dev/null || echo coordinated
     )"
     log "generated release impact: $release_impact ($impact_manifest)"
+    if [ -s "$impact_manifest" ]; then
+      grep -Eq '"kernel"[[:space:]]*:[[:space:]]*true' "$impact_manifest" \
+        || restart_kernel=0
+      grep -Eq '"executor"[[:space:]]*:[[:space:]]*true' "$impact_manifest" \
+        || restart_executor_peer=0
+    fi
   fi
   if [ "$release_impact" = "root" ]; then
     log "ERROR: release changes root-owned lifecycle artifacts; use deploy/deploy.sh"
@@ -741,9 +752,13 @@ do_deploy() {
   if [ -S /run/opensession-gateway/control.sock ]; then
     write_marker
     local supervisor_controller="$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts"
-    if "$BUN_BIN" "$supervisor_controller" prepare-coordinated "$release_dir" "$target_sha"; then
-      record_kernel_schema_floor
-      if refresh_protocol_peers \
+    local kernel_generation="$current" executor_generation="$current"
+    [ "$restart_kernel" = "1" ] && kernel_generation="$target_sha"
+    [ "$restart_executor_peer" = "1" ] && executor_generation="$target_sha"
+    if "$BUN_BIN" "$supervisor_controller" prepare-coordinated \
+      "$release_dir" "$target_sha" "$kernel_generation" "$executor_generation"; then
+      if [ "$restart_kernel" = "1" ]; then record_kernel_schema_floor; fi
+      if refresh_protocol_peers "$restart_executor_peer" "$restart_kernel" \
         && "$BUN_BIN" "$supervisor_controller" activate-coordinated \
         && poll_health \
         && "$BUN_BIN" "$supervisor_controller" commit-coordinated; then

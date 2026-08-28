@@ -99,16 +99,21 @@ describe("gateway activation preload barrier", () => {
     }
   });
 
-  test("admits effects only when both peers report the exact release generation", async () => {
-    const generation = "a".repeat(40);
+  test("admits effects only when each peer reports its selected generation", async () => {
+    const kernel = "a".repeat(40);
+    const executor = "b".repeat(40);
     await expect(waitForRuntimePeerGeneration({
-      env: { OPENSESSION_RELEASE_GENERATION: generation },
-      fetchReady: async () => Response.json({ generation }),
-      readReadyFile: () => JSON.stringify({ pid: 7, generation }),
+      env: {
+        OPENSESSION_RELEASE_GENERATION: "c".repeat(40),
+        OPENSESSION_KERNEL_GENERATION: kernel,
+        OPENSESSION_EXECUTOR_GENERATION: executor,
+      },
+      fetchReady: async () => Response.json({ generation: kernel }),
+      readReadyFile: () => JSON.stringify({ pid: 7, generation: executor }),
     })).resolves.toBeUndefined();
     await expect(waitForRuntimePeerGeneration({
       env: { OPENSESSION_RELEASE_GENERATION: "not-a-sha" },
-    })).rejects.toThrow("Invalid OPENSESSION_PEER_GENERATION");
+    })).rejects.toThrow("Invalid runtime peer generation");
   });
 
   test("holds an OS lease until explicit release", async () => {
