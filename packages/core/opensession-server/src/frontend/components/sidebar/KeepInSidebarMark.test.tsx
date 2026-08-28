@@ -11,6 +11,7 @@ type KeepTriggerProps = {
 	role: string;
 	"aria-label": string;
 	"data-sidebar-keep": string;
+	className: string;
 	onClick: (event: ActivationEvent) => void;
 	onKeyDown: (event: ActivationEvent) => void;
 };
@@ -29,6 +30,7 @@ test("visible but unclaimed rows offer an inline keep action", () => {
 	expect(trigger.props.role).toBe("button");
 	expect(trigger.props["aria-label"]).toBe("Keep in sidebar");
 	expect(trigger.props["data-sidebar-keep"]).toBe("");
+	expect(trigger.props.className).toContain("text-accent");
 	trigger.props.onClick(event);
 	trigger.props.onKeyDown({ ...event, key: "Enter" });
 	expect(kept).toBe(2);

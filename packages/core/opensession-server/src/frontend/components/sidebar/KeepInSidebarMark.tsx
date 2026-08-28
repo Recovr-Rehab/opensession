@@ -1,5 +1,5 @@
 import { Tooltip } from "../../ui/tooltip";
-import { IconInbox, IconPlus } from "../icons";
+import { IconSidebarPlus } from "../icons";
 
 /** The inline claim affordance for a row that is visible but not yet kept. */
 export function KeepInSidebarMark({ onKeep }: { onKeep: () => void }) {
@@ -15,7 +15,7 @@ export function KeepInSidebarMark({ onKeep }: { onKeep: () => void }) {
 				tabIndex={0}
 				aria-label="Keep in sidebar"
 				data-sidebar-keep=""
-				className="focus-ring relative ml-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-faint transition-[color,scale] before:absolute before:-inset-3 before:content-[''] hover:text-fg active:scale-[0.96] desktop:before:-inset-2.5 motion-reduce:transform-none"
+				className="focus-ring relative ml-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-accent transition-[scale] before:absolute before:-inset-3 before:content-[''] active:scale-[0.96] desktop:before:-inset-2.5 motion-reduce:transform-none"
 				onClick={keep}
 				onMouseDown={(event) => event.stopPropagation()}
 				onDoubleClick={(event) => event.stopPropagation()}
@@ -25,13 +25,7 @@ export function KeepInSidebarMark({ onKeep }: { onKeep: () => void }) {
 					if (event.key === "Enter" || event.key === " ") keep(event);
 				}}
 			>
-				<IconInbox size={20} />
-				<span
-					aria-hidden="true"
-					className="absolute -right-1 -bottom-1 flex size-3 items-center justify-center rounded-full bg-accent text-on-accent ring-2 ring-panel"
-				>
-					<IconPlus size={9} />
-				</span>
+				<IconSidebarPlus size={20} />
 			</span>
 		</Tooltip>
 	);

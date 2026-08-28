@@ -282,7 +282,7 @@ import {
 	IconDesk,
 	IconDotsHorizontal,
 	IconEye,
-	IconInbox,
+	IconSidebarPlus,
 	IconBranches,
 	IconNewBranch,
 	IconPullRequest,
@@ -5857,7 +5857,7 @@ export function SessionViewer({
 					canKeepInSidebar &&
 					(inMenu ? (
 						<Menu.Item onClick={keepInSidebar} title="Keep this workspace in your sidebar">
-							<IconInbox size={20} className={MENU_ICON} />
+							<IconSidebarPlus size={20} className={MENU_ICON} />
 							<span className="grow">Keep in sidebar</span>
 						</Menu.Item>
 					) : (
@@ -5865,7 +5865,7 @@ export function SessionViewer({
 							size="md"
 							variant="default"
 							className="mr-1.5"
-							icon={<IconInbox size={20} />}
+							icon={<IconSidebarPlus size={20} className="text-dim" />}
 							onClick={keepInSidebar}
 							title="Keep this workspace in your sidebar"
 						>
