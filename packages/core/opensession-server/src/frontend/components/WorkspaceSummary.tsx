@@ -574,7 +574,6 @@ export function WorkspaceSummaryBody({
 		) ?? null;
 	const [prompted, setPrompted] = useState(false);
 	const [changesOpen, setChangesOpen] = useState(false);
-	const [commitsOpen, setCommitsOpen] = useState(false);
 	const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
 	const [reviewError, setReviewError] = useState<string | null>(null);
 	const [reviewBusy, setReviewBusy] = useState(false);
@@ -868,9 +867,9 @@ setFixBusy(false);
 		);
 	}
 
-	/** A long session commits dozens of times, and the card would spend its whole
-	 *  height listing them. Closed, its commit, file, and line totals summarize
-	 *  the completed work; the row opens the individual commits. */
+	/** A long session can commit dozens of times. Keep the card folded to one
+	 *  totals row, then show the individual commits in the same small side
+	 *  overlay used for checks rather than stretching the summary itself. */
 	function committedSummaryRow() {
 		if (commits.length === 0) return null;
 		const stats = commits.reduce(
@@ -881,31 +880,55 @@ setFixBusy(false);
 			}),
 			{ files: 0, additions: 0, deletions: 0 },
 		);
+		const label = `${commits.length} commit${commits.length === 1 ? "" : "s"}`;
 		return (
-			<button
-				className={WS_SUMMARY_ROW}
-				onClick={() => setCommitsOpen(true)}
-				aria-expanded={false}
-			>
-				<span className={WS_SUMMARY_RAIL}>
-					<IconGitCommit size={20} className={WS_SUMMARY_ICON} />
-				</span>
-				<span className={WS_SUMMARY_LABEL}>
-					{commits.length} commit{commits.length === 1 ? "" : "s"}
-				</span>
-				<span
-					className={cn(
-						WS_SUMMARY_STATE,
-						"flex items-baseline gap-2 text-dim tabular-nums",
-					)}
+			<Popover.Root exclusive={false}>
+				<Popover.Trigger
+					render={
+						<button
+							type="button"
+							className={WS_SUMMARY_ROW}
+							title={`View ${label}`}
+						>
+							<span className={WS_SUMMARY_RAIL}>
+								<IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+							</span>
+							<span className={WS_SUMMARY_LABEL}>{label}</span>
+							<span
+								className={cn(
+									WS_SUMMARY_STATE,
+									"flex items-baseline gap-2 text-dim tabular-nums",
+								)}
+							>
+								<span>
+									{stats.files} file{stats.files === 1 ? "" : "s"}
+								</span>
+								<span className="text-green">+{stats.additions}</span>
+								<span className="text-red">−{stats.deletions}</span>
+							</span>
+						</button>
+					}
+				/>
+				<Popover.Popup
+					portalContainer={typeof document !== "undefined" ? document.body : undefined}
+					side={embedded ? "bottom" : "left"}
+					align="end"
+					sideOffset={10}
+					className="flex max-h-[min(440px,70vh,var(--available-height))] w-[min(380px,calc(100vw-24px))] flex-col overflow-hidden p-0"
 				>
-					<span>
-						{stats.files} file{stats.files === 1 ? "" : "s"}
-					</span>
-					<span className="text-green">+{stats.additions}</span>
-					<span className="text-red">−{stats.deletions}</span>
-				</span>
-			</button>
+					<div className="flex items-baseline justify-between gap-2.5 border-b border-divider bg-surface px-3 py-[9px]">
+						<span className="text-label font-semibold text-fg">{label}</span>
+						<span className="inline-flex gap-2 text-meta font-semibold tabular-nums">
+							<span className="text-dim">
+								{stats.files} file{stats.files === 1 ? "" : "s"}
+							</span>
+							<span className="text-green">+{stats.additions}</span>
+							<span className="text-red">−{stats.deletions}</span>
+						</span>
+					</div>
+					<div className="overflow-y-auto p-1">{commits.map(committedRow)}</div>
+				</Popover.Popup>
+			</Popover.Root>
 		);
 	}
 
@@ -1256,38 +1279,12 @@ setFixBusy(false);
 
 			{(diffIsCommitted || commits.length > 0) && (
 				<div className={groupClass}>
-					{commits.length > 0 ? (
-						/* The heading owns the toggle: it names the band the list belongs
-						   to, so it is the one place to open and close the whole band. The
-						   chevron waits for the cursor, so a card at rest keeps a plain
-						   label like every other section. */
-						<button
-							className={cn(
-								WS_SUMMARY_SECTION,
-								"group/committed w-full cursor-pointer justify-between gap-2",
-								"border-none bg-transparent text-left",
-							)}
-							onClick={() => setCommitsOpen((open) => !open)}
-							aria-expanded={commitsOpen}
-						>
-							<span>Committed</span>
-							<IconChevronDown
-								size={14}
-								className={cn(
-									"shrink-0 transition-[transform,opacity] motion-reduce:transition-none",
-									"opacity-0 group-hover/committed:opacity-100 group-focus-visible/committed:opacity-100",
-									commitsOpen && "rotate-180 opacity-100",
-								)}
-							/>
-						</button>
-					) : (
-						<div className={WS_SUMMARY_SECTION}>Committed</div>
-					)}
+					<div className={WS_SUMMARY_SECTION}>Committed</div>
 					{diffIsCommitted &&
 						diffChangeRow(
 							`${changedFiles} file${changedFiles === 1 ? "" : "s"} committed`,
 						)}
-					{commitsOpen ? commits.map(committedRow) : committedSummaryRow()}
+					{committedSummaryRow()}
 				</div>
 			)}
 
