@@ -679,7 +679,12 @@ export function PreferencesPanel() {
 					return (
 						<SettingRow
 							key={repo.id}
-							title={label}
+							title={
+								<span className="flex min-w-0 items-center gap-2">
+									<RepoTile name={repo.id} size={18} />
+									<span className="truncate">{label}</span>
+								</span>
+							}
 							desc={
 								checkoutPref === "default"
 									? `Repository default: ${repo.sharedCheckout ? "local checkout" : "separate worktree"}.`
