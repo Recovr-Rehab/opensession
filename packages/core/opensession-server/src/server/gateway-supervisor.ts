@@ -17,6 +17,7 @@ import {
   type GatewayTcpProxyMetrics,
 } from "./gateway-tcp-proxy";
 import { stableFrontendHttpResponse } from "./stable-frontend";
+import { publishGatewayBackendPort } from "./gateway-routing";
 
 export const GATEWAY_CONTROL_SOCKET =
   process.env.OPENSESSION_GATEWAY_CONTROL_SOCKET ||
@@ -122,6 +123,7 @@ export interface GatewaySupervisorDependencies {
   recordTransaction?(transaction: GatewayHandoffTransaction): void;
   clearTransaction?(): void;
   quiescePublicListener?(): void;
+  publishBackendPort?(port: number): void;
 }
 
 function timeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -155,6 +157,7 @@ export class GatewaySupervisor {
     private readonly proxyMetrics?: GatewayTcpProxyMetrics,
   ) {
     this.watchActive(active);
+    this.dependencies.publishBackendPort?.(active.backendPort);
   }
 
   private watchActive(gateway: ManagedGateway): void {
@@ -175,6 +178,12 @@ export class GatewaySupervisor {
   private selectActive(gateway: ManagedGateway): void {
     this.active = gateway;
     this.watchActive(gateway);
+    if (this.routeToActive) this.dependencies.publishBackendPort?.(gateway.backendPort);
+  }
+
+  private setRouteToActive(value: boolean): void {
+    this.routeToActive = value;
+    this.dependencies.publishBackendPort?.(value ? this.active.backendPort : 0);
   }
 
   private peerGenerations(gateway: ManagedGateway): PeerGenerations {
@@ -231,7 +240,7 @@ export class GatewaySupervisor {
         10_000,
         "candidate gateway did not become live in time",
       );
-      this.routeToActive = true;
+      this.setRouteToActive(true);
       await timeout(
         this.dependencies.waitReady(pending.candidate),
         READY_TIMEOUT_MS,
@@ -292,7 +301,7 @@ export class GatewaySupervisor {
     this.selectActive(rollback);
     try {
       await timeout(this.waitLive(rollback), 10_000, "rollback gateway did not become live");
-      this.routeToActive = true;
+      this.setRouteToActive(true);
       await timeout(
         this.dependencies.waitReady(rollback),
         READY_TIMEOUT_MS,
@@ -336,7 +345,7 @@ export class GatewaySupervisor {
     // chance to attach to the still-active backend.
     this.dependencies.quiescePublicListener?.();
     await Bun.sleep(50);
-    this.routeToActive = false;
+    this.setRouteToActive(false);
     gateway.kill(12);
     try {
       await timeout(
@@ -408,7 +417,7 @@ export class GatewaySupervisor {
         candidatePid: candidate.pid,
         updatedAt: new Date().toISOString(),
       });
-      this.routeToActive = false;
+      this.setRouteToActive(false);
       previous.kill(12);
       try {
         await timeout(
@@ -452,7 +461,7 @@ export class GatewaySupervisor {
       candidate.kill(9);
       await candidate.exited.catch(() => 0);
       this.standby = null;
-      if (!previousExited) this.routeToActive = true;
+      if (!previousExited) this.setRouteToActive(true);
       this.dependencies.clearTransaction?.();
       return { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
@@ -462,7 +471,7 @@ export class GatewaySupervisor {
     if (this.shuttingDown) return;
     this.shuttingDown = true;
     if (this.coordinated) clearTimeout(this.coordinated.timeout);
-    this.routeToActive = false;
+    this.setRouteToActive(false);
     const children = new Set([this.active, this.standby].filter(Boolean) as ManagedGateway[]);
     for (const child of children) child.kill(child === this.active ? 15 : 9);
     await Promise.all([...children].map((child) => child.exited.catch(() => 0)));
@@ -503,7 +512,7 @@ export class GatewaySupervisor {
       });
 
       if (this.shuttingDown) throw new Error("gateway supervisor is shutting down");
-      this.routeToActive = false;
+      this.setRouteToActive(false);
       previous.kill(12);
       try {
         await timeout(
@@ -541,7 +550,7 @@ export class GatewaySupervisor {
         10_000,
         "candidate gateway did not become live in time",
       );
-      this.routeToActive = true;
+      this.setRouteToActive(true);
       await timeout(
         this.dependencies.waitReady(candidate),
         READY_TIMEOUT_MS,
@@ -577,7 +586,7 @@ export class GatewaySupervisor {
       this.selectActive(rollback);
       try {
         await timeout(this.waitLive(rollback), 10_000, "rollback gateway did not become live");
-        this.routeToActive = true;
+        this.setRouteToActive(true);
         await timeout(
           this.dependencies.waitReady(rollback),
           READY_TIMEOUT_MS,
@@ -965,6 +974,7 @@ async function runSupervisor(): Promise<void> {
   const peerGenerations = await discoverRuntimePeerGenerations();
   const active = spawnGateway(releaseRoot, "active", undefined, peerGenerations);
   const proxyMetrics = createGatewayTcpProxyMetrics();
+  const externalIngress = process.env.OPENSESSION_EXTERNAL_INGRESS === "1";
   let publicListener: ReturnType<typeof startGatewayTcpProxy> | undefined;
   let stopping = false;
   const supervisor = new GatewaySupervisor(active, {
@@ -975,6 +985,9 @@ async function runSupervisor(): Promise<void> {
     promoteCurrent: promoteGatewayCurrent,
     recordTransaction: writeGatewayHandoffTransaction,
     clearTransaction: clearGatewayHandoffTransaction,
+    publishBackendPort(port) {
+      if (externalIngress) publishGatewayBackendPort(deployStateRoot(), port);
+    },
     quiescePublicListener() {
       publicListener?.stop(false);
     },
@@ -985,16 +998,19 @@ async function runSupervisor(): Promise<void> {
     },
   }, proxyMetrics);
   const controlListener = serveControl(supervisor);
-  publicListener = startGatewayTcpProxy({
-    hostname: PUBLIC_HOST,
-    port: PUBLIC_PORT,
-    backendPort: () => supervisor.backendPort(),
-    metrics: proxyMetrics,
-    fallbackHttp: (request) => stableFrontendHttpResponse(deployStateRoot(), request),
-    listenFd: inheritedGatewaySocketFd(),
-  });
+  if (!externalIngress) {
+    publicListener = startGatewayTcpProxy({
+      hostname: PUBLIC_HOST,
+      port: PUBLIC_PORT,
+      backendPort: () => supervisor.backendPort(),
+      metrics: proxyMetrics,
+      fallbackHttp: (request) => stableFrontendHttpResponse(deployStateRoot(), request),
+      listenFd: inheritedGatewaySocketFd(),
+    });
+  }
   console.log(
-    `[gateway-supervisor] proxying ${PUBLIC_HOST}:${PUBLIC_PORT} to gateway ${active.pid}` +
+    `[gateway-supervisor] ${externalIngress ? "publishing" : "proxying"} ` +
+    `${PUBLIC_HOST}:${PUBLIC_PORT} to gateway ${active.pid}` +
     ` on ${BACKEND_HOST}:${active.backendPort} from ${releaseRoot}`,
   );
   if (interrupted) {

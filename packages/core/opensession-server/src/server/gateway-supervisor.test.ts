@@ -89,6 +89,7 @@ describe("gateway supervisor", () => {
     const old = controlledGateway(1, "/releases/old");
     const candidate = controlledGateway(2, "/releases/new", true);
     const order: string[] = [];
+    const publishedPorts: number[] = [];
     let markLive!: () => void;
     const live = new Promise<void>((resolve) => { markLive = resolve; });
     const supervisor = new GatewaySupervisor(old.gateway, {
@@ -105,6 +106,9 @@ describe("gateway supervisor", () => {
       },
       promoteCurrent(root) {
         order.push(`promote:${root}`);
+      },
+      publishBackendPort(port) {
+        publishedPorts.push(port);
       },
     });
 
@@ -128,6 +132,7 @@ describe("gateway supervisor", () => {
     await Bun.sleep(0);
     expect(candidate.events[0]?.startsWith("activate:")).toBe(true);
     expect(supervisor.backendPort()).toBe(0);
+    expect(publishedPorts).toEqual([old.gateway.backendPort, 0]);
     markLive();
     const result = await handoff;
     expect(result.ok).toBe(true);
@@ -140,6 +145,11 @@ describe("gateway supervisor", () => {
     ]);
     expect(supervisor.activeGateway()).toBe(candidate.gateway);
     expect(supervisor.backendPort()).toBe(candidate.gateway.backendPort);
+    expect(publishedPorts).toEqual([
+      old.gateway.backendPort,
+      0,
+      candidate.gateway.backendPort,
+    ]);
   });
 
   test("parks a coordinated candidate until protocol peers are replaced", async () => {
