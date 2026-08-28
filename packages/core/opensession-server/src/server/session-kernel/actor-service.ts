@@ -225,7 +225,7 @@ function actorFatal(response: KernelActorResponse): boolean {
 
 export async function startSessionKernelService(
   options: SessionKernelServiceOptions = {},
-): Promise<{ stop(): void; url: string }> {
+): Promise<{ stop(options?: { terminateWorkers?: boolean }): void; url: string }> {
   const host = options.host ?? process.env.OPENSESSION_SESSION_KERNEL_HOST ?? DEFAULT_HOST;
   const port = options.port ?? Number(process.env.OPENSESSION_SESSION_KERNEL_PORT ?? DEFAULT_PORT);
   if (host !== DEFAULT_HOST)
@@ -986,10 +986,11 @@ export async function startSessionKernelService(
   const runningServer = server;
   return {
     url: runningServer.url.origin,
-    stop() {
+    stop(stopOptions = {}) {
       if (stopping) return;
       stopping = true;
       runningServer.stop(true);
+      if (stopOptions.terminateWorkers === false) return;
       const error = new Error("Session kernel service stopped");
       for (const slot of slots) stopSlot(slot, error);
     },
