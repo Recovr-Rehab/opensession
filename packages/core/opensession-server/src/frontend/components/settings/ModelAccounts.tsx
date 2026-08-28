@@ -1430,16 +1430,7 @@ function AddClaudeAccountForm({
 	);
 }
 
-/**
- * "Connect usage" attaches PKCE OAuth to an existing setup-token account.
- * The server hands us an authorize URL; the user signs in on any device and pastes
- * back the code Anthropic
- * displays (`…#…`), which the server exchanges and stores.
- *
- * Renders as an expansion directly beneath the triggering account row inside
- * the SettingCard (CardList draws the divider) — row-triggered content must
- * uncollapse in place, never teleport to the top of the section.
- */
+/** Connect PKCE usage credentials without replacing a setup token. */
 function ClaudeSignInForm({
 	account,
 	onClose,
@@ -1456,20 +1447,22 @@ function ClaudeSignInForm({
 
 	useEffect(() => {
 		let cancelled = false;
-		(async () => {
-			await (async () => {
-const res = await fetch(`${BASE_PATH}/api/claude-accounts/oauth-login`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ accountId: account.id }),
-				});
-				const body = await res.json();
-				if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-				if (!cancelled) setLogin(body);
-})().catch(async (e: any) => {
-if (!cancelled) setError(e.message);
-});
-		})();
+		void request<{ id: string; url: string }>(
+			"/claude-accounts/oauth-login",
+			{
+				method: "POST",
+				body: { accountId: account.id },
+				label: "Could not start Claude sign-in",
+			},
+		).then(
+			(nextLogin) => {
+				if (!cancelled) setLogin(nextLogin);
+			},
+			(cause: unknown) => {
+				if (!cancelled)
+					setError(errorMessage(cause, "Could not start Claude sign-in"));
+			},
+		);
 		return () => {
 			cancelled = true;
 		};
@@ -1477,9 +1470,10 @@ if (!cancelled) setError(e.message);
 
 	function handleClose() {
 		if (login) {
-			fetch(`${BASE_PATH}/api/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`, {
-				method: "DELETE",
-			}).catch(() => {});
+			void request(
+				`/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`,
+				{ method: "DELETE", label: "Could not cancel Claude sign-in" },
+			).catch(() => undefined);
 		}
 		onClose();
 	}
@@ -1488,23 +1482,23 @@ if (!cancelled) setError(e.message);
 		if (!login) return;
 		setBusy(true);
 		setError(null);
-		await (async () => {
-const res = await fetch(
-				`${BASE_PATH}/api/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`,
+		try {
+			await request(
+				`/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`,
 				{
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ code }),
+					body: { code },
+					label: "Could not connect Anthropic usage tracking",
 				},
 			);
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			toast(`Usage tracking connected for ${providerAccountLabel(account)}`);
 			onDone();
-})().catch(async (e: any) => {
-setError(e.message);
+		} catch (cause) {
+			setError(
+				errorMessage(cause, "Could not connect Anthropic usage tracking"),
+			);
 			setBusy(false);
-});
+		}
 	}
 
 	return (
