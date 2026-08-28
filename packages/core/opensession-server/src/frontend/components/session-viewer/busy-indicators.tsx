@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { duration, ease } from "../../ui/motion";
 import { TranscriptSkeleton } from "../../ui/state";
 import { PageLoader } from "../../ui/page-loader";
@@ -174,32 +174,48 @@ function BusyStopping({ since }: { since: number }) {
 export function BusyInline({
 	since,
 	stoppingSince,
+	onLayout,
 }: {
 	since: number | null;
 	stoppingSince: number | null;
+	onLayout?: () => void;
 }) {
+	const reducedMotion = useReducedMotion();
 	return (
-		<div
-			className={cn(
-				msgRow,
-				"mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
-			)}
+		<motion.div
+			initial={reducedMotion ? false : { height: 0, opacity: 0 }}
+			animate={{ height: "auto", opacity: 1 }}
+			exit={{ height: 0, opacity: 0 }}
+			transition={{
+				type: "tween",
+				duration: reducedMotion ? 0 : duration.base,
+				ease,
+			}}
+			onUpdate={onLayout}
+			className="overflow-hidden"
 		>
-			{/* The 8px pull hangs off the DOT, not off the row: msgRow centres
-			    itself in the reading column with `mx-auto`, and a `-ml-2` on the
-			    row overrides that auto (Tailwind emits `margin-left` after
-			    `margin-inline`), leaving `margin-right: auto` to shove the whole
-			    row against the scroller's left gutter. Here it lands the dot's
-			    centre on the work fold's chevron, which hangs out by the same
-			    8px from a box that stays centred. */}
-			<span className="-ml-2 grid size-5 shrink-0 place-items-center">
-				<PulseDot size={7} />
-			</span>
-			{stoppingSince != null ? (
-				<BusyStopping since={stoppingSince} />
-			) : (
-				<BusyWorking since={since} />
-			)}
-		</div>
+			<div
+				className={cn(
+					msgRow,
+					"mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
+				)}
+			>
+				{/* The 8px pull hangs off the DOT, not off the row: msgRow centres
+				    itself in the reading column with `mx-auto`, and a `-ml-2` on the
+				    row overrides that auto (Tailwind emits `margin-left` after
+				    `margin-inline`), leaving `margin-right: auto` to shove the whole
+				    row against the scroller's left gutter. Here it lands the dot's
+				    centre on the work fold's chevron, which hangs out by the same
+				    8px from a box that stays centred. */}
+				<span className="-ml-2 grid size-5 shrink-0 place-items-center">
+					<PulseDot size={7} />
+				</span>
+				{stoppingSince != null ? (
+					<BusyStopping since={stoppingSince} />
+				) : (
+					<BusyWorking since={since} />
+				)}
+			</div>
+		</motion.div>
 	);
 }

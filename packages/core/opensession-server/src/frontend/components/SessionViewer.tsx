@@ -7574,12 +7574,16 @@ export function SessionViewer({
 								</InlineAlert>
 							)}
 
-							{isBusy && !settingUpWorkspace && (
-								<BusyInline
-									since={busySince}
-									stoppingSince={stopRequestedAt}
-								/>
-							)}
+							<AnimatePresence initial={false}>
+								{isBusy && !settingUpWorkspace && (
+									<BusyInline
+										key="busy"
+										since={busySince}
+										stoppingSince={stopRequestedAt}
+										onLayout={relayout}
+									/>
+								)}
+							</AnimatePresence>
 
 							{ask && (
 								<AskCard
