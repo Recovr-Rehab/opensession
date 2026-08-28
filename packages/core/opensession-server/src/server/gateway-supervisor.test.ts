@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 import {
+  discoverRuntimePeerGenerations,
   GatewaySupervisor,
   inheritedGatewaySocketFd,
   type ManagedGateway,
@@ -53,6 +54,16 @@ describe("gateway supervisor", () => {
     expect(inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "1" }, 42)).toBe(3);
     expect(inheritedGatewaySocketFd({ LISTEN_PID: "41", LISTEN_FDS: "1" }, 42)).toBeUndefined();
     expect(inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "0" }, 42)).toBeUndefined();
+  });
+
+  test("discovers independently selected peer generations on supervisor boot", async () => {
+    const peers = await discoverRuntimePeerGenerations({
+      fetchReady: async () => Response.json({ generation: "a".repeat(40) }),
+      readExecutorReady: () => JSON.stringify({ generation: "b".repeat(40) }),
+      sleep: async () => {},
+      attempts: 1,
+    });
+    expect(peers).toEqual({ kernel: "a".repeat(40), executor: "b".repeat(40) });
   });
 
   test("fast-drains the child before a supervisor service restart", async () => {
@@ -243,16 +254,26 @@ describe("gateway supervisor", () => {
     expect(supervisor.activeGateway()).toBe(rollback.gateway);
   });
 
-  test("keeps the old gateway active when candidate preload fails", async () => {
+  test("keeps the old gateway active when peer precheck fails", async () => {
     const old = controlledGateway(1, "/releases/old");
+    old.gateway.peerGenerations = {
+      kernel: "a".repeat(40),
+      executor: "b".repeat(40),
+    };
     let fail!: (error: Error) => void;
+    let selectedPeers: { kernel: string; executor: string } | undefined;
+    let precheckPeers = false;
     const candidate = controlledGateway(2, "/releases/new", true);
     candidate.gateway.preloaded = new Promise<void>((_, reject) => {
       fail = reject;
     });
     candidate.gateway.exited = Promise.resolve(1);
     const supervisor = new GatewaySupervisor(old.gateway, {
-      spawn: () => candidate.gateway,
+      spawn(_root, _role, _nonce, peers, precheck) {
+        selectedPeers = peers;
+        precheckPeers = Boolean(precheck);
+        return candidate.gateway;
+      },
       waitReady: async () => {},
       validateRelease: (root) => root,
       promoteCurrent() {},
@@ -266,6 +287,8 @@ describe("gateway supervisor", () => {
     const result = await handoff;
     expect(result.ok).toBe(false);
     expect(result.message).toContain("before cut-over");
+    expect(selectedPeers).toEqual(old.gateway.peerGenerations);
+    expect(precheckPeers).toBe(true);
     expect(old.events).toEqual([]);
     expect(supervisor.activeGateway()).toBe(old.gateway);
   });
@@ -288,6 +311,7 @@ describe("gateway supervisor", () => {
       "standby",
       "integration-nonce",
       undefined,
+      false,
       entry,
     );
     await candidate.preloaded!;

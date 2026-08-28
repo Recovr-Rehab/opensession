@@ -27,7 +27,9 @@ const BACKEND_HOST = "127.0.0.1";
 let nextBackendPort = Number(process.env.OPENSESSION_GATEWAY_BACKEND_PORT_BASE || 0);
 const PRELOAD_TIMEOUT_MS = 30_000;
 const FAST_HANDOFF_EXIT_TIMEOUT_MS = 2_500;
-const READY_TIMEOUT_MS = 60_000;
+// A healthy gateway normally reaches /ready in 1-3 seconds. Long waits only
+// extend a parked listener and compound candidate + rollback outages.
+const READY_TIMEOUT_MS = 15_000;
 
 export function inheritedGatewaySocketFd(
   env: Record<string, string | undefined> = process.env,
@@ -95,6 +97,7 @@ export interface ManagedGateway {
   pid: number;
   releaseRoot: string;
   backendPort: number;
+  peerGenerations?: PeerGenerations;
   exited: Promise<number>;
   kill(signal?: number): void;
   activate?(nonce: string): void;
@@ -107,6 +110,7 @@ export interface GatewaySupervisorDependencies {
     role: "active" | "standby",
     nonce?: string,
     peerGenerations?: PeerGenerations,
+    precheckPeers?: boolean,
   ): ManagedGateway;
   waitReady(gateway: ManagedGateway): Promise<void>;
   validateRelease(releaseRoot: string, sha: string): string;
@@ -168,6 +172,11 @@ export class GatewaySupervisor {
   private selectActive(gateway: ManagedGateway): void {
     this.active = gateway;
     this.watchActive(gateway);
+  }
+
+  private peerGenerations(gateway: ManagedGateway): PeerGenerations {
+    const fallback = releaseGeneration(gateway.releaseRoot);
+    return gateway.peerGenerations ?? { kernel: fallback, executor: fallback };
   }
 
   activeGateway(): ManagedGateway {
@@ -261,7 +270,12 @@ export class GatewaySupervisor {
       };
     }
     this.dependencies.promoteCurrent(pending.previous.releaseRoot);
-    const rollback = this.dependencies.spawn(pending.previous.releaseRoot, "active");
+    const rollback = this.dependencies.spawn(
+      pending.previous.releaseRoot,
+      "active",
+      undefined,
+      this.peerGenerations(pending.previous),
+    );
     this.selectActive(rollback);
     this.routeToActive = true;
     try {
@@ -453,10 +467,8 @@ export class GatewaySupervisor {
       releaseRoot,
       "standby",
       nonce,
-      {
-        kernel: releaseGeneration(previous.releaseRoot),
-        executor: releaseGeneration(previous.releaseRoot),
-      },
+      this.peerGenerations(previous),
+      true,
     );
     this.standby = candidate;
     let previousExited = false;
@@ -538,7 +550,12 @@ export class GatewaySupervisor {
       }
 
       this.dependencies.promoteCurrent(previous.releaseRoot);
-      const rollback = this.dependencies.spawn(previous.releaseRoot, "active");
+      const rollback = this.dependencies.spawn(
+        previous.releaseRoot,
+        "active",
+        undefined,
+        this.peerGenerations(previous),
+      );
       this.selectActive(rollback);
       this.routeToActive = true;
       try {
@@ -593,11 +610,53 @@ function releaseGeneration(releaseRoot: string): string {
   return existsSync(marker) ? readFileSync(marker, "utf8").trim() : "development";
 }
 
+export async function discoverRuntimePeerGenerations(options: {
+  fetchReady?: () => Promise<Response>;
+  readExecutorReady?: () => string;
+  sleep?: (ms: number) => Promise<void>;
+  attempts?: number;
+} = {}): Promise<PeerGenerations> {
+  const fetchReady = options.fetchReady ?? (() => fetch(
+    new URL(
+      "/ready",
+      process.env.OPENSESSION_SESSION_KERNEL_URL ?? "http://127.0.0.1:3849",
+    ),
+    { signal: AbortSignal.timeout(1_000) },
+  ));
+  const readExecutorReady = options.readExecutorReady ?? (() => readFileSync(
+    process.env.OPENSESSION_EXECUTOR_READY_FILE ?? "/run/opensession-executor/ready",
+    "utf8",
+  ));
+  const sleep = options.sleep ?? Bun.sleep;
+  for (let attempt = 0; attempt < (options.attempts ?? 30); attempt += 1) {
+    try {
+      const [kernelResponse, executorText] = await Promise.all([
+        fetchReady(),
+        Promise.resolve().then(readExecutorReady),
+      ]);
+      const kernel = kernelResponse.ok
+        ? await kernelResponse.json() as { generation?: string }
+        : null;
+      const executor = JSON.parse(executorText) as { generation?: string };
+      if (
+        kernel?.generation && executor.generation &&
+        /^[0-9a-f]{40,64}$/.test(kernel.generation) &&
+        /^[0-9a-f]{40,64}$/.test(executor.generation)
+      ) {
+        return { kernel: kernel.generation, executor: executor.generation };
+      }
+    } catch {}
+    await sleep(100);
+  }
+  throw new Error("runtime peer generations are unavailable");
+}
+
 export function spawnGateway(
   releaseRoot: string,
   role: "active" | "standby",
   nonce?: string,
   peerGenerations?: PeerGenerations,
+  precheckPeers = false,
   entry = "packages/core/opensession-server/opensession.ts",
 ): ManagedGateway {
   const preloaded = deferred();
@@ -617,6 +676,7 @@ export function spawnGateway(
         OPENSESSION_RELEASE_GENERATION: generation,
         OPENSESSION_KERNEL_GENERATION: peerGenerations?.kernel ?? generation,
         OPENSESSION_EXECUTOR_GENERATION: peerGenerations?.executor ?? generation,
+        OPENSESSION_GATEWAY_PRECHECK_PEERS: precheckPeers ? "1" : "0",
         ...(nonce ? { OPENSESSION_GATEWAY_NONCE: nonce } : {}),
       },
       stdin: "ignore",
@@ -645,6 +705,7 @@ export function spawnGateway(
     pid: child.pid,
     releaseRoot,
     backendPort,
+    peerGenerations: peerGenerations ?? { kernel: generation, executor: generation },
     exited,
     kill(signal = 15) {
       child.kill(signal);
@@ -860,7 +921,11 @@ async function runSupervisor(): Promise<void> {
       `current selects ${releaseRoot}`,
     );
   }
-  const active = spawnGateway(releaseRoot, "active");
+  // Peer generations can intentionally differ after a selective rollout. Never
+  // guess from `current`: a guessed generation caused a two-minute crash loop
+  // after an executor was correctly retained on its previous release.
+  const peerGenerations = await discoverRuntimePeerGenerations();
+  const active = spawnGateway(releaseRoot, "active", undefined, peerGenerations);
   const proxyMetrics = createGatewayTcpProxyMetrics();
   let publicListener: ReturnType<typeof startGatewayTcpProxy> | undefined;
   let stopping = false;

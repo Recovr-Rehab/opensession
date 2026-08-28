@@ -79,10 +79,12 @@ describe("gateway activation preload barrier", () => {
 
   test("entrypoint waits before every production boot effect", async () => {
     const entry = await Bun.file(resolve(import.meta.dir, "../../opensession.ts")).text();
+    const precheck = entry.indexOf("waitForRuntimePeerGeneration({ timeoutMs: 5_000 })");
     const barrier = entry.indexOf("await waitForGatewayActivationIfStandby()");
     const peers = entry.indexOf("await waitForRuntimePeerGeneration()");
     const lease = entry.indexOf("await acquireGatewayActivationLease");
-    expect(barrier).toBeGreaterThan(0);
+    expect(precheck).toBeGreaterThan(0);
+    expect(barrier).toBeGreaterThan(precheck);
     expect(peers).toBeGreaterThan(barrier);
     expect(lease).toBeGreaterThan(peers);
     expect(entry).not.toContain("}, 1500);");

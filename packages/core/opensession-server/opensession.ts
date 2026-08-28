@@ -138,14 +138,17 @@ function isLoopbackHostname(hostname: string): boolean {
 	return normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost";
 }
 
+// Gateway-only candidates validate the already-running peer generations before
+// the supervisor drains the active child. A mismatch then rejects the candidate
+// with no user-visible cut-over. Coordinated candidates cannot precheck changed
+// peers because those peers start only after the old gateway is fenced.
+const precheckRuntimePeers = process.env.OPENSESSION_GATEWAY_PRECHECK_PEERS === "1";
+if (precheckRuntimePeers) await waitForRuntimePeerGeneration({ timeoutMs: 5_000 });
 // A supervised standby is allowed to preload this import graph, but it cannot
 // proceed into even the earliest shared-state, socket, Worker, timer, or
 // integration effect until its parent explicitly activates the exact nonce.
 await waitForGatewayActivationIfStandby();
-// A release generation is admitted only when both protocol peers identify as
-// the exact same immutable release. This runs before the ownership lease and
-// every shared-state effect, so crash recovery cannot create a mixed cluster.
-await waitForRuntimePeerGeneration();
+if (!precheckRuntimePeers) await waitForRuntimePeerGeneration();
 // The OS lock is the final ownership fence. A supervisor crash or stale parent
 // can leave an old child serving, but no replacement may cross into effects
 // until that process has exited and released this lease.
