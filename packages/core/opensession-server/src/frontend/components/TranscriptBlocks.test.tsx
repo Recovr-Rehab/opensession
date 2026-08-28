@@ -535,19 +535,18 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		setTurnPrefs(null);
 	});
 
-	test("folds the notes away too when the work is always folded", () => {
+	test("keeps every model message visible when work is folded", () => {
 		setTurnPrefs("folded", "open");
 		const html = renderToStaticMarkup(<TranscriptBlocks entries={narratedTurn} />);
 
 		expect(html).toContain("Worked");
-		expect(html).not.toContain("The repository is clean.");
+		expect(html).toContain("The repository is clean.");
 		expect(html).not.toContain("git status");
-		// The answer is never work, so it stays whatever the turn does.
 		expect(html).toContain("All good.");
 		setTurnPrefs(null);
 	});
 
-	test("opens the outer steps only while a turn runs", () => {
+	test("never folds model output before or between tool runs", () => {
 		setTurnPrefs("running", "folded");
 		const running = renderToStaticMarkup(
 			<TranscriptBlocks live entries={liveNarratedTurn} />,
@@ -558,7 +557,8 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		const settled = renderToStaticMarkup(
 			<TranscriptBlocks entries={narratedTurn} />,
 		);
-		expect(settled).not.toContain("The repository is clean.");
+		expect(settled).toContain("The repository is clean.");
+		expect(settled).toContain("All good.");
 		expect(settled).not.toContain("git status");
 		setTurnPrefs(null);
 	});
@@ -659,7 +659,7 @@ describe("TranscriptBlocks featured media outlives the fold", () => {
 });
 
 describe("TranscriptBlocks review loops", () => {
-	test("folds review work but leaves a following user request in the conversation", () => {
+	test("folds review tools but leaves model output and a following user request visible", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				entries={[
@@ -672,7 +672,7 @@ describe("TranscriptBlocks review loops", () => {
 		);
 		expect(html).toContain("Review loop");
 		expect(html).toContain("PR #42");
-		expect(html).not.toContain("Fixed the review finding.");
+		expect(html).toContain("Fixed the review finding.");
 		expect(html).toContain("Please also update the empty state.");
 		expect(html).not.toContain("Review outcome");
 		expect(html).not.toContain("Ready to merge");
