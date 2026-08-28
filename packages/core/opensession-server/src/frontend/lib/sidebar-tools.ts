@@ -16,7 +16,6 @@ export const SIDEBAR_TOOL_IDS = [
 	"feed",
 	"prs",
 	"tasks",
-	"control-ui",
 	"plain",
 	"catchup",
 	"supporttinder",
@@ -30,7 +29,6 @@ export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
 	feed: "Feed",
 	prs: "Pull requests",
 	tasks: "Tasks",
-	"control-ui": "Control UI",
 	// The Plain queue as a destination. The alternate sidebar band opens a
 	// ticket's workspace; this tool opens the ticket directly.
 	plain: "Support",
@@ -76,11 +74,12 @@ const ORDER_PREF_KEY = "sidebar-tool-order";
 const TOOLS_CHANGED_EVENT = "opensession-sidebar-tools-changed";
 const USER_CHANGE_EVENT = "opensession-user-changed";
 
-// A new account starts with the primary destinations plus Control UI's session
-// launcher. The rest are either empty until something else exists (Tasks needs
-// todos, Reports needs automations) or need an integration (Support Tinder,
-// Analytics), so shipping them on makes the sidebar look busy and broken at
-// once. They are one click away in the Tools band's ••• menu and in Settings.
+// A new account starts with the primary destinations: Feed, Pull requests,
+// Support, and Catch up. The rest are either empty until something else exists
+// (Tasks needs todos, Reports needs automations) or need an integration
+// (Support Tinder, Analytics), so shipping them on makes the sidebar look busy
+// and broken at once. They are one click away in the Tools band's ••• menu and
+// in Settings.
 //
 // This list is the whole agreement between clients when nobody has chosen:
 // absent means these defaults, on the web and in the native app alike. Keep it
@@ -88,7 +87,6 @@ const USER_CHANGE_EVENT = "opensession-user-changed";
 const DEFAULT_VISIBLE_TOOLS: SidebarToolId[] = [
 	"feed",
 	"prs",
-	"control-ui",
 	"plain",
 	"catchup",
 ];

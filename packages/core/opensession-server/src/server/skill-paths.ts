@@ -64,26 +64,6 @@ export interface LoadedSkill {
 	baseDir: string;
 }
 
-const SELECTED_SKILL_NAME = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
-
-/**
- * Build the private command a selected-skill launcher sends to the runner.
- * The person's prompt stays separate for transcript display; this command is
- * only the engine input, so a sidebar starter can select a skill without
- * writing slash syntax into the composer.
- */
-export function selectedSkillName(name: string): string {
-	const skill = name.trim().toLowerCase();
-	if (!SELECTED_SKILL_NAME.test(skill)) throw new Error("Invalid selected skill");
-	return skill;
-}
-
-export function selectedSkillPrompt(name: string, prompt: string): string {
-	const skill = selectedSkillName(name);
-	const task = prompt.trim();
-	return `/skill:${skill}${task ? ` ${task}` : ""}`;
-}
-
 /**
  * Expand a prompt that invokes a skill into the block pi would have built.
  *

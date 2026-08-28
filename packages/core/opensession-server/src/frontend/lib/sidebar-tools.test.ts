@@ -29,14 +29,14 @@ const LEGACY_KEY = "opensession-sidebar-hidden-tools";
 beforeEach(() => store.clear());
 
 describe("readHiddenSidebarTools", () => {
-	// New tools default off unless they are deliberately added to the primary
-	// set. Control UI is a primary launcher; Support is a primary destination.
-	test("a new account sees the primary tools and Control UI", () => {
+	// A tool added to SIDEBAR_TOOL_IDS must not switch itself on for everyone
+	// who has never touched the setting. Support is deliberately one of the
+	// default destinations.
+	test("a new account sees Feed, Pull requests, Support and Catch up", () => {
 		const hidden = readHiddenSidebarTools();
 		expect([...SIDEBAR_TOOL_IDS].filter((id) => !hidden.has(id))).toEqual([
 			"feed",
 			"prs",
-			"control-ui",
 			"plain",
 			"catchup",
 		]);
@@ -115,30 +115,20 @@ describe("sidebar tool order", () => {
 					"catchup",
 					"prs",
 					"tasks",
-					"control-ui",
 					"supporttinder",
 					"reports",
 					"plain",
 					"analytics",
 				],
-				[
-					"reports",
-					"feed",
-					"prs",
-					"tasks",
-					"control-ui",
-					"plain",
-					"analytics",
-				],
+				["reports", "feed", "prs", "tasks", "plain", "analytics"],
 			),
 		).toEqual([
 			"reports",
 			"catchup",
 			"feed",
 			"prs",
-			"tasks",
 			"supporttinder",
-			"control-ui",
+			"tasks",
 			"plain",
 			"analytics",
 		]);

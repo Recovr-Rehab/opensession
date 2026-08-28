@@ -2,12 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import {
-  expandSkillCommand,
-  selectedSkillPrompt,
-  skillSearchPaths,
-  SHIPPED_SKILLS_DIR,
-} from "./skill-paths";
+import { expandSkillCommand, skillSearchPaths, SHIPPED_SKILLS_DIR } from "./skill-paths";
 import { searchSkills } from "./skills";
 
 const dirs: string[] = [];
@@ -49,20 +44,6 @@ describe("skillSearchPaths", () => {
   test("the shipped directory is listed once, even for a session on this repo", () => {
     const paths = skillSearchPaths(join(SHIPPED_SKILLS_DIR, "..", ".."));
     expect(paths.length).toBe(new Set(paths).size);
-  });
-});
-
-describe("selectedSkillPrompt", () => {
-  test("keeps launcher syntax out of the visible task", () => {
-    expect(selectedSkillPrompt("control-ui", "inspect the menu")).toBe(
-      "/skill:control-ui inspect the menu",
-    );
-    expect(selectedSkillPrompt("control-ui", "")).toBe("/skill:control-ui");
-  });
-
-  test("rejects names that can escape the command", () => {
-    expect(() => selectedSkillPrompt("control ui", "inspect")).toThrow();
-    expect(() => selectedSkillPrompt("../control-ui", "inspect")).toThrow();
   });
 });
 

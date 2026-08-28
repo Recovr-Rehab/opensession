@@ -87,10 +87,6 @@ import { clearDraft, saveDraft, NEW_SESSION_DRAFT_KEY } from "./lib/drafts";
 import { dropStagingAttachments } from "./lib/attachments";
 import type { NewSessionPrefill } from "./lib/new-session-link";
 import {
-	CONTROL_UI_SKILL,
-	type SelectedSkill,
-} from "./lib/selected-skill";
-import {
 	errorMatchesPendingCreate,
 	shouldApplyCreatedSessionReply,
 	shouldOpenCreatedSession,
@@ -1579,7 +1575,6 @@ export function App(
 		branch?: string;
 		mode?: "ask" | "code" | "scratch";
 		mcpServers?: string[];
-		skill?: SelectedSkill;
 	}>(() =>
 		route.view === "new" ? { open: true, prompt: route.prompt } : { open: false },
 	);
@@ -1599,17 +1594,7 @@ export function App(
 	useLayoutEffect(() => {
 	paletteOpenRef.current = palette.open;
 	});
-	const openPalette = (
-		{
-			prompt,
-			mcpServers,
-			skill,
-		}: {
-			prompt?: string;
-			mcpServers?: string[];
-			skill?: SelectedSkill;
-		} = {},
-	) => {
+	const openPalette = (prompt?: string, mcpServers?: string[]) => {
 		// This is the global new-session action. It must not inherit the workspace
 		// behind it: without workspaceId, NewSession creates a workspace with its
 		// first session. Its model combinations are safe to use as a picker source,
@@ -1623,7 +1608,6 @@ export function App(
 			open: true,
 			prompt,
 			...(mcpServers?.length ? { mcpServers } : {}),
-			...(skill ? { skill } : {}),
 			...(modelWorkspaceId ? { modelWorkspaceId } : {}),
 		});
 	};
@@ -5445,10 +5429,6 @@ console.error("Rename workspace failed:", error);
 							}
 							analyticsActive={route.view === "analytics"}
 							onOpenAnalytics={() => navigate({ view: "analytics" })}
-							controlUiActive={
-								palette.open && palette.skill?.name === CONTROL_UI_SKILL.name
-							}
-							onOpenControlUi={() => openPalette({ skill: CONTROL_UI_SKILL })}
 							onSelect={(s) => navigate({ view: "session", id: s.id })}
 							onOpenReview={openReviewForSession}
 							onOpenTicket={openTicketWorkspace}
@@ -6169,7 +6149,7 @@ console.error("Archive failed:", e);
 					actions={commandActions}
 					onSelectSession={(id) => navigate({ view: "session", id })}
 					onSelectPr={(pr) => void openPrReview(pr)}
-					onOpenWithMcp={(server) => openPalette({ mcpServers: [server] })}
+					onOpenWithMcp={(server) => openPalette(undefined, [server])}
 				/>
 
 				{/* New-session palette overlays every view. */}
@@ -6186,7 +6166,6 @@ console.error("Archive failed:", e);
 						forceBranch={palette.branch}
 						forceMode={palette.mode}
 						initialMcpServers={palette.mcpServers}
-						initialSkill={palette.skill}
 						workspaces={workspaces}
 						sessions={sessions}
 						onCreateStarted={startNewSessionCreate}
