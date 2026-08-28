@@ -3177,15 +3177,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			...prev,
 			plain: (prev.plain || []).filter((x) => x.id !== threadId),
 		}));
-		await (async () => {
-await setPlainThreadStatusApi(threadId, "done", { user: currentUser });
-})().catch(async () => {
-fetchFeedItems("plain")
-				.then((items) =>
-					setFeedItems((prev) => ({ ...prev, plain: items })),
-				)
-				.catch(() => {});
-});
+		try {
+			await setPlainThreadStatusApi(threadId, "done", { user: currentUser });
+		} catch {
+			try {
+				const items = await fetchFeedItems("plain");
+				setFeedItems((prev) => ({ ...prev, plain: items }));
+			} catch {
+				// The scheduled feed refresh will reconcile the optimistic removal.
+			}
+		}
 	}
 
 	// A Support row: one TODO Plain ticket. The dot wears the linked session's
