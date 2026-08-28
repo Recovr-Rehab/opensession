@@ -569,7 +569,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 			<TranscriptBlocks
 				entries={[
 					{ id: "prompt", type: "user", content: "Check it", timestamp: "2026-08-28T06:00:00Z" },
-					{ id: "reasoning", type: "assistant", content: "**Checking deployment status**", isReasoning: true, timestamp: "2026-08-28T06:00:01Z" },
+					{ id: "reasoning", type: "assistant", content: "**Checking deployment status**\n\n**Inspecting the release**", isReasoning: true, timestamp: "2026-08-28T06:00:01Z" },
 					{ id: "tool", type: "tool_use", toolUseId: "tool-call", toolName: "bash", toolInput: { command: "git status" }, content: "Using bash", timestamp: "2026-08-28T06:00:02Z" },
 					{ id: "legacy-reasoning", type: "assistant", content: "**Verifying the release**", timestamp: "2026-08-28T06:00:03Z" },
 					{ id: "tool-2", type: "tool_use", toolUseId: "tool-call-2", toolName: "bash", toolInput: { command: "git diff" }, content: "Using bash", timestamp: "2026-08-28T06:00:04Z" },
@@ -579,9 +579,10 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		);
 
 		expect(html.match(/data-reasoning=""/g)).toHaveLength(2);
-		expect(html).toContain("Checking deployment status");
+		expect(html).toContain("Checking deployment status\nInspecting the release");
 		expect(html).toContain("Verifying the release");
 		expect(html).not.toContain("<strong>Checking deployment status</strong>");
+		expect(html).not.toContain("<strong>Inspecting the release</strong>");
 		expect(html).not.toContain("<strong>Verifying the release</strong>");
 		setTurnPrefs(null);
 	});

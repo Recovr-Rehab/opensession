@@ -90,8 +90,10 @@ export const msgBodyStreaming =
  * Desktop treats the generated `**title**` as chrome and keeps the body quiet;
  * these do the same while leaving every summary visible in the timeline. */
 export const msgReasoningTitle =
-	"text-body font-normal leading-6 break-words text-dim";
-export const msgReasoningBody = `${msgBody} text-dim`;
+	"whitespace-pre-line text-body font-normal leading-6 break-words text-dim";
+// Reasoning is never answer emphasis. Keep provider-authored strong markers
+// structurally intact for markdown while preventing them from becoming bold.
+export const msgReasoningBody = `${msgBody} text-dim [&_strong]:font-normal`;
 
 /** The current reasoning heading doubles as its loading indicator. This is the
  * same restrained text shimmer as Queueing/Sending: a faint resting word with
