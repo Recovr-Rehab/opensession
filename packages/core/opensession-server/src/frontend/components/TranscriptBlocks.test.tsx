@@ -590,7 +590,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		setTurnPrefs("running", "folded");
 		const running = renderToStaticMarkup(<TranscriptBlocks live entries={entries} />);
 		expect(running).toContain('aria-expanded="true"');
-		expect(running).toContain("text-shimmer_1.8s_linear_infinite");
+		expect(running).toContain("reasoning-shimmer_3s_ease_0.5s_infinite");
 
 		const proseReasoning = renderToStaticMarkup(
 			<TranscriptBlocks
@@ -604,7 +604,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		);
 		expect(proseReasoning).toContain(">Thinking</div>");
 		expect(proseReasoning).toContain("I should inspect the current state first.");
-		expect(proseReasoning).toContain("text-shimmer_1.8s_linear_infinite");
+		expect(proseReasoning).toContain("reasoning-shimmer_3s_ease_0.5s_infinite");
 		setTurnPrefs(null);
 	});
 });
