@@ -15,7 +15,6 @@ export interface SidebarPersonSessions {
 	key: string;
 	label: string;
 	activeSessions: UnifiedSession[];
-	allSessions: UnifiedSession[];
 }
 
 /**
@@ -44,8 +43,7 @@ export function sessionIsRecentlyActive(
  * Unowned automations file under the Agent person; owned automations file under
  * their configured teammate.
  *
- * Sessions retain the incoming order, which lets the caller choose one sort
- * for both the compact and expanded lists. Sessions already kept in personal
+ * Active sessions retain the incoming order. Sessions already kept in personal
  * lanes are omitted so Team remains the place to discover work that is not yet
  * in your sidebar.
  */
@@ -62,7 +60,12 @@ export function sidebarPersonSessions(
 	const groups = new Map<string, SidebarPersonSessions>();
 
 	for (const session of sessions) {
-		if (session.archived || session.desk || keptSessionIds.has(session.id))
+		if (
+			session.archived ||
+			session.desk ||
+			keptSessionIds.has(session.id) ||
+			!sessionIsRecentlyActive(session, nowMs)
+		)
 			continue;
 
 		let key: string;
@@ -85,15 +88,11 @@ export function sidebarPersonSessions(
 
 		let group = groups.get(key);
 		if (!group) {
-			group = { key, label, activeSessions: [], allSessions: [] };
+			group = { key, label, activeSessions: [] };
 			groups.set(key, group);
 		}
-		group.allSessions.push(session);
-		if (sessionIsRecentlyActive(session, nowMs))
-			group.activeSessions.push(session);
+		group.activeSessions.push(session);
 	}
 
-	return Array.from(groups.values()).filter(
-		(group) => group.activeSessions.length > 0,
-	);
+	return Array.from(groups.values());
 }
