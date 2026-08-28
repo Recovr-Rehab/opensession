@@ -14,6 +14,8 @@ import {
   fetchRepos,
   cachedRepos,
   relativeTime,
+  type Goal,
+  type GoalStatus,
   type ModelOption,
   type RepoInfo,
 } from "../lib/api";
@@ -51,33 +53,6 @@ const FORM_FIELDS =
 const SECTION_LABEL = "mb-1.5 text-label font-semibold text-faint";
 /** .automation-session-link */
 const LINK = "cursor-pointer text-link no-underline hover:underline";
-
-type GoalStatus = "active" | "paused" | "done" | "failed";
-
-interface Goal {
-  id: string;
-  name: string;
-  mission: string;
-  status: GoalStatus;
-  mode: "ask" | "code";
-  repo?: string;
-  bksSessionId?: string;
-  nextWakeAt: string;
-  minWakeMinutes: number;
-  maxWakes?: number;
-  wakeCount: number;
-  lastRunAt?: string;
-  lastRunStatus?: "running" | "ok" | "error";
-  lastRunError?: string;
-  phase?: string;
-  pauseReason?: string;
-  doneReason?: string;
-  model?: string;
-  fallbackModel?: string;
-  mcpServers?: string[];
-  createdBy: string;
-  isRunning?: boolean;
-}
 
 interface Props {
   onOpenSession: (sessionId: string) => void;
