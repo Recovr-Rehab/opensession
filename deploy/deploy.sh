@@ -546,11 +546,18 @@ if systemctl cat caddy.service >/dev/null 2>&1 \
   fi
 fi
 
-# The target supervisor may have been socket-activated while peers restarted.
-# Drain its child with the restart-specific one-second journal handoff before
-# systemd replaces the supervisor and transfers the inherited listener again.
-drain_gateway_for_supervisor_restart || true
-systemctl restart opensession.service
+# The target supervisor is normally socket-activated while peers restart. Keep
+# it when the installed unit is unchanged; replacing it again only resets
+# already-accepted proxy connections. A changed unit still gets one fast drain
+# before systemd transfers the inherited listener.
+if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "1" ]; then
+  drain_gateway_for_supervisor_restart || true
+  systemctl restart opensession.service
+elif ! systemctl is-active --quiet opensession.service; then
+  systemctl start opensession.service
+else
+  echo "[deploy] target supervisor already active; retaining accepted connections"
+fi
 
 # Post-restart health gate — fail the deploy if it doesn't come back.
 for _ in $(seq 1 30); do
