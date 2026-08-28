@@ -1,12 +1,6 @@
 /** `opensession sandbox …` — one-command local provider setup. */
 
-import {
-  chmodSync,
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-} from "fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -33,13 +27,16 @@ function updateSandboxConfig(patch: Record<string, unknown>): void {
   let raw: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(readFileSync(sandboxConfigPath(), "utf-8"));
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+      raw = parsed;
   } catch {}
   writeJsonAtomic(sandboxConfigPath(), { ...raw, ...patch });
   chmodSync(sandboxConfigPath(), 0o600);
 }
 
-async function qualifyRemoteThroughServer(provider: "daytona" | "box" | "modal"): Promise<number> {
+async function qualifyRemoteThroughServer(
+  provider: "daytona" | "box" | "modal",
+): Promise<number> {
   const token = localAutomationToken();
   if (!token) {
     fail(
@@ -73,7 +70,10 @@ async function qualifyRemoteThroughServer(provider: "daytona" | "box" | "modal")
     operation?: { id?: string };
   };
   if (!start.ok || !started.operation?.id) {
-    fail("remote qualification could not start", started.error || `HTTP ${start.status}`);
+    fail(
+      "remote qualification could not start",
+      started.error || `HTTP ${start.status}`,
+    );
     return 1;
   }
   const operationId = started.operation.id;
@@ -93,16 +93,24 @@ async function qualifyRemoteThroughServer(provider: "daytona" | "box" | "modal")
           }>;
         })
       : undefined;
-    const operation = body?.operations?.find((candidate) => candidate.id === operationId);
+    const operation = body?.operations?.find(
+      (candidate) => candidate.id === operationId,
+    );
     if (!operation || operation.status === "running") continue;
     if (operation.status === "succeeded") {
       ok(`${provider} is Ready`);
       return 0;
     }
-    fail(`${provider} needs attention`, operation.failureSummary || "qualification failed");
+    fail(
+      `${provider} needs attention`,
+      operation.failureSummary || "qualification failed",
+    );
     return 1;
   }
-  fail(`${provider} qualification timed out`, "check Workspace → Sandboxes for the operation state");
+  fail(
+    `${provider} qualification timed out`,
+    "check Workspace → Sandboxes for the operation state",
+  );
   return 1;
 }
 
@@ -118,7 +126,12 @@ async function requireCommand(name: string, hint: string): Promise<boolean> {
 async function installPersistentHostFirewall(): Promise<boolean> {
   const setup = `${REPO_ROOT}/deploy/sandbox/setup-host.sh`;
   const unitPath = "/etc/systemd/system/opensession-sandbox-host.service";
-  if (!(await requireCommand("sudo", "install sudo and grant this operator host setup access"))) {
+  if (
+    !(await requireCommand(
+      "sudo",
+      "install sudo and grant this operator host setup access",
+    ))
+  ) {
     return false;
   }
   const scratch = mkdtempSync(join(tmpdir(), "opensession-sandbox-unit-"));
@@ -129,11 +142,21 @@ async function installPersistentHostFirewall(): Promise<boolean> {
     for (const argv of [
       ["sudo", "-n", "install", "-m", "0644", staged, unitPath],
       ["sudo", "-n", "systemctl", "daemon-reload"],
-      ["sudo", "-n", "systemctl", "enable", "--now", "opensession-sandbox-host.service"],
+      [
+        "sudo",
+        "-n",
+        "systemctl",
+        "enable",
+        "--now",
+        "opensession-sandbox-host.service",
+      ],
     ]) {
       const result = await run(argv);
       if (result.code !== 0) {
-        fail("could not install the persistent sandbox firewall", result.stderr || argv.join(" "));
+        fail(
+          "could not install the persistent sandbox firewall",
+          result.stderr || argv.join(" "),
+        );
         return false;
       }
     }
@@ -156,7 +179,10 @@ async function installDockerImage(): Promise<string | null> {
   const pull = await run(["docker", "pull", releaseImage]);
   if (pull.code === 0) {
     if (!Bun.which("cosign")) {
-      fail("cosign is required to verify the published runner image", "install cosign, then rerun this command");
+      fail(
+        "cosign is required to verify the published runner image",
+        "install cosign, then rerun this command",
+      );
       return null;
     }
     const verify = await run([
@@ -176,8 +202,13 @@ async function installDockerImage(): Promise<string | null> {
     return releaseImage;
   }
 
-  warn("no matching published image; building this checkout for the local architecture");
-  const code = await runInherit(["bash", `${REPO_ROOT}/deploy/sandbox/build.sh`], REPO_ROOT);
+  warn(
+    "no matching published image; building this checkout for the local architecture",
+  );
+  const code = await runInherit(
+    ["bash", `${REPO_ROOT}/deploy/sandbox/build.sh`],
+    REPO_ROOT,
+  );
   if (code !== 0) {
     fail("runner image build failed");
     return null;
@@ -187,10 +218,24 @@ async function installDockerImage(): Promise<string | null> {
 
 async function enableDocker(): Promise<number> {
   heading("Docker sandbox");
-  if (!(await requireCommand("docker", "install Docker Engine, then rerun this command"))) return 1;
-  const daemon = await run(["docker", "info", "--format", "{{.ServerVersion}}"]).catch(() => ({ code: 1, stdout: "", stderr: "" }));
+  if (
+    !(await requireCommand(
+      "docker",
+      "install Docker Engine, then rerun this command",
+    ))
+  )
+    return 1;
+  const daemon = await run([
+    "docker",
+    "info",
+    "--format",
+    "{{.ServerVersion}}",
+  ]).catch(() => ({ code: 1, stdout: "", stderr: "" }));
   if (daemon.code !== 0) {
-    fail("Docker daemon is unavailable", "start Docker and allow this user to access its socket");
+    fail(
+      "Docker daemon is unavailable",
+      "start Docker and allow this user to access its socket",
+    );
     return 1;
   }
   ok("Docker daemon", daemon.stdout);
@@ -201,21 +246,33 @@ async function enableDocker(): Promise<number> {
   updateSandboxConfig({
     workspace: "volume",
     transport: "ws",
-    snapshots: { enabled: true, onIdle: true, maxPerSession: 2, quickSyncOnRestore: true },
+    snapshots: {
+      enabled: true,
+      onIdle: true,
+      maxPerSession: 2,
+      quickSyncOnRestore: true,
+    },
   });
-  connectSandboxProvider("docker", { settings: { image, cpu: 4, memoryMb: 8192 } });
+  connectSandboxProvider("docker", {
+    settings: { image, cpu: 4, memoryMb: 8192 },
+  });
   heading("Qualification");
   try {
     await qualifySandboxConnection("docker");
   } catch (error) {
-    fail("Docker needs attention", error instanceof Error ? error.message : String(error));
+    fail(
+      "Docker needs attention",
+      error instanceof Error ? error.message : String(error),
+    );
     return 1;
   }
   ok("Docker is Ready", "select it in Workspace → Sandboxes");
   return 0;
 }
 
-async function installCaddyIngress(originValue: string | undefined): Promise<number> {
+async function installCaddyIngress(
+  originValue: string | undefined,
+): Promise<number> {
   let origin: string;
   try {
     const parsed = new URL(originValue || "");
@@ -225,13 +282,26 @@ async function installCaddyIngress(originValue: string | undefined): Promise<num
     parsed.hash = "";
     origin = parsed.toString().replace(/\/$/, "");
   } catch {
-    fail("usage: opensession sandbox ingress install https://ingress.example.com");
+    fail(
+      "usage: opensession sandbox ingress install https://ingress.example.com",
+    );
     return 1;
   }
-  if (!(await requireCommand("caddy", "install Caddy, or copy the generated Settings snippet manually"))) {
+  if (
+    !(await requireCommand(
+      "caddy",
+      "install Caddy, or copy the generated Settings snippet manually",
+    ))
+  ) {
     return 1;
   }
-  if (!(await requireCommand("sudo", "grant this operator Caddy configuration access"))) return 1;
+  if (
+    !(await requireCommand(
+      "sudo",
+      "grant this operator Caddy configuration access",
+    ))
+  )
+    return 1;
 
   const caddyfile = process.env.OPENSESSION_CADDYFILE || "/etc/caddy/Caddyfile";
   let main = "";
@@ -253,28 +323,50 @@ async function installCaddyIngress(originValue: string | undefined): Promise<num
     try {
       await Bun.write(staged, upsertCaddyIngress(main, origin));
     } catch (error) {
-      fail("Open Session could not safely update this Caddyfile", String(error));
+      fail(
+        "Open Session could not safely update this Caddyfile",
+        String(error),
+      );
       return 1;
     }
     if ((await run([...sudo, "cp", "-p", caddyfile, backup])).code !== 0) {
       fail("could not back up the Caddyfile");
       return 1;
     }
-    if ((await run([...sudo, "install", "-m", "0644", staged, caddyfile])).code !== 0) {
+    if (
+      (await run([...sudo, "install", "-m", "0644", staged, caddyfile]))
+        .code !== 0
+    ) {
       await rollback();
-      fail("could not install the managed Caddy routes; the prior Caddyfile was restored");
+      fail(
+        "could not install the managed Caddy routes; the prior Caddyfile was restored",
+      );
       return 1;
     }
-    const validate = await run([...sudo, "caddy", "validate", "--config", caddyfile, "--adapter", "caddyfile"]);
+    const validate = await run([
+      ...sudo,
+      "caddy",
+      "validate",
+      "--config",
+      caddyfile,
+      "--adapter",
+      "caddyfile",
+    ]);
     if (validate.code !== 0) {
       await rollback();
-      fail("Caddy rejected the generated configuration; the prior Caddyfile was restored", validate.stderr);
+      fail(
+        "Caddy rejected the generated configuration; the prior Caddyfile was restored",
+        validate.stderr,
+      );
       return 1;
     }
     const reload = await run([...sudo, "systemctl", "reload", "caddy"]);
     if (reload.code !== 0) {
       await rollback();
-      fail("Caddy reload failed; the prior Caddyfile was restored", reload.stderr);
+      fail(
+        "Caddy reload failed; the prior Caddyfile was restored",
+        reload.stderr,
+      );
       return 1;
     }
     let healthy = false;
@@ -309,7 +401,11 @@ export async function sandbox(args: string[]): Promise<number> {
   }
   if (!isWorkspaceSandboxProvider(provider)) {
     fail("usage: opensession sandbox enable docker");
-    info(dim("Also available: opensession sandbox test|disable docker|daytona|box|modal"));
+    info(
+      dim(
+        "Also available: opensession sandbox test|disable docker|daytona|box|modal",
+      ),
+    );
     info(dim("Provider accounts are connected in Workspace → Sandboxes."));
     return 1;
   }
@@ -326,7 +422,10 @@ export async function sandbox(args: string[]): Promise<number> {
       return 1;
     }
     updateSandboxConnection(provider, { enabled: false });
-    ok(`${provider} is disabled`, "configuration and existing sandboxes were preserved");
+    ok(
+      `${provider} is disabled`,
+      "configuration and existing sandboxes were preserved",
+    );
     return 0;
   }
   if (action === "test") {
@@ -343,11 +442,18 @@ export async function sandbox(args: string[]): Promise<number> {
       ok(`${provider} is Ready`);
       return 0;
     } catch (error) {
-      fail(`${provider} needs attention`, error instanceof Error ? error.message : String(error));
+      fail(
+        `${provider} needs attention`,
+        error instanceof Error ? error.message : String(error),
+      );
       return 1;
     }
   }
   fail("usage: opensession sandbox enable docker");
-  info(dim("Also available: opensession sandbox test|disable docker|daytona|box|modal"));
+  info(
+    dim(
+      "Also available: opensession sandbox test|disable docker|daytona|box|modal",
+    ),
+  );
   return 1;
 }

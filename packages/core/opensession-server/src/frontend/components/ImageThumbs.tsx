@@ -1,10 +1,7 @@
 import React from "react";
 import type { ImageAttachmentComment } from "../lib/image-attachment-comment";
 import type { ImageRegion } from "../lib/image-region-comment";
-import {
-  openLightbox,
-  type ImageRegionAnnotation,
-} from "./MediaLightbox";
+import { openLightbox, type ImageRegionAnnotation } from "./MediaLightbox";
 import { IconX } from "./icons";
 
 interface Props {

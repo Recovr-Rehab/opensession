@@ -33,12 +33,17 @@ type ProcessPort = {
   pid: number;
   send?: (message: GatewayPreloadedMessage) => boolean;
   on(event: "message", listener: (message: unknown) => void): unknown;
-  removeListener(event: "message", listener: (message: unknown) => void): unknown;
+  removeListener(
+    event: "message",
+    listener: (message: unknown) => void,
+  ): unknown;
 };
 
 type GatewayEnvironment = Record<string, string | undefined>;
 
-export function gatewayRole(env: GatewayEnvironment = process.env): GatewayRole {
+export function gatewayRole(
+  env: GatewayEnvironment = process.env,
+): GatewayRole {
   const value = env.OPENSESSION_GATEWAY_ROLE?.trim() || "active";
   if (value !== "active" && value !== "standby") {
     throw new Error(`Invalid OPENSESSION_GATEWAY_ROLE: ${value}`);
@@ -51,7 +56,7 @@ function activationMessage(value: unknown): GatewayActivationMessage | null {
   const message = value as Partial<GatewayActivationMessage>;
   return message.type === "opensession_gateway_activate" &&
     typeof message.nonce === "string"
-    ? message as GatewayActivationMessage
+    ? (message as GatewayActivationMessage)
     : null;
 }
 
@@ -76,22 +81,31 @@ async function readBoundedLine(
   }
 }
 
-export async function acquireGatewayActivationLease(options: {
-  env?: GatewayEnvironment;
-  spawn?: (command: string[]) => GatewayLeaseProcess;
-  exit?: (code: number) => never;
-} = {}): Promise<{ release(): Promise<void> }> {
+export async function acquireGatewayActivationLease(
+  options: {
+    env?: GatewayEnvironment;
+    spawn?: (command: string[]) => GatewayLeaseProcess;
+    exit?: (code: number) => never;
+  } = {},
+): Promise<{ release(): Promise<void> }> {
   const env = options.env ?? process.env;
-  const state = env.OPENSESSION_DEPLOY_STATE ||
-    `${env.HOME || ""}/.opensession/deploy`;
-  const lockPath = env.OPENSESSION_GATEWAY_LEASE || `${state}/gateway-active.lock`;
+  const state =
+    env.OPENSESSION_DEPLOY_STATE || `${env.HOME || ""}/.opensession/deploy`;
+  const lockPath =
+    env.OPENSESSION_GATEWAY_LEASE || `${state}/gateway-active.lock`;
   mkdirSync(dirname(lockPath), { recursive: true, mode: 0o700 });
   const waitSeconds = env.OPENSESSION_GATEWAY_LEASE_WAIT_SECS || "5";
   if (!/^\d+$/.test(waitSeconds)) {
     throw new Error("Invalid OPENSESSION_GATEWAY_LEASE_WAIT_SECS");
   }
-  const spawn = options.spawn ?? ((command: string[]) =>
-    Bun.spawn(command, { stdin: "pipe", stdout: "pipe", stderr: "pipe" }) as GatewayLeaseProcess);
+  const spawn =
+    options.spawn ??
+    ((command: string[]) =>
+      Bun.spawn(command, {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      }) as GatewayLeaseProcess);
   const lease = spawn([
     "flock",
     "-w",
@@ -114,7 +128,9 @@ export async function acquireGatewayActivationLease(options: {
   const exit = options.exit ?? ((code: number) => process.exit(code));
   void lease.exited.then((code) => {
     if (!releasing) {
-      console.error(`[gateway-activation] ownership lease exited unexpectedly (${code})`);
+      console.error(
+        `[gateway-activation] ownership lease exited unexpectedly (${code})`,
+      );
       exit(70);
     }
   });
@@ -128,64 +144,80 @@ export async function acquireGatewayActivationLease(options: {
   };
 }
 
-export async function waitForRuntimePeerGeneration(options: {
-  env?: GatewayEnvironment;
-  fetchReady?: (url: string) => Promise<Response>;
-  readReadyFile?: (path: string) => string;
-  sleep?: (ms: number) => Promise<void>;
-  timeoutMs?: number;
-} = {}): Promise<void> {
+export async function waitForRuntimePeerGeneration(
+  options: {
+    env?: GatewayEnvironment;
+    fetchReady?: (url: string) => Promise<Response>;
+    readReadyFile?: (path: string) => string;
+    sleep?: (ms: number) => Promise<void>;
+    timeoutMs?: number;
+  } = {},
+): Promise<void> {
   const env = options.env ?? process.env;
   const fallback = (
     env.OPENSESSION_PEER_GENERATION ?? env.OPENSESSION_RELEASE_GENERATION
   )?.trim();
-  const expectedKernel = (env.OPENSESSION_KERNEL_GENERATION ?? fallback)?.trim();
-  const expectedExecutor = (env.OPENSESSION_EXECUTOR_GENERATION ?? fallback)?.trim();
+  const expectedKernel = (
+    env.OPENSESSION_KERNEL_GENERATION ?? fallback
+  )?.trim();
+  const expectedExecutor = (
+    env.OPENSESSION_EXECUTOR_GENERATION ?? fallback
+  )?.trim();
   if (
     (!expectedKernel || expectedKernel === "development") &&
     (!expectedExecutor || expectedExecutor === "development")
-  ) return;
+  )
+    return;
   for (const expected of [expectedKernel, expectedExecutor]) {
     if (!expected || !/^[0-9a-f]{40,64}$/.test(expected)) {
       throw new Error("Invalid runtime peer generation");
     }
   }
-  const fetchReady = options.fetchReady ?? ((url: string) =>
-    fetch(url, { signal: AbortSignal.timeout(1_000) }));
-  const readReadyFile = options.readReadyFile ?? ((path: string) => readFileSync(path, "utf8"));
+  const fetchReady =
+    options.fetchReady ??
+    ((url: string) => fetch(url, { signal: AbortSignal.timeout(1_000) }));
+  const readReadyFile =
+    options.readReadyFile ?? ((path: string) => readFileSync(path, "utf8"));
   const sleep = options.sleep ?? Bun.sleep;
   const deadline = Date.now() + (options.timeoutMs ?? 60_000);
   const kernelUrl = new URL(
     "/ready",
     env.OPENSESSION_SESSION_KERNEL_URL ?? "http://127.0.0.1:3849",
   ).toString();
-  const executorReadyFile = env.OPENSESSION_EXECUTOR_READY_FILE ?? "/run/opensession-executor/ready";
+  const executorReadyFile =
+    env.OPENSESSION_EXECUTOR_READY_FILE ?? "/run/opensession-executor/ready";
 
   while (Date.now() < deadline) {
     try {
       const [kernel, executorText] = await Promise.all([
         fetchReady(kernelUrl).then(async (response) =>
-          response.ok ? await response.json() as { generation?: string } : null),
+          response.ok
+            ? ((await response.json()) as { generation?: string })
+            : null,
+        ),
         Promise.resolve().then(() => readReadyFile(executorReadyFile)),
       ]);
       const executor = JSON.parse(executorText) as { generation?: string };
       if (
         kernel?.generation === expectedKernel &&
         executor.generation === expectedExecutor
-      ) return;
+      )
+        return;
     } catch {}
     await sleep(100);
   }
   throw new Error(
     `Runtime peers did not reach kernel ${expectedKernel!.slice(0, 10)} / ` +
-    `executor ${expectedExecutor!.slice(0, 10)}`,
+      `executor ${expectedExecutor!.slice(0, 10)}`,
   );
 }
 
-export async function waitForGatewayActivationIfStandby(options: {
-  env?: GatewayEnvironment;
-  processPort?: ProcessPort;
-} = {}): Promise<void> {
+export async function waitForGatewayActivationIfStandby(
+  options: {
+    env?: GatewayEnvironment;
+    processPort?: ProcessPort;
+  } = {},
+): Promise<void> {
   const env = options.env ?? process.env;
   if (gatewayRole(env) === "active") return;
 

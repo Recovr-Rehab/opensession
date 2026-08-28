@@ -51,9 +51,15 @@ function controlledGateway(pid: number, releaseRoot: string, standby = false) {
 
 describe("gateway supervisor", () => {
   test("accepts only systemd descriptors addressed to this supervisor", () => {
-    expect(inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "1" }, 42)).toBe(3);
-    expect(inheritedGatewaySocketFd({ LISTEN_PID: "41", LISTEN_FDS: "1" }, 42)).toBeUndefined();
-    expect(inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "0" }, 42)).toBeUndefined();
+    expect(
+      inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "1" }, 42),
+    ).toBe(3);
+    expect(
+      inheritedGatewaySocketFd({ LISTEN_PID: "41", LISTEN_FDS: "1" }, 42),
+    ).toBeUndefined();
+    expect(
+      inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "0" }, 42),
+    ).toBeUndefined();
   });
 
   test("discovers independently selected peer generations on supervisor boot", async () => {
@@ -77,7 +83,9 @@ describe("gateway supervisor", () => {
       waitReady: async () => {},
       validateRelease: (root) => root,
       promoteCurrent() {},
-      quiescePublicListener() { active.events.push("listener-quiesced"); },
+      quiescePublicListener() {
+        active.events.push("listener-quiesced");
+      },
     });
     expect(supervisor.status().backendPort).toBe(active.gateway.backendPort);
     const result = await supervisor.drainForSupervisorRestart();
@@ -92,7 +100,9 @@ describe("gateway supervisor", () => {
     const order: string[] = [];
     const publishedPorts: number[] = [];
     let markLive!: () => void;
-    const live = new Promise<void>((resolve) => { markLive = resolve; });
+    const live = new Promise<void>((resolve) => {
+      markLive = resolve;
+    });
     const supervisor = new GatewaySupervisor(old.gateway, {
       spawn() {
         order.push("spawn-standby");
@@ -163,9 +173,13 @@ describe("gateway supervisor", () => {
         selectedPeers = peerGenerations;
         return candidate.gateway;
       },
-      async waitReady() { order.push("ready"); },
+      async waitReady() {
+        order.push("ready");
+      },
       validateRelease: (root) => root,
-      promoteCurrent(root) { order.push(`promote:${root}`); },
+      promoteCurrent(root) {
+        order.push(`promote:${root}`);
+      },
     });
     const preparing = supervisor.prepareCoordinated({
       type: "prepare_coordinated",
@@ -207,10 +221,13 @@ describe("gateway supervisor", () => {
         return role === "standby" ? candidate.gateway : rollback.gateway;
       },
       async waitReady(gateway) {
-        if (gateway === candidate.gateway) throw new Error("target generation failed");
+        if (gateway === candidate.gateway)
+          throw new Error("target generation failed");
       },
       validateRelease: (root) => root,
-      promoteCurrent(root) { promotions.push(root); },
+      promoteCurrent(root) {
+        promotions.push(root);
+      },
     });
     const preparing = supervisor.prepareCoordinated({
       type: "prepare_coordinated",
@@ -250,7 +267,8 @@ describe("gateway supervisor", () => {
         return role === "standby" ? candidate.gateway : rollback.gateway;
       },
       async waitReady(gateway) {
-        if (gateway === candidate.gateway) throw new Error("candidate boot failed");
+        if (gateway === candidate.gateway)
+          throw new Error("candidate boot failed");
       },
       validateRelease: (root) => root,
       promoteCurrent(root) {
@@ -316,13 +334,16 @@ describe("gateway supervisor", () => {
     const marker = join(root, "effect.txt");
     const activationModule = join(import.meta.dir, "gateway-activation.ts");
     const entry = join(root, "candidate.ts");
-    writeFileSync(entry, [
-      `import { waitForGatewayActivationIfStandby } from ${JSON.stringify(activationModule)};`,
-      `import { writeFileSync } from "fs";`,
-      `await waitForGatewayActivationIfStandby();`,
-      `writeFileSync(${JSON.stringify(marker)}, "activated\\n");`,
-      `await new Promise(() => {});`,
-    ].join("\n"));
+    writeFileSync(
+      entry,
+      [
+        `import { waitForGatewayActivationIfStandby } from ${JSON.stringify(activationModule)};`,
+        `import { writeFileSync } from "fs";`,
+        `await waitForGatewayActivationIfStandby();`,
+        `writeFileSync(${JSON.stringify(marker)}, "activated\\n");`,
+        `await new Promise(() => {});`,
+      ].join("\n"),
+    );
 
     const candidate = spawnGateway(
       root,
@@ -345,13 +366,16 @@ describe("gateway supervisor", () => {
 
   test("durably journals handoff authority with atomic replacement", () => {
     const state = mkdtempSync(join(tmpdir(), "gateway-transaction-"));
-    writeGatewayHandoffTransaction({
-      phase: "parked",
-      targetRelease: "/releases/new",
-      previousRelease: "/releases/old",
-      candidatePid: 42,
-      updatedAt: new Date().toISOString(),
-    }, state);
+    writeGatewayHandoffTransaction(
+      {
+        phase: "parked",
+        targetRelease: "/releases/new",
+        previousRelease: "/releases/old",
+        candidatePid: 42,
+        updatedAt: new Date().toISOString(),
+      },
+      state,
+    );
     expect(readGatewayHandoffTransaction(state)).toMatchObject({
       phase: "parked",
       candidatePid: 42,
@@ -377,8 +401,14 @@ describe("gateway supervisor", () => {
     mkdirSync(join(release, ".frontend-dist"), { recursive: true });
     writeFileSync(join(release, ".opensession-release"), `${sha}\n`);
     writeFileSync(join(release, ".frontend-dist", ".bundle-meta.json"), "{}\n");
-    expect(validateGatewayRelease(release, sha, releases)).toBe(realpathSync(release));
-    expect(() => validateGatewayRelease(root, sha, releases)).toThrow("outside");
-    expect(() => validateGatewayRelease(release, "bad", releases)).toThrow("invalid release sha");
+    expect(validateGatewayRelease(release, sha, releases)).toBe(
+      realpathSync(release),
+    );
+    expect(() => validateGatewayRelease(root, sha, releases)).toThrow(
+      "outside",
+    );
+    expect(() => validateGatewayRelease(release, "bad", releases)).toThrow(
+      "invalid release sha",
+    );
   });
 });
