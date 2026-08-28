@@ -1915,6 +1915,14 @@ const path = await resolveAnonymousUserPath(
 				}
 			});
 			if (!started.openImmediately) return;
+			// "Open" means the new session's conversation, even when the create
+			// adopts the PR workspace whose Review pane is currently foregrounded.
+			// Leaving Review selected mounts PrPanel against the client-minted id
+			// before the server has persisted it, briefly reporting "Session not
+			// found" until the person opens the tab again. Clear both the live pane
+			// and the target workspace's remembered selection before navigating.
+			setActiveViewTabState(null);
+			if (started.workspaceId) saveActiveViewTab(started.workspaceId, null);
 			if (started.prompt || started.images?.length) {
 				setPendingInitialPrompts((current) => ({
 					...current,
