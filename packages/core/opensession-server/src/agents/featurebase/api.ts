@@ -48,7 +48,8 @@ async function fbFetch<T = unknown>(
   init: RequestInit = {},
 ): Promise<T> {
   const key = featurebaseApiKey();
-  if (!key) throw new FeaturebaseApiError("FEATUREBASE_API_KEY is not set", 401);
+  if (!key)
+    throw new FeaturebaseApiError("FEATUREBASE_API_KEY is not set", 401);
   const url = `${featurebaseApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${key}`);
@@ -71,7 +72,9 @@ async function fbFetch<T = unknown>(
     const message =
       asString(errObj.message) ||
       asString(errObj.error) ||
-      (typeof parsed === "string" ? parsed.slice(0, 200) : `Featurebase ${res.status}`);
+      (typeof parsed === "string"
+        ? parsed.slice(0, 200)
+        : `Featurebase ${res.status}`);
     throw new FeaturebaseApiError(message, res.status);
   }
   return parsed as T;
@@ -113,7 +116,12 @@ async function listPages<T>(
 function unwrapResource(raw: unknown): unknown {
   const rec = asRecord(raw);
   const nested = rec.data;
-  if (nested && typeof nested === "object" && !Array.isArray(nested) && asString(asRecord(nested).id)) {
+  if (
+    nested &&
+    typeof nested === "object" &&
+    !Array.isArray(nested) &&
+    asString(asRecord(nested).id)
+  ) {
     return nested;
   }
   return raw;
@@ -162,6 +170,7 @@ export interface FeaturebaseTicket {
   open: boolean;
   status: FeaturebaseStatus;
   author: FeaturebasePerson;
+  assignee: FeaturebasePerson | null;
   assigneeId: string | null;
   teamAssigneeId: string | null;
   createdAt: string | null;
@@ -224,24 +233,35 @@ function status(raw: unknown): FeaturebaseStatus {
   };
 }
 
-function partActorType(partType: string | null, authorType: string | null): FeaturebaseConversationPart["actorType"] {
+function partActorType(
+  partType: string | null,
+  authorType: string | null,
+): FeaturebaseConversationPart["actorType"] {
   if (partType === "note" || partType === "admin_note") return "note";
   if (authorType === "bot") return "bot";
   if (partType === "admin_msg" || authorType === "admin") return "admin";
-  if (partType === "user_msg" || authorType === "customer" || authorType === "lead" || authorType === "guest") {
+  if (
+    partType === "user_msg" ||
+    authorType === "customer" ||
+    authorType === "lead" ||
+    authorType === "guest"
+  ) {
     return "customer";
   }
   return "system";
 }
 
-export function normalizeConversationPart(raw: unknown): FeaturebaseConversationPart | null {
+export function normalizeConversationPart(
+  raw: unknown,
+): FeaturebaseConversationPart | null {
   const rec = asRecord(raw);
   const id = asString(rec.id);
   if (!id) return null;
   const author = person(rec.author);
   const html = asString(rec.bodyHtml) || asString(rec.body);
   const markdown = asString(rec.bodyMarkdown);
-  const text = markdown || (html ? htmlToText(html) : "") || asString(rec.content) || "";
+  const text =
+    markdown || (html ? htmlToText(html) : "") || asString(rec.content) || "";
   const actorType = partActorType(asString(rec.partType), author.type);
   if (!text && actorType === "system") return null;
   return {
@@ -262,7 +282,9 @@ export function normalizeTicket(raw: unknown): FeaturebaseTicket | null {
   const content = htmlToText(contentHtml);
   const title = asString(rec.title) || "Ticket";
   const parts = Array.isArray(rec.conversationParts)
-    ? rec.conversationParts.map(normalizeConversationPart).filter((p): p is FeaturebaseConversationPart => !!p)
+    ? rec.conversationParts
+        .map(normalizeConversationPart)
+        .filter((p): p is FeaturebaseConversationPart => !!p)
     : [];
   return {
     id,
@@ -274,7 +296,8 @@ export function normalizeTicket(raw: unknown): FeaturebaseTicket | null {
     open: asBool(rec.open) ?? true,
     status: status(rec.status),
     author: person(rec.author),
-    assigneeId: asString(rec.assigneeId),
+    assignee: personIfPresent(rec.assignee),
+    assigneeId: asString(rec.assigneeId) || personIfPresent(rec.assignee)?.id,
     teamAssigneeId: asString(rec.teamAssigneeId),
     createdAt: asString(rec.createdAt),
     updatedAt: asString(rec.updatedAt),
@@ -287,13 +310,21 @@ function normalizeComment(raw: unknown): FeaturebaseComment | null {
   const id = asString(rec.id);
   if (!id) return null;
   const html = asString(rec.content) || asString(rec.bodyHtml) || "";
-  const author = personIfPresent(rec.author) || personIfPresent(rec.user) || person(null);
+  const author =
+    personIfPresent(rec.author) || personIfPresent(rec.user) || person(null);
   return {
     id,
-    text: asString(rec.bodyMarkdown) || htmlToText(html) || asString(rec.content) || "",
+    text:
+      asString(rec.bodyMarkdown) ||
+      htmlToText(html) ||
+      asString(rec.content) ||
+      "",
     authorName: author.name,
     createdAt: asString(rec.createdAt),
-    private: asBool(rec.private) || asBool(rec.isPrivate) || asString(rec.privacy) === "private",
+    private:
+      asBool(rec.private) ||
+      asBool(rec.isPrivate) ||
+      asString(rec.privacy) === "private",
   };
 }
 
@@ -315,11 +346,16 @@ export function normalizePost(raw: unknown): FeaturebasePost | null {
     boardName: asString(board.name),
     status: status(rec.status),
     author: person(rec.author),
-    upvoteCount: asNumber(rec.upvotes) ?? asNumber(rec.upvoteCount) ?? asNumber(rec.voteCount),
+    upvoteCount:
+      asNumber(rec.upvotes) ??
+      asNumber(rec.upvoteCount) ??
+      asNumber(rec.voteCount),
     createdAt: asString(rec.createdAt),
     updatedAt: asString(rec.updatedAt),
     comments: Array.isArray(rec.comments)
-      ? rec.comments.map(normalizeComment).filter((c): c is FeaturebaseComment => !!c)
+      ? rec.comments
+          .map(normalizeComment)
+          .filter((c): c is FeaturebaseComment => !!c)
       : [],
   };
 }
@@ -336,13 +372,23 @@ function isOpenTicket(ticket: FeaturebaseTicket): boolean {
 
 export async function listTicketStatuses(): Promise<FeaturebaseStatus[]> {
   const raw = await fbFetch<unknown>("/v2/tickets/statuses");
-  const rows = Array.isArray(raw) ? raw : Array.isArray(asRecord(raw).data) ? asRecord(raw).data : [];
+  const rows = Array.isArray(raw)
+    ? raw
+    : Array.isArray(asRecord(raw).data)
+      ? asRecord(raw).data
+      : [];
   return (rows as unknown[]).map(status).filter((row) => row.id);
 }
 
-export async function listBoards(): Promise<Array<{ id: string; name: string }>> {
+export async function listBoards(): Promise<
+  Array<{ id: string; name: string }>
+> {
   const raw = await fbFetch<unknown>("/v2/boards");
-  const rows = Array.isArray(raw) ? raw : Array.isArray(asRecord(raw).data) ? asRecord(raw).data : [];
+  const rows = Array.isArray(raw)
+    ? raw
+    : Array.isArray(asRecord(raw).data)
+      ? asRecord(raw).data
+      : [];
   const out: Array<{ id: string; name: string }> = [];
   for (const row of rows as unknown[]) {
     const rec = asRecord(row);
@@ -358,16 +404,25 @@ export async function listAdmins(): Promise<FeaturebasePerson[]> {
   return raw.map(person).filter((admin) => admin.id);
 }
 
-async function mergeLinkedConversationParts(ticket: FeaturebaseTicket, raw: unknown): Promise<FeaturebaseTicket> {
+async function mergeLinkedConversationParts(
+  ticket: FeaturebaseTicket,
+  raw: unknown,
+): Promise<FeaturebaseTicket> {
   const rec = asRecord(unwrapResource(raw));
-  const links = Array.isArray(rec.linkedConversations) ? rec.linkedConversations : [];
+  const links = Array.isArray(rec.linkedConversations)
+    ? rec.linkedConversations
+    : [];
   const seen = new Set(ticket.parts.map((part) => part.id));
   for (const link of links) {
     const convId = asString(asRecord(link).id);
     if (!convId) continue;
     try {
-      const conv = asRecord(await fbFetch(`/v2/conversations/${encodeURIComponent(convId)}`));
-      const extra = Array.isArray(conv.conversationParts) ? conv.conversationParts : [];
+      const conv = asRecord(
+        await fbFetch(`/v2/conversations/${encodeURIComponent(convId)}`),
+      );
+      const extra = Array.isArray(conv.conversationParts)
+        ? conv.conversationParts
+        : [];
       for (const partRaw of extra) {
         const part = normalizeConversationPart(partRaw);
         if (!part || seen.has(part.id)) continue;
@@ -378,7 +433,9 @@ async function mergeLinkedConversationParts(ticket: FeaturebaseTicket, raw: unkn
       // Ticket still renders with the parts Featurebase already attached.
     }
   }
-  ticket.parts.sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || "")));
+  ticket.parts.sort((a, b) =>
+    String(a.timestamp || "").localeCompare(String(b.timestamp || "")),
+  );
   return ticket;
 }
 
@@ -396,11 +453,18 @@ export async function listOpenTickets(max = 100): Promise<FeaturebaseTicket[]> {
     { sortBy: "recent", ...(statusIds?.length ? { statusIds } : {}) },
     max,
   );
-  return raw.map(normalizeTicket).filter((t): t is FeaturebaseTicket => !!t && isOpenTicket(t) && t.ticketNumber != null);
+  return raw
+    .map(normalizeTicket)
+    .filter(
+      (t): t is FeaturebaseTicket =>
+        !!t && isOpenTicket(t) && t.ticketNumber != null,
+    );
 }
 
 export async function getTicket(id: string): Promise<FeaturebaseTicket | null> {
-  const raw = await fbFetch(`/v2/tickets/${encodeURIComponent(ticketPathId(id))}`);
+  const raw = await fbFetch(
+    `/v2/tickets/${encodeURIComponent(ticketPathId(id))}`,
+  );
   const ticket = normalizeTicket(unwrapResource(raw));
   if (!ticket) return null;
   return mergeLinkedConversationParts(ticket, raw);
@@ -441,7 +505,9 @@ export async function listRecentPosts(max = 100): Promise<FeaturebasePost[]> {
     .filter((p): p is FeaturebasePost => !!p)
     .map((post) => ({
       ...post,
-      boardName: post.boardName || (post.boardId ? boardName.get(post.boardId) || null : null),
+      boardName:
+        post.boardName ||
+        (post.boardId ? boardName.get(post.boardId) || null : null),
     }));
 }
 
@@ -452,15 +518,20 @@ export async function getPost(id: string): Promise<FeaturebasePost | null> {
   if (!post.boardName && post.boardId) {
     try {
       const boards = await listBoards();
-      post.boardName = boards.find((board) => board.id === post.boardId)?.name || null;
+      post.boardName =
+        boards.find((board) => board.id === post.boardId)?.name || null;
     } catch {}
   }
   if (post.comments.length === 0) {
     try {
       const commentsPage = asRecord(
-        await fbFetch(`/v2/comments?postId=${encodeURIComponent(id)}&limit=100`),
+        await fbFetch(
+          `/v2/comments?postId=${encodeURIComponent(id)}&limit=100`,
+        ),
       );
-      const comments = Array.isArray(commentsPage.data) ? commentsPage.data : [];
+      const comments = Array.isArray(commentsPage.data)
+        ? commentsPage.data
+        : [];
       post.comments = comments
         .map(normalizeComment)
         .filter((c): c is FeaturebaseComment => !!c);
@@ -513,10 +584,14 @@ export function formatTicketContext(ticket: FeaturebaseTicket): string {
   if (ticket.parts.length) {
     lines.push("", "Conversation:");
     for (const part of ticket.parts.slice(-20)) {
-      lines.push(`[${part.actorType}] ${part.actorName || "unknown"}: ${part.text}`);
+      lines.push(
+        `[${part.actorType}] ${part.actorName || "unknown"}: ${part.text}`,
+      );
     }
   }
-  return lines.filter((line, i, arr) => line !== "" || arr[i - 1] !== "").join("\n");
+  return lines
+    .filter((line, i, arr) => line !== "" || arr[i - 1] !== "")
+    .join("\n");
 }
 
 export function formatPostContext(post: FeaturebasePost): string {
@@ -537,5 +612,7 @@ export function formatPostContext(post: FeaturebasePost): string {
       );
     }
   }
-  return lines.filter((line, i, arr) => line !== "" || arr[i - 1] !== "").join("\n");
+  return lines
+    .filter((line, i, arr) => line !== "" || arr[i - 1] !== "")
+    .join("\n");
 }

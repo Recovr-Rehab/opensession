@@ -7,9 +7,25 @@ import {
   readRequestTextWithinLimit,
   webhookBodyTooLargeResponse,
 } from "../../server/shared/bounded-body";
-import { handleFeaturebaseEvent, type FeaturebaseWebhookEvent } from "./handlers";
+import {
+  handleFeaturebaseEvent,
+  type FeaturebaseWebhookEvent,
+} from "./handlers";
 import { featurebaseOrgUrl, featurebaseWebhookSecret } from "./config";
-import { formatPostContext, formatTicketContext, getPost, getTicket, listOpenTickets, listRecentPosts } from "./api";
+import {
+  startFeaturebaseArchiveSweep,
+  stopFeaturebaseArchiveSweep,
+} from "./archive";
+import {
+  formatPostContext,
+  formatTicketContext,
+  getPost,
+  getTicket,
+  listOpenTickets,
+  listRecentPosts,
+} from "./api";
+import { invalidateSessionsCache } from "../../server/session-cache";
+import { invalidateFeedCache } from "../../server/feeds";
 
 const FEATUREBASE_BG = "#4f46e5";
 
@@ -40,7 +56,9 @@ function ticketsFeed(): FeedProvider {
       refKind: "featurebase-ticket",
       tileBg: FEATUREBASE_BG,
       mcpServers: ["featurebase-reader", "featurebase"],
-      lanes: STATUS_LANES.filter((lane) => lane.key !== "completed" && lane.key !== "canceled"),
+      lanes: STATUS_LANES.filter(
+        (lane) => lane.key !== "completed" && lane.key !== "canceled",
+      ),
       attentionLane: "reviewing",
       searchMeta: ["author.name", "author.email", "preview"],
       filters: [
@@ -48,15 +66,23 @@ function ticketsFeed(): FeedProvider {
           key: "assignee",
           label: "Assignee",
           mode: "meta",
-          field: "assigneeId",
+          field: "assignee",
           options: [{ value: "__unassigned__", label: "Unassigned" }],
+          optionsFromItems: { value: "name", label: "name" },
         },
       ],
       panel: {
         label: "Ticket",
         component: "featurebase-ticket",
         ...(orgUrl
-          ? { links: [{ label: "Open in Featurebase", hrefTemplate: `${orgUrl}/{id}` }] }
+          ? {
+              links: [
+                {
+                  label: "Open in Featurebase",
+                  hrefTemplate: `${orgUrl}/{id}`,
+                },
+              ],
+            }
           : {}),
       },
     },
@@ -67,7 +93,9 @@ function ticketsFeed(): FeedProvider {
         title: `TK-${ticket.ticketNumber} ${ticket.title}`,
         preview: ticket.preview,
         lane: statusLane(ticket.status.type),
-        ts: ticket.updatedAt ? Date.parse(ticket.updatedAt) || undefined : undefined,
+        ts: ticket.updatedAt
+          ? Date.parse(ticket.updatedAt) || undefined
+          : undefined,
         url: ticket.url || undefined,
         meta: ticket as unknown as Record<string, unknown>,
       }));
@@ -110,7 +138,14 @@ function postsFeed(): FeedProvider {
         label: "Post",
         component: "featurebase-post",
         ...(orgUrl
-          ? { links: [{ label: "Open in Featurebase", hrefTemplate: `${orgUrl}/{id}` }] }
+          ? {
+              links: [
+                {
+                  label: "Open in Featurebase",
+                  hrefTemplate: `${orgUrl}/{id}`,
+                },
+              ],
+            }
           : {}),
       },
     },
@@ -121,7 +156,9 @@ function postsFeed(): FeedProvider {
         title: post.title,
         preview: post.preview,
         lane: statusLane(post.status.type),
-        ts: post.updatedAt ? Date.parse(post.updatedAt) || undefined : undefined,
+        ts: post.updatedAt
+          ? Date.parse(post.updatedAt) || undefined
+          : undefined,
         url: post.url || undefined,
         meta: post as unknown as Record<string, unknown>,
       }));
@@ -141,18 +178,29 @@ export class FeaturebaseAgent implements AgentModule {
   }
 
   getRoutes(): Map<string, (req: Request, url: URL) => Promise<Response>> {
-    const routes = new Map<string, (req: Request, url: URL) => Promise<Response>>();
+    const routes = new Map<
+      string,
+      (req: Request, url: URL) => Promise<Response>
+    >();
     routes.set("POST /featurebase/webhook", async (req) => {
       let body: string;
       try {
         body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
       } catch (error) {
-        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
+        if (error instanceof RequestBodyTooLargeError)
+          return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
         throw error;
       }
       const signature = req.headers.get("x-webhook-signature") || "";
       const timestamp = req.headers.get("x-webhook-timestamp") || "";
-      if (!verifyFeaturebaseSignature(body, signature, timestamp, featurebaseWebhookSecret())) {
+      if (
+        !verifyFeaturebaseSignature(
+          body,
+          signature,
+          timestamp,
+          featurebaseWebhookSecret(),
+        )
+      ) {
         console.error("[featurebase] Invalid webhook signature");
         return Response.json({ error: "Invalid signature" }, { status: 401 });
       }
@@ -172,10 +220,16 @@ export class FeaturebaseAgent implements AgentModule {
   }
 
   async startup(): Promise<void> {
+    startFeaturebaseArchiveSweep(() => {
+      invalidateSessionsCache();
+      invalidateFeedCache("featurebase-tickets");
+      invalidateFeedCache("featurebase-posts");
+    });
     console.log("[featurebase] Agent started");
   }
 
   async shutdown(): Promise<void> {
+    stopFeaturebaseArchiveSweep();
     console.log("[featurebase] Agent shut down");
   }
 

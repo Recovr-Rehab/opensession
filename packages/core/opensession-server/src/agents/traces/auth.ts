@@ -13,7 +13,9 @@ import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 import { tracesApiBase, tracesDeviceName } from "./config";
 
 export function tracesAuthStorePath(): string {
-  return process.env.OPENSESSION_TRACES_AUTH_STORE || stateDir("traces-auth.json");
+  return (
+    process.env.OPENSESSION_TRACES_AUTH_STORE || stateDir("traces-auth.json")
+  );
 }
 
 export interface TracesConnectedAccount {
@@ -54,7 +56,10 @@ function readStore(): Store {
   try {
     const raw = JSON.parse(readFileSync(path, "utf-8")) as Partial<Store>;
     return {
-      deviceId: typeof raw.deviceId === "string" && raw.deviceId ? raw.deviceId : randomUUIDv7(),
+      deviceId:
+        typeof raw.deviceId === "string" && raw.deviceId
+          ? raw.deviceId
+          : randomUUIDv7(),
       users: raw.users && typeof raw.users === "object" ? raw.users : {},
     };
   } catch {
@@ -94,7 +99,9 @@ export function listTracesAccounts(): TracesConnectedAccount[] {
   return Object.values(readStore().users).map(publicAccount);
 }
 
-export function tracesAccountForLogin(login: string | null | undefined): TracesConnectedAccount | null {
+export function tracesAccountForLogin(
+  login: string | null | undefined,
+): TracesConnectedAccount | null {
   if (!login) return null;
   const account = readStore().users[loginKey(login)];
   return account ? publicAccount(account) : null;
@@ -125,10 +132,14 @@ export function disconnectTracesAccount(login: string): boolean {
   return true;
 }
 
-function errorMessage(body: TracesEnvelope<unknown> | null, fallback: string): string {
+function errorMessage(
+  body: TracesEnvelope<unknown> | null,
+  fallback: string,
+): string {
   const err = body?.error;
   if (typeof err === "string" && err.trim()) return err;
-  if (err && typeof err === "object" && typeof err.message === "string") return err.message;
+  if (err && typeof err === "object" && typeof err.message === "string")
+    return err.message;
   return fallback;
 }
 
@@ -139,10 +150,14 @@ async function tracesFetch<T>(
 ): Promise<{ status: number; body: TracesEnvelope<T> | null }> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (init.body && !headers.has("Content-Type"))
+    headers.set("Content-Type", "application/json");
   headers.set("User-Agent", `opensession (${tracesDeviceName()})`);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetchWithTimeout(`${tracesApiBase()}${path}`, { ...init, headers });
+  const res = await fetchWithTimeout(`${tracesApiBase()}${path}`, {
+    ...init,
+    headers,
+  });
   const body = (await res.json().catch(() => null)) as TracesEnvelope<T> | null;
   return { status: res.status, body };
 }
@@ -161,8 +176,9 @@ export type TracesConnectPoll =
 
 type WatchedFlow = TracesConnectPoll & { expiresAt: number };
 
-const watchedFlows: Map<string, WatchedFlow> = ((globalThis as any).__osWatchedTracesFlows ??=
-  new Map());
+const watchedFlows: Map<string, WatchedFlow> = ((
+  globalThis as any
+).__osWatchedTracesFlows ??= new Map());
 
 function sweepWatchedFlows(): void {
   const now = Date.now();
@@ -171,20 +187,27 @@ function sweepWatchedFlows(): void {
   }
 }
 
-export async function startTracesConnect(): Promise<TracesConnectStart | { error: string }> {
+export async function startTracesConnect(): Promise<
+  TracesConnectStart | { error: string }
+> {
   const store = readStore();
   writeStore(store);
-  const { status, body } = await tracesFetch<TracesConnectStart>("/v1/auth/cli/start", {
-    method: "POST",
-    body: JSON.stringify({
-      provider: "github",
-      deviceId: store.deviceId,
-      deviceName: tracesDeviceName(),
-    }),
-  });
+  const { status, body } = await tracesFetch<TracesConnectStart>(
+    "/v1/auth/cli/start",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        provider: "github",
+        deviceId: store.deviceId,
+        deviceName: tracesDeviceName(),
+      }),
+    },
+  );
   const data = body?.data;
   if (!body?.ok || !data?.state || !data.verificationUrl) {
-    return { error: errorMessage(body, `Traces login start failed (${status})`) };
+    return {
+      error: errorMessage(body, `Traces login start failed (${status})`),
+    };
   }
   return {
     state: data.state,
@@ -221,8 +244,13 @@ type SessionPayload = {
 };
 
 /** GitHub login claimed by a Traces session (personal slug, else display name). */
-export function githubLoginFromTracesSession(session: SessionPayload): string | null {
-  const slug = session.actor?.namespace?.type === "individual" ? session.actor.namespace.slug : null;
+export function githubLoginFromTracesSession(
+  session: SessionPayload,
+): string | null {
+  const slug =
+    session.actor?.namespace?.type === "individual"
+      ? session.actor.namespace.slug
+      : null;
   const name = session.user?.displayName || session.actor?.displayName;
   const value = (slug || name || "").trim();
   return value || null;
@@ -233,23 +261,39 @@ async function completeAndStore(
   exchangeCode: string,
   expectedLogin?: string | null,
 ): Promise<TracesConnectPoll> {
-  const { status, body } = await tracesFetch<CompletePayload>("/v1/auth/cli/complete", {
-    method: "POST",
-    body: JSON.stringify({ state, exchangeCode }),
-  });
+  const { status, body } = await tracesFetch<CompletePayload>(
+    "/v1/auth/cli/complete",
+    {
+      method: "POST",
+      body: JSON.stringify({ state, exchangeCode }),
+    },
+  );
   const session = body?.data?.session;
   const token = session?.token;
   if (!body?.ok || !token) {
-    return { status: "error", error: errorMessage(body, `Traces login complete failed (${status})`) };
+    return {
+      status: "error",
+      error: errorMessage(body, `Traces login complete failed (${status})`),
+    };
   }
-  const who = await tracesFetch<SessionPayload>("/v1/session", { method: "GET" }, token);
+  const who = await tracesFetch<SessionPayload>(
+    "/v1/session",
+    { method: "GET" },
+    token,
+  );
   const identity = who.body?.data;
   if (!who.body?.ok || !identity) {
-    return { status: "error", error: errorMessage(who.body, "Traces session lookup failed") };
+    return {
+      status: "error",
+      error: errorMessage(who.body, "Traces session lookup failed"),
+    };
   }
   const githubLogin = githubLoginFromTracesSession(identity);
   if (!githubLogin) {
-    return { status: "error", error: "Traces did not return a GitHub identity for this login" };
+    return {
+      status: "error",
+      error: "Traces did not return a GitHub identity for this login",
+    };
   }
   if (expectedLogin && loginKey(expectedLogin) !== loginKey(githubLogin)) {
     return {
@@ -289,16 +333,26 @@ export async function pollTracesConnect(
   const phase = (data?.status || "").toLowerCase();
   if (phase === "pending" || phase === "started") return { status: "pending" };
   if (phase === "error" || phase === "expired") {
-    return { status: "error", error: data?.error || errorMessage(body, `Traces login ${phase}`) };
+    return {
+      status: "error",
+      error: data?.error || errorMessage(body, `Traces login ${phase}`),
+    };
   }
   if (phase === "complete" && data?.exchangeCode) {
     return completeAndStore(state, data.exchangeCode, expectedLogin);
   }
-  if (!body?.ok) return { status: "error", error: errorMessage(body, `Traces login status failed (${status})`) };
+  if (!body?.ok)
+    return {
+      status: "error",
+      error: errorMessage(body, `Traces login status failed (${status})`),
+    };
   return { status: "pending" };
 }
 
-export function watchTracesConnect(start: TracesConnectStart, expectedLogin?: string | null): void {
+export function watchTracesConnect(
+  start: TracesConnectStart,
+  expectedLogin?: string | null,
+): void {
   sweepWatchedFlows();
   if (watchedFlows.has(start.state)) return;
   const codeExpiresAt = Date.now() + start.expiresIn * 1000;

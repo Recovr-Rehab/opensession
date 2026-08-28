@@ -25,7 +25,9 @@ export function featurebaseApiBase(): string {
 export function featurebaseApiVersion(): string {
   const fromEnv = trimString(process.env.FEATUREBASE_API_VERSION);
   if (fromEnv) return fromEnv;
-  const fromConfig = trimString(configuredIntegration("featurebase").apiVersion);
+  const fromConfig = trimString(
+    configuredIntegration("featurebase").apiVersion,
+  );
   return fromConfig || DEFAULT_API_VERSION;
 }
 
@@ -46,6 +48,7 @@ export function featurebaseAdminId(): string | null {
 
 export function featurebaseMentionHandle(): string | null {
   const fromEnv = trimString(process.env.FEATUREBASE_MENTION_HANDLE);
-  const configured = fromEnv || trimString(configuredIntegration("featurebase").mentionHandle);
+  const configured =
+    fromEnv || trimString(configuredIntegration("featurebase").mentionHandle);
   return configured ? configured.replace(/^@/, "") : null;
 }

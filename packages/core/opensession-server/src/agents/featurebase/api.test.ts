@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { isTerminalStatusType, normalizePost, normalizeTicket, ticketPathId } from "./api";
+import {
+  isTerminalStatusType,
+  normalizePost,
+  normalizeTicket,
+  ticketPathId,
+} from "./api";
 
 describe("normalizeTicket", () => {
   it("flattens a Featurebase ticket into the UI shape", () => {
@@ -10,8 +15,19 @@ describe("normalizeTicket", () => {
       content: "<p>Cannot sign in</p>",
       ticketUrl: "https://feedback.example/t/42",
       open: true,
-      status: { id: "s1", name: "In Review", color: "Yellow", type: "reviewing" },
-      author: { id: "u1", name: "Ada", email: "ada@example.com", type: "customer" },
+      status: {
+        id: "s1",
+        name: "In Review",
+        color: "Yellow",
+        type: "reviewing",
+      },
+      author: {
+        id: "u1",
+        name: "Ada",
+        email: "ada@example.com",
+        type: "customer",
+      },
+      assignee: { id: "a1", name: "Bea" },
       conversationParts: [
         {
           id: "p1",
@@ -28,6 +44,8 @@ describe("normalizeTicket", () => {
     expect(ticket?.status.type).toBe("reviewing");
     expect(ticket?.parts).toHaveLength(1);
     expect(ticket?.parts[0].actorType).toBe("customer");
+    expect(ticket?.assignee?.name).toBe("Bea");
+    expect(ticket?.assigneeId).toBe("a1");
   });
 
   it("returns null without an id", () => {
@@ -65,7 +83,9 @@ describe("ticketPathId", () => {
   it("uses the numeric ticket number, not the Mongo id", () => {
     expect(ticketPathId("821")).toBe("821");
     expect(ticketPathId("6a8bba13da61e920fefee3c9", 821)).toBe("821");
-    expect(() => ticketPathId("6a8bba13da61e920fefee3c9")).toThrow(/ticket number/);
+    expect(() => ticketPathId("6a8bba13da61e920fefee3c9")).toThrow(
+      /ticket number/,
+    );
   });
 });
 

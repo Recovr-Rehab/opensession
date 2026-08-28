@@ -28,7 +28,9 @@ describe("githubLoginFromTracesSession", () => {
 describe("publisherLogin", () => {
   it("does not infer ownership from connected-account count", () => {
     expect(publisherLogin({ id: "s1" } as NativeSessionFile)).toBeNull();
-    expect(publisherLogin({ id: "s1", createdByLogin: "josh" } as NativeSessionFile)).toBe("josh");
+    expect(
+      publisherLogin({ id: "s1", createdByLogin: "josh" } as NativeSessionFile),
+    ).toBe("josh");
   });
 });
 
@@ -36,7 +38,9 @@ describe("shouldPublishSession", () => {
   const base = { id: "s1" } as NativeSessionFile;
 
   it("skips automations", () => {
-    expect(shouldPublishSession({ ...base, automation: "triage" }, "prompt")).toBe(false);
+    expect(
+      shouldPublishSession({ ...base, automation: "triage" }, "prompt"),
+    ).toBe(false);
   });
 
   it("skips unattended kinds", () => {

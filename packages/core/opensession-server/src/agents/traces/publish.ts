@@ -88,15 +88,20 @@ export async function shareOpenSessionTrace(
       proc.exited,
     ]);
     if (exitCode !== 0) {
-      const detail = (stderr || stdout).trim().slice(0, 500) || `traces share exited ${exitCode}`;
+      const detail =
+        (stderr || stdout).trim().slice(0, 500) ||
+        `traces share exited ${exitCode}`;
       if (/401|AUTH_REQUIRED|not logged in|unauthorized/i.test(detail)) {
         markTracesAccountStale(login);
       }
       console.warn(`[traces] share failed for ${osSessionId}: ${detail}`);
       return { ok: false, error: detail };
     }
-    let parsed: { data?: { sharedUrl?: string; traceId?: string }; sharedUrl?: string; traceId?: string } =
-      {};
+    let parsed: {
+      data?: { sharedUrl?: string; traceId?: string };
+      sharedUrl?: string;
+      traceId?: string;
+    } = {};
     try {
       parsed = JSON.parse(stdout);
     } catch {
@@ -104,8 +109,13 @@ export async function shareOpenSessionTrace(
     }
     const url = parsed.data?.sharedUrl || parsed.sharedUrl;
     const traceId = parsed.data?.traceId || parsed.traceId;
-    if (!url && !traceId) return { ok: false, error: "traces share returned no url" };
-    await recordShareRef(osSessionId, traceId || osSessionId, url || `https://traces.com/s/${traceId}`);
+    if (!url && !traceId)
+      return { ok: false, error: "traces share returned no url" };
+    await recordShareRef(
+      osSessionId,
+      traceId || osSessionId,
+      url || `https://traces.com/s/${traceId}`,
+    );
     return { ok: true, url: url || undefined };
   } finally {
     try {
@@ -114,30 +124,54 @@ export async function shareOpenSessionTrace(
   }
 }
 
-async function recordShareRef(sessionId: string, traceId: string, url: string): Promise<void> {
+async function recordShareRef(
+  sessionId: string,
+  traceId: string,
+  url: string,
+): Promise<void> {
   const path = `${OPENSESSION_SESSIONS_DIR}/${sessionId}.json`;
   try {
     await executeSessionProjection(sessionId, "session_file_updated", () => {
       const data = JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
       const refs = data.externalRefs || [];
-      const next = refs.some((ref) => ref.kind === "traces-trace" && ref.id === traceId)
+      const next = refs.some(
+        (ref) => ref.kind === "traces-trace" && ref.id === traceId,
+      )
         ? refs.map((ref) =>
-            ref.kind === "traces-trace" && ref.id === traceId ? { ...ref, url } : ref,
+            ref.kind === "traces-trace" && ref.id === traceId
+              ? { ...ref, url }
+              : ref,
           )
-        : [...refs, { kind: "traces-trace" as const, id: traceId, url, title: data.title }];
+        : [
+            ...refs,
+            {
+              kind: "traces-trace" as const,
+              id: traceId,
+              url,
+              title: data.title,
+            },
+          ];
       writeJsonAtomic(path, { ...data, externalRefs: next });
     });
     invalidateSessionsCache();
   } catch (error) {
-    console.warn(`[traces] could not record share ref for ${sessionId}:`, error);
+    console.warn(
+      `[traces] could not record share ref for ${sessionId}:`,
+      error,
+    );
   }
 }
 
-export function scheduleShareOpenSessionTrace(osSessionId: string, journalKind?: string): void {
+export function scheduleShareOpenSessionTrace(
+  osSessionId: string,
+  journalKind?: string,
+): void {
   const previous = inflight.get(osSessionId) || Promise.resolve();
   const next = previous
     .then(() => shareOpenSessionTrace(osSessionId, journalKind))
-    .catch((error) => console.warn(`[traces] share threw for ${osSessionId}:`, error))
+    .catch((error) =>
+      console.warn(`[traces] share threw for ${osSessionId}:`, error),
+    )
     .finally(() => {
       if (inflight.get(osSessionId) === next) inflight.delete(osSessionId);
     });

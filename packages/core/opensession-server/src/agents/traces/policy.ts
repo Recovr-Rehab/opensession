@@ -1,11 +1,18 @@
-import { baseJournalKind, INTERACTIVE_KINDS, isUnattendedKind } from "../../server/run-policy";
+import {
+  baseJournalKind,
+  INTERACTIVE_KINDS,
+  isUnattendedKind,
+} from "../../server/run-policy";
 import type { NativeSessionFile } from "../../server/types";
 
 export function publisherLogin(session: NativeSessionFile): string | null {
   return session.createdByLogin || null;
 }
 
-export function shouldPublishSession(session: NativeSessionFile, journalKind?: string): boolean {
+export function shouldPublishSession(
+  session: NativeSessionFile,
+  journalKind?: string,
+): boolean {
   if (session.automation) return false;
   const kind = baseJournalKind(journalKind);
   if (kind && isUnattendedKind(kind)) return false;

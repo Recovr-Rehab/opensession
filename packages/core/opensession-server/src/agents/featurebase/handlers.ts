@@ -38,7 +38,8 @@ function itemStatusType(item: Record<string, unknown>): string | null {
 function ticketIdFromItem(item: Record<string, unknown>): string | null {
   if (typeof item.ticketNumber === "number") return String(item.ticketNumber);
   const nested = asRecord(item.ticket);
-  if (typeof nested.ticketNumber === "number") return String(nested.ticketNumber);
+  if (typeof nested.ticketNumber === "number")
+    return String(nested.ticketNumber);
   for (const candidate of [item.id, item.ticketId, nested.id]) {
     const value = asString(candidate);
     if (value && /^\d+$/.test(value)) return value;
@@ -63,7 +64,10 @@ function itemText(item: Record<string, unknown>): string {
   );
 }
 
-function payloadFor(topic: string, item: Record<string, unknown>): Record<string, unknown> {
+function payloadFor(
+  topic: string,
+  item: Record<string, unknown>,
+): Record<string, unknown> {
   const title = asString(item.title);
   const ticketId = ticketIdFromItem(item);
   const postId = postIdFromItem(item);
@@ -72,17 +76,25 @@ function payloadFor(topic: string, item: Record<string, unknown>): Record<string
     topic,
     title,
     ticketId,
-    ticketNumber: typeof item.ticketNumber === "number" ? item.ticketNumber : null,
+    ticketNumber:
+      typeof item.ticketNumber === "number" ? item.ticketNumber : null,
     ticketUrl: asString(item.ticketUrl) || asString(item.url),
     postId,
     postUrl: asString(item.postUrl) || (postId ? asString(item.url) : null),
-    conversationId: asString(item.object) === "conversation" ? asString(item.id) : asString(item.conversationId),
+    conversationId:
+      asString(item.object) === "conversation"
+        ? asString(item.id)
+        : asString(item.conversationId),
     status: asRecord(item.status),
     preview: itemText(item).slice(0, 500),
   };
 }
 
-async function deliverMention(ticketId: string, noteId: string, text: string): Promise<void> {
+async function deliverMention(
+  ticketId: string,
+  noteId: string,
+  text: string,
+): Promise<void> {
   const handle = featurebaseMentionHandle();
   if (!handle) return;
   const re = featurebaseMentionRe(handle);
@@ -95,9 +107,14 @@ async function deliverMention(ticketId: string, noteId: string, text: string): P
     .filter(
       (s) =>
         !s.archived &&
-        (s.externalRefs || []).some((r) => r.kind === "featurebase-ticket" && r.id === ticketId),
+        (s.externalRefs || []).some(
+          (r) => r.kind === "featurebase-ticket" && r.id === ticketId,
+        ),
     )
-    .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())[0];
+    .sort(
+      (a, b) =>
+        new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime(),
+    )[0];
   if (!session) return;
   const request = text.replace(re, "").trim();
   if (!request) return;
@@ -109,7 +126,9 @@ async function deliverMention(ticketId: string, noteId: string, text: string): P
   );
 }
 
-export async function handleFeaturebaseEvent(event: FeaturebaseWebhookEvent): Promise<{
+export async function handleFeaturebaseEvent(
+  event: FeaturebaseWebhookEvent,
+): Promise<{
   topic: string;
   fired: number;
   archived: number;
@@ -124,25 +143,37 @@ export async function handleFeaturebaseEvent(event: FeaturebaseWebhookEvent): Pr
   if (topic === "ticket.created") {
     const ticketId = ticketIdFromItem(item);
     if (ticketId) {
-      fired = fireAutomationsForEvent(TICKET_CREATED, JSON.stringify(payloadFor(topic, item), null, 2));
+      fired = fireAutomationsForEvent(
+        TICKET_CREATED,
+        JSON.stringify(payloadFor(topic, item), null, 2),
+      );
     }
     invalidateFeedCache("featurebase-tickets");
   } else if (topic === "ticket.updated") {
     const ticketId = ticketIdFromItem(item);
     if (ticketId && isTerminalStatusType(itemStatusType(item))) {
-      archived = await archiveSessionsForFeaturebaseRef("featurebase-ticket", ticketId);
+      archived = await archiveSessionsForFeaturebaseRef(
+        "featurebase-ticket",
+        ticketId,
+      );
     }
     invalidateFeedCache("featurebase-tickets");
   } else if (topic === "post.created") {
     const postId = postIdFromItem(item);
     if (postId) {
-      fired = fireAutomationsForEvent(POST_CREATED, JSON.stringify(payloadFor(topic, item), null, 2));
+      fired = fireAutomationsForEvent(
+        POST_CREATED,
+        JSON.stringify(payloadFor(topic, item), null, 2),
+      );
     }
     invalidateFeedCache("featurebase-posts");
   } else if (topic === "post.updated") {
     const postId = postIdFromItem(item);
     if (postId && isTerminalStatusType(itemStatusType(item))) {
-      archived = await archiveSessionsForFeaturebaseRef("featurebase-post", postId);
+      archived = await archiveSessionsForFeaturebaseRef(
+        "featurebase-post",
+        postId,
+      );
     }
     invalidateFeedCache("featurebase-posts");
   } else if (topic === "conversation.user.created") {
@@ -162,7 +193,10 @@ export async function handleFeaturebaseEvent(event: FeaturebaseWebhookEvent): Pr
   } else if (topic === "conversation.admin.closed") {
     const ticketId = ticketIdFromItem(item);
     if (ticketId) {
-      archived = await archiveSessionsForFeaturebaseRef("featurebase-ticket", ticketId);
+      archived = await archiveSessionsForFeaturebaseRef(
+        "featurebase-ticket",
+        ticketId,
+      );
     }
     invalidateFeedCache("featurebase-tickets");
   } else {

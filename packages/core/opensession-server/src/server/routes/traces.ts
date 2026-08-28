@@ -19,7 +19,9 @@ function expectedLogin(ctx: RouteContext): string | undefined {
   return ctx.authUser?.login || undefined;
 }
 
-export async function handleTracesRoutes(ctx: RouteContext): Promise<Response | undefined> {
+export async function handleTracesRoutes(
+  ctx: RouteContext,
+): Promise<Response | undefined> {
   const { req, path } = ctx;
   if (!path.startsWith("/api/traces/")) return undefined;
 
@@ -36,7 +38,10 @@ export async function handleTracesRoutes(ctx: RouteContext): Promise<Response | 
 
   if (path === "/api/traces/connect" && req.method === "POST") {
     if (webAuthRequired() && !ctx.authUser?.login) {
-      return Response.json({ error: "Sign in to connect Traces as yourself" }, { status: 403 });
+      return Response.json(
+        { error: "Sign in to connect Traces as yourself" },
+        { status: 403 },
+      );
     }
     const result = await startTracesConnect();
     if ("error" in result) return Response.json(result, { status: 400 });
@@ -46,11 +51,17 @@ export async function handleTracesRoutes(ctx: RouteContext): Promise<Response | 
 
   if (path === "/api/traces/connect/poll" && req.method === "POST") {
     if (webAuthRequired() && !ctx.authUser?.login) {
-      return Response.json({ error: "Sign in to connect Traces as yourself" }, { status: 403 });
+      return Response.json(
+        { error: "Sign in to connect Traces as yourself" },
+        { status: 403 },
+      );
     }
-    const body = (await req.json().catch(() => null)) as { state?: string } | null;
+    const body = (await req.json().catch(() => null)) as {
+      state?: string;
+    } | null;
     const state = typeof body?.state === "string" ? body.state : "";
-    if (!state) return Response.json({ error: "state required" }, { status: 400 });
+    if (!state)
+      return Response.json({ error: "state required" }, { status: 400 });
     const parked = tracesConnectResult(state);
     if (parked.status !== "pending") return Response.json(parked);
     const result = await pollTracesConnect(state, expectedLogin(ctx));
@@ -60,9 +71,13 @@ export async function handleTracesRoutes(ctx: RouteContext): Promise<Response | 
   if (path === "/api/traces/connect" && req.method === "DELETE") {
     const login = expectedLogin(ctx);
     const fallback = !login && !webAuthRequired() ? listTracesAccounts() : [];
-    const target = login || (fallback.length === 1 ? fallback[0].githubLogin : "");
+    const target =
+      login || (fallback.length === 1 ? fallback[0].githubLogin : "");
     if (!target) {
-      return Response.json({ error: "Sign in to disconnect Traces" }, { status: 403 });
+      return Response.json(
+        { error: "Sign in to disconnect Traces" },
+        { status: 403 },
+      );
     }
     const ok = disconnectTracesAccount(target);
     return Response.json({ ok });

@@ -4,8 +4,14 @@
  */
 import { requestUser, type RouteContext } from "./context";
 import { listAutomations, runAutomation } from "../automations";
-import { getCachedSessionsAsync, invalidateSessionsCache } from "../session-cache";
-import { TICKET_CREATED, POST_CREATED } from "../../agents/featurebase/handlers";
+import {
+  getCachedSessionsAsync,
+  invalidateSessionsCache,
+} from "../session-cache";
+import {
+  TICKET_CREATED,
+  POST_CREATED,
+} from "../../agents/featurebase/handlers";
 
 async function existingLinkedSession(
   kind: string,
@@ -15,7 +21,9 @@ async function existingLinkedSession(
     .filter(
       (s) =>
         !s.archived &&
-        (s.externalRefs || []).some((ref) => ref.kind === kind && ref.id === id),
+        (s.externalRefs || []).some(
+          (ref) => ref.kind === kind && ref.id === id,
+        ),
     )
     .sort(
       (a, b) =>
@@ -76,13 +84,16 @@ export async function handleFeaturebaseRoutes(
     }
   }
 
-  const ticketMatch = path.match(/^\/api\/featurebase\/tickets\/([^/]+)(?:\/([^/]+))?$/);
+  const ticketMatch = path.match(
+    /^\/api\/featurebase\/tickets\/([^/]+)(?:\/([^/]+))?$/,
+  );
   if (ticketMatch && req.method === "GET" && !ticketMatch[2]) {
     const id = decodeURIComponent(ticketMatch[1]);
     try {
       const { getTicket } = await import("../../agents/featurebase/api");
       const ticket = await getTicket(id);
-      if (!ticket) return Response.json({ error: "Ticket not found" }, { status: 404 });
+      if (!ticket)
+        return Response.json({ error: "Ticket not found" }, { status: 404 });
       return Response.json({ ticket });
     } catch (error: any) {
       console.error(`[featurebase] Ticket lookup failed for ${id}:`, error);
@@ -102,13 +113,16 @@ export async function handleFeaturebaseRoutes(
     } | null;
     const text = typeof body?.text === "string" ? body.text.trim() : "";
     const kind = body?.kind === "reply" ? "reply" : "note";
-    if (!text) return Response.json({ error: "Empty message" }, { status: 400 });
+    if (!text)
+      return Response.json({ error: "Empty message" }, { status: 400 });
     const senderName = requestUser(ctx, body?.user);
     const firstName = senderName.split(/\s+/)[0] || "";
     try {
-      const { getTicket, replyToTicket } = await import("../../agents/featurebase/api");
+      const { getTicket, replyToTicket } =
+        await import("../../agents/featurebase/api");
       const ticket = await getTicket(id);
-      if (!ticket) return Response.json({ error: "Ticket not found" }, { status: 404 });
+      if (!ticket)
+        return Response.json({ error: "Ticket not found" }, { status: 404 });
       const signed =
         kind === "note"
           ? firstName
@@ -166,13 +180,16 @@ export async function handleFeaturebaseRoutes(
     }
   }
 
-  const postMatch = path.match(/^\/api\/featurebase\/posts\/([^/]+)(?:\/([^/]+))?$/);
+  const postMatch = path.match(
+    /^\/api\/featurebase\/posts\/([^/]+)(?:\/([^/]+))?$/,
+  );
   if (postMatch && req.method === "GET" && !postMatch[2]) {
     const id = decodeURIComponent(postMatch[1]);
     try {
       const { getPost } = await import("../../agents/featurebase/api");
       const post = await getPost(id);
-      if (!post) return Response.json({ error: "Post not found" }, { status: 404 });
+      if (!post)
+        return Response.json({ error: "Post not found" }, { status: 404 });
       return Response.json({ post });
     } catch (error: any) {
       console.error(`[featurebase] Post lookup failed for ${id}:`, error);
@@ -191,10 +208,13 @@ export async function handleFeaturebaseRoutes(
       user?: string;
     } | null;
     const text = typeof body?.text === "string" ? body.text.trim() : "";
-    if (!text) return Response.json({ error: "Empty comment" }, { status: 400 });
+    if (!text)
+      return Response.json({ error: "Empty comment" }, { status: 400 });
     const senderName = requestUser(ctx, body?.user);
     const firstName = senderName.split(/\s+/)[0] || "";
-    const signed = firstName ? `${senderName} (via Open Session):\n\n${text}` : text;
+    const signed = firstName
+      ? `${senderName} (via Open Session):\n\n${text}`
+      : text;
     try {
       const { commentOnPost } = await import("../../agents/featurebase/api");
       await commentOnPost(id, signed, body?.private !== false);
