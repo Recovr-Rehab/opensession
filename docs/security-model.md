@@ -189,7 +189,9 @@ Public intake is an operator-controlled launch, not an App permission. Before a
 human repository administrator changes GitHub's PR creation policy to allow all
 users, operators must qualify the MicroVM provider, enable the review
 automation, and keep fork-origin GitHub Actions disabled or approval-gated. The
-GitHub App intentionally has no repository Administration permission; changing
+shipped PR workflows additionally skip every job whose head repository differs
+from the base repository. The GitHub App intentionally has no repository
+Administration permission; changing
 and auditing those GitHub settings is a one-time human-admin task, not runtime
 authority.
 

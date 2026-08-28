@@ -147,7 +147,9 @@ the private Open Session URL. See [Security model](../security-model.md#isolated
 
 GitHub Actions policy is independent. A repository may keep outside-contributor
 workflows disabled or approval-gated while still receiving Open Session's
-isolated semantic review. Keep the team GitHub roster current; an empty roster
+isolated semantic review. The shipped PR workflows also gate every job to
+same-repository branches, so fork jobs remain skipped if the platform setting
+is loosened accidentally. Keep the team GitHub roster current; an empty roster
 still fails closed for every write-capable behavior.
 
 ### Enabling public contributions
@@ -167,7 +169,8 @@ Keep public PR creation restricted until every item below is complete:
    should not receive it just for this one-time setting.
 4. In **Settings → Actions → General**, keep workflows from fork PRs disabled or
    require maintainer approval before they run. This is separate from Open
-   Session review. With the least-privilege App permission set above, GitHub's
+   Session review and complements the same-repository job gates in the shipped
+   workflows. With the least-privilege App permission set above, GitHub's
    Actions-policy API returns 403 by design, so a repository administrator must
    verify this setting in GitHub.
 5. Open a disposable fork PR and confirm the review uses the isolated public

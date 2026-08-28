@@ -26,6 +26,7 @@ concurrency:
 
 jobs:
   check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Type-check and tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -83,6 +84,7 @@ jobs:
         run: bun run test:snapshots
 
   installer:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Install (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -180,6 +182,7 @@ jobs:
         run: bash install.sh --uninstall
 
   runner-windows:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # Same situation as the macOS installer job above: the Windows Runner
     # client (install.ps1, the scheduled-task service, PowerShell command
     # execution, the Windows env whitelist) was written without a Windows box
