@@ -9,6 +9,8 @@ import React, {
 } from "react";
 import { usePeople } from "../../lib/people";
 import { providerAccountLabel } from "../../lib/provider-account";
+import { request } from "../../lib/api/request";
+import { errorMessage } from "../../lib/error-message";
 import { UserAvatar } from "../UserAvatar";
 import {
 	claudeLimits,
@@ -434,20 +436,21 @@ function useClaudeAccounts() {
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	// Stable identity: only setters are captured, so the polling effect can
-	// list `load` without ever refiring from re-renders.
 	const load = useCallback(async (forceUsage = false) => {
 		if (forceUsage) setRefreshing(true);
-		await (async () => {
-const res = forceUsage
-				? await fetch(`${BASE_PATH}/api/claude-accounts/refresh`, { method: "POST" })
-				: await fetch(`${BASE_PATH}/api/claude-accounts`);
-			if (!res.ok) throw new Error(`Could not load Anthropic accounts (${res.status})`);
-			setAccounts((await res.json()).accounts);
-})().catch(async (cause: any) => {
-setError(cause.message || "Could not load Anthropic accounts");
+		try {
+			const { accounts } = await request<{ accounts: ClaudeAccountInfo[] }>(
+				forceUsage ? "/claude-accounts/refresh" : "/claude-accounts",
+				{
+					method: forceUsage ? "POST" : "GET",
+					label: "Could not load Anthropic accounts",
+				},
+			);
+			setAccounts(accounts);
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not load Anthropic accounts"));
 			setAccounts((current) => current ?? []);
-});
+		}
 		setRefreshing(false);
 	}, []);
 
@@ -458,37 +461,36 @@ setError(cause.message || "Could not load Anthropic accounts");
 	}, [load]);
 
 	async function remove(account: ClaudeAccountInfo) {
-		if (!confirm(`Remove Claude account "${providerAccountLabel(account)}"? Runs will stop using this account.`)) return;
-		await (async () => {
-const res = await fetch(
-				`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(account.id)}`,
-				{ method: "DELETE" },
+		if (
+			!confirm(
+				`Remove Claude account "${providerAccountLabel(account)}"? Runs will stop using this account.`,
+			)
+		) {
+			return;
+		}
+		try {
+			await request(
+				`/claude-accounts/${encodeURIComponent(account.id)}`,
+				{ method: "DELETE", label: "Could not remove Anthropic account" },
 			);
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			void load();
-})().catch(async (cause: any) => {
-setError(cause.message);
-});
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not remove Anthropic account"));
+		}
 	}
 
 	async function setOwner(account: ClaudeAccountInfo, owner: string) {
 		if (owner === (account.owner || "")) return;
-		await (async () => {
-const res = await fetch(
-				`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(account.id)}`,
-				{
-					method: "PUT",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ owner }),
-				},
-			);
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+		try {
+			await request(`/claude-accounts/${encodeURIComponent(account.id)}`, {
+				method: "PUT",
+				body: { owner },
+				label: "Could not update Anthropic account",
+			});
 			void load();
-})().catch(async (cause: any) => {
-setError(cause.message);
-});
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not update Anthropic account"));
+		}
 	}
 
 	async function setCredentialsPath(account: ClaudeAccountInfo) {
@@ -500,21 +502,18 @@ setError(cause.message);
 			current,
 		);
 		if (credentialsPath === null) return;
-		await (async () => {
-const res = await fetch(
-				`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(account.id)}`,
-				{
-					method: "PUT",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ owner: account.owner || "", credentialsPath }),
-				},
-			);
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+		try {
+			await request(`/claude-accounts/${encodeURIComponent(account.id)}`, {
+				method: "PUT",
+				body: { owner: account.owner || "", credentialsPath },
+				label: "Could not update Anthropic usage credentials",
+			});
 			void load(true);
-})().catch(async (cause: any) => {
-setError(cause.message);
-});
+		} catch (cause) {
+			setError(
+				errorMessage(cause, "Could not update Anthropic usage credentials"),
+			);
+		}
 	}
 
 	return {
