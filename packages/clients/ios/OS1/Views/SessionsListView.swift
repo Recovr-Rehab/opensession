@@ -333,6 +333,23 @@ struct SessionsListView: View {
     @Environment(\.openSettings) private var openSettings
     #endif
 
+    #if DEBUG && os(iOS)
+    private var presentsScreenshotSession: Bool {
+        ProcessInfo.processInfo.environment["OS1_PRESENT_SCREENSHOT_SESSION"] == "1"
+    }
+
+    private var screenshotSession: Session {
+        var session = Session(id: "screenshot-session")
+        session.title = "Safety protocol parity"
+        session.source = "opensession"
+        session.repo = "opensession"
+        session.ran = true
+        session.createdAt = ISO8601DateFormatter().string(from: .now)
+        session.lastActivity = session.createdAt
+        return session
+    }
+    #endif
+
     var body: some View {
         navigationContainer
             // Session-id links in agent output (SessionLinks) are ordinary
@@ -383,6 +400,16 @@ struct SessionsListView: View {
                 await TeamDirectory.shared.ensureLoaded()
                 await loadAutomationOwners()
             }
+            #if DEBUG && os(iOS)
+            .fullScreenCover(isPresented: .constant(presentsScreenshotSession)) {
+                NavigationStack {
+                    SessionView(
+                        session: screenshotSession,
+                        onArchiveWorkspace: {}
+                    )
+                }
+            }
+            #endif
             .task(id: searchText) {
                 await updateTranscriptSearch()
             }
@@ -4262,7 +4289,12 @@ struct SessionRow: View {
                     .foregroundStyle(.primary)
                     #endif
                     .lineLimit(1)
-                if let searchSnippet, !searchSnippet.isEmpty {
+                if safety != nil {
+                    Text("Paused for safety")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.yellow)
+                        .lineLimit(1)
+                } else if let searchSnippet, !searchSnippet.isEmpty {
                     Text(searchSnippet)
                         .font(.caption)
                         .foregroundStyle(OS1VisualStyle.textFaint)
@@ -4478,6 +4510,10 @@ struct SessionRow: View {
             Image(systemName: "pencil")
                 .font(.system(size: markSize * 0.62, weight: .semibold))
                 .foregroundStyle(OS1VisualStyle.textFaint)
+        } else if safety != nil {
+            Image(systemName: "exclamationmark.shield.fill")
+                .font(.system(size: markSize * 0.72, weight: .semibold))
+                .foregroundStyle(OS1VisualStyle.yellow)
         } else if session.lane == .needsInput {
             PulsingDot(color: OS1VisualStyle.blue, active: animatesStatus)
         } else if reviewWaitsOnMe {
@@ -4514,6 +4550,10 @@ struct SessionRow: View {
         sessions.isEmpty ? [session] : sessions
     }
 
+    private var safety: SessionSafetyState? {
+        rowSessions.compactMap(\.safety).first
+    }
+
     private var reviewWaitsOnMe: Bool {
         ReviewRequests.waitsOnViewer(
             rowSessions,
@@ -4539,7 +4579,10 @@ struct SessionRow: View {
         if isWorkspaceDraft {
             return "Draft, \(RepoTile.label(for: session.effectiveRepo))"
         }
-        var parts = [session.lane.label, RepoTile.label(for: session.effectiveRepo)]
+        var parts = [
+            safety == nil ? session.lane.label : "Paused for safety",
+            RepoTile.label(for: session.effectiveRepo)
+        ]
         // The robot is the only sighted cue that a machine owns this row.
         if session.isAutomation { parts.append("automation") }
         // The bold title is the only sighted cue for unread; say it out loud.

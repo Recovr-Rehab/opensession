@@ -839,6 +839,16 @@ struct SessionView: View {
             // watchdog window. The zero-sized leaf owns only the side effects.
             .background { SessionSceneLifecycle(viewModel: viewModel) }
             .task {
+                #if DEBUG && os(iOS)
+                // Install screenshot fixtures before network requests so a
+                // slow catalog cannot leave the capture in the ordinary state.
+                if ProcessInfo.processInfo.environment["OS1_SHOW_SAFETY_PAUSE"] == "1" {
+                    viewModel.showSafetyPauseForScreenshot()
+                }
+                if ProcessInfo.processInfo.environment["OS1_SHOW_STEERED_MESSAGE"] == "1" {
+                    viewModel.showSteeredMessageForScreenshot()
+                }
+                #endif
                 catalog = try? await OS1API.models(workspaceId: viewModel.session.workspaceId)
                 #if DEBUG && os(iOS)
                 if ProcessInfo.processInfo.environment["OS1_OPEN_WORKTREE_INFO"] == "1" {
@@ -1018,16 +1028,62 @@ struct SessionView: View {
 
     @ViewBuilder
     private var statusBanner: some View {
-        switch viewModel.connectionState {
-        case .connected:
-            EmptyView()
-        case .connecting:
-            bannerText("Connecting…", color: .secondary)
-        case .reconnecting(let reason):
-            bannerText(reason.map { "\($0) — reconnecting…" } ?? "Reconnecting…", color: .orange)
-        case .failed(let reason):
-            bannerText(reason, color: .red)
+        VStack(spacing: 6) {
+            if let safety = viewModel.safety {
+                safetyNotice(safety)
+            }
+            switch viewModel.connectionState {
+            case .connected:
+                EmptyView()
+            case .connecting:
+                bannerText("Connecting…", color: .secondary)
+            case .reconnecting(let reason):
+                bannerText(reason.map { "\($0) · reconnecting…" } ?? "Reconnecting…", color: .orange)
+            case .failed(let reason):
+                bannerText(reason, color: .red)
+            }
         }
+    }
+
+    private func safetyNotice(_ safety: SessionSafetyState) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.shield.fill")
+                .font(.title3)
+                .foregroundStyle(OS1VisualStyle.yellow)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Paused for safety")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+                Text(safety.explanation?.nilIfBlank ?? "\(AppBrand.productName) paused this work to avoid repeating an uncertain action.")
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                Text(safetyHelp(safety))
+                    .font(.caption)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: contentMaxWidth, alignment: .leading)
+        .background(OS1VisualStyle.yellow.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(OS1VisualStyle.yellow.opacity(0.28), lineWidth: 1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func safetyHelp(_ safety: SessionSafetyState) -> String {
+        if safety.automaticReconciliationRunning == true {
+            return "\(AppBrand.productName) is checking it automatically. Repair is not available in the native app; you can still archive this session."
+        }
+        if safety.repairAvailable == true {
+            return "Repair is not available in the native app. Open this session on the web to repair it, or archive it here."
+        }
+        return "Repair is not available for this pause. You can still archive this session."
     }
 
     /// Floating glass capsule under the nav bar, instead of a full-width bar.
@@ -2423,7 +2479,7 @@ struct TabPill: Identifiable, Equatable {
     init(_ session: Session) {
         id = session.id
         title = session.displayTitle
-        activity = session.waitingForInput == true
+        activity = session.safety != nil || session.waitingForInput == true
             ? .waiting
             : (session.isRunning == true ? .running : .idle)
         // An optimistic session doesn't exist server-side yet, so there is
@@ -3441,6 +3497,7 @@ private struct SessionInputBar: View {
                     Text(noteMode ? "Team note" : "Message")
                 }
                 .textFieldStyle(.plain)
+                .disabled(viewModel.safety != nil)
                 .lineLimit(1...10)
                 .foregroundStyle(OS1VisualStyle.text)
                 // Measured on the field itself, BEFORE the frame and padding
@@ -3665,6 +3722,7 @@ private struct SessionInputBar: View {
 
     private var composerPlaceholder: String {
         if noteMode { return "Only your team will see this" }
+        if viewModel.safety != nil { return "Paused for safety" }
         if viewModel.quoteSelection.text != nil { return "Chat with selected text" }
         if viewModel.workspacePreparing {
             return "Setting up your workspace · messages queue until it's ready"
@@ -3969,7 +4027,7 @@ private struct SessionInputBar: View {
         private var label: String? {
             switch phase {
             case .queued: nil
-            case .steering: "Steering · delivers when this step ends"
+            case .steering: "Sent · pending delivery"
             case .delivering: "Delivering…"
             }
         }

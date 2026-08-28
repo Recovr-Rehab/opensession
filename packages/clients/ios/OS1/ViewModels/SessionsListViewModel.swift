@@ -1238,7 +1238,9 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
     }
     /// Any session of the row is mid-turn — the row counts as live even when a
     /// blocked sibling owns its lane.
-    var isRunning: Bool { sessions.contains { $0.isRunning == true } }
+    var isRunning: Bool {
+        sessions.contains { $0.safety == nil && $0.isRunning == true }
+    }
     var lastActivityDate: Date {
         if let draft = workspace?.draft,
            let date = Session.parseISO(draft.updatedAt) { return date }
