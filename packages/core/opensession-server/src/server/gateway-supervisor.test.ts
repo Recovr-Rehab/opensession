@@ -79,6 +79,7 @@ describe("gateway supervisor", () => {
       promoteCurrent() {},
       quiescePublicListener() { active.events.push("listener-quiesced"); },
     });
+    expect(supervisor.status().backendPort).toBe(active.gateway.backendPort);
     const result = await supervisor.drainForSupervisorRestart();
     expect(result.ok).toBe(true);
     expect(active.events).toEqual(["listener-quiesced", "kill:12"]);

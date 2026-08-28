@@ -92,6 +92,7 @@ type ControlResponse = {
   ok: boolean;
   message: string;
   pid?: number;
+  backendPort?: number;
   phase?: GatewayHandoffPhase | "idle";
   proxy?: GatewayTcpProxyMetrics;
 };
@@ -373,6 +374,7 @@ export class GatewaySupervisor {
       ok: true,
       message: this.coordinated ? "coordinated handoff in progress" : "gateway supervisor ready",
       pid: this.active.pid,
+      backendPort: this.backendPort(),
       phase: this.coordinated?.phase ?? "idle",
       ...(this.proxyMetrics ? { proxy: { ...this.proxyMetrics } } : {}),
     };
