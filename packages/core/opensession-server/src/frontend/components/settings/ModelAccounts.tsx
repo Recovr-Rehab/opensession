@@ -786,16 +786,19 @@ function useCodexAccounts() {
 
 	const load = useCallback(async (forceUsage = false) => {
 		if (forceUsage) setRefreshing(true);
-		await (async () => {
-const res = forceUsage
-				? await fetch(`${BASE_PATH}/api/codex-accounts/refresh`, { method: "POST" })
-				: await fetch(`${BASE_PATH}/api/codex-accounts`);
-			if (!res.ok) throw new Error(`Could not load OpenAI accounts (${res.status})`);
-			setAccounts((await res.json()).accounts);
-})().catch(async (cause: any) => {
-setError(cause.message || "Could not load OpenAI accounts");
+		try {
+			const { accounts } = await request<{ accounts: CodexAccountInfo[] }>(
+				forceUsage ? "/codex-accounts/refresh" : "/codex-accounts",
+				{
+					method: forceUsage ? "POST" : "GET",
+					label: "Could not load OpenAI accounts",
+				},
+			);
+			setAccounts(accounts);
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not load OpenAI accounts"));
 			setAccounts((current) => current ?? []);
-});
+		}
 		setRefreshing(false);
 	}, []);
 
@@ -807,36 +810,35 @@ setError(cause.message || "Could not load OpenAI accounts");
 
 	async function setOwner(account: CodexAccountInfo, owner: string) {
 		if (owner === (account.owner || "")) return;
-		await (async () => {
-const res = await fetch(
-				`${BASE_PATH}/api/codex-accounts/${encodeURIComponent(account.id)}`,
-				{
-					method: "PUT",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ owner }),
-				},
-			);
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+		try {
+			await request(`/codex-accounts/${encodeURIComponent(account.id)}`, {
+				method: "PUT",
+				body: { owner },
+				label: "Could not update OpenAI account",
+			});
 			void load();
-})().catch(async (cause: any) => {
-setError(cause.message);
-});
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not update OpenAI account"));
+		}
 	}
 
 	async function remove(account: CodexAccountInfo) {
-		if (!confirm(`Remove Codex account "${providerAccountLabel(account)}"? Runs will stop using it.`)) return;
-		await (async () => {
-const res = await fetch(
-				`${BASE_PATH}/api/codex-accounts/${encodeURIComponent(account.id)}`,
-				{ method: "DELETE" },
-			);
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+		if (
+			!confirm(
+				`Remove Codex account "${providerAccountLabel(account)}"? Runs will stop using it.`,
+			)
+		) {
+			return;
+		}
+		try {
+			await request(`/codex-accounts/${encodeURIComponent(account.id)}`, {
+				method: "DELETE",
+				label: "Could not remove OpenAI account",
+			});
 			void load();
-})().catch(async (cause: any) => {
-setError(cause.message);
-});
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not remove OpenAI account"));
+		}
 	}
 
 	return { accounts, error, load, refreshing, remove, setError, setOwner };
