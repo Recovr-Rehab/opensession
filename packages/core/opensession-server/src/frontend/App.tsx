@@ -1,5 +1,6 @@
 import { BASE_PATH, stripBasePath } from "./lib/base";
 import { DEFAULT_REPO_ID, PRODUCT_NAME } from "./lib/brand";
+import type { NavigationActions } from "./lib/navigation";
 import {
   onSessionTitleResolutionRequested,
   retrySessionTitleResolution,
@@ -31,6 +32,7 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
 import { MarkdownRepoProvider } from "./components/MarkdownBody";
+import { NavigationProvider } from "./components/NavigationProvider";
 import { Sidebar, type SidebarHandle } from "./components/Sidebar";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
 import { cn } from "./ui/cn";
@@ -4513,6 +4515,79 @@ export function App({
     next.scrollIntoView({ block: "nearest" });
     next.click();
   };
+  const openWorkspace = (id: string, preferredSessionId?: string) => {
+    // A bold workspace row names the unread session explicitly. Otherwise
+    // restore the session tab that was last active in this workspace.
+    const session = pickLandingSession(
+      sessions,
+      id,
+      preferredSessionId ?? getWorkspaceLastSession(id),
+    );
+    const opensPreferredSession = session?.id === preferredSessionId;
+    // Every session closed but a pane still open: land on the pane rather than
+    // resurrecting the newest archived session (pickLandingSession's history fallback).
+    const panes = session?.archived
+      ? sessionlessWorkspacePanes(
+          id,
+          workspaces.find((workspace) => workspace.id === id) ?? null,
+          {
+            reviewOpen,
+            reviewClosed,
+            conversationClosed,
+            videoClosed,
+            hasWebPanel: (workspace) =>
+              !!workspace.externalRefs?.some((ref) => refWebPanel(ref)),
+          },
+        )
+      : [];
+    const remembered = getActiveViewTab(id);
+    const pane = panes.find((item) => item === remembered) ?? panes[0] ?? null;
+    if (pane && !opensPreferredSession) {
+      setActiveViewTabState(pane);
+      setFocusComposerOnOpen(false);
+      navigate({ view: "workspace", id, tab: pane });
+    } else if (session) {
+      const rememberedTab = opensPreferredSession
+        ? null
+        : (getActiveViewTab(id) ?? null);
+      setActiveViewTabState(rememberedTab);
+      if (opensPreferredSession) saveActiveViewTab(id, null);
+      setFocusComposerOnOpen(rememberedTab === null);
+      navigate({ view: "session", id: session.id });
+    } else {
+      const workspace = workspaces.find((item) => item.id === id);
+      // A draft workspace has no session and no other pane, but it isn't
+      // "nothing to open": WorkspacePane is its home, prefilled from the draft.
+      if (workspace?.draft) {
+        navigate({ view: "workspace", id });
+        return;
+      }
+      // Default the new session onto the workspace's branch when it has one.
+      setPalette({
+        open: true,
+        workspaceId: id,
+        repo: workspace?.repo,
+        branch: workspace?.branch,
+        ...(workspace?.externalRefs?.length && !workspace?.repo
+          ? { mode: "scratch" as const }
+          : {}),
+      });
+    }
+  };
+  const openNewSessionInRepo = (repo: string) => {
+    // The Ask band's "+" is not a repo: open Ask with the repo turned off.
+    setPalette(
+      repo === ASK_BAND
+        ? { open: true, repo: NO_REPO, mode: "ask" as const }
+        : { open: true, repo },
+    );
+  };
+  const openDraft = () => {
+    // The row and panel card are one unstarted session. Return to the panel and
+    // focus its composer when another view is open.
+    if (route.view !== "prs") navigate({ view: "prs" });
+    setDraftFocusSeq((seq) => seq + 1);
+  };
   useLayoutEffect(() => {
     nextChatRef.current = openNextChat;
   });
@@ -4744,7 +4819,45 @@ export function App({
     );
   };
 
-  return (
+  const navigationActions = {
+    goBack,
+    openNextChat,
+    openPrs: () => navigate({ view: "prs" }),
+    openFeed: () => navigate({ view: "feed" }),
+    openSettings: (section) => navigate({ view: "settings", section }),
+    openTasks: () => navigate({ view: "tasks" }),
+    openAutomation: (name) => navigate({ view: "automations", id: name }),
+    openPrItem: openPrWorkspace,
+    openPlain: () => navigate({ view: "plain" }),
+    openSupportTinder: () => navigate({ view: "supporttinder" }),
+    openReports: (target) => navigate({ view: "reports", ...target }),
+    openAnalytics: () => navigate({ view: "analytics" }),
+    openArchived: () => navigate({ view: "archived" }),
+    openCatchUp: () => navigate({ view: "catchup" }),
+    openSession,
+    openWorkspace,
+    openSessionReview: openReviewForSession,
+    openTicket: openTicketWorkspace,
+    openFeedItem: openFeedItemWorkspace,
+    openPr: (repo, branch) => navigate({ view: "pr", repo, branch }),
+    openNewWorkspace: () => openPalette(),
+    openNewSessionInRepo,
+    openDraft,
+    openNewSessionInWorkspace: (mode, origin) =>
+      handleNewSession(mode, null, origin),
+    startNewChat: (session, prompt) =>
+      openNewSessionInWorkspace(session, "share", prompt),
+    openPrefilledSession,
+    openReview,
+    openStaging,
+    openPreview: openPreviewTab,
+    openPortal,
+    openAssets,
+    openTerminal,
+    openCurrentWorkspace: () => setActiveViewTab(null),
+  } satisfies NavigationActions;
+
+  const content = (
     <UserGate>
       <RestartOverlay connected={connected} addHandler={addHandler} />
       <MediaLightboxHost />
@@ -5157,90 +5270,9 @@ export function App({
                       productEmpty && githubConnectionState !== "loading"
                     }
                     draftRowActive={productEmpty && route.view === "prs"}
-                    onOpenDraft={() => {
-                      // The row and the panel's card are one unstarted session, so
-                      // pressing the row is "put me back in it": return to the panel
-                      // if some other view is up, then take the caret.
-                      if (route.view !== "prs") navigate({ view: "prs" });
-                      setDraftFocusSeq((seq) => seq + 1);
-                    }}
-                    onNewSessionInRepo={(repo) =>
-                      // The Ask band's "+" is not a repo: it opens the palette
-                      // already in Ask with the repo turned off.
-                      setPalette(
-                        repo === ASK_BAND
-                          ? { open: true, repo: NO_REPO, mode: "ask" as const }
-                          : { open: true, repo },
-                      )
-                    }
-                    onOpenWorkspace={(id, preferredSessionId) => {
-                      // A bold workspace row names the unread session explicitly. Otherwise
-                      // restore the session tab that was last active in this workspace.
-                      const session = pickLandingSession(
-                        sessions,
-                        id,
-                        preferredSessionId ?? getWorkspaceLastSession(id),
-                      );
-                      const opensPreferredSession =
-                        session?.id === preferredSessionId;
-                      // Every session closed but a pane still open: land on the
-                      // pane rather than resurrecting the newest archived session
-                      // (pickLandingSession's history fallback).
-                      const panes = session?.archived
-                        ? sessionlessWorkspacePanes(
-                            id,
-                            workspaces.find(
-                              (workspace) => workspace.id === id,
-                            ) ?? null,
-                            {
-                              reviewOpen,
-                              reviewClosed,
-                              conversationClosed,
-                              videoClosed,
-                              hasWebPanel: (workspace) =>
-                                !!workspace.externalRefs?.some((ref) =>
-                                  refWebPanel(ref),
-                                ),
-                            },
-                          )
-                        : [];
-                      const remembered = getActiveViewTab(id);
-                      const pane =
-                        panes.find((p) => p === remembered) ?? panes[0] ?? null;
-                      if (pane && !opensPreferredSession) {
-                        setActiveViewTabState(pane);
-                        setFocusComposerOnOpen(false);
-                        navigate({ view: "workspace", id, tab: pane });
-                      } else if (session) {
-                        const rememberedTab = opensPreferredSession
-                          ? null
-                          : (getActiveViewTab(id) ?? null);
-                        setActiveViewTabState(rememberedTab);
-                        if (opensPreferredSession) saveActiveViewTab(id, null);
-                        setFocusComposerOnOpen(rememberedTab === null);
-                        navigate({ view: "session", id: session.id });
-                      } else {
-                        const p = workspaces.find((x) => x.id === id);
-                        // A draft workspace has no session and no other pane, but it
-                        // isn't "nothing to open": WorkspacePane is its home, with
-                        // the composer prefilled from the parked draft.
-                        if (p?.draft) {
-                          navigate({ view: "workspace", id });
-                          return;
-                        }
-                        // Default the new session onto the workspace's own branch (share
-                        // its worktree) when it has one — e.g. all sessions archived.
-                        setPalette({
-                          open: true,
-                          workspaceId: id,
-                          repo: p?.repo,
-                          branch: p?.branch,
-                          ...(p?.externalRefs?.length && !p?.repo
-                            ? { mode: "scratch" as const }
-                            : {}),
-                        });
-                      }
-                    }}
+                    onOpenDraft={openDraft}
+                    onNewSessionInRepo={openNewSessionInRepo}
+                    onOpenWorkspace={openWorkspace}
                     onRenameWorkspace={async (id, name) => {
                       await (async () => {
                         await updateWorkspaceApi(id, { name });
@@ -5995,6 +6027,11 @@ export function App({
         )}
       </div>
     </UserGate>
+  );
+  return (
+    <NavigationProvider actions={navigationActions}>
+      {content}
+    </NavigationProvider>
   );
 }
 
