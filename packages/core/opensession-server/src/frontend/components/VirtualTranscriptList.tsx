@@ -93,6 +93,8 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	private root: HTMLDivElement | null = null;
 	private mounted = false;
 	private rendering = false;
+	private measuringCommittedRows = false;
+	private renderAfterCommitMeasure = false;
 	private mountCleanup: (() => void) | undefined;
 	private navigationCleanup: (() => void) | undefined;
 	private navigationContainer: HTMLDivElement | null = null;
@@ -163,10 +165,11 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	}
 
 	componentDidUpdate(
-		_prevProps: Omit<Props, "enabled">,
+		prevProps: Omit<Props, "enabled">,
 		_prevState: AdapterState,
 		snapshot: number | null,
 	) {
+		this.measureCommittedRows(prevProps);
 		this.virtualizer._willUpdate();
 		this.scheduleHeadGrowthClear();
 		if (snapshot !== null) {
@@ -251,6 +254,13 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 
 	private requestRender = (_instance: Virtualizer<HTMLDivElement, HTMLDivElement>, sync: boolean) => {
 		if (!this.mounted) return;
+		if (this.measuringCommittedRows) {
+			// componentDidUpdate is already before paint. Batch every changed row
+			// into one nested render rather than asking flushSync to interrupt a
+			// React lifecycle for each measurement.
+			this.renderAfterCommitMeasure = true;
+			return;
+		}
 		const update = () => {
 			if (this.mounted)
 				this.setState(({ revision }) => ({ revision: revision + 1 }));
@@ -292,6 +302,30 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	private setRoot = (node: HTMLDivElement | null) => {
 		this.root = node;
 	};
+
+	private measureCommittedRows(prevProps: Omit<Props, "enabled">) {
+		const keys = committedTranscriptMeasureKeys(prevProps.items, this.props.items);
+		if (!this.root || keys.size === 0) return;
+		this.measuringCommittedRows = true;
+		this.renderAfterCommitMeasure = false;
+		try {
+			for (const node of this.root.querySelectorAll<HTMLDivElement>(
+				"[data-transcript-key]",
+			)) {
+				if (!keys.has(node.dataset.transcriptKey ?? "")) continue;
+				const index = Number(node.dataset.index);
+				if (!Number.isInteger(index)) continue;
+				// ResizeObserver reports after the commit. Measuring semantic
+				// transcript changes here lets the virtualizer update its root height
+				// and bottom compensation in the same pre-paint layout phase.
+				this.virtualizer.resizeItem(index, node.getBoundingClientRect().height);
+			}
+		} finally {
+			this.measuringCommittedRows = false;
+		}
+		if (this.renderAfterCommitMeasure)
+			this.setState(({ revision }) => ({ revision: revision + 1 }));
+	}
 
 	/** The nearest message scroller, cached per root node: `closest` walks the
 	 * whole ancestor chain and used to run several times on every commit. */
@@ -541,6 +575,7 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 							ref={item.measure === false ? undefined : this.rowRef(item.key)}
 							data-index={virtualItem.index}
 							data-eid={item.anchorId}
+							data-transcript-key={item.key}
 							className={cn(
 								"absolute left-0 top-0 w-full",
 								item.className,
@@ -563,6 +598,25 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		this.rendering = false;
 		return result;
 	}
+}
+
+export function committedTranscriptMeasureKeys(
+	previous: VirtualTranscriptItem[],
+	next: VirtualTranscriptItem[],
+): Set<string> {
+	const previousIds = new Map(previous.map((item) => [item.key, item.entryIds]));
+	const changed = new Set<string>();
+	for (const item of next) {
+		if (item.measure === false) continue;
+		const before = previousIds.get(item.key);
+		if (
+			!before ||
+			before.length !== item.entryIds.length ||
+			before.some((id, index) => id !== item.entryIds[index])
+		)
+			changed.add(item.key);
+	}
+	return changed;
 }
 
 export function shouldAdjustTranscriptScroll(

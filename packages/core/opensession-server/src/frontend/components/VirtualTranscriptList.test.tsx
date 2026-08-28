@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+	committedTranscriptMeasureKeys,
 	VirtualTranscriptList,
 	shouldAdjustTranscriptScroll,
 	type VirtualTranscriptItem,
@@ -37,6 +38,18 @@ describe("VirtualTranscriptList", () => {
 	test("keeps positive live-edge growth pinned in the measurement frame", () => {
 		expect(shouldAdjustTranscriptScroll(1_200, 600, false, 140)).toBe(true);
 		expect(shouldAdjustTranscriptScroll(1_200, 600, false, -140)).toBe(false);
+	});
+
+	test("synchronously remeasures new and extended semantic rows", () => {
+		const before = [item(0), item(1)];
+		const extended = { ...item(1), entryIds: ["entry-1", "tool-result-1"] };
+		const added = item(2);
+		expect(
+			[...committedTranscriptMeasureKeys(before, [item(0), extended, added])],
+		).toEqual(["block-1", "block-2"]);
+		expect(
+			committedTranscriptMeasureKeys(before, [item(0), item(1)]).size,
+		).toBe(0);
 	});
 
 	test("renders complete semantic content without browser measurement", () => {
