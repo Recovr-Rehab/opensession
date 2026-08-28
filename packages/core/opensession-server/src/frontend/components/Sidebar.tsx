@@ -6181,7 +6181,13 @@ fetchFeedItems("plain")
 												SIDEBAR_GROUP_HEADER_INSET,
 												SIDEBAR_HEADER_ROW,
 											)}
-											onClick={() => toggleGroup(groupKey)}
+											onClick={(event) => {
+												const header = event.currentTarget;
+												toggleGroup(groupKey);
+												requestAnimationFrame(() =>
+													header.scrollIntoView({ block: "nearest", inline: "nearest" }),
+												);
+											}}
 											aria-expanded={personOpen}
 											title={`${personOpen ? "Collapse" : "Expand"} ${group.label}'s sessions`}
 										>
