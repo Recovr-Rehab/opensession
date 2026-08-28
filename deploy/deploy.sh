@@ -87,6 +87,13 @@ executor_ready() {
     && printf '%s' "$ready" | grep -Fq "\"generation\":\"$generation\""
 }
 
+drain_gateway_for_supervisor_restart() {
+  [ -S /run/opensession-gateway/control.sock ] || return 1
+  "$SERVICE_BUN" \
+    "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+    drain-supervisor
+}
+
 session_kernel_ready() {
   local generation body
   generation="$(cat "$CURRENT_LINK/.opensession-release" 2>/dev/null || true)"
@@ -426,6 +433,9 @@ fi
 
 if [ "$RESTART_KERNEL" = "1" ]; then
   echo "[deploy] stopping gateway before replacing its actor protocol peer"
+  if ! drain_gateway_for_supervisor_restart; then
+    echo "[deploy] installed supervisor lacks fast service drain; using compatibility stop"
+  fi
   systemctl stop opensession.service
   if [ "$SOCKET_ACTIVE" = "0" ]; then
     echo "[deploy] activating the persistent gateway socket"
@@ -536,6 +546,10 @@ if systemctl cat caddy.service >/dev/null 2>&1 \
   fi
 fi
 
+# The target supervisor may have been socket-activated while peers restarted.
+# Drain its child with the restart-specific one-second journal handoff before
+# systemd replaces the supervisor and transfers the inherited listener again.
+drain_gateway_for_supervisor_restart || true
 systemctl restart opensession.service
 
 # Post-restart health gate — fail the deploy if it doesn't come back.

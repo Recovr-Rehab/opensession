@@ -230,6 +230,12 @@ current_release_sha() {
   release_cmd current-sha 2>/dev/null || true
 }
 
+session_kernel_ready_any_generation() {
+  local body
+  body="$(curl -fs --max-time 2 "$SESSION_KERNEL_READY_URL" 2>/dev/null || true)"
+  printf '%s' "$body" | grep -Fq '"ready":true'
+}
+
 session_kernel_ready_for_current() {
   local expected body
   expected="$(current_release_sha)"
@@ -250,7 +256,7 @@ executor_ready_for_current() {
 preflight_session_kernel() {
   session_kernel_unit_available || return 1
   if ! run_systemctl is-active --quiet "$SESSION_KERNEL_SERVICE_NAME" \
-    || ! session_kernel_ready_for_current; then
+    || ! session_kernel_ready_any_generation; then
     log "ERROR: installed session kernel is not healthy; refusing to stop the gateway"
     return 1
   fi
