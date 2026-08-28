@@ -488,7 +488,11 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	};
 
 	private clearTopApproach() {
-		this.topApproachContainer?.removeEventListener("scroll", this.onTopApproachScroll);
+		this.topApproachContainer?.removeEventListener(
+			"scroll",
+			this.onTopApproachScroll,
+			true,
+		);
 		this.topApproachContainer?.removeEventListener("wheel", this.onTopApproachWheel);
 		this.topApproachContainer?.removeEventListener(
 			"touchstart",
@@ -518,7 +522,13 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		if (!container || !callback) return;
 		this.topApproachContainer = container;
 		this.topApproachScrollTop = container.scrollTop;
-		container.addEventListener("scroll", this.onTopApproachScroll, { passive: true });
+		// Capture before React's scroll listener can synchronously rerender this
+		// adapter and replace its listener. In bubble order, a one-step scrollbar
+		// jump removed this callback before the same event ever reached it.
+		container.addEventListener("scroll", this.onTopApproachScroll, {
+			passive: true,
+			capture: true,
+		});
 		container.addEventListener("wheel", this.onTopApproachWheel, { passive: true });
 		container.addEventListener("touchstart", this.onTopApproachTouchStart, {
 			passive: true,
