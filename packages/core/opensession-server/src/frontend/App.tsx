@@ -8,7 +8,6 @@ import {
   setKnownPrStates,
   setResolvedSessionTitles,
   setSessionTitles,
-  setWorkspaceTitles,
 } from "./lib/markdown";
 import { reviewRequestTargetsPerson } from "./lib/review-queue";
 import { repoLabel } from "./lib/repo-label";
@@ -173,6 +172,7 @@ import {
 } from "./components/icons";
 import { DeskOverlay } from "./components/DeskOverlay";
 import { sidebarSessionsQuery, useSessions } from "./hooks/useSessions";
+import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useGithubConnectionState } from "./hooks/useGithubConnectionState";
 import { useHydratedSession } from "./hooks/useHydratedSession";
 import { hasDraft } from "./lib/drafts";
@@ -195,7 +195,6 @@ import {
   setSessionStatusApi,
   newSessionApi,
   fetchWorkspaceArchivedSessions,
-  fetchWorkspaces,
   updateWorkspaceApi,
   deleteWorkspaceApi,
   fetchRepos,
@@ -719,18 +718,13 @@ export function App({
   const [pins, setPins] = useState<string[]>(getPins);
   const [tabColors, setTabColors] =
     useState<Record<string, string>>(getTabColors);
-  // Workspaces (containers that group sessions) — powers the sidebar rows
-  // and the workspace-scoped tab strip. Refetched on focus and when sessions
-  // change (a new PR session can auto-create a workspace server-side).
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
-  // Workspace mentions keep stable ids in the prompt while the composer shows
-  // the same human name as the sidebar and workspace route.
-  useEffect(() => {
-    setWorkspaceTitles(
-      workspaces.map((workspace) => [workspace.id, workspace.name] as const),
-    );
-  }, [workspaces]);
+  // Workspaces (containers that group sessions) power the sidebar rows and the
+  // workspace-scoped tab strip.
+  const {
+    workspaces,
+    loaded: workspacesLoaded,
+    refresh: refreshWorkspaces,
+  } = useWorkspaces();
   // Read by the PR-link opener, which runs from a document-level listener and
   // therefore can't close over the render's value.
   const workspacesRef = useRef(workspaces);
@@ -743,33 +737,6 @@ export function App({
     sessions.length === 0 &&
     workspaces.length === 0;
   const firstMileActive = forceFirstMile || onboarding.state === "required";
-  // This identity is observable: both subscriptions below depend on it. Keep it
-  // stable even if the compiler bails out on this large component, otherwise a
-  // completed fetch updates state, retriggers the effect, and starts another fetch.
-  const [refreshWorkspaces] = useState(() => () => {
-    return fetchWorkspaces()
-      .then(setWorkspaces)
-      .catch(() => {})
-      .finally(() => setWorkspacesLoaded(true));
-  });
-  useEffect(() => {
-    refreshWorkspaces();
-    const onFocus = () => refreshWorkspaces();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [refreshWorkspaces]);
-  useEffect(() => {
-    const onWorkspaceSettingsChanged = () => refreshWorkspaces();
-    window.addEventListener(
-      "opensession:workspaces-changed",
-      onWorkspaceSettingsChanged,
-    );
-    return () =>
-      window.removeEventListener(
-        "opensession:workspaces-changed",
-        onWorkspaceSettingsChanged,
-      );
-  }, [refreshWorkspaces]);
   useEffect(() => {
     if (onboarding.state !== "required" || forceFirstMile) return;
     requireFirstMile();
