@@ -138,6 +138,8 @@ import { SessionSplit, type SplitSide } from "./components/SessionSplit";
 import { RestartOverlay } from "./components/RestartOverlay";
 import { MediaLightboxHost } from "./components/MediaLightbox";
 import { ChipHoverCards } from "./components/ChipHoverCard";
+import { TranscriptMotionLab } from "./components/TranscriptMotionLab";
+import { transcriptMotionFixtureOptions } from "./lib/transcript-motion-scenarios";
 import { ShortcutCheatSheet } from "./components/ShortcutCheatSheet";
 import { UpdatePill } from "./components/UpdatePill";
 import { OrganizationSwitcher } from "./components/OrganizationSwitcher";
@@ -6202,6 +6204,10 @@ if (!embeddedDemo) {
 	// The preview interstitial renders INSTEAD of the app (and outside UserGate —
 	// it must work in cold-storage contexts like the iOS PWA's in-app browser).
 	const previewWaitSessionId = matchPreviewWaitRoute(location.pathname);
+	const transcriptMotionFixture = transcriptMotionFixtureOptions(
+		location.pathname,
+		location.search,
+	);
 	// `reducedMotion="user"` makes every `motion.*` component honour the OS
 	// setting. Motion's default is "never", so without this the CSS blanket in
 	// legacy.css would quietly cover only half the app — Motion animates inline
@@ -6211,7 +6217,12 @@ if (!embeddedDemo) {
 	// not zero" behaviour this preference actually asks for.
 	createRoot(document.getElementById("root")!).render(
 		<MotionConfig reducedMotion="user">
-			{previewWaitSessionId ? (
+			{transcriptMotionFixture ? (
+				<TranscriptMotionLab
+					initialSeed={transcriptMotionFixture.seed}
+					speed={transcriptMotionFixture.speed}
+				/>
+			) : previewWaitSessionId ? (
 				<PreviewWait sessionId={previewWaitSessionId} />
 			) : (
 				<TooltipProvider>
