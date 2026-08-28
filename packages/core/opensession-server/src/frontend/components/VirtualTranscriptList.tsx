@@ -298,7 +298,10 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 			observeElementRect,
 			observeElementOffset,
 			scrollToFn: elementScroll,
-			useAnimationFrameWithResizeObserver: true,
+			// The callback adjusts scrollTop and synchronously commits corrected row
+			// transforms. Deferring it through rAF exposes one paint of tool growth
+			// before that correction, which reads as a live-conversation flicker.
+			useAnimationFrameWithResizeObserver: false,
 			onChange: this.requestRender,
 		};
 	}
