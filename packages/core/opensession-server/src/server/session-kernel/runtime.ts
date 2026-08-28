@@ -207,22 +207,19 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 		const timerKinds = [...runtime.timerHandlers.keys()];
 		const effectKinds = registeredSessionEffectKinds();
 		const openingKind = "creation_opening_turn";
+		const now = Date.now();
+		// Fetch ordinary and opening effects in one actor pass. Separate quotas
+		// preserve opening admission without opening and rescanning another batch
+		// of per-session SQLite databases every second.
 		const work = await sessionKernelRuntimeWork(
 			timerKinds,
 			effectKinds.filter((kind) => kind !== openingKind),
+			now,
+			100,
+			effectKinds.includes(openingKind)
+				? [{ effectKinds: [openingKind], limit: OPENING_OUTBOX_CONCURRENCY }]
+				: [],
 		);
-		if (effectKinds.includes(openingKind)) {
-			// Admit enough opening effects to project their session files immediately.
-			// session-create.ts applies the smaller eight-turn engine gate only after
-			// projection, so slow agent turns cannot hide later accepted sessions.
-			const openings = await sessionKernelRuntimeWork(
-				[],
-				[openingKind],
-				Date.now(),
-				OPENING_OUTBOX_CONCURRENCY,
-			);
-			work.outbox.push(...openings.outbox);
-		}
 		const activeTimers = (runtime.activeTimers ??= new Set());
 		for (const timer of work.timers) {
 			if (activeTimers.size >= TIMER_CONCURRENCY) break;

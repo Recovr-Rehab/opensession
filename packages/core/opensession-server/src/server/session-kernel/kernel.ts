@@ -751,15 +751,30 @@ export async function sessionKernelRuntimeWork(
 	effectKinds: string[],
 	now = Date.now(),
 	limit = 100,
+	additionalOutboxGroups: Array<{
+		effectKinds: string[];
+		limit: number;
+	}> = [],
 ): Promise<{
   timers: DurableTimer[];
   outbox: import("./store").DurableOutboxItem[];
 }> {
 	if (state.actor)
-		return state.actor.runtimeWork(timerKinds, effectKinds, now, limit);
+		return state.actor.runtimeWork(
+			timerKinds,
+			effectKinds,
+			now,
+			limit,
+			additionalOutboxGroups,
+		);
+	const store = __sessionKernelStoreForTest();
+	const outbox = new Map<number, import("./store").DurableOutboxItem>();
+	for (const group of [{ effectKinds, limit }, ...additionalOutboxGroups])
+		for (const item of store.pendingOutbox(now, group.limit, group.effectKinds))
+			outbox.set(item.id, item);
 	return {
-		timers: __sessionKernelStoreForTest().dueTimers(now, limit, timerKinds),
-		outbox: __sessionKernelStoreForTest().pendingOutbox(now, limit, effectKinds),
+		timers: store.dueTimers(now, limit, timerKinds),
+		outbox: [...outbox.values()],
 	};
 }
 

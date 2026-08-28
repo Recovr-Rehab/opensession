@@ -5,7 +5,7 @@ import type {
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 33;
+export const SESSION_KERNEL_ACTOR_VERSION = 34;
 export const SESSION_KERNEL_TRANSPORT_VERSION = 1;
 // A transcript mutation can carry one accepted 50 MiB legacy/base64 image
 // (about 67 MiB on the JSON wire) before the actor splits it into blob storage.
@@ -25,6 +25,10 @@ export type KernelActorAsyncRequest =
       timerKinds: string[];
       effectKinds: string[];
       limit: number;
+      additionalOutboxGroups?: Array<{
+        effectKinds: string[];
+        limit: number;
+      }>;
     };
 
 export type KernelActorAsyncResponse =

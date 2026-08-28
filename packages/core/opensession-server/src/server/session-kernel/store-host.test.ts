@@ -905,6 +905,54 @@ describe("per-session session kernel storage", () => {
     recovered.close();
   });
 
+  test("fetches separate outbox quotas while opening each actor once", () => {
+    const path = paths();
+    const first = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "grouped-runtime-work";
+    first.call("enqueueOutbox", [
+      sessionId,
+      "ordinary_effect",
+      null,
+      "ordinary-one",
+    ]);
+    first.call("enqueueOutbox", [
+      sessionId,
+      "ordinary_effect",
+      null,
+      "ordinary-two",
+    ]);
+    first.call("enqueueOutbox", [
+      sessionId,
+      "creation_opening_turn",
+      null,
+      "opening-one",
+    ]);
+    first.call("enqueueOutbox", [
+      sessionId,
+      "creation_opening_turn",
+      null,
+      "opening-two",
+    ]);
+    first.close();
+
+    const recovered = new SessionKernelStoreHost(path.central, path.isolated);
+    const work = recovered.runtimeWork(
+      Date.now(),
+      [],
+      ["ordinary_effect"],
+      1,
+      [{ effectKinds: ["creation_opening_turn"], limit: 100 }],
+    );
+
+    expect(work.outbox.map((item) => item.kind)).toEqual([
+      "ordinary_effect",
+      "creation_opening_turn",
+      "creation_opening_turn",
+    ]);
+    expect(recovered.metrics().kernelStoreCacheMisses).toBe(1);
+    recovered.close();
+  });
+
   // Explicit budget: this test creates 24 per-session isolated databases,
   // which is real synchronous disk work (~4s warm locally, ~9s on GitHub's
   // 2-core runner) — the default 5s timeout flags slow hardware, not a hang.

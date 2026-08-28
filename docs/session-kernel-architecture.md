@@ -456,6 +456,8 @@ Before every isolated mutation, the host durably marks that session's catalog
 wake record dirty. A crash can therefore leave an extra scan but cannot hide a
 committed timer or outbox item. Runtime reconciliation reads the authoritative
 session database, dispatches due work, and repairs its next-wake projection.
+Ordinary and opening-effect quotas share one bounded reconciliation pass, so a
+runtime tick never opens the same actor batch once per effect pool.
 
 The gateway starts and handshakes the actor host before hydrating projections. A
 failed session-scoped critical settlement durably quarantines only that session,

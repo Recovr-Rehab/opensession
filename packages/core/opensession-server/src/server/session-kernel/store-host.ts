@@ -504,10 +504,19 @@ export class SessionKernelStoreHost {
     timerKinds: string[],
     effectKinds: string[],
     limit: number,
+    additionalOutboxGroups: Array<{
+      effectKinds: string[];
+      limit: number;
+    }> = [],
   ): { timers: DurableTimer[]; outbox: DurableOutboxItem[] } {
+    const outboxGroups = [
+      { effectKinds, limit },
+      ...additionalOutboxGroups,
+    ].map((group) => ({ ...group, items: [] as DurableOutboxItem[] }));
+    const largestLimit = Math.max(limit, ...outboxGroups.map((group) => group.limit));
     const candidateLimit = Math.max(
       1,
-      Math.min(RUNTIME_WAKE_CANDIDATE_BATCH, limit),
+      Math.min(RUNTIME_WAKE_CANDIDATE_BATCH, largestLimit),
     );
     // Reserve a small part of every batch for the most recently dirtied actors
     // and the oldest already-indexed due work. This keeps both new creates and
@@ -557,34 +566,65 @@ export class SessionKernelStoreHost {
     appendFairCandidates(this.runtimeCursor);
     if (candidates.length < candidateLimit && this.runtimeCursor)
       appendFairCandidates();
-    const quota = Math.max(1, Math.ceil(limit / (candidates.length + 1)));
-    const timers = this.central.dueTimers(now, Math.min(quota, limit), timerKinds);
-    const outbox = this.central.pendingOutbox(now, Math.min(quota, limit), effectKinds);
+
+    const quota = (groupLimit: number) =>
+      Math.max(1, Math.ceil(groupLimit / (candidates.length + 1)));
+    const timerQuota = quota(limit);
+    const timers = this.central.dueTimers(
+      now,
+      Math.min(timerQuota, limit),
+      timerKinds,
+    );
+    for (const group of outboxGroups) {
+      group.items.push(...this.central.pendingOutbox(
+        now,
+        Math.min(quota(group.limit), group.limit),
+        group.effectKinds,
+      ));
+    }
+
     for (const sessionId of candidates) {
       const scanned = this.containIsolated(sessionId, "runtime:scan", () => {
         const store = this.openIsolated(sessionId);
         return {
           timers: timers.length < limit
-            ? store.dueTimers(now, Math.min(quota, limit - timers.length), timerKinds)
+            ? store.dueTimers(
+                now,
+                Math.min(timerQuota, limit - timers.length),
+                timerKinds,
+              )
             : [],
-          outbox: outbox.length < limit
-            ? store.pendingOutbox(now, Math.min(quota, limit - outbox.length), effectKinds)
-            : [],
+          outbox: outboxGroups.map((group) =>
+            group.items.length < group.limit
+              ? store.pendingOutbox(
+                  now,
+                  Math.min(quota(group.limit), group.limit - group.items.length),
+                  group.effectKinds,
+                )
+              : []
+          ),
           nextTimerWakeAt: store.nextTimerWakeAt(),
           nextOutboxWakeAt: store.nextOutboxWakeAt(),
         };
       });
       if (!scanned.ok) continue;
       timers.push(...scanned.value.timers);
-      outbox.push(...scanned.value.outbox);
+      for (const [index, items] of scanned.value.outbox.entries())
+        outboxGroups[index]?.items.push(...items);
       this.central.settleIsolatedSessionWake(
         sessionId,
         scanned.value.nextTimerWakeAt,
         scanned.value.nextOutboxWakeAt,
       );
-      if (timers.length >= limit && outbox.length >= limit) break;
+      if (
+        timers.length >= limit &&
+        outboxGroups.every((group) => group.items.length >= group.limit)
+      ) break;
     }
-    return { timers, outbox };
+    const outbox = new Map<number, DurableOutboxItem>();
+    for (const group of outboxGroups)
+      for (const item of group.items) outbox.set(item.id, item);
+    return { timers, outbox: [...outbox.values()] };
   }
 
   stats(): ReturnType<SessionKernelStoreApi["stats"]> {

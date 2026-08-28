@@ -467,6 +467,7 @@ export function startSessionKernelActorWorker(): void {
             request.timerKinds,
             request.effectKinds,
             request.limit,
+            request.additionalOutboxGroups,
           ),
         });
       }
