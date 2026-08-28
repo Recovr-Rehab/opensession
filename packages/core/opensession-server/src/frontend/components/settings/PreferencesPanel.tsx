@@ -590,35 +590,6 @@ export function PreferencesPanel() {
 							/>
 						}
 					/>
-					{repoOptions.map((repo) => {
-						const label = repo.label || repo.id;
-						const checkoutPref = checkoutPrefs[repo.id] ?? "default";
-						return (
-							<SettingRow
-								key={repo.id}
-								title={`${label} workspace`}
-								desc={
-									checkoutPref === "default"
-										? `Repository default: ${repo.sharedCheckout ? "local checkout" : "separate worktree"}.`
-										: "Personal override for new code sessions."
-								}
-								control={
-									<Select
-										label={`${label} code workspace`}
-										value={checkoutPref}
-										options={[
-											{ value: "default", label: "Use repository default" },
-											{ value: "checkout", label: "Local checkout" },
-											{ value: "worktree", label: "Separate worktree" },
-										]}
-										onChange={(value) =>
-											setSessionCheckoutPref(repo.id, value)
-										}
-									/>
-								}
-							/>
-						);
-					})}
 					<PersonalSandboxDefaultRow />
 					<PersonalOutputStyleRow />
 				</SettingGroup>
@@ -700,6 +671,42 @@ export function PreferencesPanel() {
 					}
 				/>
 			</SettingCard>
+			<SettingsGroupLabel>Code workspaces</SettingsGroupLabel>
+			<SettingCard>
+				{repoOptions.map((repo) => {
+					const label = repo.label || repo.id;
+					const checkoutPref = checkoutPrefs[repo.id] ?? "default";
+					return (
+						<SettingRow
+							key={repo.id}
+							title={label}
+							desc={
+								checkoutPref === "default"
+									? `Repository default: ${repo.sharedCheckout ? "local checkout" : "separate worktree"}.`
+									: "Personal override for new code sessions."
+							}
+							control={
+								<Select
+									label={`${label} code workspace`}
+									value={checkoutPref}
+									options={[
+										{ value: "default", label: "Use repository default" },
+										{ value: "checkout", label: "Local checkout" },
+										{ value: "worktree", label: "Separate worktree" },
+									]}
+									onChange={(value) =>
+										setSessionCheckoutPref(repo.id, value)
+									}
+								/>
+							}
+						/>
+					);
+				})}
+			</SettingCard>
+			<SettingsHint>
+				Personal choices apply to new sessions only and override each
+				repository&apos;s default.
+			</SettingsHint>
 			<AppearanceSection />
 			<SettingsGroupLabel>Sidebar</SettingsGroupLabel>
 			<SettingCard>
