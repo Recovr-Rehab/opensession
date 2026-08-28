@@ -1,4 +1,4 @@
-import { Marked } from "marked";
+import { Marked, type Token, type TokenizerThis, type Tokens } from "marked";
 import { BASE_PATH } from "./base";
 import { sanitizeHtmlFragment } from "./html-sanitize";
 import { prStatusDisplay, type PrStatusInput } from "./pr-status";
@@ -1163,7 +1163,7 @@ function githubCommitTarget(
  * raw text of all chip kinds is plain (ids, digits, `#`, `/`, `.`, `-`), so
  * it needs no escaping the text renderer wouldn't already skip.
  */
-function flattenChips(tokens: any[] | undefined): void {
+function flattenChips(tokens: Token[] | undefined): void {
   for (const token of tokens ?? []) {
     if (token.type === "assetPath") {
       token.type = token.coded ? "codespan" : "text";
@@ -1184,13 +1184,15 @@ function flattenChips(tokens: any[] | undefined): void {
       token.type = "text";
       token.text = token.raw;
       token.tokens = undefined;
-    } else if (Array.isArray(token.tokens)) flattenChips(token.tokens);
+    } else if ("tokens" in token && Array.isArray(token.tokens)) {
+      flattenChips(token.tokens);
+    }
   }
 }
 
 // An auto-linked (or <bracketed>) bare URL: marked hands the raw URL over as
 // the link text. Trailing-slash tolerant so `…/session/bks-x/` still counts.
-function isBareUrlLink(token: any): boolean {
+function isBareUrlLink(token: Tokens.Link): boolean {
   const strip = (v: string) => String(v ?? "").replace(/\/+$/, "");
   const text = strip(token.text);
   return text.length > 0 && text === strip(token.href);
@@ -1204,7 +1206,7 @@ md.use({
     // approximate numbers (`~350 files`), home paths (`~/.config`) — and two of
     // them on a line struck everything between. Returning undefined on a
     // single tilde lets marked fall through to plain text.
-    del(this: any, src: string) {
+    del(this: TokenizerThis, src: string) {
       const m = /^~~(?=\S)([\s\S]*?\S)~~/.exec(src);
       if (!m) return undefined;
       return {
@@ -1226,13 +1228,13 @@ md.use({
     // PR prose is the exception: bots write markup markdown has no syntax for,
     // so those callers ask for the allowlist sanitizer instead (see
     // html-sanitize.ts). Escaping stays the default everywhere else.
-    html(token: any) {
+    html(token: Tokens.HTML | Tokens.Tag) {
       const raw = String(token.text ?? token.raw ?? "");
       return renderRawHtml === "sanitize"
         ? sanitizeHtmlFragment(raw)
         : attr(raw);
     },
-    link(token: any) {
+    link(token: Tokens.Link) {
       // `[PR #5528](https://github.com/…)` is everyday agent output, and the
       // chip extensions fire inside a link's own text just as they do in
       // prose — which would nest an <a> inside an <a>, markup the HTML parser
@@ -1314,7 +1316,7 @@ md.use({
       }
       return `<a href="${attr(token.href)}"${title} target="_blank" rel="noopener noreferrer">${text}</a>`;
     },
-    codespan(token: any) {
+    codespan(token: Tokens.Codespan) {
       const t = token.text ?? "";
       // A codespan that is exactly a session id becomes a link into that session.
       if (!renderInLink && SESSION_ID_EXACT.test(t)) return sessionLink(t);
@@ -1322,7 +1324,7 @@ md.use({
         return automationChip(t);
       return `<code>${attr(t)}</code>`;
     },
-    image(token: any) {
+    image(token: Tokens.Image) {
       const title = token.title ? ` title="${attr(token.title)}"` : "";
       // Video files pasted with image syntax would render as a broken <img>
       // linking to a new tab — play them inline instead. Clicks on .md-image
@@ -1367,7 +1369,7 @@ md.use({
           coded: match[1] !== undefined,
         };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         return assetReferenceLink(token.path, token.label, token.coded);
       },
     },
@@ -1383,7 +1385,7 @@ md.use({
         if (!person) return undefined;
         return { type: "personMention", raw: `@${typed}`, name: person.name };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         const person = knownPeople.get(String(token.name).toLowerCase());
         return person ? personChip(person) : attr(`@${token.name}`);
       },
@@ -1399,7 +1401,7 @@ md.use({
         const m = new RegExp(`^auto-${UUIDV7}`, "i").exec(src);
         if (m) return { type: "automationId", raw: m[0], id: m[0] };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         return automationChip(token.id);
       },
     },
@@ -1414,7 +1416,7 @@ md.use({
         const m = new RegExp(`^(?:os|bks)-${UUIDV7}`, "i").exec(src);
         if (m) return { type: "sessionId", raw: m[0], id: m[0] };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         return sessionLink(token.id);
       },
     },
@@ -1450,7 +1452,7 @@ md.use({
           repo: renderRepo,
         };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         // The cue stays prose, like the PR chip's: it reads as `commit` plus
         // the sha, not as a capsule that has swallowed the word.
         return attr(token.cue) + commitRefChip(token.repo, token.sha);
@@ -1489,7 +1491,7 @@ md.use({
           unqualified: !qualifier,
         };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         // The cue stays prose: it reads as `PR` + a chip labelled `#92`, so a
         // chip already carrying a PR icon doesn't also spell the word out.
         return (
