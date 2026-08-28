@@ -737,9 +737,25 @@ do_deploy() {
       fi
       exit 1
     fi
-    log "ERROR: candidate gateway handoff failed; previous gateway remains authoritative"
-    write_result false deploy "$current" "$current" \
-      "gateway handoff of $target_sha failed before pointer switch; previous gateway retained"
+    if [ "$(current_release_sha)" = "$current" ] && health_ok; then
+      log "ERROR: candidate gateway handoff failed before cut-over; previous gateway remains healthy"
+      write_result false deploy "$current" "$current" \
+        "gateway handoff of $target_sha failed before cut-over; previous gateway retained"
+      exit 1
+    fi
+    # A supervisor can fail after fencing the old child and then fail its own
+    # rollback. Never trust a generic nonzero response to mean the old gateway
+    # is still serving: the 2026-08-28 incident left PID 1 crash-looping for
+    # minutes because this branch merely recorded failure. Force the pinned
+    # generation and all protocol peers back to a health-gated state.
+    log "ERROR: gateway handoff failed and the previous gateway is not healthy; forcing rollback"
+    if rollback_to_pin; then
+      write_result false deploy "$(current_release_sha)" "$current" \
+        "gateway handoff of $target_sha failed; forced rollback restored health"
+    else
+      write_result false deploy "$(current_release_sha 2>/dev/null || echo unknown)" "$current" \
+        "gateway handoff of $target_sha failed; forced rollback failed"
+    fi
     exit 1
   fi
 

@@ -253,6 +253,9 @@ describe("deploy/self-deploy.sh", () => {
 		expect(script).toContain('restart_kernel=1 restart_executor_peer=1');
 		expect(script).toContain('refresh_protocol_peers "$restart_executor_peer" "$restart_kernel"');
 		expect(script).toContain('"$release_dir" "$target_sha" "$kernel_generation" "$executor_generation"');
+		expect(script).toContain('candidate gateway handoff failed before cut-over; previous gateway remains healthy');
+		expect(script).toContain('gateway handoff failed and the previous gateway is not healthy; forcing rollback');
+		expect(script).toContain('forced rollback restored health');
 	});
 
 	test("the server launches through the fixed privileged helper", async () => {

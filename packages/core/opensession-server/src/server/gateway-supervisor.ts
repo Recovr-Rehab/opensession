@@ -27,9 +27,10 @@ const BACKEND_HOST = "127.0.0.1";
 let nextBackendPort = Number(process.env.OPENSESSION_GATEWAY_BACKEND_PORT_BASE || 0);
 const PRELOAD_TIMEOUT_MS = 30_000;
 const FAST_HANDOFF_EXIT_TIMEOUT_MS = 2_500;
-// A healthy gateway normally reaches /ready in 1-3 seconds. Long waits only
-// extend a parked listener and compound candidate + rollback outages.
-const READY_TIMEOUT_MS = 15_000;
+// Heavy recovery can keep /ready false well after the backend is serving
+// liveness traffic. Peer mismatches are rejected by the pre-cut-over check;
+// do not destroy a healthy candidate merely because recovery takes a minute.
+const READY_TIMEOUT_MS = 60_000;
 
 export function inheritedGatewaySocketFd(
   env: Record<string, string | undefined> = process.env,
