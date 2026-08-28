@@ -310,6 +310,12 @@ import {
 	samePanel,
 	type Route,
 } from "./lib/app-route";
+import {
+	buildWorkspacePaneTabs,
+	sessionlessWorkspacePanes,
+	viewTabKind,
+	type WorkspacePaneTab,
+} from "./lib/workspace-pane-tabs";
 
 function deferred<Props extends object>(
 	load: () => Promise<{ default: React.ComponentType<Props> }>,
@@ -2400,176 +2406,59 @@ const path = await resolveAnonymousUserPath(
 	const prBackedWorkspace =
 		!!wsRecord &&
 		(wsRecord.prNumber !== undefined || !!wsRecord.key?.startsWith("ghpr-"));
-	const reviewViewTabs: ViewTab[] =
-		reviewCapable &&
-		wsKey &&
-		(reviewOpen.has(wsKey) ||
-			(prBackedWorkspace && !reviewClosed.has(wsKey)))
-			? [
-					{
-						id: `review:${wsKey}`,
-						label: "Review",
-						active: reviewActive,
-						dotClass: currentSession?.prState
-							? currentSession.prState === "OPEN" &&
-								currentSession.prMergeable === "CONFLICTING"
-								? PR_DOT_TONE.CONFLICT
-								: (PR_DOT_TONE[currentSession.prState] ?? null)
-							: null,
-					},
-				]
-			: [];
-	// The Conversation view-tab: the Plain support-ticket thread the workspace
-	// (or the open session) is attached to — timeline, admin actions, replies.
 	const conversationThreadId =
 		routeWorkspace?.plainThreadId ?? currentSession?.plainThreadId ?? null;
-	const conversationViewTabs: ViewTab[] =
-		conversationThreadId && wsKey && !conversationClosed.has(wsKey)
-			? [
-					{
-						id: `conversation:${wsKey}`,
-						label: "Conversation",
-						active: conversationActive,
-						dotClass: null,
-					},
-				]
-			: [];
-	// Feed descriptors (panel templates, labels) into the module cache that
-	// refWebPanel reads — without this the panel has no descriptors to resolve.
 	const [, setFeedMetaTick] = useState(0);
 	useEffect(() => {
-		void ensureFeedMeta().then(() => setFeedMetaTick((t) => t + 1));
+		void ensureFeedMeta().then(() => setFeedMetaTick((tick) => tick + 1));
 	}, []);
-	// The Video view-tab: the web panel of the workspace's (or open session's)
-	// feed-item ExternalRef, e.g. a video embed (the feeds design).
-	// On a session route routeWorkspace is null, so fall back to the open session's
-	// workspace record — otherwise the tab vanishes as soon as a session exists.
 	const videoWorkspace =
 		routeWorkspace ??
 		(currentSession?.workspaceId
-			? workspaces.find((p) => p.id === currentSession.workspaceId) ?? null
+			? workspaces.find((workspace) => workspace.id === currentSession.workspaceId) ??
+				null
 			: null);
-	const videoRef =
-		(
-			videoWorkspace?.externalRefs ??
-			currentSession?.externalRefs ??
-			[]
-		).find((r) => refWebPanel(r)) ?? null;
+	const videoRef = (
+		videoWorkspace?.externalRefs ??
+		currentSession?.externalRefs ??
+		[]
+	).find((ref) => refWebPanel(ref));
 	const videoPanel = videoRef ? refWebPanel(videoRef) : null;
-	const videoViewTabs: ViewTab[] =
-		videoPanel && wsKey && !videoClosed.has(wsKey)
-			? [
-					{
-						id: `video:${wsKey}`,
-						label: videoPanel.label,
-						active: videoActive,
-						dotClass: null,
-					},
-				]
-			: [];
-	// The Preview environment view-tab (the PR's Vercel preview, full-width) —
-	// opened from the Info panel button. Present once opened for this session.
-	const stagingViewTabs: ViewTab[] =
-		currentSession && wsKey && stagingOpen.has(wsKey)
-			? [
-					{
-						id: `staging:${wsKey}`,
-						label: "Preview environment",
-						active: stagingActive,
-						dotClass: null,
-						// The Preview environment tab reads as just a globe;
-						// "Preview environment" stays as its tooltip / aria label.
-						icon: <IconGlobe size={16} />,
-					},
-				]
-			: [];
-	// The Assets view-tab (the session's scratch artifacts, full-width) — opened
-	// from the Info panel's Assets button. Present once opened for this session.
-	const assetsViewTabs: ViewTab[] =
-		currentSession && wsKey && assetsOpen.has(wsKey)
-			? [
-					{
-						id: `assets:${wsKey}`,
-						label: "Assets",
-						active: assetsActive,
-						dotClass: null,
-					},
-				]
-			: [];
-	// The Terminal view-tab: an interactive shell in the session's workspace
-	// (inside its sandbox when sandboxed) — opened from the Info panel.
-	const terminalViewTabs: ViewTab[] =
-		currentSession && wsKey && terminalOpen.has(wsKey)
-			? [
-					{
-						id: `terminal:${wsKey}`,
-						label: "Terminal",
-						active: terminalActive,
-						dotClass: null,
-					},
-				]
-			: [];
-	// The local-dev Preview view-tab (live dev server iframe) — opened from
-	// the header Preview button. Present once opened for this session.
-	const previewViewTabs: ViewTab[] =
-		currentSession && wsKey && previewTabOpen.has(wsKey)
-			? [
-					{
-						id: `preview:${wsKey}`,
-						label: "Preview",
-						active: previewLiveActive,
-						dotClass: null,
-					},
-				]
-			: [];
 	const currentPortalTarget = wsKey ? portalTargets[wsKey] ?? null : null;
-	const portalViewTabs: ViewTab[] =
-		currentSession && wsKey && currentPortalTarget
-			? [
-					{
-						id: `portal:${wsKey}`,
-						label: currentPortalTarget.name,
-						active: portalActive,
-						dotClass: "bg-green",
-						icon: <IconGlobe size={16} />,
-					},
-				]
-			: [];
-	// The sub-agent view-tab: a Task drill-in from the open session's transcript.
-	// Bound to that session rather than the workspace, so switching to a sibling
-	// session hides it — and switching back brings its breadcrumb along. Only the
-	// OPEN session's tab is ever built, so the id's session always matches the
-	// pane the split machinery resolves it to.
 	const subagentStack = currentSession
 		? (subagentTabs[currentSession.id] ?? NO_SUBAGENTS)
 		: NO_SUBAGENTS;
 	const subagentActive = subagentSelected && subagentStack.length > 0;
-	const subagentViewTabs: ViewTab[] =
-		currentSession && subagentStack.length > 0
-			? [
-					{
-						id: `subagent:${currentSession.id}`,
-						label: subagentStack[subagentStack.length - 1].label,
-						active: subagentActive,
-						dotClass: null,
-					},
-				]
-			: [];
-	// This list is only the fallback for tabs with no saved position. Once a tab
-	// opens, the mixed session-and-pane order below keeps it at the right edge.
-	// The workspace home joins these once the strip would otherwise be empty —
-	// see `homeViewTabs`, which needs the session tabs to know that.
-	const paneViewTabs: ViewTab[] = [
-		...reviewViewTabs,
-		...conversationViewTabs,
-		...videoViewTabs,
-		...stagingViewTabs,
-		...previewViewTabs,
-		...portalViewTabs,
-		...assetsViewTabs,
-		...terminalViewTabs,
-		...subagentViewTabs,
-	];
+	const reviewDotClass = currentSession?.prState
+		? currentSession.prState === "OPEN" &&
+			currentSession.prMergeable === "CONFLICTING"
+			? PR_DOT_TONE.CONFLICT
+			: (PR_DOT_TONE[currentSession.prState] ?? null)
+		: null;
+	const paneViewTabs: ViewTab[] = buildWorkspacePaneTabs({
+		workspaceKey: wsKey,
+		sessionId: currentSession?.id,
+		activeViewTab,
+		reviewCapable,
+		reviewIsDefault: prBackedWorkspace,
+		reviewOpen,
+		reviewClosed,
+		reviewDotClass,
+		conversationThreadId,
+		conversationClosed,
+		videoLabel: videoPanel?.label ?? null,
+		videoClosed,
+		stagingOpen,
+		previewOpen: previewTabOpen,
+		portalLabel: currentPortalTarget?.name ?? null,
+		assetsOpen,
+		terminalOpen,
+		subagentLabel: subagentStack.at(-1)?.label ?? null,
+	}).map(({ icon, ...tab }) => ({
+		...tab,
+		...(icon === "globe" ? { icon: <IconGlobe size={16} /> } : {}),
+	}));
+
 	/**
 	 * The panes that keep rendering once a workspace has no session left: Review,
 	 * Conversation and Video hang off the workspace record, so the session-less
@@ -2580,42 +2469,15 @@ const path = await resolveAnonymousUserPath(
 	 * workspace's last session leaves these behind instead of conjuring a
 	 * replacement session, and closing the last one of them brings a session back.
 	 */
-	type WorkspacePaneTab = "review" | "conversation" | "video";
-	function sessionlessPanes(
-		key: string | null,
-		record: Workspace | null,
-	): WorkspacePaneTab[] {
-		if (!key || !record) return [];
-		const prBacked =
-			record.prNumber !== undefined || !!record.key?.startsWith("ghpr-");
-		const panes: WorkspacePaneTab[] = [];
-		if (
-			(record.prNumber !== undefined || !!record.branch) &&
-			(reviewOpen.has(key) || (prBacked && !reviewClosed.has(key)))
-		)
-			panes.push("review");
-		if (record.plainThreadId && !conversationClosed.has(key))
-			panes.push("conversation");
-		if (
-			record.externalRefs?.some((r) => refWebPanel(r)) &&
-			!videoClosed.has(key)
-		)
-			panes.push("video");
-		return panes;
-	}
-	const openWsPanes = sessionlessPanes(wsKey, wsRecord);
-	function viewTabKind(id: string): Exclude<ActiveViewTab, null> | null {
-		if (id.startsWith("subagent:")) return "subagent";
-		if (id.startsWith("staging:")) return "staging";
-		if (id.startsWith("assets:")) return "assets";
-		if (id.startsWith("terminal:")) return "terminal";
-		if (id.startsWith("preview:")) return "preview";
-		if (id.startsWith("portal:")) return "portal";
-		if (id.startsWith("conversation:")) return "conversation";
-		if (id.startsWith("video:")) return "video";
-		if (id.startsWith("review:")) return "review";
-		return null;
-	}
+	const openWsPanes = sessionlessWorkspacePanes(wsKey, wsRecord, {
+		reviewOpen,
+		reviewClosed,
+		conversationClosed,
+		videoClosed,
+		hasWebPanel: (workspace) =>
+			!!workspace.externalRefs?.some((ref) => refWebPanel(ref)),
+	});
+
 	function selectViewTab(id: string) {
 		// The workspace home has no pane of its own: it is what the strip shows
 		// with no view tab foregrounded.
@@ -5191,9 +5053,17 @@ console.error("Rename workspace failed:", error);
 								// pane rather than resurrecting the newest archived session
 								// (pickLandingSession's history fallback).
 								const panes = session?.archived
-									? sessionlessPanes(
+									? sessionlessWorkspacePanes(
 											id,
-											workspaces.find((x) => x.id === id) ?? null,
+											workspaces.find((workspace) => workspace.id === id) ?? null,
+											{
+												reviewOpen,
+												reviewClosed,
+												conversationClosed,
+												videoClosed,
+												hasWebPanel: (workspace) =>
+													!!workspace.externalRefs?.some((ref) => refWebPanel(ref)),
+											},
 										)
 									: [];
 								const remembered = getActiveViewTab(id);
