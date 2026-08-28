@@ -1352,16 +1352,20 @@ export function PrPanel({
     setActiveKey(`${justLinked.repo} ${justLinked.branch}`);
   }
 
-  async function handleUnlink(t: PrTarget) {
-    await (async () => {
-const res = await unlinkPrApi(sessionId, t.repo, t.branch!);
-      setLinkedLocal(res.all);
-      if (activeKey === t.key)
-        setActiveKey((targets.find((x) => x.primary) ?? targets[0])?.key);
+  async function handleUnlink(target: PrTarget) {
+    if (!target.branch) return;
+    try {
+      const result = await unlinkPrApi(sessionId, target.repo, target.branch);
+      setLinkedLocal(result.all);
+      if (activeKey === target.key) {
+        setActiveKey(
+          (targets.find((candidate) => candidate.primary) ?? targets[0])?.key,
+        );
+      }
       toast("PR unlinked");
-})().catch(async (error) => {
-toast(errorMessage(error, "Couldn't unlink the PR"));
-});
+    } catch (error) {
+      toast(errorMessage(error, "Couldn't unlink the PR"));
+    }
   }
 
   // Tab bar across the top: one tab per PR (primary repo, attached repos,
