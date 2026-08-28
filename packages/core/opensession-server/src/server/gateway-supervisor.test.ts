@@ -273,7 +273,13 @@ describe("gateway supervisor", () => {
       `await new Promise(() => {});`,
     ].join("\n"));
 
-    const candidate = spawnGateway(root, "standby", "integration-nonce", entry);
+    const candidate = spawnGateway(
+      root,
+      "standby",
+      "integration-nonce",
+      undefined,
+      entry,
+    );
     await candidate.preloaded!;
     expect(existsSync(marker)).toBe(false);
     candidate.activate!("integration-nonce");

@@ -136,10 +136,12 @@ export async function waitForRuntimePeerGeneration(options: {
   timeoutMs?: number;
 } = {}): Promise<void> {
   const env = options.env ?? process.env;
-  const expected = env.OPENSESSION_RELEASE_GENERATION?.trim();
+  const expected = (
+    env.OPENSESSION_PEER_GENERATION ?? env.OPENSESSION_RELEASE_GENERATION
+  )?.trim();
   if (!expected || expected === "development") return;
   if (!/^[0-9a-f]{40,64}$/.test(expected)) {
-    throw new Error("Invalid OPENSESSION_RELEASE_GENERATION");
+    throw new Error("Invalid OPENSESSION_PEER_GENERATION");
   }
   const fetchReady = options.fetchReady ?? ((url: string) =>
     fetch(url, { signal: AbortSignal.timeout(1_000) }));

@@ -108,7 +108,7 @@ describe("gateway activation preload barrier", () => {
     })).resolves.toBeUndefined();
     await expect(waitForRuntimePeerGeneration({
       env: { OPENSESSION_RELEASE_GENERATION: "not-a-sha" },
-    })).rejects.toThrow("Invalid OPENSESSION_RELEASE_GENERATION");
+    })).rejects.toThrow("Invalid OPENSESSION_PEER_GENERATION");
   });
 
   test("holds an OS lease until explicit release", async () => {

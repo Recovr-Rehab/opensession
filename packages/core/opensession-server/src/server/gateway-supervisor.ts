@@ -95,7 +95,12 @@ export interface ManagedGateway {
 }
 
 export interface GatewaySupervisorDependencies {
-  spawn(releaseRoot: string, role: "active" | "standby", nonce?: string): ManagedGateway;
+  spawn(
+    releaseRoot: string,
+    role: "active" | "standby",
+    nonce?: string,
+    peerGeneration?: string,
+  ): ManagedGateway;
   waitReady(gateway: ManagedGateway): Promise<void>;
   validateRelease(releaseRoot: string, sha: string): string;
   promoteCurrent(releaseRoot: string): void;
@@ -427,7 +432,12 @@ export class GatewaySupervisor {
 
     const previous = this.active;
     const nonce = crypto.randomUUID();
-    const candidate = this.dependencies.spawn(releaseRoot, "standby", nonce);
+    const candidate = this.dependencies.spawn(
+      releaseRoot,
+      "standby",
+      nonce,
+      releaseGeneration(previous.releaseRoot),
+    );
     this.standby = candidate;
     let previousExited = false;
     try {
@@ -558,16 +568,21 @@ function allocateBackendPort(): number {
   return port;
 }
 
+function releaseGeneration(releaseRoot: string): string {
+  const marker = join(releaseRoot, ".opensession-release");
+  return existsSync(marker) ? readFileSync(marker, "utf8").trim() : "development";
+}
+
 export function spawnGateway(
   releaseRoot: string,
   role: "active" | "standby",
   nonce?: string,
+  peerGeneration?: string,
   entry = "packages/core/opensession-server/opensession.ts",
 ): ManagedGateway {
   const preloaded = deferred();
   const backendPort = allocateBackendPort();
-  const marker = join(releaseRoot, ".opensession-release");
-  const generation = existsSync(marker) ? readFileSync(marker, "utf8").trim() : "development";
+  const generation = releaseGeneration(releaseRoot);
   let expectedNonce = nonce;
   const child = Bun.spawn(
     [process.execPath, "run", entry],
@@ -580,6 +595,7 @@ export function spawnGateway(
         OPENSESSION_GATEWAY_BACKEND_HOST: BACKEND_HOST,
         OPENSESSION_GATEWAY_BACKEND_PORT: String(backendPort),
         OPENSESSION_RELEASE_GENERATION: generation,
+        OPENSESSION_PEER_GENERATION: peerGeneration ?? generation,
         ...(nonce ? { OPENSESSION_GATEWAY_NONCE: nonce } : {}),
       },
       stdin: "ignore",
