@@ -223,23 +223,22 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   // Leaving/changing the selection always drops back to the read view.
   useEffect(() => setEditMode(false), [selectedId]);
 
-  // Stable identity: only refs and setters are captured, so the polling
-  // effect can list `load` without ever refiring from re-renders.
   const load = useCallback(async () => {
-    await (async () => {
+    try {
       const next = (await fetchAutomations()) as Automation[];
       setAutomations(
-        next.map((automation) =>
-          pendingToggles.current.has(automation.id)
-            ? {
-                ...automation,
-                enabled: pendingToggles.current.get(automation.id)!.enabled,
-              }
-            : automation,
-        ),
+        next.map((automation) => {
+          const pending = pendingToggles.current.get(automation.id);
+          return pending
+            ? { ...automation, enabled: pending.enabled }
+            : automation;
+        }),
       );
       setLoading(false);
-    })().catch(async () => {});
+    } catch (error) {
+      setError(errorMessage(error, "Could not load automations"));
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -1253,12 +1252,12 @@ function TypeChooser({
     if (description.trim().length < 10 || drafting) return;
     setDrafting(true);
     setError(null);
-    await (async () => {
+    try {
       onPick(await draftAutomationApi(description), "classic");
-    })().catch(async (e: any) => {
-      setError(e.message);
+    } catch (error) {
+      setError(errorMessage(error, "Could not draft automation"));
       setDrafting(false);
-    });
+    }
   }
 
   return (
@@ -1355,9 +1354,9 @@ function McpPicker({
     fetchConnections()
       .then((c) =>
         setServers(
-          (c.mcpServers || []).map((s: any) => ({
-            name: s.name,
-            status: s.status,
+          (c.mcpServers || []).map((server) => ({
+            name: server.name,
+            status: server.status,
           })),
         ),
       )
@@ -2024,7 +2023,7 @@ function AutomationForm({
   async function handleSave() {
     setSaving(true);
     setError(null);
-    await (async () => {
+    try {
       const slackWatch = isWatch
         ? { channel: watchChannel.trim().toUpperCase() }
         : initial?.slackWatch
@@ -2075,10 +2074,10 @@ function AutomationForm({
         });
       }
       onSaved();
-    })().catch(async (e: any) => {
-      setError(e.message);
+    } catch (error) {
+      setError(errorMessage(error, "Could not save automation"));
       setSaving(false);
-    });
+    }
   }
 
   return (
