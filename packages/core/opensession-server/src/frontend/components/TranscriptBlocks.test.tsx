@@ -228,6 +228,27 @@ describe("TranscriptBlocks sent message actions", () => {
 		expect(html).toContain("opacity-70");
 		expect(html).not.toContain("opacity-70 transition-opacity");
 	});
+
+	test("reserves action clearance before the durable row arrives", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[]}
+				onEditMessage={() => {}}
+				optimisticEntries={[
+					{
+						id: "outbox-client-prompt",
+						type: "user",
+						content: "Keep this row still",
+						timestamp: "2026-08-12T12:00:00Z",
+					},
+				]}
+			/>,
+		);
+		const rowClass = html.match(
+			/class="([^"]+)"[^>]*data-eid="outbox-client-prompt"/,
+		)?.[1];
+		expect(rowClass?.split(" ")).toContain("mb-8.75");
+	});
 });
 
 describe("TranscriptBlocks compact tool runs", () => {

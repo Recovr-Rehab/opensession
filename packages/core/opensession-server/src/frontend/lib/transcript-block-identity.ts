@@ -5,6 +5,17 @@ type TranscriptArrivalEntry = TranscriptEntryIdentity & {
 };
 type TranscriptArrivalItem = { arrivalAliases?: string[] };
 
+/** Keep one React/virtualizer identity while a locally-created user row receives
+ * its durable transcript id. For a batched row, the first source owns the
+ * mounted bubble that survives the merge. */
+export function transcriptEntryMountKey(
+	entry: TranscriptArrivalEntry,
+): string {
+	if (entry.type !== "user") return entry.id;
+	const id = entry.sourceMessageIds?.[0] ?? entry.id;
+	return id.startsWith("outbox-") ? id : `outbox-${id}`;
+}
+
 /** Identities used by the optimistic user row before its durable replacement
  * receives a transcript block or indexed-range key. */
 export function transcriptArrivalAliases(

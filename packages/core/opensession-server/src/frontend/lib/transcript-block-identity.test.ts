@@ -3,6 +3,7 @@ import {
 	newTailBlockKeys,
 	shouldAnimateTranscriptItemArrival,
 	transcriptArrivalAliases,
+	transcriptEntryMountKey,
 	turnMountKey,
 	turnScrollAnchor,
 } from "./transcript-block-identity";
@@ -24,6 +25,25 @@ describe("transcript turn identity", () => {
 });
 
 describe("optimistic transcript identity", () => {
+	test("keeps one mount key across the optimistic and durable row", () => {
+		expect(
+			transcriptEntryMountKey({ id: "outbox-client-prompt", type: "user" }),
+		).toBe("outbox-client-prompt");
+		expect(
+			transcriptEntryMountKey({ id: "client-prompt", type: "user" }),
+		).toBe("outbox-client-prompt");
+		expect(
+			transcriptEntryMountKey({
+				id: "durable-batch",
+				type: "user",
+				sourceMessageIds: ["client-first", "client-second"],
+			}),
+		).toBe("outbox-client-first");
+		expect(
+			transcriptEntryMountKey({ id: "assistant-answer", type: "assistant" }),
+		).toBe("assistant-answer");
+	});
+
 	test("carries every optimistic identity into a durable batched row", () => {
 		expect(
 			transcriptArrivalAliases([

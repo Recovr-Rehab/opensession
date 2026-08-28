@@ -681,11 +681,10 @@ export const MessageBubble = function MessageBubble({
 					"msg-user",
 					msgOwnTurn,
 					enterClass,
-					// Your own turns hang their quiet actions below the bubble. The
-					// edit button is always visible to touch pointers, while a row
-					// with only a timestamp needs the clearance on hover devices.
-					!fromOther &&
-						(onEdit ? "mb-8.75" : "[@media(hover:hover)]:mb-8.75"),
+					// Your own turns hang their quiet actions below the bubble. Reserve
+					// that clearance from the optimistic mount: when Edit appears on the
+					// durable row, the phone timeline must not grow underneath it.
+					!fromOther && "mb-8.75",
 					pendingDelivery && "opacity-70",
 				)}
 				data-delivery-pending={pendingDelivery || undefined}

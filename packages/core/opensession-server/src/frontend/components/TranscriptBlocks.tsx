@@ -7,6 +7,7 @@ import {
 } from "../lib/transcript-index";
 import {
 	transcriptArrivalAliases,
+	transcriptEntryMountKey,
 	turnMountKey,
 	turnScrollAnchor,
 } from "../lib/transcript-block-identity";
@@ -228,11 +229,12 @@ function renderBlockKey(block: RenderBlock, index: number): string {
 		const first = renderBlockEntries(block)[0];
 		return `review-loop:${first?.id ?? index}`;
 	}
-	return block.entry.id;
+	return transcriptEntryMountKey(block.entry);
 }
 
 function renderBlockAnchor(block: RenderBlock, key: string): string {
 	if (block.kind === "turn") return turnScrollAnchor(block.items);
+	if (block.kind === "entry") return block.entry.id;
 	return key;
 }
 
