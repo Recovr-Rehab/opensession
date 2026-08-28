@@ -372,6 +372,7 @@ export async function renderUnit(
   // running turns in the gateway process. The system scope retains detached,
   // restart-surviving execution through the independent executor service.
   return unit
+    .replace(/^Slice=opensession-control\.slice\n/m, "")
     .replace(
       /^# SESSION_KERNEL_CREDENTIAL$/m,
       `LoadCredential=session-kernel-token:${USER_SESSION_KERNEL_TOKEN_PATH}`,
@@ -463,6 +464,7 @@ export async function renderSessionKernelUnit(
     );
   if (scope === "system") return unit;
   return unit
+    .replace(/^Slice=opensession-control\.slice\n/m, "")
     .replace(/^User=.*\n/m, "")
     .replace(
       /^LoadCredential=session-kernel-token:.*$/m,
@@ -736,6 +738,10 @@ export async function install(
           dim(`installing ${STAGED_UNIT_PATH} -> ${SERVICE_PATH} (needs sudo)`),
         );
         const prep = [
+          [
+            "sudo",
+            join(serviceWorkdir(), "deploy", "install-resource-control.sh"),
+          ],
           [
             "sudo",
             join(serviceWorkdir(), "deploy", "install-executor-credential.sh"),

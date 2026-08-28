@@ -52,8 +52,10 @@ describe("session kernel service deployment", () => {
       "packages/core/opensession-server/src/session-kernel-service.ts",
     );
     expect(system).toContain("LoadCredential=session-kernel-token:/etc/opensession/session-kernel-token");
+    expect(system).toContain("Slice=opensession-control.slice");
     expect(system).not.toContain("EnvironmentFile=");
     expect(user).not.toMatch(/^User=/m);
+    expect(user).not.toContain("Slice=opensession-control.slice");
     expect(user).not.toContain("IPAddressDeny=");
     expect(user).toContain("WantedBy=default.target");
   });

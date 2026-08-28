@@ -121,6 +121,11 @@ if [ -f "$REPO_DIR/deploy/git-hooks/post-checkout" ]; then
   run_as_service_user install -m 755 "$REPO_DIR/deploy/git-hooks/post-checkout" "$SOURCE_DIR/.git/hooks/post-checkout"
 fi
 
+# Install the cgroup hierarchy before rendering services or launching hosts
+# that reference it. Existing hosts continue in their current cgroups; new
+# hosts enter the workload slice without interrupting active turns.
+"$REPO_DIR/deploy/install-resource-control.sh"
+
 # A release is one gateway + kernel + executor version. Even a source-only
 # change switches all three together; detached run-host scopes keep the old
 # worktree inode until they finish.

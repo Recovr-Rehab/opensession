@@ -56,6 +56,7 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
     // start at boot.
     expect(unit).not.toMatch(/^User=/m);
     expect(unit).not.toMatch(/^IPAddressDeny=/m);
+    expect(unit).not.toMatch(/^Slice=opensession-control\.slice$/m);
     expect(unit).toMatch(/^WantedBy=default\.target$/m);
     // Optional env file: a box with no secrets yet must still start.
     expect(unit).toContain(`EnvironmentFile=-${ENV_PATH}`);
@@ -85,6 +86,7 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
 
     expect(unit).toContain(`WorkingDirectory=${serviceWorkdir()}`);
     expect(unit).toContain(`EnvironmentFile=${ENV_PATH}`);
+    expect(unit).toContain("Slice=opensession-control.slice");
     expect(
       unit.match(
         /^ExecStart=(\S+) run packages\/core\/opensession-server\/opensession\.ts$/m,
@@ -127,6 +129,7 @@ describe.skipIf(!onServiceHost)("executor systemd unit", () => {
     );
     expect(unit).toContain("Restart=always");
     expect(unit).toContain("RuntimeDirectory=opensession-executor");
+    expect(unit).toContain("Slice=opensession-control.slice");
     expect(unit).toContain(
       "LoadCredential=executor-token:/etc/opensession/executor-token",
     );

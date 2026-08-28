@@ -75,6 +75,7 @@ describe("executor deployment", () => {
     expect(helper).toContain("run-host directory is outside the configured state root");
     expect(helper).toContain("OPENSESSION_RUN_SPEC_HASH");
     expect(helper).toContain("OPENSESSION_RUN_JOURNAL=$dir/journal.json");
+    expect(helper).toContain('"--slice=opensession-workloads.slice"');
     expect(helper).toContain('if [ "$action" = "self-deploy" ]');
     expect(helper).toContain('"$repo_dir/deploy/self-deploy.sh"');
     expect(helper).toContain('if [ "$runner_mode" = "compiled" ]');

@@ -10,6 +10,9 @@ Wants=opensession-executor.service
 After=network.target opensession-session-kernel.service opensession-executor.service
 
 [Service]
+# Keep latency-sensitive HTTP, WebSocket, and orchestration work ahead of
+# repository builds when the host is saturated.
+Slice=opensession-control.slice
 # PATH is passed straight through to engine subprocesses (engineEnv()/
 # host-client), so any toolchains your code sessions need must be on it —
 # interactive shells get it from the login profile; the service must carry

@@ -53,6 +53,13 @@ host socket instead of starting a second run.
 
 ## Capacity controls
 
+On system-scope systemd hosts, the gateway, SessionKernel, and executor run in
+the high-priority `opensession-control.slice`. Detached run hosts and their
+complete process trees run in `opensession-workloads.slice`. CPU and I/O weights
+let agent builds consume idle capacity while yielding promptly to control-plane
+requests during contention. Preview scopes use a lower-priority slice inside
+the user manager. The weights do not impose a fixed CPU quota.
+
 Before persisting a detached launch, the gateway checks the active and pending
 host count, Linux `MemAvailable`, and CPU PSI `some avg10`. A launch waits with
 bounded backoff when a present signal is over its limit. Missing `/proc` signals
