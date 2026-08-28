@@ -210,6 +210,24 @@ describe("TranscriptBlocks sent message actions", () => {
 		);
 		expect(html.match(/aria-label="Edit and send again"/g)).toHaveLength(1);
 	});
+
+	test("does not animate a sent message when delivery settles", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					{
+						id: "pending-message",
+						type: "user",
+						content: "Keep the handoff still",
+						timestamp: "2026-08-12T12:00:00Z",
+					},
+				]}
+				pendingDeliveryIds={["pending-message"]}
+			/>,
+		);
+		expect(html).toContain("opacity-70");
+		expect(html).not.toContain("opacity-70 transition-opacity");
+	});
 });
 
 describe("TranscriptBlocks compact tool runs", () => {
@@ -623,7 +641,8 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		setTurnPrefs("open", "folded");
 		const html = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
 		expect(html.match(/data-reasoning=""/g)).toHaveLength(2);
-		expect(html).toContain("Checking deployment status\nInspecting the release");
+		expect(html).not.toContain("Checking deployment status");
+		expect(html).toContain("Inspecting the release");
 		expect(html).toContain("Verifying the release");
 		expect(html).not.toContain("<strong>Checking deployment status</strong>");
 		expect(html).not.toContain("<strong>Inspecting the release</strong>");

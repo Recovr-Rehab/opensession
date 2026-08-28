@@ -627,8 +627,7 @@ export const MessageBubble = function MessageBubble({
 					msgRow,
 					msgOwnTurn,
 					enterClass,
-					pendingDelivery &&
-						"opacity-70 transition-opacity duration-200 motion-reduce:transition-none",
+					pendingDelivery && "opacity-70",
 				)}
 				data-delivery-pending={pendingDelivery || undefined}
 				data-eid={e.id}
@@ -687,8 +686,7 @@ export const MessageBubble = function MessageBubble({
 					// with only a timestamp needs the clearance on hover devices.
 					!fromOther &&
 						(onEdit ? "mb-8.75" : "[@media(hover:hover)]:mb-8.75"),
-					pendingDelivery &&
-						"opacity-70 transition-opacity duration-200 motion-reduce:transition-none",
+					pendingDelivery && "opacity-70",
 				)}
 				data-delivery-pending={pendingDelivery || undefined}
 				data-eid={e.id}
