@@ -441,16 +441,24 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	private onTopApproachScroll = () => {
 		const scrollTop = this.topApproachContainer?.scrollTop;
 		if (scrollTop !== undefined) {
-			if (
-				didScrollTranscriptTowardHistory(
-					this.topApproachScrollTop ?? scrollTop,
-					scrollTop,
-					this.topApproachContainer?.clientHeight ?? 0,
-					this.topApproachContainer?.scrollHeight ?? 0,
-				)
-			)
-				this.topApproachGate.request();
+			const viewportHeight = this.topApproachContainer?.clientHeight ?? 0;
+			const movedTowardHistory = didScrollTranscriptTowardHistory(
+				this.topApproachScrollTop ?? scrollTop,
+				scrollTop,
+				viewportHeight,
+				this.topApproachContainer?.scrollHeight ?? 0,
+			);
 			this.topApproachScrollTop = scrollTop;
+			if (movedTowardHistory) {
+				this.topApproachGate.request();
+				// A scrollbar/Home jump can arrive as one top-edge scroll event. Fire
+				// from that event rather than requiring a second gesture to retry the
+				// debounced proximity check.
+				if (scrollTop <= viewportHeight) {
+					this.evaluateTopApproach();
+					return;
+				}
+			}
 		}
 		if (this.topApproachTimer !== undefined) return;
 		this.topApproachTimer = window.setTimeout(() => {
