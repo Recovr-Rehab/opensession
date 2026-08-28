@@ -5234,45 +5234,19 @@ export function App({
                         : null
                     }
                     prsActive={route.view === "prs"}
-                    onOpenPrs={() => navigate({ view: "prs" })}
                     feedActive={route.view === "feed"}
-                    onOpenFeed={() => navigate({ view: "feed" })}
                     connected={connected}
-                    onOpenSettings={(section) =>
-                      navigate({ view: "settings", section })
-                    }
                     tasksActive={route.view === "tasks"}
-                    onOpenTasks={() => navigate({ view: "tasks" })}
                     taskCount={taskCount}
-                    onOpenAutomation={(name) =>
-                      navigate({ view: "automations", id: name })
-                    }
-                    onOpenPrItem={openPrWorkspace}
                     selectedWorkspaceId={activeWorkspaceId}
                     plainActive={route.view === "plain"}
-                    onOpenPlain={() => navigate({ view: "plain" })}
                     supportTinderActive={route.view === "supporttinder"}
-                    onOpenSupportTinder={() =>
-                      navigate({ view: "supporttinder" })
-                    }
                     reportsActive={route.view === "reports"}
-                    onOpenReports={(target) =>
-                      navigate({ view: "reports", ...target })
-                    }
                     analyticsActive={route.view === "analytics"}
-                    onOpenAnalytics={() => navigate({ view: "analytics" })}
-                    onSelect={(s) => navigate({ view: "session", id: s.id })}
-                    onOpenReview={openReviewForSession}
-                    onOpenTicket={openTicketWorkspace}
-                    onOpenFeedItem={openFeedItemWorkspace}
-                    onNewSession={() => openPalette()}
                     showDraftRow={
                       productEmpty && githubConnectionState !== "loading"
                     }
                     draftRowActive={productEmpty && route.view === "prs"}
-                    onOpenDraft={openDraft}
-                    onNewSessionInRepo={openNewSessionInRepo}
-                    onOpenWorkspace={openWorkspace}
                     onRenameWorkspace={async (id, name) => {
                       await (async () => {
                         await updateWorkspaceApi(id, { name });
@@ -5300,8 +5274,6 @@ export function App({
                     // mounted underneath and would portal its filter button into
                     // the session's top bar.
                     headerActionsEl={mobileDetail ? null : headerActionsEl}
-                    onOpenArchived={() => navigate({ view: "archived" })}
-                    onOpenCatchUp={() => navigate({ view: "catchup" })}
                     catchUpActive={route.view === "catchup"}
                     onNextChatAvailableChange={setNextChatAvailable}
                     archivedActive={route.view === "archived"}
