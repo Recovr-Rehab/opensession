@@ -81,6 +81,7 @@ import {
 	activeSubagentsForWorkspace,
 	isAskWorkspace,
 	isScratchWorkspace,
+	sessionSharesSelectedSidebarGroup,
 	spawnedSessionBelongsInSidebar,
 	workspaceMainSession,
 	workspaceRowOwnsSelection,
@@ -1391,10 +1392,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// selected parent row.
 	const activeWorkspaceSubagents = (activeSubagentsForWorkspace(sessions, selectedWorkspaceId));
 	const activeWorkspaceSubagentIds = (new Set(activeWorkspaceSubagents.map(({ session }) => session.id)));
+	const selectedSession =
+		sessions.find(
+			(session) =>
+				session.id === selectedId || session.aliasIds?.includes(selectedId || ""),
+		) || null;
+	const isInSelectedGroup = (session: UnifiedSession) =>
+		sessionSharesSelectedSidebarGroup(
+			session,
+			selectedSession,
+			selectedWorkspaceId,
+		);
 
 	// Every non-archived session, narrowed by the repo/person filters and search.
 	// Rows are built per-workspace below; a session matching the filter surfaces its
-	// whole workspace row.
+	// whole workspace row. The selected row survives every lens: the server sends
+	// that explicit exception, and dropping it here makes "Keep in sidebar" look
+	// ineffective while the session remains open.
 	const filtered = (() => {
 		let visible = sessions.filter((s) => !s.archived);
 		if (filter.repo !== "all") {
@@ -1405,11 +1419,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const wsRepo = new Map(workspaces.map((p) => [p.id, p.repo]));
 			visible = visible.filter(
 				(s) =>
+					isInSelectedGroup(s) ||
 					// Narrowing to a repo must not surface sessions that have none:
 					// sessionRepo's fallback would hand them the default repo.
-					!s.repoLess &&
-					(sessionRepo(s) === filter.repo ||
-						(!!s.workspaceId && wsRepo.get(s.workspaceId) === filter.repo)),
+					(!s.repoLess &&
+						(sessionRepo(s) === filter.repo ||
+							(!!s.workspaceId && wsRepo.get(s.workspaceId) === filter.repo))),
 			);
 		}
 		// Only a specific teammate narrows the sessions themselves. "me" and
@@ -1421,19 +1436,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			filter.person !== "everyone" &&
 			filter.person !== "unassigned"
 		)
-			visible = visible.filter((s) =>
-				// An automation run has no teammate to compare: it belongs to
-				// whoever the automation reports to, which the Automations band
-				// answers for itself below. Excluding them here instead is what
-				// used to empty that band the moment you looked at a colleague.
-				s.automation
-					? true
-					: !!s.startedBy && ownerKeyOf(s, canonical) === filter.person,
+			visible = visible.filter(
+				(s) =>
+					isInSelectedGroup(s) ||
+					// An automation run has no teammate to compare: it belongs to
+					// whoever the automation reports to, which the Automations band
+					// answers for itself below. Excluding them here instead is what
+					// used to empty that band the moment you looked at a colleague.
+					(s.automation
+						? true
+						: !!s.startedBy && ownerKeyOf(s, canonical) === filter.person),
 			);
 		if (!search) return visible;
 		const q = search.toLowerCase();
 		return visible.filter(
 			(s) =>
+				isInSelectedGroup(s) ||
 				s.title.toLowerCase().includes(q) ||
 				(s.branch || "").toLowerCase().includes(q) ||
 				(s.startedBy || "").toLowerCase().includes(q) ||
@@ -1482,8 +1500,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// ── Workspace rows ──────────────────────────────────────────────────────
 	// The row shape itself is WsRow in lib/sidebar-types.
-	const selectedSession = sessions.find((session) => session.id === selectedId) || null;
-
 	// Most-urgent-first for the row dot: a blocked question beats everything,
 	// a live run beats a ready-to-merge PR, merged/pending are quiet states.
 	const STATUS_PRIORITY: MineStatus[] = [
