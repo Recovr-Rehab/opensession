@@ -442,9 +442,8 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		const scrollTop = this.topApproachContainer?.scrollTop;
 		if (scrollTop !== undefined) {
 			if (
-				this.topApproachScrollTop !== null &&
 				didScrollTranscriptTowardHistory(
-					this.topApproachScrollTop,
+					this.topApproachScrollTop ?? scrollTop,
 					scrollTop,
 					this.topApproachContainer?.clientHeight ?? 0,
 					this.topApproachContainer?.scrollHeight ?? 0,
