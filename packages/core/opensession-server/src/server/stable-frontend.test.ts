@@ -56,7 +56,7 @@ describe("stable frontend ingress", () => {
     expect(body(stableFrontendHttpResponse(state, request("/live", "*/*"))!)).toContain(
       '"phase":"handoff"',
     );
-    expect(stableFrontendHttpResponse(state, request("/ready", "application/json"))).toBeNull();
+    expect(stableFrontendHttpResponse(state, request("/ready", "*/*"))).toBeNull();
     expect(stableFrontendHttpResponse(state, request("/api/sessions", "application/json"))).toBeNull();
     expect(stableFrontendHttpResponse(state, request("/../secret.js", "*/*"))).toBeNull();
     expect(stableFrontendHttpResponse(

@@ -500,6 +500,7 @@ export function renderIndexHtml(
 /** Point the served bundle at `meta`: render index.html and swap the store
  *  contents in place (never reassigned; routes hold the one reference). */
 function publishStableShell(): void {
+	if (process.env.OPENSESSION_GATEWAY_ROLE === "standby") return;
 	const store = frontendStore();
 	if (!store.indexHtml || !store.version) return;
 	try {
@@ -801,6 +802,15 @@ export const frontend: FrontendBundle | null = IS_DEV ? null : frontendStore();
  * dist, which fails the boot loudly rather than serving an app with no JS.
  * In prebuilt mode it never builds: the shipped dist is served or boot fails.
  */
+export function preloadPreparedFrontend(): void {
+	if (!frontend || frontend.version) return;
+	const meta = readBundleMeta(FRONTEND_DIST);
+	if (!meta) throw new Error("prepared frontend metadata is missing");
+	const missing = meta.assets.find((asset) => !existsSync(join(FRONTEND_DIST, asset)));
+	if (missing) throw new Error(`prepared frontend asset is missing: ${missing}`);
+	applyBundle(meta);
+}
+
 export function ensureFrontendBuilt(): Promise<void> {
 	if (!frontend || frontend.version) return Promise.resolve();
 	if (!g.__opensessionFrontendBuild) {

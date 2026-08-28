@@ -132,7 +132,10 @@ export function stableFrontendHttpResponse(
       head,
     );
   }
-  if (BACKEND_PATH_PREFIXES.some((prefix) => parsed.pathname.startsWith(prefix))) return null;
+  if (
+    parsed.pathname === "/ready" || parsed.pathname === "/api" ||
+    BACKEND_PATH_PREFIXES.some((prefix) => parsed.pathname.startsWith(prefix))
+  ) return null;
 
   const snapshot = parseSnapshot(deployState);
   if (!snapshot) return null;
