@@ -47,9 +47,9 @@ test("an assigned reviewer can be changed or cleared from the summary", () => {
 	expect(summarySource).toContain("onReviewChange?.(owner, previous)");
 });
 
-test("popup review heading does not split from a lone PR band", () => {
+test("popup review heading keeps a small gap after a lone PR band", () => {
 	expect(summarySource).toContain('"[&>.ws-summary-band:last-child]:mb-0"');
 	expect(summarySource).toContain(
-		'"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-0"',
+		'"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-1"',
 	);
 });

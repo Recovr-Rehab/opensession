@@ -1044,9 +1044,9 @@ setFixBusy(false);
 							? "h-11"
 							: cn(
 									"h-7",
-									// Match the sibling group wrappers, then reach into Review. The PR
-									// band already closes the group, so do not add a second visual break.
-									"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-0",
+									// Match the sibling group wrappers, then reach into Review. Keep a
+									// small breath after the PR without splitting the two groups apart.
+									"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-1",
 								),
 					)}
 				>
