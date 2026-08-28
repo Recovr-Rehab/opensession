@@ -1440,10 +1440,9 @@ struct SessionView: View {
             showingEmptyContent ? .top : .bottom,
             for: .sizeChanges
         )
-        // Keep the composer anchored above an open keyboard while the reader
-        // scrolls. Interactive dismissal drags both down and can park the
-        // composer partly outside the viewport.
-        .scrollKeepsKeyboardPresentedCompat()
+        // Let the transcript track a downward swipe so the keyboard can be
+        // dismissed without leaving the conversation.
+        .scrollDismissesKeyboardCompat()
         .scrollPosition($scrollPosition)
     }
 
