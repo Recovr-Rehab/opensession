@@ -62,6 +62,7 @@ import {
 	WS_SUMMARY_OPEN_KEY,
 	workspaceSummaryCanStand,
 	workspaceSummaryOpen,
+	workspaceSummaryShouldDismissAfterRouting,
 	workspaceSummarySideOffset,
 } from "../lib/workspace-summary-open";
 import {
@@ -386,7 +387,7 @@ export function WorkspaceSummary({
 	function changeOpen(nextOpen: boolean) {
 		openedByPerson.current = nextOpen;
 		if (!canStand) {
-			// On screen now, and nowhere else: a narrow or Review pane opens the card without
+			// On screen now, and nowhere else: a narrow pane opens the card without
 			// writing the preference every other window reads.
 			setTransient(nextOpen);
 			return;
@@ -395,6 +396,9 @@ export function WorkspaceSummary({
 		setPinned(nextOpen);
 		localStorage.setItem(WS_SUMMARY_OPEN_KEY, String(nextOpen));
 		window.dispatchEvent(new Event(WS_SUMMARY_OPEN_EVENT));
+	}
+	function dismissAfterRouting() {
+		if (workspaceSummaryShouldDismissAfterRouting(canStand)) changeOpen(false);
 	}
 	return (
 		<Popover.Root
@@ -471,7 +475,7 @@ export function WorkspaceSummary({
 					session={session}
 					{...body}
 					reviewMode={reviewMode}
-					close={() => changeOpen(false)}
+					close={dismissAfterRouting}
 				/>
 			</Popover.Popup>
 		</Popover.Root>
