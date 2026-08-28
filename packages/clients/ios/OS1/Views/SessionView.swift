@@ -1067,10 +1067,6 @@ struct SessionView: View {
         .padding(12)
         .frame(maxWidth: contentMaxWidth, alignment: .leading)
         .background(OS1VisualStyle.yellow.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(OS1VisualStyle.yellow.opacity(0.28), lineWidth: 1)
-        }
         .padding(.horizontal, 12)
         .padding(.top, 6)
         .accessibilityElement(children: .combine)
