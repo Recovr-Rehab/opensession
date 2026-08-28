@@ -5,17 +5,14 @@ import { WS_SUMMARY_REVIEW_BAR_CLEARANCE } from "../../lib/workspace-summary-cla
  * The floating review toolbar shared by branches with and without a pull
  * request. It stays edge to edge on phone and clears the standing workspace
  * summary on wide review canvases. The sticky outer surface masks code through
- * its inset; an opaque lower mask keeps scrolled code beneath pinned file headers.
+ * its inset.
  */
 export function ReviewToolbar({
   children,
   compact,
-  maskStickyFileHeaders = true,
 }: {
   children: ReactNode;
   compact: boolean;
-  /** Paint beneath file headers only when the canvas actually keeps them sticky. */
-  maskStickyFileHeaders?: boolean;
 }) {
   const placement = compact
     ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 desktop:pb-2 ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}`
@@ -32,14 +29,6 @@ export function ReviewToolbar({
           {children}
         </div>
       </div>
-      {compact && maskStickyFileHeaders && (
-        // File headers pin 61px below the scroll edge. Fill everything between
-        // the toolbar and that edge so code cannot scroll above its own header.
-        <div
-          className="pointer-events-none sticky top-[52px] z-[5] mx-2 hidden h-2.5 -mb-2.5 overflow-clip rounded-t-lg bg-surface desktop:block"
-          aria-hidden="true"
-        />
-      )}
     </>
   );
 }

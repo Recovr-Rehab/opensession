@@ -21,13 +21,15 @@ class FakePort extends EventEmitter {
 describe("gateway activation preload barrier", () => {
   test("keeps the compatibility path active by default", async () => {
     expect(gatewayRole({})).toBe("active");
-    await expect(waitForGatewayActivationIfStandby({ env: {} })).resolves.toBeUndefined();
+    await expect(
+      waitForGatewayActivationIfStandby({ env: {} }),
+    ).resolves.toBeUndefined();
   });
 
   test("rejects unknown roles and unsupervised standby launches", async () => {
-    expect(() => gatewayRole({ OPENSESSION_GATEWAY_ROLE: "candidate" })).toThrow(
-      "Invalid OPENSESSION_GATEWAY_ROLE",
-    );
+    expect(() =>
+      gatewayRole({ OPENSESSION_GATEWAY_ROLE: "candidate" }),
+    ).toThrow("Invalid OPENSESSION_GATEWAY_ROLE");
     await expect(
       waitForGatewayActivationIfStandby({
         env: { OPENSESSION_GATEWAY_ROLE: "standby" },
@@ -78,12 +80,18 @@ describe("gateway activation preload barrier", () => {
   });
 
   test("entrypoint waits before every production boot effect", async () => {
-    const entry = await Bun.file(resolve(import.meta.dir, "../../opensession.ts")).text();
-    const precheck = entry.indexOf("waitForRuntimePeerGeneration({ timeoutMs: 5_000 })");
+    const entry = await Bun.file(
+      resolve(import.meta.dir, "../../opensession.ts"),
+    ).text();
+    const prewarm = entry.indexOf("preloadPreparedFrontend()");
+    const precheck = entry.indexOf(
+      "waitForRuntimePeerGeneration({ timeoutMs: 5_000 })",
+    );
     const barrier = entry.indexOf("await waitForGatewayActivationIfStandby()");
     const peers = entry.indexOf("await waitForRuntimePeerGeneration()");
     const lease = entry.indexOf("await acquireGatewayActivationLease");
-    expect(precheck).toBeGreaterThan(0);
+    expect(prewarm).toBeGreaterThan(0);
+    expect(precheck).toBeGreaterThan(prewarm);
     expect(barrier).toBeGreaterThan(precheck);
     expect(peers).toBeGreaterThan(barrier);
     expect(lease).toBeGreaterThan(peers);
@@ -104,18 +112,22 @@ describe("gateway activation preload barrier", () => {
   test("admits effects only when each peer reports its selected generation", async () => {
     const kernel = "a".repeat(40);
     const executor = "b".repeat(40);
-    await expect(waitForRuntimePeerGeneration({
-      env: {
-        OPENSESSION_RELEASE_GENERATION: "c".repeat(40),
-        OPENSESSION_KERNEL_GENERATION: kernel,
-        OPENSESSION_EXECUTOR_GENERATION: executor,
-      },
-      fetchReady: async () => Response.json({ generation: kernel }),
-      readReadyFile: () => JSON.stringify({ pid: 7, generation: executor }),
-    })).resolves.toBeUndefined();
-    await expect(waitForRuntimePeerGeneration({
-      env: { OPENSESSION_RELEASE_GENERATION: "not-a-sha" },
-    })).rejects.toThrow("Invalid runtime peer generation");
+    await expect(
+      waitForRuntimePeerGeneration({
+        env: {
+          OPENSESSION_RELEASE_GENERATION: "c".repeat(40),
+          OPENSESSION_KERNEL_GENERATION: kernel,
+          OPENSESSION_EXECUTOR_GENERATION: executor,
+        },
+        fetchReady: async () => Response.json({ generation: kernel }),
+        readReadyFile: () => JSON.stringify({ pid: 7, generation: executor }),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      waitForRuntimePeerGeneration({
+        env: { OPENSESSION_RELEASE_GENERATION: "not-a-sha" },
+      }),
+    ).rejects.toThrow("Invalid runtime peer generation");
   });
 
   test("holds an OS lease until explicit release", async () => {
@@ -127,7 +139,9 @@ describe("gateway activation preload barrier", () => {
     const lease = await acquireGatewayActivationLease({
       env: { HOME: "/tmp/test-home" },
       spawn(command) {
-        expect(command).toContain("/tmp/test-home/.opensession/deploy/gateway-active.lock");
+        expect(command).toContain(
+          "/tmp/test-home/.opensession/deploy/gateway-active.lock",
+        );
         return {
           stdin: {
             end() {
@@ -153,15 +167,17 @@ describe("gateway activation preload barrier", () => {
   });
 
   test("fails closed when the active lease is held", async () => {
-    await expect(acquireGatewayActivationLease({
-      env: { HOME: "/tmp/test-home" },
-      spawn: () => ({
-        stdin: { end() {} },
-        stdout: new Response("").body!,
-        stderr: new Response("busy").body!,
-        exited: Promise.resolve(1),
+    await expect(
+      acquireGatewayActivationLease({
+        env: { HOME: "/tmp/test-home" },
+        spawn: () => ({
+          stdin: { end() {} },
+          stdout: new Response("").body!,
+          stderr: new Response("busy").body!,
+          exited: Promise.resolve(1),
+        }),
       }),
-    })).rejects.toThrow("already held");
+    ).rejects.toThrow("already held");
   });
 
   test("fails closed on an activation nonce mismatch", async () => {

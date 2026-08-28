@@ -15,6 +15,10 @@ import {
   relativeTime,
   type ModelOption,
   type ProviderAccountOption,
+  type Automation,
+  type AutomationInput,
+  type AutomationRun,
+  type AutomationOutput,
   type AutomationTemplate,
   type AutomationDraft,
 } from "../lib/api";
@@ -32,7 +36,12 @@ import {
   IconPlug,
   IconPlus,
 } from "./icons";
-import { AGENT_NAME, WEBHOOK_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
+import {
+  AGENT_NAME,
+  WEBHOOK_BASE_URL,
+  docTitle,
+  DEFAULT_DOC_TITLE,
+} from "../lib/brand";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { cn } from "../ui/cn";
@@ -43,6 +52,7 @@ import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { WorkingPill } from "../ui/status";
 import { Switch } from "../ui/switch";
 import { formatDuration } from "../lib/time";
+import { errorMessage } from "../lib/error-message";
 
 /* The old .automation-form family, as utilities. Two of its rules reached in
    from the form to the fields inside it and have to stay descendant selectors:
@@ -56,7 +66,8 @@ const FORM_FIELDS =
  *  and the heading. */
 const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
 /** .automation-form label */
-const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
+const FIELD_LABEL =
+  "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
 
 /** .automation-form-actions */
 const FORM_ACTIONS = "flex justify-end gap-2.5";
@@ -68,82 +79,6 @@ const SECTION_LABEL = "mb-1.5 text-label font-semibold text-faint";
 const LINK = "cursor-pointer text-link no-underline hover:underline";
 /** .automation-cron — the cron/event chip in the Configuration grid. */
 const CHIP = "rounded-sm bg-active px-1.75 py-px text-meta";
-
-interface AutomationRun {
-  at: string;
-  sessionId: string;
-  trigger: "cron" | "webhook" | "manual" | "event";
-  status: "running" | "ok" | "error";
-  error?: string;
-  durationMs?: number;
-}
-
-type AutomationInput = {
-  id: string;
-  label?: string;
-  window?: {
-    mode?: "since_last_success" | "rolling";
-    minutes?: number;
-    overlapMinutes?: number;
-  };
-  reduce?: { model?: string; instructions?: string; maxOutputChars?: number };
-  source:
-    | {
-        type: "slack_channel";
-        channel: string;
-        includeThreads?: boolean;
-        includeBots?: boolean;
-        limit?: number;
-      }
-    | { type: "reports"; automationId: string; limit?: number };
-};
-
-type AutomationOutput =
-  | { id: string; type: "report"; enabled?: boolean; publish?: "always" | "on_findings" }
-  | {
-      id: string;
-      type: "slack";
-      enabled?: boolean;
-      channel: string;
-      minUrgency?: "low" | "medium" | "high" | "critical";
-      minConfidence?: "low" | "medium" | "high";
-    };
-
-interface Automation {
-  id: string;
-  name: string;
-  prompt: string;
-  schedule: string;
-  mode: "ask" | "code";
-  enabled: boolean;
-  createdBy: string;
-  createdAt: string;
-  webhookSecret?: string;
-  webhookEnabled?: boolean;
-  eventKey?: string;
-  mcpServers?: string[];
-  slackWatch?: { channel: string };
-  inputs?: AutomationInput[];
-  outputs?: AutomationOutput[];
-  /** Who is accountable for it; absent means nobody has taken it. */
-  owner?: string;
-  /** Workspace it files under. */
-  workspaceId?: string;
-  model?: string;
-  fallbackModel?: string;
-  accountId?: string;
-  accountStrict?: boolean;
-  usageCredits?: boolean;
-  sandbox?: boolean;
-  lastRunAt?: string;
-  lastRunSessionId?: string;
-  lastRunStatus?: "running" | "ok" | "error";
-  lastRunError?: string;
-  lastTrigger?: "cron" | "webhook" | "manual" | "event";
-  nextRunAt: string | null;
-  isRunning?: boolean;
-  runs?: AutomationRun[];
-}
 
 interface Props {
   onOpenSession: (sessionId: string) => void;
@@ -170,10 +105,22 @@ const PRESETS: Array<{ label: string; cron: string }> = [
 
 const EVENT_OPTIONS: Array<{ key: string; label: string }> = [
   { key: "plain:thread_created", label: "Plain · new support ticket created" },
-  { key: "featurebase:ticket_created", label: "Featurebase · new support ticket created" },
-  { key: "featurebase:post_created", label: "Featurebase · new feedback post created" },
-  { key: "featurebase:conversation_created", label: "Featurebase · new conversation started" },
-  { key: "stripe:charge.dispute.created", label: "Stripe · dispute (chargeback) created" },
+  {
+    key: "featurebase:ticket_created",
+    label: "Featurebase · new support ticket created",
+  },
+  {
+    key: "featurebase:post_created",
+    label: "Featurebase · new feedback post created",
+  },
+  {
+    key: "featurebase:conversation_created",
+    label: "Featurebase · new conversation started",
+  },
+  {
+    key: "stripe:charge.dispute.created",
+    label: "Stripe · dispute (chargeback) created",
+  },
   { key: "github:pr_merged", label: "GitHub · PR merged" },
 ];
 
@@ -211,25 +158,22 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   // Leaving/changing the selection always drops back to the read view.
   useEffect(() => setEditMode(false), [selectedId]);
 
-  // Stable identity: only refs and setters are captured, so the polling
-  // effect can list `load` without ever refiring from re-renders.
   const load = useCallback(async () => {
-    await (async () => {
-const next = (await fetchAutomations()) as Automation[];
+    try {
+      const next = await fetchAutomations();
       setAutomations(
-        next.map((automation) =>
-          pendingToggles.current.has(automation.id)
-            ? {
-                ...automation,
-                enabled: pendingToggles.current.get(automation.id)!.enabled,
-              }
-            : automation,
-        ),
+        next.map((automation) => {
+          const pending = pendingToggles.current.get(automation.id);
+          return pending
+            ? { ...automation, enabled: pending.enabled }
+            : automation;
+        }),
       );
       setLoading(false);
-})().catch(async () => {
-
-});
+    } catch (error) {
+      setError(errorMessage(error, "Could not load automations"));
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -243,10 +187,10 @@ const next = (await fetchAutomations()) as Automation[];
   }, [load]);
 
   // The routed selection — matched by id, or by name for sidebar deep-links.
-  const sel = (selectedId
-        ? automations.find((a) => a.id === selectedId || a.name === selectedId) ||
-          null
-        : null);
+  const sel = selectedId
+    ? automations.find((a) => a.id === selectedId || a.name === selectedId) ||
+      null
+    : null;
 
   // Escape backs out one layer: inline edit → read view → closed. (The create
   // modal handles its own Escape — don't close both from one keypress.)
@@ -256,7 +200,13 @@ const next = (await fetchAutomations()) as Automation[];
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      )
+        return;
       if (editMode) setEditMode(false);
       else onSelect("");
     };
@@ -275,16 +225,17 @@ const next = (await fetchAutomations()) as Automation[];
       ),
     );
 
-    await (async () => {
-await updateAutomationApi(a.id, { enabled });
+    try {
+      await updateAutomationApi(a.id, { enabled });
       // A second click may have superseded this request. Only the latest intent
       // gets to reconcile the optimistic state with the server response.
       if (pendingToggles.current.get(a.id)?.request !== request) return;
       await load();
-      if (pendingToggles.current.get(a.id)?.request === request)
+      if (pendingToggles.current.get(a.id)?.request === request) {
         pendingToggles.current.delete(a.id);
-})().catch(async (e: any) => {
-if (pendingToggles.current.get(a.id)?.request !== request) return;
+      }
+    } catch (error) {
+      if (pendingToggles.current.get(a.id)?.request !== request) return;
       pendingToggles.current.delete(a.id);
       setAutomations((current) =>
         current.map((automation) =>
@@ -293,177 +244,192 @@ if (pendingToggles.current.get(a.id)?.request !== request) return;
             : automation,
         ),
       );
-      setError(e.message);
-});
+      setError(errorMessage(error, "Could not update automation"));
+    }
   }
 
-  async function handleDelete(a: Automation) {
-    if (!confirm(`Delete automation "${a.name}"?`)) return;
-    await (async () => {
-await deleteAutomationApi(a.id);
-      if (sel?.id === a.id) onSelect("");
-      load();
-})().catch(async (e: any) => {
-setError(e.message);
-});
+  async function handleDelete(automation: Automation) {
+    if (!confirm(`Delete automation "${automation.name}"?`)) return;
+    try {
+      await deleteAutomationApi(automation.id);
+      if (sel?.id === automation.id) onSelect("");
+      void load();
+    } catch (error) {
+      setError(errorMessage(error, "Could not delete automation"));
+    }
   }
 
-  async function handleRunNow(a: Automation) {
-    await (async () => {
-await runAutomationApi(a.id);
+  async function handleRunNow(automation: Automation) {
+    try {
+      await runAutomationApi(automation.id);
       setTimeout(load, 800);
-})().catch(async (e: any) => {
-setError(e.message);
-});
+    } catch (error) {
+      setError(errorMessage(error, "Could not run automation"));
+    }
   }
 
   async function handleRetrigger(sessionId: string) {
-    await (async () => {
-await retriggerAutomationApi(sessionId);
+    try {
+      await retriggerAutomationApi(sessionId);
       setTimeout(load, 800);
-})().catch(async (e: any) => {
-setError(e.message);
-});
+    } catch (error) {
+      setError(errorMessage(error, "Could not retrigger automation"));
+    }
   }
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
-    {/* Drawer open: the list compresses to a narrow rail (Reviews-style), and
+      {/* Drawer open: the list compresses to a narrow rail (Reviews-style), and
         on phones it steps aside entirely — Back returns to it. */}
-    <div
-      className={cn(
-        "min-w-0 overflow-y-auto",
-        sel
-          ? "flex-[0_0_340px] border-r border-line px-3.5 pt-4 pb-10 max-[900px]:hidden"
-          : "flex-1 px-6 pt-7 pb-15 max-[560px]:px-4 max-[560px]:pt-5 max-[560px]:pb-12",
-      )}
-    >
-    <div className={cn("mx-auto", !sel && "max-w-[860px]")}>
-      <PageHeader
-        className={`max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5 ${sel ? "mb-3.5 items-center" : ""}`}
+      <div
+        className={cn(
+          "min-w-0 overflow-y-auto",
+          sel
+            ? "flex-[0_0_340px] border-r border-line px-3.5 pt-4 pb-10 max-[900px]:hidden"
+            : "flex-1 px-6 pt-7 pb-15 max-[560px]:px-4 max-[560px]:pt-5 max-[560px]:pb-12",
+        )}
       >
-        <div>
-          <PageTitle className={sel ? "text-base" : undefined}>Automations</PageTitle>
-          <PageDescription className={sel ? "hidden" : undefined}>
-            Scheduled {AGENT_NAME} sessions. Cron runs in UTC (server time).
-          </PageDescription>
-        </div>
-        <Button
-					variant="primary"
-					size="lg"
-					icon={<IconPlus size={20} />}
-					className="text-control-label font-medium"
-					onClick={() => setShowModal(true)}
-				>
-					New automation
-				</Button>
-      </PageHeader>
+        <div className={cn("mx-auto", !sel && "max-w-[860px]")}>
+          <PageHeader
+            className={`max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5 ${sel ? "mb-3.5 items-center" : ""}`}
+          >
+            <div>
+              <PageTitle className={sel ? "text-base" : undefined}>
+                Automations
+              </PageTitle>
+              <PageDescription className={sel ? "hidden" : undefined}>
+                Scheduled {AGENT_NAME} sessions. Cron runs in UTC (server time).
+              </PageDescription>
+            </div>
+            <Button
+              variant="primary"
+              size="lg"
+              icon={<IconPlus size={20} />}
+              className="text-control-label font-medium"
+              onClick={() => setShowModal(true)}
+            >
+              New automation
+            </Button>
+          </PageHeader>
 
-      {error && (
-        <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
-      )}
+          {error && (
+            <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
+          )}
 
-      {loading ? (
-        <LoadingState>Loading…</LoadingState>
-      ) : automations.length === 0 && !showModal ? (
-        <EmptyState title="No automations yet.">
-          Schedule recurring work: daily PR-review sweeps, dependency checks, weekly
-          changelog drafts, flaky-test hunts…
-        </EmptyState>
-      ) : (
-        <div className="flex flex-col border-t border-line">
-          {automations.map((a) => {
-            const running = a.isRunning || a.lastRunStatus === "running";
-            return (
-              <div
-                key={a.id}
-                className={cn(
-                  "relative flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-item-title text-fg",
-                  "max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3",
-                  sel?.id === a.id ? "bg-active" : "hover:bg-hover",
-                )}
-              >
-                {/* Two controls in one row: opening the automation, and
+          {loading ? (
+            <LoadingState>Loading…</LoadingState>
+          ) : automations.length === 0 && !showModal ? (
+            <EmptyState title="No automations yet.">
+              Schedule recurring work: daily PR-review sweeps, dependency
+              checks, weekly changelog drafts, flaky-test hunts…
+            </EmptyState>
+          ) : (
+            <div className="flex flex-col border-t border-line">
+              {automations.map((a) => {
+                const running = a.isRunning || a.lastRunStatus === "running";
+                return (
+                  <div
+                    key={a.id}
+                    className={cn(
+                      "relative flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-item-title text-fg",
+                      "max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3",
+                      sel?.id === a.id ? "bg-active" : "hover:bg-hover",
+                    )}
+                  >
+                    {/* Two controls in one row: opening the automation, and
                     turning it on. So the row can't be a button around the
                     switch. The open target is a button stretched under the
                     content instead, which keeps the whole row clickable and
                     keyboard-reachable without nesting one inside the other.
                     Content above it is inert unless it has its own tooltip. */}
-                <button
-                  className="absolute inset-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50"
-                  onClick={() => onSelect(a.id)}
-                >
-                  <span className="sr-only">Open {a.name}</span>
-                </button>
-                <TriggerIcon automation={a} />
-                <span
-                  className={cn(
-                    "pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.75",
-                    !a.enabled && "opacity-55",
-                  )}
-                >
-                  <span className="truncate text-item-title font-semibold leading-5">{a.name}</span>
-                  <span className="truncate text-meta text-faint">{triggerSummary(a)}</span>
-                </span>
-                {running ? (
-                  <WorkingPill className="pointer-events-none relative max-[560px]:max-w-[92px] max-[560px]:overflow-hidden max-[560px]:text-ellipsis" />
-                ) : a.lastRunStatus === "ok" || a.lastRunStatus === "error" ? (
-                  // Its own click target rather than an inert glyph: keeping
-                  // pointer events is what keeps the tooltip, and the click
-                  // does what the row does.
-                  <span
-                    className={cn(
-                      "relative flex size-5 shrink-0 self-start cursor-pointer items-center justify-center [&_svg]:size-3.5",
-                      a.lastRunStatus === "ok" ? "text-green" : "text-red",
-                    )}
-                    onClick={() => onSelect(a.id)}
-                    title={
-                      a.lastRunStatus === "ok"
-                        ? `Last run ok${a.lastRunAt ? ` · ${relativeTime(a.lastRunAt)}` : ""}`
-                        : a.lastRunError || "Last run failed"
-                    }
-                  >
-                    <CheckStatusIcon kind={a.lastRunStatus === "ok" ? "success" : "failure"} />
-                  </span>
-                ) : null}
-                {/* The graph and the next-run column are the first things to
+                    <button
+                      className="absolute inset-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50"
+                      onClick={() => onSelect(a.id)}
+                    >
+                      <span className="sr-only">Open {a.name}</span>
+                    </button>
+                    <TriggerIcon automation={a} />
+                    <span
+                      className={cn(
+                        "pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.75",
+                        !a.enabled && "opacity-55",
+                      )}
+                    >
+                      <span className="truncate text-item-title font-semibold leading-5">
+                        {a.name}
+                      </span>
+                      <span className="truncate text-meta text-faint">
+                        {triggerSummary(a)}
+                      </span>
+                    </span>
+                    {running ? (
+                      <WorkingPill className="pointer-events-none relative max-[560px]:max-w-[92px] max-[560px]:overflow-hidden max-[560px]:text-ellipsis" />
+                    ) : a.lastRunStatus === "ok" ||
+                      a.lastRunStatus === "error" ? (
+                      // Its own click target rather than an inert glyph: keeping
+                      // pointer events is what keeps the tooltip, and the click
+                      // does what the row does.
+                      <span
+                        className={cn(
+                          "relative flex size-5 shrink-0 self-start cursor-pointer items-center justify-center [&_svg]:size-3.5",
+                          a.lastRunStatus === "ok" ? "text-green" : "text-red",
+                        )}
+                        onClick={() => onSelect(a.id)}
+                        title={
+                          a.lastRunStatus === "ok"
+                            ? `Last run ok${a.lastRunAt ? ` · ${relativeTime(a.lastRunAt)}` : ""}`
+                            : a.lastRunError || "Last run failed"
+                        }
+                      >
+                        <CheckStatusIcon
+                          kind={
+                            a.lastRunStatus === "ok" ? "success" : "failure"
+                          }
+                        />
+                      </span>
+                    ) : null}
+                    {/* The graph and the next-run column are the first things to
                     go when width is scarce: the drawer's rail and phones. */}
-                <span
-                  className={cn(
-                    "relative shrink-0 cursor-pointer",
-                    sel ? "hidden" : "flex max-[560px]:hidden",
-                  )}
-                  onClick={() => onSelect(a.id)}
-                >
-                  {(a.runs?.length ?? 0) > 0 && <TriggerGraph runs={a.runs!} compact />}
-                </span>
-                <span
-                  className={cn(
-                    "pointer-events-none relative w-21 shrink-0 text-right text-meta text-faint",
-                    sel ? "hidden" : "max-[560px]:hidden",
-                  )}
-                >
-                  {/* No "off" here any more: it used to be the only state a
+                    <span
+                      className={cn(
+                        "relative shrink-0 cursor-pointer",
+                        sel ? "hidden" : "flex max-[560px]:hidden",
+                      )}
+                      onClick={() => onSelect(a.id)}
+                    >
+                      {(a.runs?.length ?? 0) > 0 && (
+                        <TriggerGraph runs={a.runs!} compact />
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        "pointer-events-none relative w-21 shrink-0 text-right text-meta text-faint",
+                        sel ? "hidden" : "max-[560px]:hidden",
+                      )}
+                    >
+                      {/* No "off" here any more: it used to be the only state a
                       row carried at this end, and now it sits beside a switch
                       that already says it. */}
-                  {a.enabled && a.nextRunAt ? `next ${formatNext(a.nextRunAt)}` : ""}
-                </span>
-                {/* Last in the row: the switch is the one thing you act on
+                      {a.enabled && a.nextRunAt
+                        ? `next ${formatNext(a.nextRunAt)}`
+                        : ""}
+                    </span>
+                    {/* Last in the row: the switch is the one thing you act on
                     here, so it sits on the edge, in a column of its own. */}
-                <Switch
-                  size="sm"
-                  className="relative"
-                  checked={a.enabled}
-                  onCheckedChange={(enabled) => handleToggle(a, enabled)}
-                  aria-label={`${a.name} · ${a.enabled ? "on" : "off"}`}
-                />
-              </div>
-            );
-          })}
+                    <Switch
+                      size="sm"
+                      className="relative"
+                      checked={a.enabled}
+                      onCheckedChange={(enabled) => handleToggle(a, enabled)}
+                      aria-label={`${a.name} · ${a.enabled ? "on" : "off"}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      )}
-    </div>
-    </div>
+      </div>
 
       {sel && (
         <aside className="flex min-h-0 min-w-0 flex-auto flex-col border-l border-line bg-panel max-[900px]:border-l-0">
@@ -474,7 +440,14 @@ setError(e.message);
               onClick={() => onSelect("")}
               title="Back to automations"
             >
-              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" className="text-dim" aria-hidden>
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className="text-dim"
+                aria-hidden
+              >
                 <path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 1 1 1.06 1.06L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06Z" />
               </svg>
               Automations
@@ -492,7 +465,11 @@ setError(e.message);
                 >
                   Run now
                 </Button>
-                <Button size="sm" variant="soft" onClick={() => setEditMode(true)}>
+                <Button
+                  size="sm"
+                  variant="soft"
+                  onClick={() => setEditMode(true)}
+                >
                   Edit
                 </Button>
                 <Button
@@ -510,7 +487,13 @@ setError(e.message);
               onClick={() => onSelect("")}
               title="Close"
             >
-              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                aria-hidden
+              >
                 <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.749.749 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.749.749 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
               </svg>
             </button>
@@ -585,8 +568,11 @@ setError(e.message);
                           )}
                           {sel.schedule && sel.eventKey && " · "}
                           {sel.eventKey && <>on {eventLabel(sel.eventKey)}</>}
-                          {!sel.schedule && !sel.eventKey &&
-                            (sel.webhookEnabled === false ? "manual only" : "webhook / manual only")}
+                          {!sel.schedule &&
+                            !sel.eventKey &&
+                            (sel.webhookEnabled === false
+                              ? "manual only"
+                              : "webhook / manual only")}
                         </>
                       )}
                     </span>
@@ -613,7 +599,8 @@ setError(e.message);
                           className="text-faint"
                           title="Used only when every account for the primary model has hit its usage limit"
                         >
-                          {" "}· falls back to {sel.fallbackModel}
+                          {" "}
+                          · falls back to {sel.fallbackModel}
                         </span>
                       )}
                     </span>
@@ -623,7 +610,9 @@ setError(e.message);
                         <DetailKey>Account</DetailKey>
                         <span className="text-dim">
                           {providerAccountLabel(
-                            providerAccounts.find((x) => x.id === sel.accountId) ?? {
+                            providerAccounts.find(
+                              (x) => x.id === sel.accountId,
+                            ) ?? {
                               name: "pinned account",
                             },
                           )}
@@ -631,7 +620,9 @@ setError(e.message);
                             {sel.accountStrict === false
                               ? " · preferred, falls back to the shared pool"
                               : " · hard pin (cost cap)"}
-                            {sel.usageCredits ? " · paid usage-credits allowed" : ""}
+                            {sel.usageCredits
+                              ? " · paid usage-credits allowed"
+                              : ""}
                           </span>
                         </span>
                       </>
@@ -650,14 +641,17 @@ setError(e.message);
                       <>
                         <DetailKey>Inputs</DetailKey>
                         <span className="text-dim min-w-0">
-                          {sel.inputs.map((input) =>
-                            input.label ||
-                            (input.source.type === "slack_channel"
-                              ? `Slack ${input.source.channel}`
-                              : input.source.automationId === "self"
-                                ? "previous reports"
-                                : `reports ${input.source.automationId}`),
-                          ).join(", ")}
+                          {sel.inputs
+                            .map(
+                              (input) =>
+                                input.label ||
+                                (input.source.type === "slack_channel"
+                                  ? `Slack ${input.source.channel}`
+                                  : input.source.automationId === "self"
+                                    ? "previous reports"
+                                    : `reports ${input.source.automationId}`),
+                            )
+                            .join(", ")}
                         </span>
                       </>
                     ) : null}
@@ -666,11 +660,13 @@ setError(e.message);
                       <>
                         <DetailKey>Outputs</DetailKey>
                         <span className="text-dim min-w-0">
-                          {sel.outputs.map((output) => {
-                            if (output.type === "report")
-                              return `Reports · ${output.publish || "always"}`;
-                            return `Slack ${output.channel} · ${output.enabled === false ? "disabled" : `${output.minUrgency || "high"}/${output.minConfidence || "high"}`}`;
-                          }).join(", ")}
+                          {sel.outputs
+                            .map((output) => {
+                              if (output.type === "report")
+                                return `Reports · ${output.publish || "always"}`;
+                              return `Slack ${output.channel} · ${output.enabled === false ? "disabled" : `${output.minUrgency || "high"}/${output.minConfidence || "high"}`}`;
+                            })
+                            .join(", ")}
                         </span>
                       </>
                     ) : null}
@@ -686,11 +682,14 @@ setError(e.message);
                     <span className="text-dim">
                       by {sel.createdBy}
                       {sel.createdAt &&
-                        ` · ${new Date(sel.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}`}
+                        ` · ${new Date(sel.createdAt).toLocaleDateString(
+                          undefined,
+                          {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          },
+                        )}`}
                     </span>
                   </div>
                 </div>
@@ -701,9 +700,14 @@ setError(e.message);
                     <div className="text-dim text-supporting">
                       last run {relativeTime(sel.lastRunAt)}
                       {sel.lastTrigger ? ` via ${sel.lastTrigger}` : ""}
-                      {sel.lastRunStatus === "ok" && <span className="text-green"> ✓</span>}
+                      {sel.lastRunStatus === "ok" && (
+                        <span className="text-green"> ✓</span>
+                      )}
                       {sel.lastRunStatus === "error" && (
-                        <span className="text-red" title={sel.lastRunError}> ✗</span>
+                        <span className="text-red" title={sel.lastRunError}>
+                          {" "}
+                          ✗
+                        </span>
                       )}
                       {sel.lastRunSessionId && (
                         <>
@@ -722,12 +726,18 @@ setError(e.message);
                       )}
                     </div>
                   ) : (
-                    <div className="text-faint text-supporting">No runs yet.</div>
+                    <div className="text-faint text-supporting">
+                      No runs yet.
+                    </div>
                   )}
                   {(sel.runs?.length ?? 0) > 0 && (
                     <>
                       <TriggerGraph runs={sel.runs!} />
-                      <RunLedger runs={sel.runs!} onOpenSession={onOpenSession} onRetrigger={handleRetrigger} />
+                      <RunLedger
+                        runs={sel.runs!}
+                        onOpenSession={onOpenSession}
+                        onRetrigger={handleRetrigger}
+                      />
                     </>
                   )}
                 </div>
@@ -804,7 +814,9 @@ function eventLabel(key: string): string {
 /** Left column of the drawer's Configuration grid. */
 function DetailKey({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-faint text-label leading-[1.7] whitespace-nowrap">{children}</span>
+    <span className="text-faint text-label leading-[1.7] whitespace-nowrap">
+      {children}
+    </span>
   );
 }
 
@@ -817,18 +829,28 @@ const PLOT_H = 26;
 /** Runs-per-day bar strip for the last 30 days. Status is state, so it uses
  *  the reserved status tokens (green/yellow/red); per-bar tooltips carry the
  *  counts in text and the expanded run ledger is the table view. */
-function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: boolean }) {
+function TriggerGraph({
+  runs,
+  compact,
+}: {
+  runs: AutomationRun[];
+  compact?: boolean;
+}) {
   const buckets = (() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const out = Array.from({ length: GRAPH_DAYS }, (_, i) => {
-      const date = new Date(today.getTime() - (GRAPH_DAYS - 1 - i) * 86_400_000);
+      const date = new Date(
+        today.getTime() - (GRAPH_DAYS - 1 - i) * 86_400_000,
+      );
       return { date, ok: 0, error: 0, running: 0 };
     });
     for (const r of runs) {
       const d = new Date(r.at);
       d.setHours(0, 0, 0, 0);
-      const idx = Math.round((d.getTime() - out[0].date.getTime()) / 86_400_000);
+      const idx = Math.round(
+        (d.getTime() - out[0].date.getTime()) / 86_400_000,
+      );
       if (idx >= 0 && idx < out.length) out[idx][r.status]++;
     }
     return out;
@@ -848,19 +870,41 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
         className="shrink-0"
       >
         {/* baseline */}
-        <rect x={0} y={PLOT_H} width={GRAPH_DAYS * SLOT - 2} height={1} fill="var(--border)" />
+        <rect
+          x={0}
+          y={PLOT_H}
+          width={GRAPH_DAYS * SLOT - 2}
+          height={1}
+          fill="var(--border)"
+        />
         {buckets.map((b, i) => {
           const count = b.ok + b.error + b.running;
-          const label = b.date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+          const label = b.date.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          });
           if (count === 0) {
             return (
-              <rect key={i} x={i * SLOT} y={PLOT_H - 2} width={SLOT - 2} height={2} rx={1} fill="var(--border)">
+              <rect
+                key={i}
+                x={i * SLOT}
+                y={PLOT_H - 2}
+                width={SLOT - 2}
+                height={2}
+                rx={1}
+                fill="var(--border)"
+              >
                 <title>{`${label} · no runs`}</title>
               </rect>
             );
           }
           const h = Math.max(4, Math.round((count / max) * PLOT_H));
-          const fill = b.error > 0 ? "var(--red)" : b.running > 0 ? "var(--yellow)" : "var(--green)";
+          const fill =
+            b.error > 0
+              ? "var(--red)"
+              : b.running > 0
+                ? "var(--yellow)"
+                : "var(--green)";
           const parts = [
             b.ok ? `${b.ok} ok` : "",
             b.error ? `${b.error} failed` : "",
@@ -870,7 +914,15 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
           // capsule, so a tall bar still shows a straight side to read a
           // height off. Short ones pill anyway: ry clamps to half the height.
           return (
-            <rect key={i} x={i * SLOT} y={PLOT_H - h} width={SLOT - 2} height={h} rx={3} fill={fill}>
+            <rect
+              key={i}
+              x={i * SLOT}
+              y={PLOT_H - h}
+              width={SLOT - 2}
+              height={h}
+              rx={3}
+              fill={fill}
+            >
               <title>{`${label} · ${count} run${count === 1 ? "" : "s"} (${parts.join(", ")})`}</title>
             </rect>
           );
@@ -898,20 +950,27 @@ function RunLedger({
   return (
     <div className="mt-2.5 border-t border-line pt-2 flex flex-col gap-1">
       {runs.map((r) => (
-        <div key={r.sessionId + r.at} className="flex items-baseline gap-2 text-label text-dim min-w-0">
+        <div
+          key={r.sessionId + r.at}
+          className="flex items-baseline gap-2 text-label text-dim min-w-0"
+        >
           {r.status === "running" ? (
             <span className="text-yellow shrink-0">●</span>
           ) : r.status === "ok" ? (
             <span className="text-green shrink-0">✓</span>
           ) : (
-            <span className="text-red shrink-0" title={r.error}>✗</span>
+            <span className="text-red shrink-0" title={r.error}>
+              ✗
+            </span>
           )}
           <span className="shrink-0" title={new Date(r.at).toLocaleString()}>
             {relativeTime(r.at)}
           </span>
           <span className="text-faint shrink-0">via {r.trigger}</span>
           {r.durationMs != null && (
-            <span className="text-faint shrink-0">{formatDuration(r.durationMs)}</span>
+            <span className="text-faint shrink-0">
+              {formatDuration(r.durationMs)}
+            </span>
           )}
           {r.error && (
             <span className="text-red truncate" title={r.error}>
@@ -1033,7 +1092,9 @@ function CreateAutomationModal({
         ) : (
           <>
             <Modal.Header
-              title={step === "watch" ? "Watch a Slack channel" : "New automation"}
+              title={
+                step === "watch" ? "Watch a Slack channel" : "New automation"
+              }
               description={
                 step === "watch"
                   ? `${AGENT_NAME} triages every new message in the channel.`
@@ -1086,10 +1147,16 @@ function ChooserRow({
         <Icon size={20} className="max-w-none scale-[1.15]" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.75">
-        <span className="text-item-title font-semibold leading-5 text-fg">{title}</span>
-        <span className="text-supporting leading-normal text-faint">{description}</span>
+        <span className="text-item-title font-semibold leading-5 text-fg">
+          {title}
+        </span>
+        <span className="text-supporting leading-normal text-faint">
+          {description}
+        </span>
       </span>
-      {meta && <span className="mt-0.5 shrink-0 text-meta text-faint">{meta}</span>}
+      {meta && (
+        <span className="mt-0.5 shrink-0 text-meta text-faint">{meta}</span>
+      )}
     </button>
   );
 }
@@ -1100,7 +1167,10 @@ function TypeChooser({
   onPick,
 }: {
   describeRef: React.RefObject<HTMLTextAreaElement | null>;
-  onPick: (prefill: AutomationDraft | null, step: Exclude<Step, "type">) => void;
+  onPick: (
+    prefill: AutomationDraft | null,
+    step: Exclude<Step, "type">,
+  ) => void;
 }) {
   const [templates, setTemplates] = useState<AutomationTemplate[]>([]);
   const [description, setDescription] = useState("");
@@ -1108,19 +1178,21 @@ function TypeChooser({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchAutomationTemplates().then(setTemplates).catch(() => {});
+    fetchAutomationTemplates()
+      .then(setTemplates)
+      .catch(() => {});
   }, []);
 
   async function handleDraft() {
     if (description.trim().length < 10 || drafting) return;
     setDrafting(true);
     setError(null);
-    await (async () => {
-onPick(await draftAutomationApi(description), "classic");
-})().catch(async (e: any) => {
-setError(e.message);
+    try {
+      onPick(await draftAutomationApi(description), "classic");
+    } catch (error) {
+      setError(errorMessage(error, "Could not draft automation"));
       setDrafting(false);
-});
+    }
   }
 
   return (
@@ -1142,7 +1214,9 @@ setError(e.message);
           aria-label="Describe the automation"
           placeholder="Every weekday morning, check Sentry for new errors and rank them by impact"
         />
-        {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+        {error && (
+          <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
+        )}
         <div className="flex justify-end">
           <Button
             variant="primary"
@@ -1206,14 +1280,19 @@ function McpPicker({
   value: string[] | undefined;
   onChange: (v: string[] | undefined) => void;
 }) {
-  const [servers, setServers] = useState<Array<{ name: string; status: string }>>([]);
+  const [servers, setServers] = useState<
+    Array<{ name: string; status: string }>
+  >([]);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     fetchConnections()
       .then((c) =>
         setServers(
-          (c.mcpServers || []).map((s: any) => ({ name: s.name, status: s.status })),
+          (c.mcpServers || []).map((server) => ({
+            name: server.name,
+            status: server.status,
+          })),
         ),
       )
       .catch(() => {});
@@ -1267,10 +1346,11 @@ function McpPicker({
             {all ? "all connectors" : `${selected.length} selected`}
           </span>
         </div>
-        <label
-          className="flex items-center gap-2.5 border-b border-line px-3 py-2 text-label cursor-pointer hover:bg-hover"
-        >
-          <Checkbox checked={all} onCheckedChange={() => onChange(all ? [] : undefined)} />
+        <label className="flex items-center gap-2.5 border-b border-line px-3 py-2 text-label cursor-pointer hover:bg-hover">
+          <Checkbox
+            checked={all}
+            onCheckedChange={() => onChange(all ? [] : undefined)}
+          />
           <span className="text-fg">All connectors</span>
           <span className="text-faint text-meta">
             every configured server (pre-least-privilege default)
@@ -1293,7 +1373,9 @@ function McpPicker({
             </label>
           ))}
           {shown.length === 0 && (
-            <div className="px-3 py-2 text-faint text-label">No connectors match.</div>
+            <div className="px-3 py-2 text-faint text-label">
+              No connectors match.
+            </div>
           )}
         </div>
       </div>
@@ -1334,7 +1416,9 @@ function DataFlowEditor({
   const updateInput = (index: number, value: AutomationInput) =>
     onInputsChange(inputs.map((input, at) => (at === index ? value : input)));
   const updateOutput = (index: number, value: AutomationOutput) =>
-    onOutputsChange(outputs.map((output, at) => (at === index ? value : output)));
+    onOutputsChange(
+      outputs.map((output, at) => (at === index ? value : output)),
+    );
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -1348,7 +1432,9 @@ function DataFlowEditor({
       <div className="flex flex-col gap-2">
         <div className="flex min-h-10 items-center gap-2">
           <span className="text-label font-medium text-dim">Inputs</span>
-          <span className="text-supporting text-faint">Each source is bounded and treated as untrusted data</span>
+          <span className="text-supporting text-faint">
+            Each source is bounded and treated as untrusted data
+          </span>
           <div className="ml-auto flex gap-1.5">
             <Button
               size="sm"
@@ -1356,9 +1442,16 @@ function DataFlowEditor({
                 onInputsChange([
                   ...inputs,
                   {
-                    id: uniqueFlowId("slack", inputs.map((input) => input.id)),
+                    id: uniqueFlowId(
+                      "slack",
+                      inputs.map((input) => input.id),
+                    ),
                     label: "Slack channel",
-                    window: { mode: "since_last_success", minutes: 120, overlapMinutes: 10 },
+                    window: {
+                      mode: "since_last_success",
+                      minutes: 120,
+                      overlapMinutes: 10,
+                    },
                     reduce: { model: "claude-haiku-4-5", maxOutputChars: 8000 },
                     source: {
                       type: "slack_channel",
@@ -1379,7 +1472,10 @@ function DataFlowEditor({
                 onInputsChange([
                   ...inputs,
                   {
-                    id: uniqueFlowId("reports", inputs.map((input) => input.id)),
+                    id: uniqueFlowId(
+                      "reports",
+                      inputs.map((input) => input.id),
+                    ),
                     label: "Previous reports",
                     source: { type: "reports", automationId: "self", limit: 3 },
                   },
@@ -1393,12 +1489,15 @@ function DataFlowEditor({
 
         {inputs.length === 0 ? (
           <div className="rounded-panel border border-dashed border-line px-3 py-3 text-label text-faint">
-            No collected inputs. The run receives only its instructions and trigger context.
+            No collected inputs. The run receives only its instructions and
+            trigger context.
           </div>
         ) : (
           inputs.map((input, index) => {
-            const slack = input.source.type === "slack_channel" ? input.source : null;
-            const reports = input.source.type === "reports" ? input.source : null;
+            const slack =
+              input.source.type === "slack_channel" ? input.source : null;
+            const reports =
+              input.source.type === "reports" ? input.source : null;
             return (
               <div key={input.id} className="rounded-panel bg-surface p-3">
                 <div className="mb-2 flex min-h-10 items-center gap-2">
@@ -1406,16 +1505,25 @@ function DataFlowEditor({
                     className="max-w-[150px]"
                     value={input.source.type}
                     onChange={(e) => {
-                      const source = e.target.value === "slack_channel"
-                        ? {
-                            type: "slack_channel" as const,
-                            channel: "",
-                            includeThreads: true,
-                            includeBots: false,
-                            limit: 200,
-                          }
-                        : { type: "reports" as const, automationId: "self", limit: 3 };
-                      updateInput(index, { id: input.id, label: input.label, source });
+                      const source =
+                        e.target.value === "slack_channel"
+                          ? {
+                              type: "slack_channel" as const,
+                              channel: "",
+                              includeThreads: true,
+                              includeBots: false,
+                              limit: 200,
+                            }
+                          : {
+                              type: "reports" as const,
+                              automationId: "self",
+                              limit: 3,
+                            };
+                      updateInput(index, {
+                        id: input.id,
+                        label: input.label,
+                        source,
+                      });
                     }}
                   >
                     <option value="slack_channel">Slack channel</option>
@@ -1423,13 +1531,17 @@ function DataFlowEditor({
                   </Select>
                   <Input
                     value={input.label || ""}
-                    onChange={(e) => updateInput(index, { ...input, label: e.target.value })}
+                    onChange={(e) =>
+                      updateInput(index, { ...input, label: e.target.value })
+                    }
                     placeholder="Label"
                   />
                   <Button
                     size="sm"
                     className="shrink-0 text-dim hover:text-red"
-                    onClick={() => onInputsChange(inputs.filter((_, at) => at !== index))}
+                    onClick={() =>
+                      onInputsChange(inputs.filter((_, at) => at !== index))
+                    }
                   >
                     Remove
                   </Button>
@@ -1446,7 +1558,10 @@ function DataFlowEditor({
                           onChange={(e) =>
                             updateInput(index, {
                               ...input,
-                              source: { ...slack, channel: e.target.value.toUpperCase() },
+                              source: {
+                                ...slack,
+                                channel: e.target.value.toUpperCase(),
+                              },
                             })
                           }
                           placeholder="C0123456789"
@@ -1462,7 +1577,10 @@ function DataFlowEditor({
                           onChange={(e) =>
                             updateInput(index, {
                               ...input,
-                              window: { ...input.window, minutes: Number(e.target.value) },
+                              window: {
+                                ...input.window,
+                                minutes: Number(e.target.value),
+                              },
                             })
                           }
                         />
@@ -1474,7 +1592,10 @@ function DataFlowEditor({
                           onChange={(e) =>
                             updateInput(index, {
                               ...input,
-                              reduce: { ...input.reduce, model: e.target.value },
+                              reduce: {
+                                ...input.reduce,
+                                model: e.target.value,
+                              },
                             })
                           }
                           placeholder="Default Haiku"
@@ -1520,7 +1641,10 @@ function DataFlowEditor({
                         onChange={(e) =>
                           updateInput(index, {
                             ...input,
-                            source: { ...reports, automationId: e.target.value },
+                            source: {
+                              ...reports,
+                              automationId: e.target.value,
+                            },
                           })
                         }
                         placeholder="self"
@@ -1536,7 +1660,10 @@ function DataFlowEditor({
                         onChange={(e) =>
                           updateInput(index, {
                             ...input,
-                            source: { ...reports, limit: Number(e.target.value) },
+                            source: {
+                              ...reports,
+                              limit: Number(e.target.value),
+                            },
                           })
                         }
                       />
@@ -1552,7 +1679,9 @@ function DataFlowEditor({
       <div className="mt-1 flex flex-col gap-2">
         <div className="flex min-h-10 items-center gap-2">
           <span className="text-label font-medium text-dim">Outputs</span>
-          <span className="text-supporting text-faint">Reports are durable; Slack delivery is optional</span>
+          <span className="text-supporting text-faint">
+            Reports are durable; Slack delivery is optional
+          </span>
           <div className="ml-auto flex gap-1.5">
             {!outputs.some((output) => output.type === "report") && (
               <Button
@@ -1561,7 +1690,10 @@ function DataFlowEditor({
                   onOutputsChange([
                     ...outputs,
                     {
-                      id: uniqueFlowId("report", outputs.map((output) => output.id)),
+                      id: uniqueFlowId(
+                        "report",
+                        outputs.map((output) => output.id),
+                      ),
                       type: "report",
                       enabled: true,
                       publish: "always",
@@ -1578,7 +1710,10 @@ function DataFlowEditor({
                 onOutputsChange([
                   ...outputs,
                   {
-                    id: uniqueFlowId("slack", outputs.map((output) => output.id)),
+                    id: uniqueFlowId(
+                      "slack",
+                      outputs.map((output) => output.id),
+                    ),
                     type: "slack",
                     enabled: false,
                     channel: "",
@@ -1595,7 +1730,8 @@ function DataFlowEditor({
 
         {outputs.length === 0 ? (
           <div className="rounded-panel border border-dashed border-line px-3 py-3 text-label text-faint">
-            No required output. The run behaves like a normal automation session.
+            No required output. The run behaves like a normal automation
+            session.
           </div>
         ) : (
           outputs.map((output, index) => (
@@ -1623,7 +1759,10 @@ function DataFlowEditor({
                       className="mono-input"
                       value={output.channel}
                       onChange={(e) =>
-                        updateOutput(index, { ...output, channel: e.target.value.toUpperCase() })
+                        updateOutput(index, {
+                          ...output,
+                          channel: e.target.value.toUpperCase(),
+                        })
                       }
                       placeholder="C0123456789"
                     />
@@ -1641,7 +1780,9 @@ function DataFlowEditor({
                 <Button
                   size="sm"
                   className="shrink-0 text-dim hover:text-red"
-                  onClick={() => onOutputsChange(outputs.filter((_, at) => at !== index))}
+                  onClick={() =>
+                    onOutputsChange(outputs.filter((_, at) => at !== index))
+                  }
                 >
                   Remove
                 </Button>
@@ -1676,7 +1817,10 @@ function DataFlowEditor({
                       onChange={(e) =>
                         updateOutput(index, {
                           ...output,
-                          minConfidence: e.target.value as "low" | "medium" | "high",
+                          minConfidence: e.target.value as
+                            | "low"
+                            | "medium"
+                            | "high",
                         })
                       }
                     >
@@ -1713,17 +1857,31 @@ function AutomationForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const startSchedule = initial ? initial.schedule : (prefill?.schedule ?? PRESETS[2].cron);
-  const matchesPreset = PRESETS.some((p) => p.cron === startSchedule && p.cron !== CUSTOM);
+  const startSchedule = initial
+    ? initial.schedule
+    : (prefill?.schedule ?? PRESETS[2].cron);
+  const matchesPreset = PRESETS.some(
+    (p) => p.cron === startSchedule && p.cron !== CUSTOM,
+  );
   const initialPreset = matchesPreset ? startSchedule : CUSTOM;
 
   const [name, setName] = useState(initial?.name || prefill?.name || "");
-  const [prompt, setPrompt] = useState(initial?.prompt || prefill?.prompt || "");
+  const [prompt, setPrompt] = useState(
+    initial?.prompt || prefill?.prompt || "",
+  );
   const [preset, setPreset] = useState(initialPreset);
-  const [customCron, setCustomCron] = useState(!matchesPreset ? startSchedule : "");
-  const [mode, setMode] = useState<"ask" | "code">(initial?.mode || prefill?.mode || "ask");
-  const [eventKey, setEventKey] = useState(initial?.eventKey || prefill?.eventKey || "");
-  const [watchChannel, setWatchChannel] = useState(initial?.slackWatch?.channel || "");
+  const [customCron, setCustomCron] = useState(
+    !matchesPreset ? startSchedule : "",
+  );
+  const [mode, setMode] = useState<"ask" | "code">(
+    initial?.mode || prefill?.mode || "ask",
+  );
+  const [eventKey, setEventKey] = useState(
+    initial?.eventKey || prefill?.eventKey || "",
+  );
+  const [watchChannel, setWatchChannel] = useState(
+    initial?.slackWatch?.channel || "",
+  );
   const [webhookEnabled, setWebhookEnabled] = useState(
     initial ? initial.webhookEnabled !== false : false,
   );
@@ -1734,7 +1892,9 @@ function AutomationForm({
     initial?.outputs ? structuredClone(initial.outputs) : [],
   );
   const [mcpServers, setMcpServers] = useState<string[] | undefined>(
-    initial ? initial.mcpServers : (prefill?.mcpServers ?? (kind === "watch" ? ["slack"] : undefined)),
+    initial
+      ? initial.mcpServers
+      : (prefill?.mcpServers ?? (kind === "watch" ? ["slack"] : undefined)),
   );
   // Who is accountable for what this automation does to the codebase. Empty
   // means nobody has taken it, which is what every automation written before
@@ -1744,9 +1904,13 @@ function AutomationForm({
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [model, setModel] = useState(initial?.model || "");
-  const [fallbackModel, setFallbackModel] = useState(initial?.fallbackModel || "");
+  const [fallbackModel, setFallbackModel] = useState(
+    initial?.fallbackModel || "",
+  );
   const [accountId, setAccountId] = useState(initial?.accountId || "");
-  const [accountStrict, setAccountStrict] = useState(initial?.accountStrict !== false);
+  const [accountStrict, setAccountStrict] = useState(
+    initial?.accountStrict !== false,
+  );
   const [usageCredits, setUsageCredits] = useState(!!initial?.usageCredits);
   const sandbox = false;
   const [models, setModels] = useState<ModelOption[]>([]);
@@ -1767,8 +1931,12 @@ function AutomationForm({
       .catch(() => {});
   }, []);
   const effectiveModel = model || defaultModel;
-  const accountProvider = models.find((item) => item.id === effectiveModel)?.accountProvider;
-  const eligibleAccounts = providerAccounts.filter((account) => account.provider === accountProvider);
+  const accountProvider = models.find(
+    (item) => item.id === effectiveModel,
+  )?.accountProvider;
+  const eligibleAccounts = providerAccounts.filter(
+    (account) => account.provider === accountProvider,
+  );
   useEffect(() => {
     const account = providerAccounts.find((item) => item.id === accountId);
     if (account && account.provider !== accountProvider) setAccountId("");
@@ -1777,15 +1945,21 @@ function AutomationForm({
   const [error, setError] = useState<string | null>(null);
 
   const isWatch = kind === "watch";
-  const schedule = isWatch ? "" : preset === CUSTOM ? customCron.trim() : preset;
-  const scheduleValid = isWatch || preset !== CUSTOM || customCron.trim().length > 0;
-  const watchValid = !isWatch || /^[CG][A-Z0-9]{6,}$/i.test(watchChannel.trim());
+  const schedule = isWatch
+    ? ""
+    : preset === CUSTOM
+      ? customCron.trim()
+      : preset;
+  const scheduleValid =
+    isWatch || preset !== CUSTOM || customCron.trim().length > 0;
+  const watchValid =
+    !isWatch || /^[CG][A-Z0-9]{6,}$/i.test(watchChannel.trim());
 
   async function handleSave() {
     setSaving(true);
     setError(null);
-    await (async () => {
-const slackWatch = isWatch
+    try {
+      const slackWatch = isWatch
         ? { channel: watchChannel.trim().toUpperCase() }
         : initial?.slackWatch
           ? { channel: "" } // editing a watch automation into a classic one clears it
@@ -1835,10 +2009,10 @@ const slackWatch = isWatch
         });
       }
       onSaved();
-})().catch(async (e: any) => {
-setError(e.message);
+    } catch (error) {
+      setError(errorMessage(error, "Could not save automation"));
       setSaving(false);
-});
+    }
   }
 
   return (
@@ -1848,7 +2022,9 @@ setError(e.message);
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={isWatch ? "Support channel triage" : "Daily PR review sweep"}
+          placeholder={
+            isWatch ? "Support channel triage" : "Daily PR review sweep"
+          }
         />
       </label>
 
@@ -1894,9 +2070,10 @@ setError(e.message);
             className="mono-input"
           />
           <span className="mt-1 text-supporting leading-snug text-faint">
-            Invite @{AGENT_NAME} to the channel first. The bot only receives messages
-            for channels it's a member of. One run per top-level message; thread
-            replies don't re-trigger. Channel id is in the channel's “About” tab.
+            Invite @{AGENT_NAME} to the channel first. The bot only receives
+            messages for channels it's a member of. One run per top-level
+            message; thread replies don't re-trigger. Channel id is in the
+            channel's “About” tab.
           </span>
         </label>
       ) : (
@@ -1910,7 +2087,10 @@ setError(e.message);
           <div className="bg-surface rounded-panel px-3 py-2.5 flex flex-col gap-2.5">
             <label className={FIELD_LABEL}>
               Schedule
-              <Select value={preset} onChange={(e) => setPreset(e.target.value)}>
+              <Select
+                value={preset}
+                onChange={(e) => setPreset(e.target.value)}
+              >
                 {PRESETS.map((p) => (
                   <option key={p.label} value={p.cron}>
                     {p.label}
@@ -1931,7 +2111,10 @@ setError(e.message);
             )}
             <label className={FIELD_LABEL}>
               Internal event
-              <Select value={eventKey} onChange={(e) => setEventKey(e.target.value)}>
+              <Select
+                value={eventKey}
+                onChange={(e) => setEventKey(e.target.value)}
+              >
                 <option value="">None</option>
                 {EVENT_OPTIONS.map((o) => (
                   <option key={o.key} value={o.key}>
@@ -1941,13 +2124,19 @@ setError(e.message);
               </Select>
             </label>
             <div className="text-supporting text-faint">
-              Schedules and events can be combined. Manual “Run now” is always available.
+              Schedules and events can be combined. Manual “Run now” is always
+              available.
             </div>
             <label className="flex min-h-10 items-center gap-2.5 text-label text-dim">
-              <Checkbox checked={webhookEnabled} onCheckedChange={setWebhookEnabled} />
+              <Checkbox
+                checked={webhookEnabled}
+                onCheckedChange={setWebhookEnabled}
+              />
               <span>
                 Accept webhook triggers
-                <span className="ml-1.5 text-faint">Creates a secret external POST URL</span>
+                <span className="ml-1.5 text-faint">
+                  Creates a secret external POST URL
+                </span>
               </span>
             </label>
           </div>
@@ -1955,7 +2144,8 @@ setError(e.message);
       )}
 
       <label className={FIELD_LABEL}>
-        Instructions: what {AGENT_NAME} does {isWatch ? "with each message" : "when triggers activate"}
+        Instructions: what {AGENT_NAME} does{" "}
+        {isWatch ? "with each message" : "when triggers activate"}
         <Textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -1993,7 +2183,10 @@ setError(e.message);
         <div className={FORM_ROW}>
           <label className={FIELD_LABEL}>
             Mode
-            <Select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
+            <Select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as "ask" | "code")}
+            >
               <option value="ask">Ask · read-only on main</option>
               <option value="code">Code · fresh worktree per run</option>
             </Select>
@@ -2002,7 +2195,9 @@ setError(e.message);
           <label className={FIELD_LABEL}>
             Model
             <Select value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="">Default{defaultModel ? ` · ${defaultModel}` : ""}</option>
+              <option value="">
+                Default{defaultModel ? ` · ${defaultModel}` : ""}
+              </option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
@@ -2029,9 +2224,15 @@ setError(e.message);
             </Select>
           </label>
 
-          <label className={FIELD_LABEL} title="Pin runs to one account from the selected model's provider pool.">
+          <label
+            className={FIELD_LABEL}
+            title="Pin runs to one account from the selected model's provider pool."
+          >
             Provider account
-            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <Select
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+            >
               <option value="">Auto · shared pool rotation</option>
               {eligibleAccounts.map((x) => (
                 <option key={x.id} value={x.id}>
@@ -2043,33 +2244,49 @@ setError(e.message);
           </label>
 
           {accountId && (
-            <label className={FIELD_LABEL} title="Out of usage, runs switch to the fallback model rather than the shared pool, so this account's limits cap the cost. Prefer it rotates into the pool instead.">
+            <label
+              className={FIELD_LABEL}
+              title="Out of usage, runs switch to the fallback model rather than the shared pool, so this account's limits cap the cost. Prefer it rotates into the pool instead."
+            >
               When the pinned account is out of usage
               <Select
                 value={accountStrict ? "strict" : "pool"}
                 onChange={(e) => setAccountStrict(e.target.value === "strict")}
                 disabled={sandbox}
               >
-                <option value="strict">This account only · fall back by model (cost cap)</option>
-                <option value="pool">Prefer it · fall back to the shared pool</option>
+                <option value="strict">
+                  This account only · fall back by model (cost cap)
+                </option>
+                <option value="pool">
+                  Prefer it · fall back to the shared pool
+                </option>
               </Select>
             </label>
           )}
 
-          <label className={FIELD_LABEL} title="Pay-as-you-go spend past the subscription's included limits. Only applies to accounts with extra usage enabled at claude.ai, bounded by their monthly credit cap.">
+          <label
+            className={FIELD_LABEL}
+            title="Pay-as-you-go spend past the subscription's included limits. Only applies to accounts with extra usage enabled at claude.ai, bounded by their monthly credit cap."
+          >
             Usage credits
             <Select
               value={usageCredits ? "allow" : "never"}
               onChange={(e) => setUsageCredits(e.target.value === "allow")}
             >
-              <option value="never">Never · stop or fall back at the limit</option>
-              <option value="allow">Allowed · keep going on paid credits</option>
+              <option value="never">
+                Never · stop or fall back at the limit
+              </option>
+              <option value="allow">
+                Allowed · keep going on paid credits
+              </option>
             </Select>
           </label>
         </div>
       )}
 
-      {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+      {error && (
+        <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
+      )}
 
       <div className={FORM_ACTIONS}>
         {onBack && (
