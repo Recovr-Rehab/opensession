@@ -116,6 +116,7 @@ type RuntimeState = {
 	activeTimers?: Set<string>;
 	activeOutbox?: Map<number, string>;
 	activeOpeningOutbox?: Map<number, string>;
+	pendingOutbox?: Map<number, DurableOutboxItem>;
 	lastRuntimePollErrorAt?: number;
 };
 
@@ -135,6 +136,7 @@ const MAINTENANCE_CONTINUATION_DELAY_MS = 15_000;
 // Keep active physical effects out of the one-second discovery loop while
 // retaining a short, durable retry horizon if the gateway disappears.
 const ACTIVE_OUTBOX_RECHECK_MS = 30_000;
+const PENDING_OUTBOX_LIMIT = 512;
 
 export function registerSessionTimerHandler(
 	kind: string,
@@ -213,10 +215,13 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 		const now = Date.now();
 		const activeOutbox = (runtime.activeOutbox ??= new Map());
 		const activeOpeningOutbox = (runtime.activeOpeningOutbox ??= new Map());
-		const activeEffects = [
+		const pendingOutbox = (runtime.pendingOutbox ??= new Map());
+		const activeEffects = new Map<number, string>([
 			...activeOutbox.entries(),
 			...activeOpeningOutbox.entries(),
-		].map(([id, sessionId]) => ({ id, sessionId }));
+		]);
+		for (const item of pendingOutbox.values())
+			activeEffects.set(item.id, item.sessionId);
 		// Fetch ordinary and opening effects in one actor pass. Separate quotas
 		// preserve opening admission without opening and rescanning another batch
 		// of per-session SQLite databases every second.
@@ -228,7 +233,7 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 			effectKinds.includes(openingKind)
 				? [{ effectKinds: [openingKind], limit: OPENING_OUTBOX_CONCURRENCY }]
 				: [],
-			activeEffects,
+			[...activeEffects].map(([id, sessionId]) => ({ id, sessionId })),
 			now + ACTIVE_OUTBOX_RECHECK_MS,
 		);
 		const activeTimers = (runtime.activeTimers ??= new Set());
@@ -257,6 +262,10 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				.finally(() => activeTimers.delete(key));
 		}
 		for (const item of work.outbox) {
+			if (pendingOutbox.size >= PENDING_OUTBOX_LIMIT) break;
+			pendingOutbox.set(item.id, item);
+		}
+		for (const item of pendingOutbox.values()) {
 			// Opening turns can legitimately last for hours. Keep their bounded
 			// execution pool separate so eight accepted openings cannot starve
 			// delivery, preparation, or projection effects globally.
@@ -268,7 +277,12 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				item.kind === openingKind
 					? OPENING_OUTBOX_CONCURRENCY
 					: OUTBOX_CONCURRENCY;
-			if (active.size >= admissionLimit || active.has(item.id)) continue;
+			if (active.has(item.id)) {
+				pendingOutbox.delete(item.id);
+				continue;
+			}
+			if (active.size >= admissionLimit) continue;
+			pendingOutbox.delete(item.id);
 			active.set(item.id, item.sessionId);
 			void executeSessionEffect(item)
 				.then(async (executed) => {
