@@ -114,8 +114,8 @@ type RuntimeState = {
 	nextMaintenanceAt?: number;
 	maintenancePending?: boolean;
 	activeTimers?: Set<string>;
-	activeOutbox?: Set<number>;
-	activeOpeningOutbox?: Set<number>;
+	activeOutbox?: Map<number, string>;
+	activeOpeningOutbox?: Map<number, string>;
 	lastRuntimePollErrorAt?: number;
 };
 
@@ -132,6 +132,9 @@ runtime.startedAt ??= Date.now();
 const BOOT_MAINTENANCE_DELAY_MS = 5 * 60_000;
 const MAINTENANCE_SWEEP_INTERVAL_MS = 60 * 60_000;
 const MAINTENANCE_CONTINUATION_DELAY_MS = 15_000;
+// Keep active physical effects out of the one-second discovery loop while
+// retaining a short, durable retry horizon if the gateway disappears.
+const ACTIVE_OUTBOX_RECHECK_MS = 30_000;
 
 export function registerSessionTimerHandler(
 	kind: string,
@@ -208,6 +211,12 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 		const effectKinds = registeredSessionEffectKinds();
 		const openingKind = "creation_opening_turn";
 		const now = Date.now();
+		const activeOutbox = (runtime.activeOutbox ??= new Map());
+		const activeOpeningOutbox = (runtime.activeOpeningOutbox ??= new Map());
+		const activeEffects = [
+			...activeOutbox.entries(),
+			...activeOpeningOutbox.entries(),
+		].map(([id, sessionId]) => ({ id, sessionId }));
 		// Fetch ordinary and opening effects in one actor pass. Separate quotas
 		// preserve opening admission without opening and rescanning another batch
 		// of per-session SQLite databases every second.
@@ -219,6 +228,8 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 			effectKinds.includes(openingKind)
 				? [{ effectKinds: [openingKind], limit: OPENING_OUTBOX_CONCURRENCY }]
 				: [],
+			activeEffects,
+			now + ACTIVE_OUTBOX_RECHECK_MS,
 		);
 		const activeTimers = (runtime.activeTimers ??= new Set());
 		for (const timer of work.timers) {
@@ -245,8 +256,6 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				)
 				.finally(() => activeTimers.delete(key));
 		}
-		const activeOutbox = (runtime.activeOutbox ??= new Set());
-		const activeOpeningOutbox = (runtime.activeOpeningOutbox ??= new Set());
 		for (const item of work.outbox) {
 			// Opening turns can legitimately last for hours. Keep their bounded
 			// execution pool separate so eight accepted openings cannot starve
@@ -260,7 +269,7 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 					? OPENING_OUTBOX_CONCURRENCY
 					: OUTBOX_CONCURRENCY;
 			if (active.size >= admissionLimit || active.has(item.id)) continue;
-			active.add(item.id);
+			active.set(item.id, item.sessionId);
 			void executeSessionEffect(item)
 				.then(async (executed) => {
 					if (!executed) return;

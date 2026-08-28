@@ -917,12 +917,6 @@ describe("per-session session kernel storage", () => {
     ]);
     first.call("enqueueOutbox", [
       sessionId,
-      "ordinary_effect",
-      null,
-      "ordinary-two",
-    ]);
-    first.call("enqueueOutbox", [
-      sessionId,
       "creation_opening_turn",
       null,
       "opening-one",
@@ -950,6 +944,22 @@ describe("per-session session kernel storage", () => {
       "creation_opening_turn",
     ]);
     expect(recovered.metrics().kernelStoreCacheMisses).toBe(1);
+
+    const recheckAt = Date.now() + 30_000;
+    const whileActive = recovered.runtimeWork(
+      Date.now(),
+      [],
+      ["ordinary_effect"],
+      1,
+      [{ effectKinds: ["creation_opening_turn"], limit: 100 }],
+      work.outbox.map((item) => ({ id: item.id, sessionId: item.sessionId })),
+      recheckAt,
+    );
+    expect(whileActive.outbox).toEqual([]);
+    expect(recovered.central.isolatedDueWakeCandidates(recheckAt - 1, 100))
+      .not.toContain(sessionId);
+    expect(recovered.central.isolatedDueWakeCandidates(recheckAt, 100))
+      .toContain(sessionId);
     recovered.close();
   });
 

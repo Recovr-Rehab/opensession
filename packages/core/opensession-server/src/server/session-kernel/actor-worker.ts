@@ -468,6 +468,8 @@ export function startSessionKernelActorWorker(): void {
             request.effectKinds,
             request.limit,
             request.additionalOutboxGroups,
+            request.activeOutbox,
+            request.activeOutboxRecheckAt,
           ),
         });
       }

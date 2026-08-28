@@ -755,6 +755,8 @@ export async function sessionKernelRuntimeWork(
 		effectKinds: string[];
 		limit: number;
 	}> = [],
+	activeOutbox: Array<{ id: number; sessionId: string }> = [],
+	activeOutboxRecheckAt = now,
 ): Promise<{
   timers: DurableTimer[];
   outbox: import("./store").DurableOutboxItem[];
@@ -766,12 +768,20 @@ export async function sessionKernelRuntimeWork(
 			now,
 			limit,
 			additionalOutboxGroups,
+			activeOutbox,
+			activeOutboxRecheckAt,
 		);
 	const store = __sessionKernelStoreForTest();
 	const outbox = new Map<number, import("./store").DurableOutboxItem>();
-	for (const group of [{ effectKinds, limit }, ...additionalOutboxGroups])
-		for (const item of store.pendingOutbox(now, group.limit, group.effectKinds))
-			outbox.set(item.id, item);
+	const activeIds = activeOutbox.map((item) => item.id);
+	for (const group of [{ effectKinds, limit }, ...additionalOutboxGroups]) {
+		for (const item of store.pendingOutbox(
+			now,
+			group.limit,
+			group.effectKinds,
+			activeIds,
+		)) outbox.set(item.id, item);
+	}
 	return {
 		timers: store.dueTimers(now, limit, timerKinds),
 		outbox: [...outbox.values()],

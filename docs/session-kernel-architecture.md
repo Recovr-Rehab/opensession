@@ -457,7 +457,10 @@ wake record dirty. A crash can therefore leave an extra scan but cannot hide a
 committed timer or outbox item. Runtime reconciliation reads the authoritative
 session database, dispatches due work, and repairs its next-wake projection.
 Ordinary and opening-effect quotas share one bounded reconciliation pass, so a
-runtime tick never opens the same actor batch once per effect pool.
+runtime tick never opens the same actor batch once per effect pool. While a
+physical effect is active, its catalog projection advances to a 30-second
+recovery horizon instead of rereading the same actor every second. A gateway
+crash stops that renewal and makes the durable effect discoverable again.
 
 The gateway starts and handshakes the actor host before hydrating projections. A
 failed session-scoped critical settlement durably quarantines only that session,

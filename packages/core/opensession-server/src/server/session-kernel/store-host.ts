@@ -508,7 +508,16 @@ export class SessionKernelStoreHost {
       effectKinds: string[];
       limit: number;
     }> = [],
+    activeOutbox: Array<{ id: number; sessionId: string }> = [],
+    activeOutboxRecheckAt = now,
   ): { timers: DurableTimer[]; outbox: DurableOutboxItem[] } {
+    const activeIds = activeOutbox.map((item) => item.id);
+    const activeIdsBySession = new Map<string, number[]>();
+    for (const item of activeOutbox) {
+      const ids = activeIdsBySession.get(item.sessionId) ?? [];
+      ids.push(item.id);
+      activeIdsBySession.set(item.sessionId, ids);
+    }
     const outboxGroups = [
       { effectKinds, limit },
       ...additionalOutboxGroups,
@@ -580,12 +589,14 @@ export class SessionKernelStoreHost {
         now,
         Math.min(quota(group.limit), group.limit),
         group.effectKinds,
+        activeIds,
       ));
     }
 
     for (const sessionId of candidates) {
       const scanned = this.containIsolated(sessionId, "runtime:scan", () => {
         const store = this.openIsolated(sessionId);
+        const sessionActiveIds = activeIdsBySession.get(sessionId) ?? [];
         return {
           timers: timers.length < limit
             ? store.dueTimers(
@@ -600,11 +611,15 @@ export class SessionKernelStoreHost {
                   now,
                   Math.min(quota(group.limit), group.limit - group.items.length),
                   group.effectKinds,
+                  sessionActiveIds,
                 )
               : []
           ),
           nextTimerWakeAt: store.nextTimerWakeAt(),
-          nextOutboxWakeAt: store.nextOutboxWakeAt(),
+          nextOutboxWakeAt: store.nextOutboxWakeAt(
+            sessionActiveIds,
+            activeOutboxRecheckAt,
+          ),
         };
       });
       if (!scanned.ok) continue;
