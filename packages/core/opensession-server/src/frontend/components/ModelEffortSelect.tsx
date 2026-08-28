@@ -297,7 +297,7 @@ type ModelMenuOption = {
 	engine: string;
 	/** Picker section override from the registry ("dial" = The Dial). */
 	group?: string;
-	/** One-line subtitle rendered under the label (dial presets). */
+	/** One-line description rendered with the preset label. */
 	description?: string;
 };
 
@@ -598,6 +598,9 @@ export function ModelEffortSelect({
 		const selected = isSelected(option);
 		const optionLabel = standalone ? option.standaloneLabel : option.label;
 		const optionDescription = standalone ? undefined : option.description;
+		const inlineDescription =
+			!!optionDescription &&
+			(option.group === "dial" || option.group === "orchestrator");
 		const nextModelInfo = modelById.get(option.id);
 		const nextEfforts = nextModelInfo?.efforts ?? [];
 		const nextEffort =
@@ -658,9 +661,23 @@ export function ModelEffortSelect({
 						/>
 					</span>
 					{optionDescription ? (
-						<span className="flex min-w-0 flex-1 flex-col">
-							<span className="truncate">{optionLabel}</span>
-							<span className="truncate text-xs text-faint">{optionDescription}</span>
+						<span
+							className={cn(
+								"flex min-w-0 flex-1",
+								inlineDescription ? "items-baseline gap-1.5" : "flex-col",
+							)}
+						>
+							<span className={inlineDescription ? "shrink-0" : "truncate"}>
+								{optionLabel}
+							</span>
+							<span
+								className={cn(
+									"truncate text-xs text-faint",
+									inlineDescription && "min-w-0 flex-1",
+								)}
+							>
+								{optionDescription}
+							</span>
 						</span>
 					) : (
 						<span className="min-w-0 truncate">{optionLabel}</span>
