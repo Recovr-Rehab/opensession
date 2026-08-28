@@ -11,6 +11,7 @@ import type { BunFile, BunPlugin } from "bun";
 import { EMBEDDED_FRONTEND } from "./embedded-frontend";
 import { activeRunRecords } from "./run-journal";
 import { writeFileAtomic } from "./shared/atomic-write";
+import { publishStableFrontendSnapshot } from "./stable-frontend";
 import { stateDir } from "./paths";
 import { gitIdentityFor } from "./shared/user-mappings";
 import { broadcastToAll } from "./ws-hub";
@@ -498,12 +499,27 @@ export function renderIndexHtml(
 
 /** Point the served bundle at `meta`: render index.html and swap the store
  *  contents in place (never reassigned; routes hold the one reference). */
+function publishStableShell(): void {
+	const store = frontendStore();
+	if (!store.indexHtml || !store.version) return;
+	try {
+		publishStableFrontendSnapshot(frontendDeployStateDir(), {
+			releaseRoot: activeFrontendReleaseRoot(),
+			version: store.version,
+			indexHtml: store.indexHtml,
+		});
+	} catch (error) {
+		console.error("[frontend] could not publish stable ingress shell", error);
+	}
+}
+
 function applyBundle(meta: BundleMeta): string {
 	const store = frontendStore();
 	store.indexHtml = renderIndexHtml(meta);
 	store.gzip.clear(); // stale gzipped blobs were keyed by the old hashed names
 	store.version = bundleVersion(meta);
 	g.__opensessionFrontendMeta = meta;
+	publishStableShell();
 	return store.version;
 }
 
@@ -571,6 +587,7 @@ export function activateFrontendRelease(pointer: FrontendReleasePointer): string
 	store.gzip.clear();
 	store.version = bundleVersion(prepared.meta);
 	g.__opensessionFrontendMeta = prepared.meta;
+	publishStableShell();
 	console.log(`[frontend] promoted immutable release ${pointer.sha.slice(0, 10)} (v=${store.version})`);
 	return store.version;
 }
