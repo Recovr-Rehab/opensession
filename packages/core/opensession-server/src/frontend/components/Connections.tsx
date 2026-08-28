@@ -1057,59 +1057,61 @@ export function GithubAccounts({
     notifyContentSizeChange();
   }, [data, flow, flowState, error]);
 
-  // Stable identity: only setters are captured.
   const load = useCallback(async () => {
-    await (async () => {
-const res = await fetch(`${BASE_PATH}/api/connections/github`);
-      if (res.ok) setData(await res.json());
-})().catch(async () => {
-
-});
+    try {
+      setData(
+        await request<GithubAuthData>("/connections/github", {
+          label: "Could not load GitHub accounts",
+        }),
+      );
+    } catch {
+      // Keep the last successful account snapshot during transient refreshes.
+    }
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
-  // Poll the device flow until GitHub reports authorized / expired.
   useEffect(() => {
     if (!flow) return;
     let cancelled = false;
     let intervalMs = Math.max(flow.interval, 5) * 1000;
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
-      await (async () => {
-const res = await fetch(`${BASE_PATH}/api/connections/github/device/poll`, {
+      try {
+        const result = await request<
+          | { status: "pending" }
+          | { status: "slow_down"; interval: number }
+          | { status: "ok"; authEnabled?: boolean }
+          | { status: "error"; error: string }
+        >("/connections/github/device/poll", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceCode: flow.deviceCode }),
+          body: { deviceCode: flow.deviceCode },
+          label: "Could not check GitHub authorization",
         });
-        const body = await res.json();
         if (cancelled) return;
-        if (body.status === "ok") {
+        if (result.status === "ok") {
           setFlow(null);
           setFlowState("idle");
-          // authEnabled: this connect flipped the workspace into sign-in mode and
-          // the browser now holds the session cookie. A full reload re-runs the
-          // app's auth bootstrap so every panel reflects operator mode, rather
-          // than patching one card's state.
-          if (body.authEnabled) {
+          if (result.authEnabled) {
             window.location.reload();
             return;
           }
-          load();
+          void load();
           return;
         }
-        if (body.status === "slow_down") intervalMs = Math.max(body.interval, 5) * 1000;
-        if (body.status === "error") {
-          setError(body.error);
+        if (result.status === "slow_down") {
+          intervalMs = Math.max(result.interval, 5) * 1000;
+        } else if (result.status === "error") {
+          setError(result.error);
           setFlow(null);
           setFlowState("idle");
           return;
         }
-})().catch(async () => {
-
-});
+      } catch {
+        // Authorization polling tolerates transient network failures.
+      }
       if (!cancelled) timer = setTimeout(tick, intervalMs);
     };
     timer = setTimeout(tick, intervalMs);
@@ -1122,16 +1124,17 @@ const res = await fetch(`${BASE_PATH}/api/connections/github/device/poll`, {
   async function startConnect() {
     setError(null);
     setFlowState("starting");
-    await (async () => {
-const res = await fetch(`${BASE_PATH}/api/connections/github/device`, { method: "POST" });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-      setFlow(body);
+    try {
+      const nextFlow = await request<DeviceFlow>("/connections/github/device", {
+        method: "POST",
+        label: "Could not start GitHub authorization",
+      });
+      setFlow(nextFlow);
       setFlowState("waiting");
-})().catch(async (e: any) => {
-setError(e.message);
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not start GitHub authorization"));
       setFlowState("idle");
-});
+    }
   }
 
   function cancelConnect() {
@@ -1173,34 +1176,24 @@ setError(e.message);
     const slug = appSlug.trim();
     const secret = appSecret.trim();
     const privateKey = appPrivateKey.trim();
-    // The secret is required: the device-flow token expires and is refreshed
-    // with it, so without one the connection would stop after ~8h.
     if (!clientId || !slug || !secret) return;
     setError(null);
     setSavingApp(true);
-    await (async () => {
-const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
+    try {
+      await request("/connections/github/app", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // App setup records connect-time sign-in intent for either owner. The
-        // private key is optional but lets the bot/agent and checks-read mint
-        // installation tokens.
-        body: JSON.stringify({ clientId, slug, secret, appOrg, privateKey }),
+        body: { clientId, slug, secret, appOrg, privateKey },
+        label: "Could not save GitHub App",
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       setAppClientId("");
       setAppSlug("");
       setAppSecret("");
       setAppPrivateKey("");
-      // getConfig() re-reads on the file change, so the reload shows the App as
-      // configured and switches the card to its device-flow connect.
-      load();
-})().catch(async (e: any) => {
-setError(e.message);
-}).finally(async () => {
-setSavingApp(false);
-});
+      void load();
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not save GitHub App"));
+    }
+    setSavingApp(false);
   }
 
   async function removeApp() {
@@ -1208,51 +1201,50 @@ setSavingApp(false);
       !confirm(
         "Remove the GitHub App configuration? You'll need to set up an app again before you can connect GitHub.",
       )
-    )
+    ) {
       return;
+    }
     setError(null);
-    await (async () => {
-const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
+    try {
+      await request("/connections/github/app", {
         method: "DELETE",
+        label: "Could not remove GitHub App",
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-      load();
-})().catch(async (e: any) => {
-setError(e.message);
-});
+      void load();
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not remove GitHub App"));
+    }
   }
 
-  // Switching the wizard owner back to "You" clears the captured org owner.
-  // The subsequent personal App setup arms its own connect-time sign-in intent.
   async function clearOrgIntent() {
-    await (async () => {
-const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
+    try {
+      await request("/connections/github/app", {
         method: "DELETE",
+        label: "Could not clear GitHub organization setup",
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error || `Failed: ${res.status}`);
-      }
-      load();
-})().catch(async (e: any) => {
-setError(e.message);
-});
+      void load();
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not clear GitHub organization setup"));
+    }
   }
 
   async function disconnect(login: string) {
-    if (!confirm(`Disconnect @${login}? Your GitHub actions will be unavailable until you reconnect.`)) return;
-    await (async () => {
-const res = await fetch(
-        `${BASE_PATH}/api/connections/github/account/${encodeURIComponent(login)}`,
-        { method: "DELETE" },
+    if (
+      !confirm(
+        `Disconnect @${login}? Your GitHub actions will be unavailable until you reconnect.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await request(
+        `/connections/github/account/${encodeURIComponent(login)}`,
+        { method: "DELETE", label: `Could not disconnect @${login}` },
       );
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-      load();
-})().catch(async (e: any) => {
-setError(e.message);
-});
+      void load();
+    } catch (cause) {
+      setError(errorMessage(cause, `Could not disconnect @${login}`));
+    }
   }
 
   if (!data) return loadingFallback;
