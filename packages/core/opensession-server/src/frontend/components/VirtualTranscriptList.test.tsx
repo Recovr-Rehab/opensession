@@ -30,6 +30,10 @@ describe("VirtualTranscriptList", () => {
 		expect(shouldAdjustTranscriptScroll(700, 600)).toBe(false);
 	});
 
+	test("compensates a newly hydrated head row while it straddles the viewport", () => {
+		expect(shouldAdjustTranscriptScroll(1_200, 600, true)).toBe(true);
+	});
+
 	test("renders complete semantic content without browser measurement", () => {
 		const html = renderToStaticMarkup(
 			<VirtualTranscriptList

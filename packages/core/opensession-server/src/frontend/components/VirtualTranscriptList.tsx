@@ -105,6 +105,17 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	private topApproachGate = new TranscriptTopApproachGate();
 	private rowObserver: ResizeObserver | null = null;
 	private rowRefs = new Map<string, (node: HTMLDivElement | null) => void>();
+	/** Rows newly inserted at the hydrated head need measurement compensation
+	 * even while they straddle the viewport. The normal TanStack predicate only
+	 * adjusts rows whose estimated end is already above scrollTop; a tall new
+	 * row can therefore paint for one frame before the next correction. */
+	private headGrowthKeys = new Set<string>();
+	private headGrowthGeneration = 0;
+	private scheduledHeadGrowthGeneration = 0;
+	private headGrowthTimer: number | undefined;
+	private renderedGrowth:
+		| { key: string; version: number | undefined }
+		| undefined;
 	/** Every block key this adapter instance has ever mounted. The first build
 	 *  seeds it (opening a session is not an arrival); afterwards, a tail key
 	 *  missing from the set just arrived live and plays the entrance fade. Keys
@@ -155,6 +166,7 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		snapshot: number | null,
 	) {
 		this.virtualizer._willUpdate();
+		this.scheduleHeadGrowthClear();
 		if (snapshot !== null) {
 			// Height gained by this commit's own mutation goes back on scrollTop
 			// before paint, holding the reader's place while history grows above.
@@ -175,7 +187,52 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		this.navigationCleanup?.();
 		this.clearTopApproach();
 		if (this.visibleTimer !== undefined) window.clearTimeout(this.visibleTimer);
+		if (this.headGrowthTimer !== undefined)
+			window.clearTimeout(this.headGrowthTimer);
 		this.rowObserver?.disconnect();
+	}
+
+	private prepareHeadGrowth(props: Omit<Props, "enabled">) {
+		const key = props.topGrowthKey ?? props.items[0]?.key ?? "";
+		const next = { key, version: props.topGrowthVersion };
+		const previous = this.renderedGrowth;
+		this.renderedGrowth = next;
+		if (!previous || !key) return;
+
+		let added = false;
+		if (key !== previous.key) {
+			const previousIndex = props.items.findIndex(
+				(item) => item.key === previous.key,
+			);
+			if (previousIndex > 0) {
+				for (const item of props.items.slice(0, previousIndex)) {
+					this.headGrowthKeys.add(item.key);
+					added = true;
+				}
+			}
+		} else if (next.version !== previous.version) {
+			// The bounded opening payload can start inside a structural range.
+			// Completing its older prefix grows the same row above visible content.
+			this.headGrowthKeys.add(key);
+			added = true;
+		}
+		if (added) this.headGrowthGeneration++;
+	}
+
+	private scheduleHeadGrowthClear() {
+		if (
+			this.headGrowthKeys.size === 0 ||
+			this.scheduledHeadGrowthGeneration === this.headGrowthGeneration
+		)
+			return;
+		this.scheduledHeadGrowthGeneration = this.headGrowthGeneration;
+		if (this.headGrowthTimer !== undefined)
+			window.clearTimeout(this.headGrowthTimer);
+		const generation = this.headGrowthGeneration;
+		this.headGrowthTimer = window.setTimeout(() => {
+			this.headGrowthTimer = undefined;
+			if (this.headGrowthGeneration === generation) this.headGrowthKeys.clear();
+		}, 750);
 	}
 
 	private syncSeeded(sizeCacheKey?: string) {
@@ -425,6 +482,7 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	render() {
 		this.rendering = true;
 		this.syncSeeded(this.props.sizeCacheKey);
+		this.prepareHeadGrowth(this.props);
 		this.virtualizer.setOptions(this.options(this.props));
 		this.virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
 			item,
@@ -443,7 +501,11 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 					scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
 				if (fromBottom < 120) return false;
 			}
-			return shouldAdjustTranscriptScroll(item.end, instance.scrollOffset ?? 0);
+			return shouldAdjustTranscriptScroll(
+				item.end,
+				instance.scrollOffset ?? 0,
+				this.headGrowthKeys.has(String(item.key)),
+			);
 		};
 		const virtualItems = this.virtualizer.getVirtualItems();
 		const totalSize = this.virtualizer.getTotalSize();
@@ -493,8 +555,9 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 export function shouldAdjustTranscriptScroll(
 	itemEnd: number,
 	scrollOffset: number,
+	headGrowth = false,
 ): boolean {
-	return itemEnd <= scrollOffset + 1;
+	return headGrowth || itemEnd <= scrollOffset + 1;
 }
 
 export function virtualTranscriptRange(
