@@ -43,7 +43,11 @@ export interface AgentModule {
    * Optional sidebar feed (the feeds design). Called once at feed
    * registration; return null when the module's backing connection isn't
    * configured (hides the band). Import the FeedProvider type from
-   * src/server/feeds.
+   * src/server/feeds. Prefer getFeeds() when a module contributes more
+   * than one band.
    */
   getFeed?(): import("../server/feeds").FeedProvider | null;
+
+  /** Optional multi-feed contribution. When present, getFeed() is ignored. */
+  getFeeds?(): import("../server/feeds").FeedProvider[];
 }

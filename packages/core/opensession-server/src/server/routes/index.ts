@@ -11,6 +11,8 @@ import { handleAuthRoutes } from "./auth";
 import { handleMediaRoutes } from "./media";
 import { handleStaticAssetsRoutes } from "./static-assets";
 import { handlePlainRoutes } from "./plain";
+import { handleFeaturebaseRoutes } from "./featurebase";
+import { handleTracesRoutes } from "./traces";
 import { handleFeedsRoutes } from "./feeds";
 import { handleSlackChannelRoutes } from "./slack-channels";
 import { handleSlackComposeRoutes } from "./slack-compose";
@@ -67,6 +69,8 @@ export const routeHandlers: RouteHandler[] = [
 	handleMediaRoutes,
 	handleStaticAssetsRoutes,
 	handlePlainRoutes,
+	handleFeaturebaseRoutes,
+	handleTracesRoutes,
 	handleFeedsRoutes,
 	handleSlackChannelRoutes,
 	handleSlackComposeRoutes,

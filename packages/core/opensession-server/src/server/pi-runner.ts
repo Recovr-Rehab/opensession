@@ -2831,6 +2831,13 @@ async function* runPiAttempt(
       ...usageAuditFields(),
       ...(terminal.type === "done" ? {} : { error: terminal.content }),
     });
+    if (terminal.type === "done" && journal?.osSessionId) {
+      void import("../agents/traces/publish")
+        .then(({ scheduleShareOpenSessionTrace }) =>
+          scheduleShareOpenSessionTrace(journal.osSessionId!, journal.kind),
+        )
+        .catch((error) => console.warn("[traces] share schedule failed:", error));
+    }
     yield terminal;
   } catch (e: any) {
     if (abort.signal.aborted) {

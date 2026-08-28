@@ -17,8 +17,8 @@
  * ARRAY ORDER IS BOOT ORDER. It matches the original hand-written sequence
  * (plain, linear, slack, stripe, grafana, github) so that agent
  * registration — including webhook route registration — happens in exactly the
- * order it always has. Present them in a friendlier order in UI if you like,
- * but do not reshuffle this array casually.
+ * order it always has. Append new integrations; do not reshuffle. Present
+ * them in a friendlier order in UI if you like.
  *
  * Other invariants preserved from the original blocks:
  *  - a failing import logs and is skipped; it never takes the server down
@@ -220,6 +220,49 @@ export const INTEGRATIONS: IntegrationSpec[] = [
     load: async () => {
       const { CodeStorageIntegration } = await import("../codestorage/integration");
       return new CodeStorageIntegration();
+    },
+  },
+  {
+    id: "featurebase",
+    label: "Featurebase",
+    doc: "docs/setup/featurebase.md",
+    enableFlag: "ENABLE_FEATUREBASE_AGENT",
+    env: [
+      { name: "FEATUREBASE_API_KEY", required: true, description: "API key from Featurebase → Settings → API" },
+      { name: "FEATUREBASE_WEBHOOK_SECRET", description: "Webhook signing secret (starts with whsec_)" },
+      { name: "FEATUREBASE_ADMIN_ID", description: "Your Featurebase admin id, used as the author of replies and notes" },
+      { name: "FEATUREBASE_ORG_URL", description: "Public portal URL, e.g. https://support.recovr.com" },
+      { name: "FEATUREBASE_MENTION_HANDLE", description: "Optional @handle in internal notes that wakes a linked session" },
+    ],
+    links: [
+      { label: "API keys", url: "https://auth.featurebase.app/choose-org?redirect=/settings/api" },
+      { label: "Webhooks", url: "https://auth.featurebase.app/choose-org?redirect=/settings/webhooks" },
+      { label: "MCP connectors", url: "https://auth.featurebase.app/choose-org?redirect=/settings/mcp" },
+    ],
+    load: async () => {
+      const { FeaturebaseAgent } = await import("../../agents/featurebase/index");
+      return new FeaturebaseAgent();
+    },
+  },
+  {
+    id: "traces",
+    label: "Traces",
+    doc: "docs/setup/traces.md",
+    enableFlag: "ENABLE_TRACES_AGENT",
+    env: [
+      {
+        name: "TRACES_NAMESPACE_SLUG",
+        description: "Org slug to publish into (e.g. recovr). Each person still connects as themselves.",
+      },
+    ],
+    links: [
+      { label: "Traces", url: "https://traces.com" },
+      { label: "Authentication", url: "https://traces.com/docs/getting-started/authentication" },
+      { label: "API", url: "https://traces.com/docs/api-reference" },
+    ],
+    load: async () => {
+      const { TracesAgent } = await import("../../agents/traces/index");
+      return new TracesAgent();
     },
   },
 ];

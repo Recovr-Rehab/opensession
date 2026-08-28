@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { createHmac } from "node:crypto";
 import {
+  verifyFeaturebaseSignature,
   verifyGitHubSignature,
   verifyLinearSignature,
   verifyPlainSignature,
@@ -204,5 +205,36 @@ describe("verifyStripeSignature", () => {
   it("rejects when the secret is empty (fail closed)", () => {
     const ts = freshTs();
     expect(verifyStripeSignature(BODY, `t=${ts},v1=${sign(BODY, ts, "")}`, "")).toBe(false);
+  });
+});
+
+describe("verifyFeaturebaseSignature", () => {
+  const freshTs = () => Math.floor(Date.now() / 1000).toString();
+  const signHex = (body: string, ts: string, secret = SECRET) =>
+    hmacHex(secret, `${ts}.${body}`);
+
+  it("accepts a valid hex signature with a fresh timestamp", () => {
+    const ts = freshTs();
+    expect(verifyFeaturebaseSignature(BODY, signHex(BODY, ts), ts, SECRET)).toBe(true);
+  });
+
+  it("accepts a sha256= prefixed signature", () => {
+    const ts = freshTs();
+    expect(verifyFeaturebaseSignature(BODY, `sha256=${signHex(BODY, ts)}`, ts, SECRET)).toBe(true);
+  });
+
+  it("rejects a tampered body", () => {
+    const ts = freshTs();
+    expect(verifyFeaturebaseSignature(BODY + "x", signHex(BODY, ts), ts, SECRET)).toBe(false);
+  });
+
+  it("rejects an expired timestamp", () => {
+    const oldTs = (Math.floor(Date.now() / 1000) - 600).toString();
+    expect(verifyFeaturebaseSignature(BODY, signHex(BODY, oldTs), oldTs, SECRET)).toBe(false);
+  });
+
+  it("rejects when the secret is empty (fail closed)", () => {
+    const ts = freshTs();
+    expect(verifyFeaturebaseSignature(BODY, signHex(BODY, ts), ts, "")).toBe(false);
   });
 });

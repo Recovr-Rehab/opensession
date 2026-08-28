@@ -9,6 +9,8 @@ export * from "./api/previews";
 export * from "./api/workspaces";
 export * from "./api/repos";
 export * from "./api/plain";
+export * from "./api/featurebase";
+export * from "./api/traces";
 export * from "./api/feeds";
 export * from "./api/automations";
 export * from "./api/settings";

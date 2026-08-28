@@ -36,7 +36,7 @@ import {
 import { createWorktree, ensureAskCheckout, getRepo, listWorktrees, REPOS, worktreeHeadBranch } from "./worktree";
 import { engineSessionPatch } from "./sessions";
 import { updateSessionFile } from "./session-cache";
-import { resolvePlainWorkspace } from "./workspace-resolve";
+import { resolveExternalWorkspace, resolvePlainWorkspace } from "./workspace-resolve";
 import { getWorkspace } from "./workspaces";
 import type { NativeSessionFile } from "./types";
 import { stateDir } from "./paths";
@@ -1364,12 +1364,28 @@ export async function runAutomation(
     // title as the session title
     let plainThreadId: string | undefined;
     let eventTitle: string | undefined;
+    let eventExternalRef: import("./types").ExternalRef | undefined;
     if (options?.eventContext) {
       try {
         const parsed = JSON.parse(options.eventContext);
         if (typeof parsed.threadId === "string") plainThreadId = parsed.threadId;
         if (typeof parsed.title === "string" && parsed.title.trim()) {
           eventTitle = parsed.title.trim().slice(0, 100);
+        }
+        if (parsed.source === "featurebase" && typeof parsed.ticketId === "string") {
+          eventExternalRef = {
+            kind: "featurebase-ticket",
+            id: parsed.ticketId,
+            ...(eventTitle ? { title: eventTitle } : {}),
+            ...(typeof parsed.ticketUrl === "string" ? { url: parsed.ticketUrl } : {}),
+          };
+        } else if (parsed.source === "featurebase" && typeof parsed.postId === "string") {
+          eventExternalRef = {
+            kind: "featurebase-post",
+            id: parsed.postId,
+            ...(eventTitle ? { title: eventTitle } : {}),
+            ...(typeof parsed.postUrl === "string" ? { url: parsed.postUrl } : {}),
+          };
         }
       } catch {}
     }
@@ -1381,6 +1397,13 @@ export async function runAutomation(
         ticketWorkspaceId = resolvePlainWorkspace({
           threadId: plainThreadId,
           title: eventTitle,
+          createdBy: `${automation.name} (automation)`,
+        }).workspace.id;
+      } catch {}
+    } else if (eventExternalRef) {
+      try {
+        ticketWorkspaceId = resolveExternalWorkspace({
+          ref: eventExternalRef,
           createdBy: `${automation.name} (automation)`,
         }).workspace.id;
       } catch {}
@@ -1428,6 +1451,7 @@ export async function runAutomation(
       updateSessionFile(bksId, (data) => {
         // Widen to Partial: the file may not exist yet (create-if-absent).
         const existing: Partial<NativeSessionFile> = data;
+        const incomingRef = eventExternalRef;
         return {
           id: bksId,
           claudeSessionId: "",
@@ -1458,6 +1482,16 @@ export async function runAutomation(
           ...(plainThreadId ? { plainThreadId } : {}),
           ...(ticketWorkspaceId ? { workspaceId: ticketWorkspaceId } : {}),
           ...existing,
+          ...(incomingRef
+            ? {
+                externalRefs: [
+                  ...(existing.externalRefs || []).filter(
+                    (ref) => !(ref.kind === incomingRef.kind && ref.id === incomingRef.id),
+                  ),
+                  incomingRef,
+                ],
+              }
+            : {}),
           ...(engineSessionId
             ? engineSessionPatch(effectiveProvider, engineSessionId)
             : {}),

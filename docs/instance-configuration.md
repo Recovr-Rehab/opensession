@@ -32,10 +32,16 @@ sections the example omits, including `storage` and `organization`.
   `integrations.plain.workspaceId` whenever it is set, and code.storage
   support activates when `org` and `privateKeyPath` are configured.
   Integration-specific values such as OAuth callbacks, GitHub/Plain mention
-  handles, Slack workspace metadata, and Linear team keys live in the same
+  handles, Slack workspace metadata, Linear team keys, and Featurebase admin
+  id / org URL live in the same
   section. Plain also takes `integrations.plain.apiUrl`, the GraphQL endpoint
   for direct API calls, which defaults to
-  `https://core-api.uk.plain.com/graphql/v1`.
+  `https://core-api.uk.plain.com/graphql/v1`. Featurebase uses
+  `integrations.featurebase.apiBase` (default `https://do.featurebase.app`).
+  Traces publishing uses `integrations.traces.namespaceSlug` plus per-user
+  GitHub device sessions in `~/.opensession/traces-auth.json` by default
+  (`OPENSESSION_TRACES_AUTH_STORE` can select another file); it does not
+  publish with a shared API key.
 - Company routines are data. `integrations.seeds.automations` creates records
   only when `integrations.seeds.enabled` is true. Existing persisted records are never
   deleted when seeds are disabled.

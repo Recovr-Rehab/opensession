@@ -27,7 +27,7 @@ supervised session kernel, and run processes provide:
 ```mermaid
 flowchart LR
   clients["<b>Clients</b><br/>web UI · PWA · desktop shell<br/>native iOS/macOS · Chrome extension"]
-  hooks["<b>External events</b><br/>Slack · Linear · Plain<br/>GitHub · Stripe · code.storage"]
+  hooks["<b>External events</b><br/>Slack · Linear · Plain · Featurebase<br/>GitHub · Stripe · code.storage"]
 
   subgraph gateway["gateway process"]
     direction TB
@@ -175,6 +175,8 @@ that touches them.
 | [codestorage.md](codestorage.md) | code.storage as an alternative git host — signing key, repos, branch reviews |
 | [linear.md](linear.md) | Linear OAuth app, webhooks, the Linear agent |
 | [plain.md](plain.md) | Plain support tickets, the triage automation |
+| [featurebase.md](featurebase.md) | Featurebase tickets, feedback posts, and triage automations |
+| [traces.md](traces.md) | Publish Open Session runs to traces.com as each GitHub user |
 | [integrations-misc.md](integrations-misc.md) | Stripe, WorkOS, Grafana/Sentry/Tinybird, web push, voice |
 | [engines.md](engines.md) | the Pi engine, account pools, provider keys, run isolation |
 | [../self-hosting-sandboxes.md](../self-hosting-sandboxes.md) | certified Docker, Daytona, Box, and Modal sandboxes; implemented E2B and Lambda adapters remain unavailable pending certification |

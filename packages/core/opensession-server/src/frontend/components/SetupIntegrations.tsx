@@ -27,6 +27,8 @@ import {
 
 const INTEGRATION_DESCRIPTIONS: Record<string, string> = {
 	plain: "Support threads, internal notes, and triage webhooks.",
+	featurebase: "Support tickets, feedback posts, and triage webhooks.",
+	traces: "Publish your Open Session runs to traces.com as you.",
 	linear: "Assigned issues become scoped coding sessions.",
 	slack: "DMs, mentions, session channels, and interactive controls.",
 	stripe: "Dispute webhooks routed into scoped automations.",

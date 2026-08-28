@@ -36,14 +36,16 @@ configuration for the run.
 - Automation runs hard-deny _customer-facing, identity-mutating, and incident.io
   mutation_ tools (enforced for direct runs and interactive resumes of
   automation sessions):
-  Plain thread writes (reply_to_thread, mark_thread_done/todo, snooze_thread)
+  Plain thread writes (reply_to_thread, mark_thread_done/todo, snooze_thread),
+  Featurebase customer-facing ticket/conversation replies,
   and the WorkOS write/destructive subset (create/delete/update user+org,
   revoke, invitations, password/verification emails, impersonation URLs).
   incident.io is declare-and-read only: `incident_create` may create a triage
   incident, while incident updates, follow-up writes, escalation responses,
   alert attachment changes, investigation controls, extension writes, and
   skill-feedback writes are stripped. Reads stay allowed; suggested customer
-  replies go in an internal Plain note. Linear (including issue creation) and
+  replies go in an internal Plain note (or the Featurebase session report —
+  Featurebase automations are Reader-only). Linear (including issue creation) and
   Sentry are internal, so their writes are allowed. That is the "spin off
   work" affordance.
 - Automations run on Pi in detached run hosts. `runAutomation` maps every

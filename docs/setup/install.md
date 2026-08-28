@@ -385,6 +385,8 @@ credentials its setup page marks as required. Common operator-facing variables:
 | GitHub | App: `OPENSESSION_GITHUB_CLIENT_ID`, `OPENSESSION_GITHUB_CLIENT_SECRET`, `OPENSESSION_GITHUB_APP_SLUG`, `OPENSESSION_GITHUB_APP_KEY`; webhook: `GITHUB_WEBHOOK_SECRET` | [github.md](github.md) |
 | Linear | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET`, `LINEAR_WEBHOOK_SECRET`, `LINEAR_API_KEY` | [linear.md](linear.md) |
 | Plain | `PLAIN_API_KEY`, `PLAIN_WEBHOOK_SECRET`, `PLAIN_*_MODEL` ×2 | [plain.md](plain.md) |
+| Featurebase | `FEATUREBASE_API_KEY`, `FEATUREBASE_WEBHOOK_SECRET`, `FEATUREBASE_ADMIN_ID`, `FEATUREBASE_ORG_URL` | [featurebase.md](featurebase.md) |
+| Traces | `TRACES_NAMESPACE_SLUG` (per-user GitHub connect in Settings, not a shared API key) | [traces.md](traces.md) |
 | Stripe | `STRIPE_WEBHOOK_SECRET` | [integrations-misc.md](integrations-misc.md#stripe) |
 | Grafana | `GRAFANA_URL`, `GRAFANA_SERVICE_ACCOUNT_TOKEN`, `LOKI_DATASOURCE_UID` | [integrations-misc.md](integrations-misc.md#grafana-poller) |
 | Voice | `OPENAI_API_KEY`, `GROQ_API_KEY`, `WHISPER_CLI`, `WHISPER_MODEL` | [integrations-misc.md](integrations-misc.md#voice--transcription) |
@@ -393,7 +395,7 @@ credentials its setup page marks as required. Common operator-facing variables:
 | Previews | `PREVIEW_HOST` | Caddy-fronted live previews (`packages/core/opensession-server/src/server/preview.ts`) |
 
 **Feature flags** — `ENABLE_SLACK_AGENT`, `ENABLE_LINEAR_AGENT`,
-`ENABLE_PLAIN_AGENT`, `ENABLE_GITHUB_AGENT`, `ENABLE_STRIPE_AGENT`,
+`ENABLE_PLAIN_AGENT`, `ENABLE_FEATUREBASE_AGENT`, `ENABLE_TRACES_AGENT`, `ENABLE_GITHUB_AGENT`, `ENABLE_STRIPE_AGENT`,
 `ENABLE_GRAFANA_POLLER`, and `ENABLE_CODESTORAGE`. All **default OFF**; only
 the literal string `true` enables (not `1`). The env flag wins when set,
 otherwise `integrations.<id>.enabled` decides. Changes require a restart. See

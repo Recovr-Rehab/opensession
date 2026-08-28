@@ -133,3 +133,38 @@ export function verifyStripeSignature(
     }
   });
 }
+
+function equalUtf8(left: string, right: string): boolean {
+  const leftBuf = Buffer.from(left);
+  const rightBuf = Buffer.from(right);
+  if (leftBuf.length !== rightBuf.length) return false;
+  try {
+    return timingSafeEqual(leftBuf, rightBuf);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Verify Featurebase webhook signature.
+ * Headers: X-Webhook-Signature, X-Webhook-Timestamp
+ * HMAC-SHA256 of "{timestamp}.{body}" with the webhook secret (whsec_…).
+ * Accepts hex or base64, with or without a sha256= prefix. Fail-closed when
+ * the secret is missing. Rejects timestamps outside a 5-minute window.
+ */
+export function verifyFeaturebaseSignature(
+  body: string,
+  signature: string,
+  timestamp: string,
+  secret: string,
+): boolean {
+  if (!secret || !signature || !timestamp) return false;
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) return false;
+
+  const payload = `${timestamp}.${body}`;
+  const hex = createHmac("sha256", secret).update(payload, "utf8").digest("hex");
+  const b64 = createHmac("sha256", secret).update(payload, "utf8").digest("base64");
+  const given = signature.trim().replace(/^sha256=/i, "");
+  return equalUtf8(given, hex) || equalUtf8(given, b64);
+}
