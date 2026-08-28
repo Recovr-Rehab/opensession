@@ -585,6 +585,26 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		setTurnPrefs(null);
 	});
 
+	test("coalesces consecutive reasoning revisions into their latest visible step", () => {
+		const entries: TranscriptEntry[] = [
+			{ id: "prompt", type: "user", content: "Check it", timestamp: "2026-08-28T05:00:00Z" },
+			{ id: "reasoning-1", type: "assistant", content: "**Inspecting the current state**\n\nThe first probe found an older release.", isReasoning: true, timestamp: "2026-08-28T05:00:01Z" },
+			{ id: "reasoning-2", type: "assistant", content: "**Checking deployment status**", isReasoning: true, timestamp: "2026-08-28T05:00:02Z" },
+			{ id: "tool", type: "tool_use", toolUseId: "tool-call", toolName: "bash", toolInput: { command: "git status" }, content: "Using bash", timestamp: "2026-08-28T05:00:03Z" },
+			{ id: "reasoning-3", type: "assistant", content: "**Verifying the release**", isReasoning: true, timestamp: "2026-08-28T05:00:04Z" },
+			{ id: "answer", type: "assistant", content: "Done.", timestamp: "2026-08-28T05:00:05Z" },
+		];
+		setTurnPrefs("open", "folded");
+		const html = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+
+		expect(html.match(/data-reasoning=""/g)).toHaveLength(2);
+		expect(html).not.toContain("Inspecting the current state");
+		expect(html).toContain("The first probe found an older release.");
+		expect(html).toContain("Checking deployment status");
+		expect(html).toContain("Verifying the release");
+		setTurnPrefs(null);
+	});
+
 	test("keeps reasoning quiet inside one work disclosure", () => {
 		const entries: TranscriptEntry[] = [
 			{ id: "prompt", type: "user", content: "Check it", timestamp: "2026-08-28T06:00:00Z" },

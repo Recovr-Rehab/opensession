@@ -160,20 +160,19 @@ export const TurnBlock = function TurnBlock({
   // line collapses by dropping characters off its tail instead of overflowing.
   const metaLabel = [!live && duration, countsLabel].filter(Boolean).join(" · ");
 
-  // Interleave: consecutive tool calls share one timeline rail; intermediate
-  // assistant messages break the rail into segments.
+  // Interleave tool runs and reasoning runs. Consecutive summary events are
+  // status revisions, not separate moments in the work: keep only their latest
+  // heading while retaining any prose and media they carried. A tool call is
+  // the boundary that makes the next reasoning update a new visible step.
   const sections: Array<
     | { kind: "tools"; items: TranscriptEntry[] }
-    | { kind: "msg"; entry: TranscriptEntry }
+    | { kind: "reasoning"; items: TranscriptEntry[] }
   > = [];
   for (const it of items) {
-    if (it.type === "tool_use") {
-      const last = sections[sections.length - 1];
-      if (last?.kind === "tools") last.items.push(it);
-      else sections.push({ kind: "tools", items: [it] });
-    } else {
-      sections.push({ kind: "msg", entry: it });
-    }
+    const kind = it.type === "tool_use" ? "tools" : "reasoning";
+    const last = sections[sections.length - 1];
+    if (last?.kind === kind) last.items.push(it);
+    else sections.push({ kind, items: [it] });
   }
   // Survives the fold: a marked screenshot is the answer to "show me", so
   // closing the turn takes the steps and leaves the picture. Only while the
@@ -273,11 +272,13 @@ export const TurnBlock = function TurnBlock({
             className="absolute inset-y-0 -left-2 w-4 cursor-pointer border-0 bg-transparent p-0 after:absolute after:inset-y-0 after:left-1/2 after:border-l after:border-transparent after:transition-colors hover:after:border-line-strong focus-visible:after:border-line-strong"
           />
           {sections.map((sec) =>
-            sec.kind === "msg" ? (
+            sec.kind === "reasoning" ? (
               <TurnMessage
-                key={sec.entry.id}
-                entry={sec.entry}
-                active={sec.entry === activeReasoning}
+                key={sec.items[0].id}
+                entries={sec.items}
+                active={
+                  activeReasoning !== undefined && sec.items.includes(activeReasoning)
+                }
                 sessionId={sessionId}
               />
             ) : (
@@ -649,19 +650,26 @@ function sameRunInputs(
   return true;
 }
 
-/** A reasoning update inside the work rail, stripped of provider bold chrome. */
+/** One visible reasoning step inside the work rail. Adjacent provider events
+ * revise its heading instead of producing a ladder of near-identical traces. */
 function TurnMessage({
-  entry,
+  entries,
   active,
   sessionId,
 }: {
-  entry: TranscriptEntry;
+  entries: TranscriptEntry[];
   active: boolean;
   sessionId?: string;
 }) {
-  const { title, body } = reasoningDisplay(entry.content);
+  const displays = entries.map((entry) => reasoningDisplay(entry.content));
+  const title = displays.findLast((display) => display.title)?.title ?? "";
+  const last = entries[entries.length - 1];
   return (
-    <div className="my-2 px-1" data-eid={entry.id} data-reasoning="">
+    <div
+      className="my-2 px-1"
+      data-eid={last.id}
+      data-reasoning=""
+    >
       {title ? (
         <div className={cn(msgReasoningTitle, active && msgReasoningShimmer)}>
           {title}
@@ -671,15 +679,25 @@ function TurnMessage({
         // heading. Keep that prose readable and shimmer a stable activity label.
         <div className={cn(msgReasoningTitle, msgReasoningShimmer)}>Thinking</div>
       ) : null}
-      {body && (
-        <ClampedBody
-          className={cn(msgReasoningBody, "markdown")}
-          content={body}
-          entry={entry}
+      {entries.map((entry, index) => {
+        const body = displays[index].body;
+        return body ? (
+          <ClampedBody
+            key={entry.id}
+            className={cn(msgReasoningBody, "markdown")}
+            content={body}
+            entry={entry}
+            sessionId={sessionId}
+          />
+        ) : null;
+      })}
+      {entries.map((entry) => (
+        <EntryImages
+          key={`${entry.id}:images`}
+          images={entry.images}
           sessionId={sessionId}
         />
-      )}
-      <EntryImages images={entry.images} sessionId={sessionId} />
+      ))}
     </div>
   );
 }
