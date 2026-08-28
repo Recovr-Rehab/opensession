@@ -24,6 +24,7 @@ function controlledGateway(pid: number, releaseRoot: string, standby = false) {
   const gateway: ManagedGateway = {
     pid,
     releaseRoot,
+    backendPort: 40_000 + pid,
     exited: new Promise<number>((resolve) => {
       finish = resolve;
     }),

@@ -121,8 +121,11 @@ import {
 	type RouteContext,
 } from "./src/server/routes";
 
-const PORT = parseInt(process.env.PORT || "3850");
-const HOST = process.env.HOST || "127.0.0.1";
+const PORT = parseInt(
+	process.env.OPENSESSION_GATEWAY_BACKEND_PORT || process.env.PORT || "3850",
+);
+const HOST = process.env.OPENSESSION_GATEWAY_BACKEND_HOST ||
+	process.env.HOST || "127.0.0.1";
 const HOME = homeDir();
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 

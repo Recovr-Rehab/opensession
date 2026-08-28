@@ -7,7 +7,9 @@ machinery, or service units use the coordinated rollout instead.
 
 ## Ownership invariants
 
-1. Exactly one gateway may cross the activation boundary.
+1. Exactly one gateway may cross the activation boundary. The supervisor owns
+   the stable public TCP listener and only forwards bytes; gateway children
+   bind private loopback backend ports.
 2. Every gateway acquires the OS-backed `gateway-active.lock` before touching
    shared state, binding a listener, starting a Worker or timer, or contacting
    an integration.
@@ -34,8 +36,11 @@ strict path classifier then chooses one of three flows:
   one coordinated release.
 
 During a gateway handoff, the old process continues serving while it performs
-its bounded shutdown drain. Web and native clients receive
-`server_restarting`; they retry every 250ms until the candidate handshake.
+its bounded shutdown drain. The supervisor keeps the public TCP listener bound
+throughout cut-over; connections accepted between child exit and candidate bind
+stay paused and attach to the candidate backend once it is live. Web and native
+clients receive `server_restarting`; they retry every 250ms until the candidate
+handshake.
 
 ## Failure behavior
 

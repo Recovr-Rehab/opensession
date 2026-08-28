@@ -10,12 +10,16 @@ import {
   unlinkSync,
 } from "fs";
 import { join, resolve } from "path";
+import { startGatewayTcpProxy } from "./gateway-tcp-proxy";
 
 export const GATEWAY_CONTROL_SOCKET =
   process.env.OPENSESSION_GATEWAY_CONTROL_SOCKET ||
   "/run/opensession-gateway/control.sock";
 
-const READY_URL = process.env.OPENSESSION_HEALTH_URL || "http://127.0.0.1:3850/ready";
+const PUBLIC_HOST = process.env.HOST || "127.0.0.1";
+const PUBLIC_PORT = Number(process.env.PORT || 3850);
+const BACKEND_HOST = "127.0.0.1";
+let nextBackendPort = Number(process.env.OPENSESSION_GATEWAY_BACKEND_PORT_BASE || 0);
 const PRELOAD_TIMEOUT_MS = 30_000;
 const EXIT_TIMEOUT_MS = 90_000;
 const READY_TIMEOUT_MS = 60_000;
@@ -41,6 +45,7 @@ type ControlResponse = {
 export interface ManagedGateway {
   pid: number;
   releaseRoot: string;
+  backendPort: number;
   exited: Promise<number>;
   kill(signal?: number): void;
   activate?(nonce: string): void;
@@ -222,6 +227,21 @@ function deferred(): {
   return { promise, resolve, reject };
 }
 
+function allocateBackendPort(): number {
+  if (nextBackendPort > 0) return nextBackendPort++;
+  const reservation = Bun.listen({
+    hostname: BACKEND_HOST,
+    port: 0,
+    socket: {
+      open(socket) { socket.end(); },
+      data() {},
+    },
+  });
+  const port = reservation.port;
+  reservation.stop();
+  return port;
+}
+
 export function spawnGateway(
   releaseRoot: string,
   role: "active" | "standby",
@@ -229,6 +249,7 @@ export function spawnGateway(
   entry = "packages/core/opensession-server/opensession.ts",
 ): ManagedGateway {
   const preloaded = deferred();
+  const backendPort = allocateBackendPort();
   let expectedNonce = nonce;
   const child = Bun.spawn(
     [process.execPath, "run", entry],
@@ -237,6 +258,9 @@ export function spawnGateway(
       env: {
         ...process.env,
         OPENSESSION_GATEWAY_ROLE: role,
+        PORT: String(PUBLIC_PORT),
+        OPENSESSION_GATEWAY_BACKEND_HOST: BACKEND_HOST,
+        OPENSESSION_GATEWAY_BACKEND_PORT: String(backendPort),
         ...(nonce ? { OPENSESSION_GATEWAY_NONCE: nonce } : {}),
       },
       stdin: "ignore",
@@ -264,6 +288,7 @@ export function spawnGateway(
   return {
     pid: child.pid,
     releaseRoot,
+    backendPort,
     exited,
     kill(signal = 15) {
       child.kill(signal);
@@ -309,7 +334,9 @@ async function waitForGatewayReady(gateway: ManagedGateway): Promise<void> {
   for (;;) {
     const state = await Promise.race([
       gateway.exited.then((code) => ({ exited: code } as const)),
-      fetch(READY_URL, { signal: AbortSignal.timeout(1_000) })
+      fetch(`http://${BACKEND_HOST}:${gateway.backendPort}/ready`, {
+        signal: AbortSignal.timeout(1_000),
+      })
         .then(async (response) => ({
           ready: response.ok && (await response.json() as { ok?: boolean }).ok === true,
         } as const))
@@ -434,13 +461,22 @@ async function runSupervisor(): Promise<void> {
       process.exit(1);
     },
   });
-  const listener = serveControl(supervisor);
-  console.log(`[gateway-supervisor] managing gateway ${active.pid} from ${releaseRoot}`);
+  const controlListener = serveControl(supervisor);
+  const publicListener = startGatewayTcpProxy({
+    hostname: PUBLIC_HOST,
+    port: PUBLIC_PORT,
+    backendPort: () => supervisor.activeGateway().backendPort,
+  });
+  console.log(
+    `[gateway-supervisor] proxying ${PUBLIC_HOST}:${PUBLIC_PORT} to gateway ${active.pid}` +
+    ` on ${BACKEND_HOST}:${active.backendPort} from ${releaseRoot}`,
+  );
 
   const stop = async () => {
     if (stopping) return;
     stopping = true;
-    listener.stop();
+    controlListener.stop();
+    publicListener.stop();
     await supervisor.shutdown();
     process.exit(0);
   };
