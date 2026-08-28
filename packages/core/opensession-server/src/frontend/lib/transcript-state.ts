@@ -52,6 +52,65 @@ export function orderTranscriptEntries(
 	return result;
 }
 
+/** A just-sent row carries the durable position that was visible at send time.
+ * The anchor is UI-only and disappears when the durable user row replaces it. */
+export type OptimisticTranscriptEntry = TranscriptEntry & {
+	optimisticAfterEntryId?: string | null;
+	optimisticAfterSeq?: number;
+};
+
+/**
+ * Insert optimistic user rows into an already-authoritative transcript without
+ * comparing clocks. The current tail id is the primary causal anchor; seq is a
+ * fallback when that payload was paged out or replaced during reconciliation.
+ *
+ * This is linear in the loaded transcript plus pending rows. The old timestamp
+ * sort was O(n log n) and could put assistant output above its prompt whenever
+ * the browser clock ran ahead of the server or a frame landed late.
+ */
+export function mergeOptimisticTranscriptEntries(
+	entries: TranscriptEntry[],
+	optimistic: OptimisticTranscriptEntry[],
+): TranscriptEntry[] {
+	if (optimistic.length === 0) return entries;
+	const positions = new Map(entries.map((entry, index) => [entry.id, index]));
+	const buckets = new Map<number, OptimisticTranscriptEntry[]>();
+
+	for (const entry of optimistic) {
+		let index: number | undefined;
+		const anchorId = entry.optimisticAfterEntryId;
+		if (anchorId === null) {
+			index = 0;
+		} else if (anchorId !== undefined) {
+			const exact = positions.get(anchorId);
+			const optimisticAlias = positions.get(`outbox-${anchorId}`);
+			const position = exact ?? optimisticAlias;
+			if (position !== undefined) index = position + 1;
+		}
+		if (index === undefined && entry.optimisticAfterSeq !== undefined) {
+			index = 0;
+			for (let position = 0; position < entries.length; position++) {
+				const seq = entries[position]!.seq;
+				if (seq === undefined) continue;
+				if (seq > entry.optimisticAfterSeq) break;
+				index = position + 1;
+			}
+		}
+		index ??= entries.length;
+		const bucket = buckets.get(index);
+		if (bucket) bucket.push(entry);
+		else buckets.set(index, [entry]);
+	}
+
+	const merged: TranscriptEntry[] = [];
+	for (let index = 0; index <= entries.length; index++) {
+		const pending = buckets.get(index);
+		if (pending) merged.push(...pending);
+		if (index < entries.length) merged.push(entries[index]!);
+	}
+	return merged;
+}
+
 /** Last-write-wins by id, but never let a delayed frame overwrite a newer
  * changeSeq. V2 output is always in seq order; legacy keeps arrival order. */
 export function mergeTranscriptEntries(

@@ -52,6 +52,7 @@ import {
 	orderTranscriptEntries,
 	queueAttribution,
 	summarizeInFlightContent,
+	type OptimisticTranscriptEntry,
 } from "../lib/transcript-state";
 import {
 	HISTORY_PAGE_ENTRIES,
@@ -1386,7 +1387,13 @@ export function SessionViewer({
 	// queue flap (as "Queueing…") instead of as a transcript bubble.
 	const [pending, setPending] = useState<OptimisticPendingPrompt[]>(() =>
 		initialPending
-			? [{ id: `pending-initial-${session.id}`, ...initialPending }]
+			? [
+					{
+						id: `pending-initial-${session.id}`,
+						transcriptAfterEntryId: null,
+						...initialPending,
+					},
+				]
 			: [],
 	);
 	// Read by the reconcile effect below, which must not re-run on every send.
@@ -1412,6 +1419,8 @@ export function SessionViewer({
 				content: item.content,
 				user: item.user || getCurrentUser(),
 				sentAt: item.createdAt,
+				transcriptAfterEntryId: item.transcriptAfterEntryId,
+				transcriptAfterSeq: item.transcriptAfterSeq,
 				...(item.images?.length ? { images: item.images } : {}),
 			};
 			if (result.status === "started") {
@@ -1500,6 +1509,7 @@ export function SessionViewer({
 				...prev,
 				{
 					id: `pending-initial-${session.id}`,
+					transcriptAfterEntryId: null,
 					...initialPending,
 				},
 			];
@@ -3496,7 +3506,13 @@ export function SessionViewer({
 	const resetOptimisticState = useEffectEvent(() => {
 		setPending(
 			initialPending
-				? [{ id: `pending-initial-${session.id}`, ...initialPending }]
+				? [
+						{
+							id: `pending-initial-${session.id}`,
+							transcriptAfterEntryId: null,
+							...initialPending,
+						},
+					]
 				: [],
 		);
 		setIsRunningLive(session.isRunning);
@@ -4354,6 +4370,19 @@ export function SessionViewer({
 		// Attachments ride along on every path — images fold into the run as
 		// content blocks; files route to the queue server-side.
 		const steerNow = isBusy && !!opts?.steer;
+		const optimisticTail = [...pendingRef.current]
+			.reverse()
+			.find((item) => item.busyMode !== "queue");
+		const transcriptTail = transcriptViewStore.getSnapshot().at(-1);
+		const transcriptAfterEntryId = optimisticTail
+			? optimisticTail.id.startsWith("outbox-")
+				? optimisticTail.id.slice("outbox-".length)
+				: optimisticTail.id
+			: transcriptTail?.id ?? null;
+		const transcriptAfterSeq =
+			transcriptSeqRef.current?.sessionId === session.id
+				? transcriptSeqRef.current.lastSeq
+				: undefined;
 		let outboxItem: PromptOutboxItem;
 		try {
 			outboxItem = promptOutbox.enqueue({
@@ -4363,6 +4392,8 @@ export function SessionViewer({
 				effort,
 				fastMode,
 				busyMode: isBusy ? (steerNow ? "steer" : "queue") : undefined,
+				transcriptAfterEntryId,
+				transcriptAfterSeq,
 				...(imgs.length ? { images: imgs } : {}),
 				...(fls.length ? { files: filePayload } : {}),
 				...(!isolated && contextSessions.length ? { contextSessions } : {}),
@@ -4389,7 +4420,9 @@ export function SessionViewer({
 					id: `outbox-${outboxItem.clientId}`,
 					content: text,
 					user,
-					sentAt: Date.now(),
+					sentAt: outboxItem.createdAt,
+					transcriptAfterEntryId,
+					transcriptAfterSeq,
 					images: imgs.length ? imgs : undefined,
 					...(steerNow ? { busyMode: "steer" as const } : {}),
 				},
@@ -4405,7 +4438,9 @@ export function SessionViewer({
 					id: `outbox-${outboxItem.clientId}`,
 					content: text,
 					user,
-					sentAt: Date.now(),
+					sentAt: outboxItem.createdAt,
+					transcriptAfterEntryId,
+					transcriptAfterSeq,
 					images: imgs.length ? imgs : undefined,
 					busyMode: "queue" as const,
 				},
@@ -4641,7 +4676,7 @@ export function SessionViewer({
 		),
 		...(settingUpWorkspace ? [] : fallbackPending),
 	];
-	const optimisticTranscriptEntries: TranscriptEntry[] =
+	const optimisticTranscriptEntries: OptimisticTranscriptEntry[] =
 		pendingBubbles.length === 0
 			? EMPTY_TRANSCRIPT_ENTRIES
 			: pendingBubbles.map((pending) => ({
@@ -4649,6 +4684,8 @@ export function SessionViewer({
 					type: "user",
 					content: pending.content,
 					timestamp: new Date(pending.sentAt).toISOString(),
+					optimisticAfterEntryId: pending.transcriptAfterEntryId,
+					optimisticAfterSeq: pending.transcriptAfterSeq,
 					// Preserve attribution across the optimistic-to-durable handoff.
 					// Without this, MessageBubble falls back to the session owner first.
 					sender: pending.user,

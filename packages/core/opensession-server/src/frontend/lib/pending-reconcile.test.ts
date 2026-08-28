@@ -162,6 +162,21 @@ describe("markPendingBusy", () => {
 });
 
 describe("reconcilePending", () => {
+	test("the durable prompt id claims its bubble despite normalized content", () => {
+		const { landed } = reconcilePending(
+			[bubble("outbox-a", "raw prompt with hidden context")],
+			[
+				{
+					id: "a",
+					...entry("visible prompt after server normalization", SENT - 60_000),
+				},
+			],
+			[],
+			SENT,
+		);
+		expect([...landed]).toEqual(["outbox-a"]);
+	});
+
 	test("a transcript user entry claims its bubble as landed", () => {
 		const { landed, expired } = reconcilePending(
 			[bubble("outbox-a", "ship it")],

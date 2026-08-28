@@ -25,8 +25,10 @@ import {
 import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
 import {
+	mergeOptimisticTranscriptEntries,
 	normalizeLegacyVoiceToolEntries,
 	orderTranscriptEntries,
+	type OptimisticTranscriptEntry,
 } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
@@ -58,7 +60,7 @@ interface Props {
 	entries: TranscriptEntry[];
 	/** Just-sent user turns that have not landed durably yet. They participate in
 	 *  transcript ordering so live tools can never render above their prompt. */
-	optimisticEntries?: TranscriptEntry[];
+	optimisticEntries?: OptimisticTranscriptEntry[];
 	/** Transcript ids accepted as sent but not yet read by the engine. */
 	pendingDeliveryIds?: string[];
 	/** Whether the conversation is live (last work block shows a spinner / stays open). */
@@ -261,9 +263,9 @@ function renderBlockEstimate(block: RenderBlock): number {
 export const TranscriptBlocks = function TranscriptBlocks(
 	props: Props,
 ) {
-	const entries = (props.optimisticEntries?.length
-				? orderTranscriptEntries([...props.entries, ...props.optimisticEntries])
-				: props.entries);
+	const entries = props.optimisticEntries?.length
+		? mergeOptimisticTranscriptEntries(props.entries, props.optimisticEntries)
+		: props.entries;
 	const renderedProps = entries === props.entries ? props : { ...props, entries };
 	return (
 		<>
@@ -659,13 +661,25 @@ function IndexedTranscriptBlocks(props: Props) {
 		if (typeof entry.seq === "number" || indexedIds.has(entry.id)) continue;
 		const timestampMs = Date.parse(entry.timestamp) || 0;
 		if (optimisticIds.has(entry.id) && rangeAtoms.length > 0) {
-			// A prompt can paint before its durable user row while live tool frames
-			// are already arriving. Put it into the range those tools occupy, then
-			// order that range by the immutable seq spine plus this timestamp. If no
-			// range reaches its send time yet, the durable tail is still the correct
-			// predecessor for a new turn.
+			// Keep the prompt in the structural range that was current when it was
+			// sent. Wall clocks are deliberately absent here: a browser clock ahead
+			// of the server used to place later assistant/tool rows above the prompt.
+			const optimistic = entry as OptimisticTranscriptEntry;
+			const anchorId = optimistic.optimisticAfterEntryId;
+			const anchorSeq = optimistic.optimisticAfterSeq;
 			const rangeAtom =
-				rangeAtoms.find((atom) => atom.range.endTimestampMs >= timestampMs) ??
+				(anchorId !== undefined && anchorId !== null
+					? rangeAtoms.find(
+							(atom) =>
+								atom.range.entryIds.includes(anchorId) ||
+								atom.range.entryIds.includes(`outbox-${anchorId}`),
+						)
+					: undefined) ??
+				(anchorSeq !== undefined
+					? rangeAtoms.findLast(
+							(atom) => atom.range.firstSeq <= anchorSeq,
+						)
+					: undefined) ??
 				rangeAtoms[rangeAtoms.length - 1]!;
 			rangeAtom.continuationEntryIds.push(entry.id);
 			rangeAtom.timestampMs = Math.max(rangeAtom.timestampMs, timestampMs);
@@ -817,11 +831,18 @@ function IndexedTranscriptBlocks(props: Props) {
 	const items: VirtualTranscriptItem[] = renderedTimeline.map(
 		({ item, index }, position) => {
 			const entryIds = indexedItemEntryIds(item);
-			const itemEntries = orderTranscriptEntries(
-				entryIds.flatMap((id) => {
-					const entry = payloadById.get(id);
-					return entry ? [entry] : [];
-				}),
+			const rangeEntries = entryIds.flatMap((id) => {
+				const entry = payloadById.get(id);
+				return entry ? [entry] : [];
+			});
+			const optimisticRangeEntries = rangeEntries.filter(
+				(entry): entry is OptimisticTranscriptEntry => optimisticIds.has(entry.id),
+			);
+			const itemEntries = mergeOptimisticTranscriptEntries(
+				orderTranscriptEntries(
+					rangeEntries.filter((entry) => !optimisticIds.has(entry.id)),
+				),
+				optimisticRangeEntries,
 			);
 			// Keys come from the full-outline position so a row keeps its identity
 			// while older siblings hydrate in above it.
