@@ -2,7 +2,12 @@
 
 import { isFrontendOnlyRelease, requiresRootDeploy } from "../packages/core/opensession-server/src/server/self-deploy";
 
-export type ReleaseImpact = "frontend-only" | "gateway-handoff" | "coordinated" | "root";
+export type ReleaseImpact =
+  | "frontend-only"
+  | "gateway-handoff"
+  | "supervisor-restart"
+  | "coordinated"
+  | "root";
 
 const ENTRIES = {
   gateway: "packages/core/opensession-server/opensession.ts",
@@ -59,7 +64,7 @@ async function combinedClosure(
 export function classifyRuntimeImpact(
   runtimePaths: string[],
   closures: { gateway: Set<string>; kernel: Set<string>; executor: Set<string> },
-): "gateway-handoff" | "coordinated" {
+): "gateway-handoff" | "supervisor-restart" | "coordinated" {
   if (runtimePaths.some((path) =>
     path === "package.json" || path === "bun.lock" || path.startsWith("packages/core/protocol/"))) {
     return "coordinated";
@@ -67,6 +72,9 @@ export function classifyRuntimeImpact(
   if (runtimePaths.some((path) => closures.kernel.has(path) || closures.executor.has(path))) {
     return "coordinated";
   }
+  if (runtimePaths.includes(
+    "packages/core/opensession-server/src/server/gateway-supervisor.ts",
+  )) return "supervisor-restart";
   return runtimePaths.every((path) => closures.gateway.has(path))
     ? "gateway-handoff"
     : "coordinated";

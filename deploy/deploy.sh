@@ -87,6 +87,13 @@ executor_ready() {
     && printf '%s' "$ready" | grep -Fq "\"generation\":\"$generation\""
 }
 
+supervisor_generation() {
+  local pid
+  pid="$(systemctl show -p MainPID --value opensession.service 2>/dev/null || true)"
+  [ -n "$pid" ] || return 1
+  cat "/proc/$pid/cwd/.opensession-release" 2>/dev/null
+}
+
 drain_gateway_for_supervisor_restart() {
   [ -S /run/opensession-gateway/control.sock ] || return 1
   "$SERVICE_BUN" \
@@ -557,16 +564,21 @@ if systemctl cat caddy.service >/dev/null 2>&1 \
 fi
 
 # The target supervisor is normally socket-activated while peers restart. Keep
-# it when the installed unit is unchanged; replacing it again only resets
-# already-accepted proxy connections. A changed unit still gets one fast drain
-# before systemd transfers the inherited listener.
+# it when both unit and supervisor code already match; replacing it again only
+# resets accepted proxy connections. Changed supervisor code or units get one
+# fast drain before systemd transfers the inherited listener.
 if [ "$GATEWAY_COORDINATED" = "1" ]; then
   "$SERVICE_BUN" \
     "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
     activate-coordinated
-elif [ "$GATEWAY_UNIT_NEEDS_SYNC" = "1" ]; then
+fi
+if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "1" ] \
+  || [ "$(supervisor_generation || true)" != "$TARGET_COMMIT" ]; then
   drain_gateway_for_supervisor_restart || true
   systemctl restart opensession.service
+  # The replacement reconciles the durable transaction journal against the
+  # selected generation; the old in-memory transaction no longer exists.
+  GATEWAY_COORDINATED=0
 elif ! systemctl is-active --quiet opensession.service; then
   systemctl start opensession.service
 else

@@ -17,6 +17,13 @@ describe("generated release impact", () => {
     expect(classifyRuntimeImpact([gatewayPath], closures())).toBe("gateway-handoff");
   });
 
+  test("restarts the stable supervisor when its own runtime changes", () => {
+    const supervisor = "packages/core/opensession-server/src/server/gateway-supervisor.ts";
+    const graph = closures();
+    graph.gateway.add(supervisor);
+    expect(classifyRuntimeImpact([supervisor], graph)).toBe("supervisor-restart");
+  });
+
   test("coordinates shared, protocol, dependency, and unknown runtime changes", () => {
     for (const path of [sharedPath, "packages/core/protocol/src/session.ts", "bun.lock", "unknown.ts"]) {
       expect(classifyRuntimeImpact([path], closures())).toBe("coordinated");

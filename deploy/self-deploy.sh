@@ -658,7 +658,8 @@ do_deploy() {
       "refused unprivileged deployment of root-owned lifecycle artifacts"
     exit 1
   fi
-  if [ "$release_impact" = "gateway-handoff" ]; then
+  if [ "$release_impact" = "gateway-handoff" ] \
+    || [ "$release_impact" = "supervisor-restart" ]; then
     write_marker
     log "preloading gateway ${target_sha:0:10} for a single-active handoff"
     if "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
@@ -673,6 +674,18 @@ do_deploy() {
             "gateway handoff of $target_sha lost pointer authority; rollback failed"
         fi
         exit 1
+      fi
+      if [ "$release_impact" = "supervisor-restart" ]; then
+        log "fast-draining the promoted child to load target supervisor code"
+        if ! "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+          drain-supervisor; then
+          log "ERROR: target supervisor drain protocol failed"
+          rollback_to_pin || true
+          write_result false deploy "$(current_release_sha)" "$current" \
+            "supervisor replacement failed after gateway promotion"
+          exit 1
+        fi
+        run_systemctl restart "$SERVICE_NAME"
       fi
       if poll_health; then
         log "healthy after gateway handoff — deployed ${target_sha:0:10}"
