@@ -76,6 +76,9 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     var toolName: String?
     var toolInput: JSONValue?
     var toolUseId: String?
+    /// Stable outbox identities whose accepted messages formed this user turn.
+    /// One engine turn can batch several separately sent messages.
+    var sourceMessageIds: [String]?
     var isError: Bool?
     var model: String?
     var agentId: String?

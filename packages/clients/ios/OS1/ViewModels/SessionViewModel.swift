@@ -2244,13 +2244,33 @@ final class SessionViewModel {
 
     private func upsert(_ incoming: [TranscriptEntry]) {
         for entry in incoming {
-            // Current steers use the delivery id as their durable transcript
-            // id. Retire local-<id> by identity before any text fallback so
-            // repeated messages cannot claim one another.
+            // Current single-message turns use the delivery id as their durable
+            // row id. Batched turns name every source separately. Retire those
+            // identities before any legacy text fallback so repeated messages
+            // cannot claim one another.
             if entry.isUser {
-                let localId = "local-\(entry.id)"
-                if localEchoIds.remove(localId) != nil {
-                    entries.removeAll { $0.id == localId }
+                let sourceIds = Set(entry.sourceMessageIds ?? [])
+                let exactIds = sourceIds.union([entry.id])
+                for sourceId in exactIds {
+                    let localId = "local-\(sourceId)"
+                    if localEchoIds.remove(localId) != nil {
+                        entries.removeAll { $0.id == localId }
+                    }
+                }
+                if !sourceIds.isEmpty {
+                    queuedItems.removeAll {
+                        sourceIds.contains($0.id)
+                            || ($0.id.hasPrefix("local-queued-")
+                                && sourceIds.contains(String($0.id.dropFirst("local-queued-".count))))
+                    }
+                    steeredItems.removeAll { sourceIds.contains($0.id) }
+                    if deliveringItems.contains(where: { sourceIds.contains($0.id) }) {
+                        updateDelivering(
+                            deliveringItems.filter { !sourceIds.contains($0.id) }
+                        )
+                    }
+                    pendingDeliveryIds.subtract(sourceIds)
+                    landedChipIds.formUnion(sourceIds)
                 }
             }
             if let index = entries.firstIndex(where: { $0.id == entry.id }) {

@@ -177,6 +177,25 @@ describe("reconcilePending", () => {
 		expect([...landed]).toEqual(["outbox-a"]);
 	});
 
+	test("one batched transcript entry claims every source message by identity", () => {
+		const { landed } = reconcilePending(
+			[
+				bubble("outbox-a", "again"),
+				bubble("outbox-b", "again"),
+			],
+			[
+				{
+					id: "batch-entry",
+					...entry("normalized batch", SENT - 60_000),
+					sourceMessageIds: ["a", "b"],
+				},
+			],
+			[],
+			SENT,
+		);
+		expect([...landed]).toEqual(["outbox-a", "outbox-b"]);
+	});
+
 	test("a transcript user entry claims its bubble as landed", () => {
 		const { landed, expired } = reconcilePending(
 			[bubble("outbox-a", "ship it")],

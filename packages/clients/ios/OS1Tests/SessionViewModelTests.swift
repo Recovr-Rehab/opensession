@@ -1768,6 +1768,29 @@ final class SendDraftTests: XCTestCase {
         XCTAssertTrue(viewModel.deliveringItems.isEmpty)
     }
 
+    func testBatchedTranscriptRetiresRepeatedQueuedMessagesBySourceId() async {
+        markRunning()
+        await send("again")
+        await send("again")
+        let sourceIds = deliveries.map { $0.item.id }
+        XCTAssertEqual(viewModel.queuedItems.count, 2)
+
+        viewModel.handle(.transcriptAppend(
+            sessionId: "bks-1",
+            entries: [TranscriptEntry(
+                id: "batch-entry",
+                type: "user",
+                content: "normalized batch",
+                sourceMessageIds: sourceIds
+            )]
+        ))
+
+        XCTAssertEqual(viewModel.entries.map(\.id), ["batch-entry"])
+        XCTAssertTrue(viewModel.queuedItems.isEmpty)
+        XCTAssertTrue(viewModel.steeredItems.isEmpty)
+        XCTAssertTrue(viewModel.deliveringItems.isEmpty)
+    }
+
     func testPromotedQueuedMessageMovesToTranscriptWithoutDeliveryChip() {
         viewModel.handle(.queueUpdate(
             sessionId: "bks-1",

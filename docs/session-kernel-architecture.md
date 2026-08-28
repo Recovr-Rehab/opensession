@@ -45,12 +45,13 @@ run hosts, sandboxes, or Runners. Active effect receipts do not hold the actor
 mailbox, so Stop, steering, and fenced run events remain responsive.
 
 The gateway retains a Worker bridge for typed reductions. Mutations and durable
-reads perform authenticated bounded HTTP RPC and wake the gateway through its
-existing `SharedArrayBuffer`. Reads also route through the actor host because a
-central WAL mirror cannot authoritatively represent sessions placed in separate
-databases. Hot run-state projections remain cached in the gateway and are
-invalidated by committed actor replies. A missing credential,
-actor/transport/incarnation mismatch, service failure, or invalid response
+reads perform authenticated bounded HTTP RPC over an awaited posted-message
+transport. The gateway event loop never blocks on `Atomics.wait`. Reads also
+route through the actor host because a central WAL mirror cannot authoritatively
+represent sessions placed in separate databases. Hot run-state projections
+remain cached in the gateway and are invalidated by committed actor replies. A
+missing credential, actor/transport/incarnation mismatch, service failure, or
+invalid response
 fail-stops the gateway. There is no in-process actor or direct writer fallback
 in production.
 
@@ -423,9 +424,12 @@ summaries are read projections. They may be rebuilt or served stale while a
 refresh runs. Admission and recovery consult SessionKernel and the engine
 control plane, never those projections.
 
-Transcript clients already reconnect by durable `changeSeq`. This keeps a
-future gateway process split mechanical: the gateway can translate commands
-and replay committed changes without becoming another session owner.
+Transcript clients already reconnect by durable `changeSeq`. Current user
+entries also carry the stable source delivery ids that formed the turn, so
+optimistic clients reconcile repeated or batched messages by identity; text and
+clock matching remains only for older rows during compatibility rollout. This
+keeps a future gateway process split mechanical: the gateway can translate
+commands and replay committed changes without becoming another session owner.
 
 ## Process boundary
 

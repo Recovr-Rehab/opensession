@@ -412,7 +412,13 @@ registerSessionControl({
 						);
 						await storeAppendUserLineEarly(
 							id,
-							transcriptLineUser(attributed, promptEntryId, undefined, opts?.images),
+							transcriptLineUser(
+								attributed,
+								promptEntryId,
+								undefined,
+								opts?.images,
+								[deliveryId],
+							),
 							{ required: true },
 						);
 						watchExternalRunAndDrain(id);

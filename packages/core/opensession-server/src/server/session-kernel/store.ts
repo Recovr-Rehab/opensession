@@ -4239,7 +4239,10 @@ export class SessionKernelStore {
         const applyInterrupt = confirmedInterrupt && batchOwnsInterrupt;
         if (applyInterrupt) state.interrupt = undefined;
         const promptEntryId =
-          retryDispatchId || plan.batch[0]?.promptEntryId || input.promptEntryId;
+          retryDispatchId ||
+          plan.batch[0]?.promptEntryId ||
+          (plan.batch.length === 1 ? plan.batch[0]?.id : undefined) ||
+          input.promptEntryId;
         if (!promptEntryId || promptEntryId.length > 256)
           throw new Error("Invalid claimed prompt dispatch identity");
         state.queued = plan.rest;

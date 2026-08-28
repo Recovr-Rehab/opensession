@@ -139,7 +139,13 @@ export interface ReconcileResult {
 
 export function reconcilePending(
 	pending: readonly OptimisticPendingPrompt[],
-	entries: readonly { id?: string; type: string; content: string; timestamp: string }[],
+	entries: readonly {
+		id?: string;
+		type: string;
+		content: string;
+		timestamp: string;
+		sourceMessageIds?: string[];
+	}[],
 	echoes: readonly { id?: string; content: string }[],
 	now: number,
 ): ReconcileResult {
@@ -150,6 +156,7 @@ export function reconcilePending(
 		.filter((e) => e.type === "user")
 		.map((e) => ({
 			id: e.id,
+			sourceMessageIds: new Set(e.sourceMessageIds ?? []),
 			c: e.content.trim(),
 			t: new Date(e.timestamp).getTime(),
 		}));
@@ -161,15 +168,24 @@ export function reconcilePending(
 		const deliveryId = p.id.startsWith("outbox-")
 			? p.id.slice("outbox-".length)
 			: undefined;
-		// Web prompt delivery uses the outbox client id as the durable transcript
-		// row id. Claim that identity before falling back to legacy content/time
-		// matching: server normalization may strip context or add attribution, and
-		// neither should leave the optimistic copy alive beside the real turn.
+		// A single prompt uses the outbox id as its durable row id; a batch carries
+		// every constituent id in sourceMessageIds. Claim identity before falling
+		// back to legacy content/time matching: server normalization may strip
+		// context or add attribution, and neither should leave the optimistic copy
+		// alive beside the real turn.
 		const exactEntry = deliveryId
-			? userPool.findIndex((entry) => entry.id === deliveryId)
+			? userPool.findIndex(
+					(entry) =>
+						entry.id === deliveryId ||
+						entry.sourceMessageIds.has(deliveryId),
+				)
 			: -1;
 		if (exactEntry >= 0) {
-			userPool.splice(exactEntry, 1);
+			const matched = userPool[exactEntry]!;
+			const hadSourceIds = matched.sourceMessageIds.size > 0;
+			matched.sourceMessageIds.delete(deliveryId!);
+			if (!hadSourceIds || matched.sourceMessageIds.size === 0)
+				userPool.splice(exactEntry, 1);
 			landed.add(p.id);
 			continue;
 		}

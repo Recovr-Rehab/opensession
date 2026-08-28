@@ -96,6 +96,14 @@ final class TranscriptGroupingTests: XCTestCase {
         XCTAssertEqual(entry.media.label, "1 video")
     }
 
+    func testTranscriptEntryDecodesSourceMessageIds() throws {
+        let data = Data(
+            #"{"id":"batch","type":"user","sourceMessageIds":["one","two"]}"#.utf8
+        )
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        XCTAssertEqual(entry.sourceMessageIds, ["one", "two"])
+    }
+
     func testFoldProjectsOnlyExplicitlyFeaturedMediaAndDeduplicatesIt() {
         var first = toolResult("t1", text: "captured")
         first.images = ["/media?path=incidental.png", "/media?path=after.png"]

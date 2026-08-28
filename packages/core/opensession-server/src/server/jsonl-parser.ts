@@ -67,6 +67,7 @@ interface RawJsonlEntry {
   uuid?: string;
   timestamp?: string;
   requestId?: string;
+  sourceMessageIds?: string[];
   // Open Session's Pi normalizer marks provider thinking blocks so they keep
   // their quiet activity presentation after the JSONL normalization round-trip.
   isReasoning?: boolean;
@@ -181,20 +182,32 @@ function splitAttributedParts(text: string): string[] {
 }
 
 /** Push a user turn, splitting a steer-joined composite into one entry per
- *  attributed part (derived ids keep streaming merges stable). */
+ *  attributed part. Delivery identities survive normalization so optimistic
+ *  clients never have to correlate repeated text or client/server clocks. */
 function pushUserEntries(
   entries: TranscriptEntry[],
   id: string,
   text: string,
   ts: string,
+  sourceMessageIds?: string[],
 ): void {
   const parts = splitAttributedParts(text);
+  const sources = sourceMessageIds?.filter(
+    (source): source is string => typeof source === "string" && source.length > 0,
+  );
   parts.forEach((part, i) => {
+    const partSources =
+      sources?.length === parts.length
+        ? [sources[i]!]
+        : i === 0
+          ? sources
+          : undefined;
     entries.push({
       id: i === 0 ? id : `${id}-j${i + 1}`,
       type: "user",
       content: resolveSlackIds(part),
       timestamp: ts,
+      ...(partSources?.length ? { sourceMessageIds: partSources } : {}),
     });
   });
 }
@@ -420,7 +433,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
           const baseId = raw.uuid || crypto.randomUUID();
           const id = userTextCount === 0 ? baseId : `${baseId}-t${userTextCount}`;
           userTextCount++;
-          pushUserEntries(entries, id, text, ts);
+          pushUserEntries(entries, id, text, ts, raw.sourceMessageIds);
           if (files.length) {
             // The note rides the end of the turn — attach to its last user entry
             // (or a bare one when the message was attachments-only).
@@ -464,7 +477,13 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
           entries.push(...harness);
         } else {
           const { text, files } = extractUploadsNote(stripped);
-          pushUserEntries(entries, raw.uuid || crypto.randomUUID(), text, ts);
+          pushUserEntries(
+            entries,
+            raw.uuid || crypto.randomUUID(),
+            text,
+            ts,
+            raw.sourceMessageIds,
+          );
           if (files.length) {
             const lastUser = [...entries].reverse().find((e) => e.type === "user");
             if (lastUser) attachUploads(lastUser, files);

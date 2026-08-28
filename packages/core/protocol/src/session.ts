@@ -63,6 +63,9 @@ export interface TranscriptEntry {
   toolInput?: unknown;
   toolUseId?: string;
   requestId?: string;
+  /** Stable delivery identities whose accepted messages formed this user turn.
+   * A batched engine turn can represent several independently sent messages. */
+  sourceMessageIds?: string[];
   // Set on a tool_result whose block carried is_error — the UI shows the step
   // with an error state instead of a success check.
   isError?: boolean;
