@@ -323,7 +323,9 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 	const pendingDeliveryEntryIds = new Set(pendingDeliveryIds ?? []);
 	const renderedEntries = normalizeLegacyVoiceToolEntries(entries)
 		.map(classifyEntry)
-		.filter((entry) => !isRenderlessUserEntry(entry));
+		.filter(
+			(entry) => entry.turnBoundary || !isRenderlessUserEntry(entry),
+		);
 	const shareAfterEntryIds = new Set<string>();
 	if (slackShare) {
 		for (let i = 0; i < renderedEntries.length; i++) {
@@ -395,7 +397,9 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 			turn.push(entry);
 		} else {
 			flushTurn();
-			blocks.push({ kind: "entry", entry });
+			// Hidden system-triggered turns exist only to keep the completed output
+			// before them out of later work. They are structural, never a blank row.
+			if (!entry.turnBoundary) blocks.push({ kind: "entry", entry });
 		}
 	}
 	flushTurn(true);

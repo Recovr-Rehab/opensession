@@ -23,17 +23,15 @@ import {
 	pendingAskAwaitingAnswerSync,
 	pendingAskIdsAwaitingAnswer,
 } from "../asks";
-import { transcriptMatchSnippet } from "../jsonl-parser";
 import {
-	classifyEntries,
-	classifyEntry,
-	dropContextInjections,
-} from "@tellahq/opensession-protocol/notices";
+	prepareEntriesForWire,
+	transcriptMatchSnippet,
+} from "../jsonl-parser";
+import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import {
 	inWorkspaceGroup,
 	type WorkspaceGroup,
 } from "@tellahq/opensession-protocol/workspace-group";
-import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import {
   deleteSessionTranscript,
   transcript,
@@ -1289,12 +1287,9 @@ export async function handleSessionsRoutes(
 		// sessions from before transcript persistence, and migrated
 		// sessions whose history spans engines). Classified on the way out,
 		// like every other send site — this is what the native clients read.
-		const entries = withToolPresentations(
-			classifyEntries(
-				dropContextInjections(await mergedSessionTranscriptAsync(session)),
-			),
+		return Response.json(
+			prepareEntriesForWire(await mergedSessionTranscriptAsync(session)),
 		);
-		return Response.json(entries);
 	}
 
 	// One transcript entry, unclamped. The WS wire clamps giant entry contents

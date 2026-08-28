@@ -66,6 +66,11 @@ export interface TranscriptEntry {
   /** Stable delivery identities whose accepted messages formed this user turn.
    * A batched engine turn can represent several independently sent messages. */
   sourceMessageIds?: string[];
+  /** Content-free wire marker for a hidden system-triggered turn. It separates
+   * completed assistant output from later background work without rendering a
+   * fake user message. Stored context payloads remain private; the server
+   * projects only this boolean boundary. */
+  turnBoundary?: boolean;
   // Set on a tool_result whose block carried is_error — the UI shows the step
   // with an error state instead of a success check.
   isError?: boolean;

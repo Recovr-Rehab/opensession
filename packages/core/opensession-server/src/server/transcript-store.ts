@@ -2289,6 +2289,7 @@ const TRANSCRIPT_ENTRY_KEYS = new Set([
   "sender",
   "senderVia",
   "timestamp",
+  "turnBoundary",
   "toolInput",
   "toolName",
   "toolUseId",
@@ -2762,7 +2763,7 @@ function validateDestinationEntry(
     if (entry[key] !== undefined && typeof entry[key] !== "string")
       throw new TypeError(`Invalid transcript entry ${key} at ${index}`);
   }
-  for (const key of ["isError"]) {
+  for (const key of ["isError", "turnBoundary"]) {
     if (entry[key] !== undefined && typeof entry[key] !== "boolean")
       throw new TypeError(`Invalid transcript entry ${key} at ${index}`);
   }
@@ -2982,6 +2983,15 @@ function transcriptOutlineProjection(entry: TranscriptEntry): {
   contentLength: number;
   reviewPrNumber?: number;
 } {
+  // A background wait is model-only context, but it starts a distinct turn.
+  // Index it as a content-free user boundary so hydrated ranges cannot merge
+  // the completed status before the wait into the later continuation.
+  if (
+    entry.noticeKind === "context-injection" &&
+    entry.contextInjection?.source === "background-wait"
+  ) {
+    return { role: "user", contentLength: 0 };
+  }
   if (dropContextInjections([entry]).length === 0) {
     return { role: "hidden", contentLength: 0 };
   }

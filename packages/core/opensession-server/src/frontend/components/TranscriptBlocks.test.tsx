@@ -643,6 +643,28 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		setTurnPrefs(null);
 	});
 
+	test("keeps completed output visible across a background wake", () => {
+		setTurnPrefs("folded", "folded");
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					{ id: "prompt", type: "user", content: "Ship it", timestamp: "2026-08-19T06:00:00Z" },
+					{ id: "first-tool", type: "tool_use", toolUseId: "first-call", toolName: "bash", toolInput: { command: "bun test" }, content: "Using bash", timestamp: "2026-08-19T06:00:01Z" },
+					{ id: "status", type: "assistant", content: "Implemented and committed. Deployment is running.", timestamp: "2026-08-19T06:00:02Z" },
+					{ id: "wait-boundary", type: "user", content: "", timestamp: "2026-08-19T06:01:30Z", turnBoundary: true },
+					{ id: "verify-tool", type: "tool_use", toolUseId: "verify-call", toolName: "bash", toolInput: { command: "curl /health" }, content: "Using bash", timestamp: "2026-08-19T06:01:31Z" },
+					{ id: "final", type: "assistant", content: "Deployment verified.", timestamp: "2026-08-19T06:01:32Z" },
+				]}
+			/>,
+		);
+
+		expect(html).toContain("Implemented and committed. Deployment is running.");
+		expect(html).toContain("Deployment verified.");
+		expect(html.match(/>Worked<\/span>/g)).toHaveLength(2);
+		expect(html).not.toContain("wait-boundary");
+		setTurnPrefs(null);
+	});
+
 	test("coalesces consecutive reasoning revisions into their latest visible step", () => {
 		const entries: TranscriptEntry[] = [
 			{ id: "prompt", type: "user", content: "Check it", timestamp: "2026-08-28T05:00:00Z" },
