@@ -334,7 +334,7 @@ export function piDialOracleAgent(oracleAgent: string, providerID: string): stri
  * Model metadata comes from Pi's built-in provider catalog when Pi knows the
  * provider (Cerebras, Moonshot, xAI, and others). piProviderCatalog supplies a
  * provider Pi does not know (Wafer) and models newer than its bundled snapshot
- * (Ox Alpha on OpenRouter). A provider in neither catalog fails clearly rather
+ * (GLM-5.3 on OpenRouter). A provider in neither catalog fails clearly rather
  * than guessing a protocol. A model id newer than both catalogs gets a
  * conservative fallback entry: zero cost because unknown pricing must
  * under-report, plus safe window and output floors. It inherits the provider's
@@ -2401,7 +2401,7 @@ async function* runPiAttempt(
     // Renderable content blocks (real text or tool calls) of the LATEST
     // assistant message; -1 = none seen yet. Providers occasionally return a
     // well-formed completion with ZERO content blocks and stopReason "stop"
-    // (2026-08-21 os-01a02486: stealth/ox-alpha via OpenRouter ended a
+    // (2026-08-21 os-01a02486: GLM-5.3's pre-release OpenRouter route ended a
     // 10-minute turn on content:[] with all-zero usage). pi settles that as a
     // clean turn, so the session goes idle with no summary and the user has
     // to ask "done?". The pump loop retries such finishes once.
