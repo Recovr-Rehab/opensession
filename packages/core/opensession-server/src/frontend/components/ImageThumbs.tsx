@@ -1,4 +1,5 @@
 import React from "react";
+import type { ImageRegion } from "../lib/image-region-comment";
 import { openLightbox } from "./MediaLightbox";
 import { IconX } from "./icons";
 
@@ -6,6 +7,13 @@ interface Props {
   /** Attached images as `data:` URLs. */
   images: string[];
   onRemove: (index: number) => void;
+  /** Add a region comment to the draft that owns these attachments. */
+  onComment?: (
+    index: number,
+    region: ImageRegion,
+    text: string,
+    keepOpen: boolean,
+  ) => void | Promise<void>;
   disabled?: boolean;
   /**
    * Images still on their way to disk. A paste is not attached until its
@@ -21,6 +29,7 @@ interface Props {
 export function ImageThumbs({
   images,
   onRemove,
+  onComment,
   disabled,
   pending = 0,
   onRemovePending,
@@ -37,7 +46,19 @@ export function ImageThumbs({
             className="focus-ring block cursor-zoom-in rounded-control leading-[0]"
             onClick={(event) =>
               openLightbox(
-                images.map((image) => ({ kind: "image", src: image })),
+                images.map((image, imageIndex) => ({
+                  kind: "image" as const,
+                  src: image,
+                  ...(onComment
+                    ? {
+                        onRegionComment: ({ region, text, keepOpen }: {
+                          region: ImageRegion;
+                          text: string;
+                          keepOpen: boolean;
+                        }) => onComment(imageIndex, region, text, keepOpen),
+                      }
+                    : {}),
+                })),
                 i,
                 event.currentTarget,
               )

@@ -11,6 +11,10 @@ import {
 } from "../hooks/useShortcutBindings";
 import type { ModelOption, FileMention, ProviderAccountOption } from "../lib/api";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
+import {
+  appendImageAttachmentComment,
+  rebaseImageAttachmentReferences,
+} from "../lib/image-attachment-comment";
 import { clearDraft, loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
 import { appendDictation } from "../lib/dictation";
 import {
@@ -590,6 +594,13 @@ export function Composer({
   const isControlled = value !== undefined;
   const text = isControlled ? value : innerValue;
   const setText = isControlled ? onChange ?? (() => {}) : setInnerValue;
+  // The lightbox is hosted above the composer and keeps the callback from the
+  // moment it opened. Keep its draft source current across several Shift+Enter
+  // comments without making the global viewer own composer state.
+  const textRef = useRef(text);
+  useLayoutEffect(() => {
+    textRef.current = text;
+  }, [text]);
   // A session reference in the draft is stored as its id and shown as that
   // session's name (hooks/useSessionNameProjection.ts): the field renders
   // `displayText`, while the draft, the send and the clipboard keep the id.
@@ -984,6 +995,35 @@ export function Composer({
 
   function removeImage(i: number) {
     onImagesChange?.(imgs.filter((_, idx) => idx !== i));
+    const next = rebaseImageAttachmentReferences(textRef.current, i);
+    textRef.current = next;
+    setText(next);
+  }
+
+  function commentOnImage(
+    i: number,
+    region: { x: number; y: number; width: number; height: number },
+    comment: string,
+    keepOpen: boolean,
+  ) {
+    const next = appendImageAttachmentComment(
+      textRef.current,
+      i,
+      region,
+      comment,
+    );
+    textRef.current = next;
+    if (!isControlled && draftKey) saveDraft(draftKey, { text: next });
+    setText(next);
+    if (!keepOpen) {
+      // The lightbox restores focus to its thumbnail first. Run after that
+      // cleanup so the newly added reference is ready to edit or send.
+      setTimeout(() => {
+        const field = textareaRef.current;
+        field?.focus({ preventScroll: true });
+        if (field) field.selectionStart = field.selectionEnd = field.value.length;
+      }, 0);
+    }
   }
 
   function removeFile(i: number) {
@@ -1606,6 +1646,7 @@ export function Composer({
           images={imgs}
           pending={activeStaging.images}
           onRemove={removeImage}
+          onComment={canAttachImages ? commentOnImage : undefined}
           onRemovePending={staging ? onRemovePendingImage : localUploads.cancelPendingImage}
           disabled={disabled}
         />

@@ -96,6 +96,13 @@ export interface LightboxItem {
 	/** Session that owns this transcript image. Only these images can send a
 	 *  selected region back into chat. */
 	commentSessionId?: string;
+	/** Composer attachments add the comment to the draft instead of sending a
+	 * new turn immediately. `keepOpen` is Shift+Enter's add-another path. */
+	onRegionComment?: (request: {
+		region: ImageRegion;
+		text: string;
+		keepOpen: boolean;
+	}) => void | Promise<void>;
 }
 
 interface LightboxState {
@@ -1665,23 +1672,40 @@ if (!nativeShareWasCancelled(error)) toast("Could not share that link");
 	};
 	const commentable =
 		item.kind === "image" &&
-		canCommentOnImageRegion(item.commentSessionId);
-	const sendRegionComment = async () => {
+		(Boolean(item.onRegionComment) ||
+			canCommentOnImageRegion(item.commentSessionId));
+	const sendRegionComment = async (keepOpen = false) => {
 		const text = commentText.trim();
-		const { commentSessionId, src } = item;
-		if (!commentSessionId || !selection || !text || sendingCommentRef.current)
+		const { commentSessionId, onRegionComment, src } = item;
+		if (
+			(!commentSessionId && !onRegionComment) ||
+			!selection ||
+			!text ||
+			sendingCommentRef.current
+		)
 			return;
 		sendingCommentRef.current = true;
 		setSendingComment(true);
 		setCommentError(null);
 		await (async () => {
-await submitImageRegionComment({
-				sessionId: commentSessionId,
-				src,
-				region: selection,
-				text,
-			});
-			onClose(false);
+			if (onRegionComment) {
+				await onRegionComment({ region: selection, text, keepOpen });
+			} else if (commentSessionId) {
+				await submitImageRegionComment({
+					sessionId: commentSessionId,
+					src,
+					region: selection,
+					text,
+				});
+			}
+			if (keepOpen) {
+				setSelection(null);
+				setSelectionRect(null);
+				setCommentCardSize(null);
+				setCommentText("");
+			} else {
+				onClose(false);
+			}
 })().catch(async (error) => {
 setCommentError(
 				error instanceof Error ? error.message : "Could not send this comment",
@@ -2395,12 +2419,14 @@ sendingCommentRef.current = false;
 							onKeyDown={(event) => {
 								if (
 									event.key === "Enter" &&
-									!event.shiftKey &&
+									(!event.shiftKey || Boolean(item.onRegionComment)) &&
 									!event.nativeEvent.isComposing &&
 									window.matchMedia("(hover: hover) and (pointer: fine)").matches
 								) {
 									event.preventDefault();
-									void sendRegionComment();
+									void sendRegionComment(
+										event.shiftKey && Boolean(item.onRegionComment),
+									);
 								}
 							}}
 							rows={1}
@@ -2428,7 +2454,7 @@ sendingCommentRef.current = false;
 							type="submit"
 							// The filled circle a message is sent with, in the app's own
 							// accent rather than a plain white chip.
-							className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-accent p-0 text-white transition-transform active:scale-[0.94] disabled:bg-white/15 disabled:text-white/40 phone:size-11"
+							className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-accent p-0 text-white transition-transform active:scale-[0.96] disabled:bg-white/15 disabled:text-white/40 phone:size-11"
 							disabled={!commentText.trim() || sendingComment}
 							aria-label={sendingComment ? "Sending comment" : "Send comment"}
 						>
