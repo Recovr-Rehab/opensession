@@ -662,7 +662,8 @@ function TurnMessage({
   sessionId?: string;
 }) {
   const displays = entries.map((entry) => reasoningDisplay(entry.content));
-  const title = displays.findLast((display) => display.title)?.title ?? "";
+  const batchedTitle = displays.findLast((display) => display.title)?.title ?? "";
+  const title = batchedTitle.split("\n").at(-1) ?? "";
   const last = entries[entries.length - 1];
   return (
     <div
