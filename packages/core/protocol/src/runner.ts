@@ -184,6 +184,13 @@ type HostToClientPayload =
       done?: StreamEvent;
     }
   | { t: "event"; event: StreamEvent }
+  /**
+   * Per-connection catch-up fence. On attach, the host sends hello, replays
+   * every recoverable frame, then sends this marker. An ended hello is not a
+   * safe terminal fence by itself because its missing transcript tail follows
+   * it on the wire.
+   */
+  | { t: "catchup_complete" }
   | { t: "ask"; askId: string; input: Record<string, unknown> }
   /**
    * A steer/interrupt_steer arrived too late (run already finishing, or the
