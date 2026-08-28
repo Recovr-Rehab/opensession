@@ -212,7 +212,10 @@ if (!g.__opensessionBooted && !isDevInstance()) {
 	await hydratePersistedQueueState();
 }
 
-console.log(`Starting Open Session server on ${HOST}:${PORT}...`);
+const gatewayProcessLabel = process.env.OPENSESSION_GATEWAY_BACKEND_PORT
+	? "gateway backend"
+	: "server";
+console.log(`Starting Open Session ${gatewayProcessLabel} on ${HOST}:${PORT}...`);
 
 // The SPA bundle, before anything can ask for it. frontend-build.ts used to
 // compile it at import instead, which meant any script or test that reached a
@@ -585,7 +588,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				: false,
 });
 
-console.log(`Open Session running at http://${HOST}:${PORT}/`);
+console.log(`Open Session ${gatewayProcessLabel} running at http://${HOST}:${PORT}/`);
 
 
 // --- Agent loading and webhook server ---
