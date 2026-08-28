@@ -991,19 +991,24 @@ if (generation === guideGenerationRef.current) setGuideLoading(false);
     }
     setSubmitting(true);
     setReviewError(null);
-    await (async () => {
-const payload = {
+    try {
+      const payload = {
         user: getCurrentUser(),
         event: reviewEvent,
         summary: summary.trim() || undefined,
         repo: active?.repo,
         branch: active?.branch,
-        comments: pending.map((c) => ({
-          text: c.text,
-          path: c.path,
-          line: c.endLine,
-          startLine: c.startLine !== c.endLine ? c.startLine : undefined,
-          side: (c.side === "deletions" ? "LEFT" : "RIGHT") as "LEFT" | "RIGHT",
+        comments: pending.map((comment) => ({
+          text: comment.text,
+          path: comment.path,
+          line: comment.endLine,
+          startLine:
+            comment.startLine !== comment.endLine
+              ? comment.startLine
+              : undefined,
+          side: (comment.side === "deletions" ? "LEFT" : "RIGHT") as
+            | "LEFT"
+            | "RIGHT",
         })),
       };
       const result = previewTarget
@@ -1015,41 +1020,48 @@ const payload = {
         : await submitPrReviewApi(sessionId, payload);
       let merged = false;
       if (reviewEvent === "APPROVE" && mergeAfterReview) {
-        await (async () => {
-if (previewTarget)
+        try {
+          if (previewTarget) {
             await mergePrPreviewApi(
               previewTarget.repo,
               previewTarget.branch,
               "squash",
             );
-          else
-            await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
+          } else {
+            await mergePrApi(
+              sessionId,
+              "squash",
+              active?.repo,
+              active?.branch,
+            );
+          }
           merged = true;
-})().catch(async (error) => {
-setMergeError(
+        } catch (error) {
+          setMergeError(
             `Review approved, but merge failed: ${errorMessage(error, "unknown error")}`,
           );
-});
+        }
       }
-      if (actionTargetKey !== activeLoadTargetRef.current) return;
-      setPending([]);
-      setSummaryDraft("");
-      setReviewOpen(false);
-      setReviewEvent("APPROVE");
-      setMergeAfterReview(false);
-      setReviewDone(merged ? "merged" : result.url || "submitted");
-      setTimeout(() => {
-        if (actionTargetKey !== activeLoadTargetRef.current) return;
-        setReviewDone(null);
-        setReviewing(false);
-      }, 6000);
-      await load(true);
-})().catch(async (error) => {
-if (actionTargetKey === activeLoadTargetRef.current)
+      if (actionTargetKey === activeLoadTargetRef.current) {
+        setPending([]);
+        setSummaryDraft("");
+        setReviewOpen(false);
+        setReviewEvent("APPROVE");
+        setMergeAfterReview(false);
+        setReviewDone(merged ? "merged" : result.url || "submitted");
+        setTimeout(() => {
+          if (actionTargetKey !== activeLoadTargetRef.current) return;
+          setReviewDone(null);
+          setReviewing(false);
+        }, 6000);
+        await load(true);
+      }
+    } catch (error) {
+      if (actionTargetKey === activeLoadTargetRef.current) {
         setReviewError(errorMessage(error, "Failed to submit review"));
-}).finally(async () => {
-setSubmitting(false);
-});
+      }
+    }
+    setSubmitting(false);
   }
 
   function handleMerge() {
@@ -1062,22 +1074,24 @@ setSubmitting(false);
     setMergeError(null);
     const actionTargetKey = loadTargetKey;
     scheduleDeferredMerge(mergeKey, async () => {
-      await (async () => {
-if (previewTarget)
+      try {
+        if (previewTarget) {
           await mergePrPreviewApi(
             previewTarget.repo,
             previewTarget.branch,
             "squash",
           );
-        else await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
+        } else {
+          await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
+        }
         if (actionTargetKey === activeLoadTargetRef.current) await load(true);
-})().catch(async (error) => {
-if (actionTargetKey === activeLoadTargetRef.current) {
+      } catch (error) {
+        if (actionTargetKey === activeLoadTargetRef.current) {
           const message = errorMessage(error, "Merge failed");
           setMergeError(message);
           toast(message);
         }
-});
+      }
     });
   }
 
@@ -1092,17 +1106,19 @@ if (actionTargetKey === activeLoadTargetRef.current) {
     setClosing(true);
     setCloseError(null);
     const actionTargetKey = loadTargetKey;
-    await (async () => {
-if (previewTarget)
+    try {
+      if (previewTarget) {
         await closePrPreviewApi(previewTarget.repo, previewTarget.branch);
-      else await closePrApi(sessionId, active?.repo, active?.branch);
+      } else {
+        await closePrApi(sessionId, active?.repo, active?.branch);
+      }
       if (actionTargetKey === activeLoadTargetRef.current) await load(true);
-})().catch(async (error) => {
-if (actionTargetKey === activeLoadTargetRef.current)
+    } catch (error) {
+      if (actionTargetKey === activeLoadTargetRef.current) {
         setCloseError(errorMessage(error, "Failed to close pull request"));
-}).finally(async () => {
-setClosing(false);
-});
+      }
+    }
+    setClosing(false);
   }
 
   // Roll the per-check list up into headline counts, and split deployments
