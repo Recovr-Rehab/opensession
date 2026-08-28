@@ -163,12 +163,13 @@ GitHub Actions or placing contributor code in a host worktree:
 
 1. GitHub REST supplies the PR identity and a size-bounded patch, pinned by base
    repository, PR number, base SHA, head repository and head SHA.
-2. A fresh Firecracker MicroVM anonymously fetches `refs/pull/<number>/head`
-   plus the immutable base SHA, verifies both commits and checks out the head
-   with Git hooks disabled. The source-verification profile requires a matching
-   credential-free golden and skips private workspace seed files, dial-back,
-   repository setup/resume hooks and credential-bearing runner refresh. Any mismatch
-   fails closed. The VM is destroyed before model inference.
+2. A fresh disposable Daytona Executor anonymously fetches
+   `refs/pull/<number>/head` plus the immutable base SHA, verifies both commits
+   and checks out the head with Git hooks disabled. The source-verification
+   profile refuses prewarmed and project-template resources and skips runner
+   bootstrap, dial-back, private workspace seed files, and repository
+   setup/resume hooks. Any mismatch fails closed. Provider deletion must be
+   confirmed before model inference.
 3. A tool-less one-shot model receives only the bounded immutable patch. Model
    and GitHub credentials never enter the guest, and untrusted repository text
    never reaches a host-side shell, filesystem tool or MCP server.
@@ -181,13 +182,13 @@ simplify, adversarial review, conversational commands, pushes or handoffs.
 Review policy comes from the registered base checkout. The path is limited by
 file count, changed lines, patch bytes, attempts per SHA, reviews per author and
 a repository-wide daily budget. The `OPENSESSION_PUBLIC_REVIEW_*` environment
-settings can lower or raise those bounded defaults. If MicroVM provisioning,
-immutable ref verification or the model call fails, there is no host-agent
+settings can lower or raise those bounded defaults. If Executor provisioning,
+immutable ref verification, strict disposal, or the model call fails, there is no host-agent
 fallback.
 
 Public intake is an operator-controlled launch, not an App permission. Before a
 human repository administrator changes GitHub's PR creation policy to allow all
-users, operators must qualify the MicroVM provider, enable the review
+users, operators must qualify the Daytona provider, enable the review
 automation, and keep fork-origin GitHub Actions disabled or approval-gated. The
 shipped PR workflows additionally skip every job whose head repository differs
 from the base repository. The GitHub App intentionally has no repository

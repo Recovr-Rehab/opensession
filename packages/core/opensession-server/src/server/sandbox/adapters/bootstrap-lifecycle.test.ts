@@ -229,7 +229,7 @@ describe("remote repo lifecycle", () => {
 			"main",
 			"main",
 			"opensession",
-			{ sandboxId: "sbx-test", provider: "microvm", repoId: "opensession" },
+			{ sandboxId: "sbx-test", provider: "daytona", repoId: "opensession" },
 			{ seedPrivateFiles: false, runLifecycleHooks: false },
 		);
 

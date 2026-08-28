@@ -263,16 +263,20 @@ export const HEADER_TITLE_REPO =
 	"phone:inline-flex phone:flex-none phone:items-center phone:justify-center " +
 	"phone:empty:hidden";
 
-/** Name over metadata, stacked to the right of the repo tile. */
+/**
+ * Name over metadata, stacked to the right of the repo tile. The two 16px rows
+ * need no extra gap: with the pill's padding and border they land at the same
+ * 44px height as the Back control beside it.
+ */
 export const HEADER_TITLE_COL =
 	"phone:flex phone:min-w-0 phone:flex-col phone:items-start phone:justify-center " +
-	"phone:gap-px";
+	"phone:gap-0";
 
 /**
  * The name's row. The leading is pinned rather than left at `normal` (~1.21):
  * the name and the metadata line below it are a stacked pair, so the space
- * between them should be the 1px column gap plus a known half-leading, not
- * whatever the font's default line box happens to be.
+ * between them should come only from their known half-leading, not whatever
+ * the font's default line box happens to be.
  */
 export const HEADER_TITLE_ROW =
 	"phone:flex phone:min-w-0 phone:max-w-full phone:items-center phone:gap-[7px] " +

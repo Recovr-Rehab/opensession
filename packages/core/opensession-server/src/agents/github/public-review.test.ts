@@ -123,27 +123,32 @@ describe("public PR review policy", () => {
     expect(admit(exhausted)).toMatchObject({ ok: true, state: { total: 1 } });
   });
 
-  test("destroys the guest before tool-less model inference", () => {
+  test("strictly disposes the Executor before tool-less model inference", () => {
     const source = readFileSync(new URL("./public-review.ts", import.meta.url), "utf8");
-    const verify = source.indexOf("export async function verifyPublicPrInMicrovm");
+    const verify = source.indexOf("export async function verifyPublicPrInDisposableExecutor");
     const destroy = source.indexOf("await provider.destroy", verify);
     const toolLess = source.indexOf("export async function runToollessPublicReview");
     const inference = source.indexOf("await oneShotDetailed", toolLess);
     const review = readFileSync(new URL("./review.ts", import.meta.url), "utf8");
-    const microvm = readFileSync(
-      new URL("../../server/sandbox/adapters/microvm.ts", import.meta.url),
+    const daytona = readFileSync(
+      new URL("../../server/sandbox/adapters/daytona.ts", import.meta.url),
       "utf8",
     );
     const publicBranch = review.indexOf("if (publicReview) {");
-    const verifyCall = review.indexOf("await verifyPublicPrInMicrovm", publicBranch);
+    const verifyCall = review.indexOf("await verifyPublicPrInDisposableExecutor", publicBranch);
     const toolLessCall = review.indexOf("await runToollessPublicReview", publicBranch);
     expect(source.slice(verify, toolLess)).toContain("refs/pull/${input.prNumber}/head");
     expect(source.slice(verify, toolLess)).toContain("+${input.baseSha}:${baseRef}");
     expect(source.slice(verify, toolLess)).not.toContain("+refs/heads/${input.baseRef}:${baseRef}");
+    expect(source).toContain('sandboxProviderConfigured("daytona")');
     expect(source.slice(verify, toolLess)).toContain('cloneCredential: "none"');
     expect(source.slice(verify, toolLess)).toContain("sourceVerification: true");
-    expect(microvm).toContain("if (resumed && !spec.sourceVerification)");
-    expect(microvm).toContain("runLifecycleHooks: !spec.sourceVerification");
+    expect(source.slice(verify, toolLess)).not.toContain('getSandboxProvider("microvm")');
+    expect(daytona).toContain("if (!sbx && !sourceVerification)");
+    expect(daytona).toContain("const template = sourceVerification");
+    expect(daytona).toContain("runLifecycleHooks: !sourceVerification");
+    expect(daytona).toContain("await client.delete(sbx, 120)");
+    expect(source).toContain("provider.destroy(sandbox.id, { strict: true })");
     expect(source.slice(verify)).not.toContain("launchRun(");
     expect(destroy).toBeGreaterThan(verify);
     expect(inference).toBeGreaterThan(toolLess);

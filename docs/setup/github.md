@@ -138,8 +138,8 @@ GitHub's `author_association` field is not a trust source.
 
 An external fork is the narrow exception. When review automation is enabled,
 its open and update events may start an automatic isolated review. Open Session
-verifies the immutable PR refs in a disposable Firecracker MicroVM, destroys
-the guest, and gives a tool-less model only the bounded patch. No contributor
+verifies the immutable PR refs in a fresh disposable Daytona Executor, confirms
+provider deletion, and gives a tool-less model only the bounded patch. No contributor
 code runs on the host, and no model or GitHub credential enters the guest.
 External PRs cannot trigger mentions, autofix, simplify, adversarial review,
 conversational work, pushes or handoffs. Public review comments do not contain
@@ -156,8 +156,8 @@ still fails closed for every write-capable behavior.
 
 Keep public PR creation restricted until every item below is complete:
 
-1. Configure and qualify the Firecracker MicroVM provider. Confirm it reports
-   **Ready** in Workspace → Sandboxes. Public review fails closed when it is
+1. Configure and qualify the Daytona provider. Confirm it reports **Ready** in
+   Workspace → Sandboxes. Public review fails closed when it is
    unavailable, but opening submissions before readiness leaves contributors
    without the promised automatic review.
 2. Enable the `github-pr-review` automation. This is the budget switch for

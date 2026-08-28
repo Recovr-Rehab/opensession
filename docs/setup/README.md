@@ -177,7 +177,7 @@ that touches them.
 | [plain.md](plain.md) | Plain support tickets, the triage automation |
 | [integrations-misc.md](integrations-misc.md) | Stripe, WorkOS, Grafana/Sentry/Tinybird, web push, voice |
 | [engines.md](engines.md) | the Pi engine, account pools, provider keys, run isolation |
-| [../self-hosting-sandboxes.md](../self-hosting-sandboxes.md) | certified Docker, Daytona, Box, Modal, and local MicroVM sandboxes; implemented E2B and Lambda adapters remain unavailable pending certification |
+| [../self-hosting-sandboxes.md](../self-hosting-sandboxes.md) | certified Docker, Daytona, Box, and Modal sandboxes; implemented E2B and Lambda adapters remain unavailable pending certification |
 | [../runners.md](../runners.md) | attaching a Mac/Linux/Windows box as a Runner |
 | [../worktrees.md](../worktrees.md) | how sessions map to git worktrees, and where the disk goes |
 | [../../CLIENTS.md](../../CLIENTS.md) | web UI, PWA, Electron shell, Swift app, Chrome extension |

@@ -122,7 +122,7 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
 	],
 	runners: ["run hosts", "machines", "workers", "capacity", "detached runs"],
 	library: ["templates", "prompts", "skills", "starters", "commands"],
-	sandboxes: ["docker", "daytona", "box", "ascii", "modal", "microvm", "firecracker", "isolation", "compute"],
+	sandboxes: ["docker", "daytona", "box", "ascii", "modal", "isolation", "compute"],
 	integrations: ["tools", "webhooks", "credentials", "github app", "private key", "client secret"],
 	connections: ["mcp servers", "tools", "agents", "add mcp server"],
 	memory: ["facts", "remember", "scopes"],

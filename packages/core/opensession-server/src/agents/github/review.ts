@@ -83,7 +83,7 @@ import {
   publicReviewLimits,
   publicReviewSizeError,
   runToollessPublicReview,
-  verifyPublicPrInMicrovm,
+  verifyPublicPrInDisposableExecutor,
 } from "./public-review";
 
 const DEFAULT_REPO_DIR = defaultRepo().repo;
@@ -549,7 +549,7 @@ export async function runReview(
           return { findings: 0, blocking: 0, publicReview: true, error };
         }
         try {
-          await verifyPublicPrInMicrovm(isolatedInput);
+          await verifyPublicPrInDisposableExecutor(isolatedInput);
         } catch (error) {
           const message = "The isolated review environment is unavailable. No contributor code was run.";
           if (placeholderId)
@@ -715,7 +715,7 @@ export async function runReview(
         blocking: outcome.blocking,
         is_update: isUpdate,
         public_review: publicReview,
-        isolation: publicReview ? "microvm_toolless" : "host_worktree",
+        isolation: publicReview ? "disposable_executor_toolless" : "host_worktree",
         model: finalResult.model,
       });
     }

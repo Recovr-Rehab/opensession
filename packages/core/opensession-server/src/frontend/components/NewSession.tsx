@@ -764,7 +764,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       : sandboxChoices;
   const showSandboxPicker = !!sandboxStatus;
   const sandboxLabel = (id: string) =>
-		id === "" ? "This machine" : id === "docker" ? "Docker" : id === "daytona" ? "Daytona" : id === "e2b" ? "E2B" : id === "box" ? "Box" : id === "modal" ? "Modal" : id === "microvm" ? "Local MicroVM" : id === "lambda-microvm" ? "AWS Lambda MicroVM" : id;
+		id === "" ? "This machine" : id === "docker" ? "Docker" : id === "daytona" ? "Daytona" : id === "e2b" ? "E2B" : id === "box" ? "Box" : id === "modal" ? "Modal" : id === "lambda-microvm" ? "AWS Lambda MicroVM" : id;
 
   // Provider-independent family check, driven by the same server list the
   // create path enforces.
@@ -791,7 +791,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // Brain-inside remote/MicroVM sessions all adopt a full-runner prewarm.
   // Strictly fire-and-forget: failure must never surface or block typing.
   const isRemoteSandbox = sandboxProvider === "daytona" || sandboxProvider === "e2b" || sandboxProvider === "box" || sandboxProvider === "modal" || sandboxProvider === "lambda-microvm";
-  const shouldPrewarm = isRemoteSandbox || sandboxProvider === "microvm";
+  const shouldPrewarm = isRemoteSandbox;
   const [sandboxWarmed, setSandboxWarmed] = useState(false);
   const lastPrewarmAtRef = useRef(0);
   useEffect(() => {

@@ -963,7 +963,6 @@ async function bootstrapRemoteBaseRuntime(
 export async function bootstrapRemoteSandbox(
   driver: RemoteDriver,
   label: string,
-  options: { requirePrebootstrapped?: boolean } = {},
 ): Promise<void> {
   const cfg = sandboxConfig();
   const signature = bootstrapSignature();
@@ -984,11 +983,6 @@ export async function bootstrapRemoteSandbox(
       "workload identity client repair",
     );
     return;
-  }
-  if (options.requirePrebootstrapped) {
-    throw new Error(
-      `${label} source verification requires a credential-free golden matching the current runner`,
-    );
   }
   const log = (msg: string) => console.log(`[sandbox:${label}] bootstrap: ${msg}`);
 
