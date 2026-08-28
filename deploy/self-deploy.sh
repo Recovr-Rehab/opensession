@@ -529,7 +529,8 @@ do_deploy() {
 
   # Materialize the exact commit before any lifecycle action. A dirty or
   # diverged WIP tree is irrelevant: git worktree reads objects, not its files.
-  if ! release_cmd prepare-frontend "$target_sha" >/dev/null; then
+  local release_dir
+  if ! release_dir="$(release_cmd prepare-frontend "$target_sha")"; then
     log "ERROR: could not prepare release and frontend ${target_sha:0:10}"
     write_result false deploy "$current" "$current" "release or frontend preparation failed for $target_sha"
     exit 1
@@ -541,6 +542,55 @@ do_deploy() {
   if ! preflight_session_kernel; then
     log "ERROR: session kernel preflight failed; runtime pointer was not changed"
     write_result false deploy "$current" "$current" "session kernel preflight failed before release switch"
+    exit 1
+  fi
+
+  # Gateway-only source can use the installed single-active supervisor. The
+  # candidate preloads behind IPC, the old process drains while it still owns
+  # the listener and OS lease, and activation is sent only after its exit is
+  # observed. Peer/protocol/dependency changes stay on the coordinated path.
+  local release_impact="coordinated"
+  if [ -S /run/opensession-gateway/control.sock ]; then
+    release_impact="$(
+      "$BUN_BIN" "$release_dir/scripts/release-impact.ts" \
+        "$REPO_DIR" "$current" "$target_sha" 2>/dev/null || echo coordinated
+    )"
+  fi
+  if [ "$release_impact" = "gateway-handoff" ]; then
+    write_marker
+    log "preloading gateway ${target_sha:0:10} for a single-active handoff"
+    if "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+      handoff "$release_dir" "$target_sha"; then
+      if [ "$(release_cmd current-sha 2>/dev/null || true)" != "$target_sha" ]; then
+        log "ERROR: gateway supervisor returned without promoting the runtime pointer"
+        if rollback_to_pin; then
+          write_result false deploy "$(release_cmd current-sha)" "$current" \
+            "gateway handoff of $target_sha lost pointer authority; rolled back and healthy again"
+        else
+          write_result false deploy "$(release_cmd current-sha 2>/dev/null || echo unknown)" "$current" \
+            "gateway handoff of $target_sha lost pointer authority; rollback failed"
+        fi
+        exit 1
+      fi
+      if poll_health; then
+        log "healthy after gateway handoff — deployed ${target_sha:0:10}"
+        write_result true deploy "$target_sha" "$current" "deployed with a single-active gateway handoff"
+        echo 0 > "$FAIL_COUNT_FILE"
+        exit 0
+      fi
+      log "ERROR: gateway handoff returned before readiness; attempting coordinated rollback"
+      if rollback_to_pin; then
+        write_result false deploy "$(release_cmd current-sha)" "$current" \
+          "gateway handoff of $target_sha failed post-switch health; rolled back and healthy again"
+      else
+        write_result false deploy "$(release_cmd current-sha 2>/dev/null || echo unknown)" "$current" \
+          "gateway handoff of $target_sha failed post-switch health; rollback failed"
+      fi
+      exit 1
+    fi
+    log "ERROR: candidate gateway handoff failed; previous gateway remains authoritative"
+    write_result false deploy "$current" "$current" \
+      "gateway handoff of $target_sha failed before pointer switch; previous gateway retained"
     exit 1
   fi
 

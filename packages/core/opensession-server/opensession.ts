@@ -101,7 +101,10 @@ import { hydratePersistedQueueState } from "./src/server/queue-state";
 import { hydrateScheduledPromptTimers } from "./src/server/scheduled-prompts";
 import { beginShutdown } from "./src/server/shutdown-state";
 import { setServiceReadiness } from "./src/server/service-readiness";
-import { waitForGatewayActivationIfStandby } from "./src/server/gateway-activation";
+import {
+	acquireGatewayActivationLease,
+	waitForGatewayActivationIfStandby,
+} from "./src/server/gateway-activation";
 import {
 	reconcileSessionKernelOwnership,
 	sessionKernel,
@@ -132,6 +135,16 @@ function isLoopbackHostname(hostname: string): boolean {
 // proceed into even the earliest shared-state, socket, Worker, timer, or
 // integration effect until its parent explicitly activates the exact nonce.
 await waitForGatewayActivationIfStandby();
+// The OS lock is the final ownership fence. A supervisor crash or stale parent
+// can leave an old child serving, but no replacement may cross into effects
+// until that process has exited and released this lease.
+const gatewayOwnership = globalThis as typeof globalThis & {
+	__opensessionGatewayActivationLease?: Awaited<ReturnType<typeof acquireGatewayActivationLease>>;
+};
+if (!gatewayOwnership.__opensessionGatewayActivationLease) {
+	gatewayOwnership.__opensessionGatewayActivationLease =
+		await acquireGatewayActivationLease();
+}
 
 // A dev instance (OPENSESSION_DEV=1, src/server/dev-mode.ts) sharing the live
 // state is the fleet-outage class bug: the run-rpc unix socket lives under the

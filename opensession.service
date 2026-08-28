@@ -20,6 +20,8 @@ Slice=opensession-control.slice
 Environment="PATH=/home/ubuntu/.cargo/bin:/home/ubuntu/.bun/bin:/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Type=simple
 User=ubuntu
+RuntimeDirectory=opensession-gateway
+RuntimeDirectoryMode=0700
 WorkingDirectory=/home/ubuntu/projects/opensession
 EnvironmentFile=/home/ubuntu/.opensession.env
 # EXECUTOR_CREDENTIAL: rendered installs replace this marker. Keeping the
@@ -31,8 +33,10 @@ Environment="NODE_ENV=production"
 # stop every timer while HTTP keeps serving, leaving all sessions apparently
 # running but unable to progress. Backend changes use a deliberate graceful
 # restart; detached engine turns survive and the run journal reattaches them.
-# The app's own frontend watcher still rebuilds frontend edits live.
-ExecStart=/home/ubuntu/.bun/bin/bun run packages/core/opensession-server/opensession.ts
+# The app's own frontend watcher still rebuilds frontend edits live. A stable
+# supervisor keeps one active child, preloads an inert candidate, observes the
+# old child exit, and only then releases the candidate's activation barrier.
+ExecStart=/home/ubuntu/.bun/bin/bun run packages/core/opensession-server/src/server/gateway-supervisor.ts
 Restart=always
 # 1s, not 5s: this pause is pure downtime on every restart (deliberate or
 # crash), and Caddy's lb_try_duration parks requests meanwhile — a crash loop

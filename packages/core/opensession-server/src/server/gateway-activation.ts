@@ -1,3 +1,6 @@
+import { mkdirSync } from "fs";
+import { dirname } from "path";
+
 /**
  * Fail-closed preload barrier for a future supervised gateway handoff.
  *
@@ -19,6 +22,13 @@ export type GatewayPreloadedMessage = {
   pid: number;
 };
 
+type GatewayLeaseProcess = {
+  stdin: { end(): void };
+  stdout: ReadableStream<Uint8Array>;
+  stderr: ReadableStream<Uint8Array>;
+  exited: Promise<number>;
+};
+
 type ProcessPort = {
   pid: number;
   send?: (message: GatewayPreloadedMessage) => boolean;
@@ -26,7 +36,9 @@ type ProcessPort = {
   removeListener(event: "message", listener: (message: unknown) => void): unknown;
 };
 
-export function gatewayRole(env: NodeJS.ProcessEnv = process.env): GatewayRole {
+type GatewayEnvironment = Record<string, string | undefined>;
+
+export function gatewayRole(env: GatewayEnvironment = process.env): GatewayRole {
   const value = env.OPENSESSION_GATEWAY_ROLE?.trim() || "active";
   if (value !== "active" && value !== "standby") {
     throw new Error(`Invalid OPENSESSION_GATEWAY_ROLE: ${value}`);
@@ -43,8 +55,81 @@ function activationMessage(value: unknown): GatewayActivationMessage | null {
     : null;
 }
 
+async function readBoundedLine(
+  stream: ReadableStream<Uint8Array>,
+  maxBytes = 128,
+): Promise<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let value = "";
+  try {
+    while (value.length <= maxBytes) {
+      const chunk = await reader.read();
+      if (chunk.done) return value;
+      value += decoder.decode(chunk.value, { stream: true });
+      const newline = value.indexOf("\n");
+      if (newline !== -1) return value.slice(0, newline + 1);
+    }
+    throw new Error("Gateway activation lease response exceeded its bound");
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+export async function acquireGatewayActivationLease(options: {
+  env?: GatewayEnvironment;
+  spawn?: (command: string[]) => GatewayLeaseProcess;
+  exit?: (code: number) => never;
+} = {}): Promise<{ release(): Promise<void> }> {
+  const env = options.env ?? process.env;
+  const state = env.OPENSESSION_DEPLOY_STATE ||
+    `${env.HOME || ""}/.opensession/deploy`;
+  const lockPath = env.OPENSESSION_GATEWAY_LEASE || `${state}/gateway-active.lock`;
+  mkdirSync(dirname(lockPath), { recursive: true, mode: 0o700 });
+  const waitSeconds = env.OPENSESSION_GATEWAY_LEASE_WAIT_SECS || "5";
+  if (!/^\d+$/.test(waitSeconds)) {
+    throw new Error("Invalid OPENSESSION_GATEWAY_LEASE_WAIT_SECS");
+  }
+  const spawn = options.spawn ?? ((command: string[]) =>
+    Bun.spawn(command, { stdin: "pipe", stdout: "pipe", stderr: "pipe" }) as GatewayLeaseProcess);
+  const lease = spawn([
+    "flock",
+    "-w",
+    waitSeconds,
+    lockPath,
+    "/bin/sh",
+    "-c",
+    "printf 'LOCKED\\n'; cat >/dev/null",
+  ]);
+  const first = await readBoundedLine(lease.stdout);
+  if (first !== "LOCKED\n") {
+    const error = await new Response(lease.stderr).text();
+    await lease.exited;
+    throw new Error(
+      `Gateway activation lease is already held${error.trim() ? `: ${error.trim()}` : ""}`,
+    );
+  }
+
+  let releasing = false;
+  const exit = options.exit ?? ((code: number) => process.exit(code));
+  void lease.exited.then((code) => {
+    if (!releasing) {
+      console.error(`[gateway-activation] ownership lease exited unexpectedly (${code})`);
+      exit(70);
+    }
+  });
+  return {
+    async release() {
+      if (releasing) return;
+      releasing = true;
+      lease.stdin.end();
+      await lease.exited;
+    },
+  };
+}
+
 export async function waitForGatewayActivationIfStandby(options: {
-  env?: NodeJS.ProcessEnv;
+  env?: GatewayEnvironment;
   processPort?: ProcessPort;
 } = {}): Promise<void> {
   const env = options.env ?? process.env;

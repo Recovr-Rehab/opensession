@@ -226,6 +226,40 @@ export function isFrontendOnlyRelease(paths: string[]): boolean {
 	return hasFrontend;
 }
 
+const GATEWAY_PACKAGE = "packages/core/opensession-server/";
+const GATEWAY_HANDOFF_FILES = new Set([
+	`${GATEWAY_PACKAGE}opensession.ts`,
+	`${GATEWAY_PACKAGE}src/server/run-rpc.ts`,
+	`${GATEWAY_PACKAGE}src/server/self-deploy.ts`,
+	`${GATEWAY_PACKAGE}src/server/service-readiness.ts`,
+	`${GATEWAY_PACKAGE}src/server/shutdown-state.ts`,
+	`${GATEWAY_PACKAGE}src/server/ws-handlers.ts`,
+	`${GATEWAY_PACKAGE}src/server/ws-hub.ts`,
+]);
+
+/** A gateway-only release may overlap an old kernel/executor while the
+ * supervisor drains the previous gateway. This is deliberately an allowlist:
+ * helpers outside these gateway-owned surfaces may also be imported by a peer,
+ * so uncertainty falls back to the coordinated rollout. */
+export function isGatewayHandoffRelease(paths: string[]): boolean {
+	let hasGatewayRuntime = false;
+	for (const path of paths) {
+		if (
+			path === "AGENTS.md" ||
+			path.startsWith("docs/") ||
+			path.endsWith(".test.ts") ||
+			path.endsWith(".spec.ts") ||
+			path.startsWith(`${GATEWAY_PACKAGE}src/frontend/`)
+		) continue;
+		if (
+			!GATEWAY_HANDOFF_FILES.has(path) &&
+			!path.startsWith(`${GATEWAY_PACKAGE}src/server/routes/`)
+		) return false;
+		hasGatewayRuntime = true;
+	}
+	return hasGatewayRuntime;
+}
+
 async function run(
 	command: string[],
 	opts: { cwd?: string; env?: Record<string, string | undefined> } = {},
@@ -400,7 +434,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 	const tools = [
 		tool(
 			"deploy_self",
-			"Deploy THIS Open Session instance to an immutable git release. Deployment may be autonomous and is shared across sessions. Concurrent standard deploy requests queue and coalesce to the newest fast-forward target; requests already covered by that release become successful no-ops. A strictly frontend-only diff is bundled in the prepared target release, atomically promoted, and announced to clients without restarting any service. Any server, protocol, dependency, or other runtime change automatically uses the standard health-gated gateway/kernel/executor restart path. /api/rebuild-frontend only rebuilds the already pinned source and is not a promotion path. This tool DOES NOT install changed root-owned artifacts. If the target changes the live deploy controllers, opensession*.service, credential installers, the fixed run-host helper/installer, or root-deploy-managed systemd units/drop-ins, use the documented full root deploy instead. Diverged targets are refused; the shared WIP checkout is only a git object source and is never changed.",
+			"Deploy THIS Open Session instance to an immutable git release. Deployment may be autonomous and is shared across sessions. Concurrent standard deploy requests queue and coalesce to the newest fast-forward target; requests already covered by that release become successful no-ops. A strictly frontend-only diff is bundled in the prepared target release, atomically promoted, and announced to clients without restarting any service. A strictly gateway-only source diff uses the single-active preload handoff; protocol peers, dependencies, and other runtime changes use the coordinated health-gated gateway/kernel/executor restart path. /api/rebuild-frontend only rebuilds the already pinned source and is not a promotion path. This tool DOES NOT install changed root-owned artifacts. If the target changes the live deploy controllers, opensession*.service, credential installers, the fixed run-host helper/installer, or root-deploy-managed systemd units/drop-ins, use the documented full root deploy instead. Diverged targets are refused; the shared WIP checkout is only a git object source and is never changed.",
 			{
 				sha: z
 					.string()
@@ -510,7 +544,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 					return text(
 						`Deploy launched${ctx.user ? ` by ${ctx.user}` : ""}: unit ${unit} → immutable release ${targetSha.slice(0, 10)}.\n` +
 							`Result will land in ${stateDir}/last-result.json (log: ${stateDir}/self-deploy.log).\n` +
-							`This instance will RESTART shortly — your session survives via the detached engine + reattach. Check deploy_status in a couple of minutes; an unhealthy release switches back automatically, and the watchdog covers wedges for 15 min.`,
+							`This instance will promote through either the single-active gateway handoff or the coordinated restart selected by the release classifier. Your session survives via the detached engine + reattach. Check deploy_status shortly; an unhealthy release switches back automatically, and the watchdog covers wedges for 15 min.`,
 					);
 				} catch (e: any) {
 					return text(`deploy_self failed to launch: ${e?.message || String(e)}`);

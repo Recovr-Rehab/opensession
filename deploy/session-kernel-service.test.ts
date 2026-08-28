@@ -102,6 +102,42 @@ describe("session kernel service deployment", () => {
       .toBeLessThan(selfDeploy.lastIndexOf("restart_service"));
   });
 
+  test("frontend preparation failure cannot mutate live lifecycle state", async () => {
+    const selfDeploy = await Bun.file(
+      resolve(repoRoot, "deploy/self-deploy.sh"),
+    ).text();
+    const prepare = selfDeploy.indexOf('release_dir="$(release_cmd prepare-frontend "$target_sha")"');
+    const failure = selfDeploy.indexOf("release or frontend preparation failed", prepare);
+    const failureExit = selfDeploy.indexOf("exit 1", failure);
+    for (const effect of [
+      "preflight_session_kernel",
+      "write_marker",
+      "stop_gateway",
+      'release_cmd switch "$target_sha"',
+      "record_kernel_schema_floor",
+    ]) {
+      expect(selfDeploy.indexOf(effect, failureExit)).toBeGreaterThan(failureExit);
+    }
+    expect(prepare).toBeGreaterThan(0);
+    expect(failure).toBeGreaterThan(prepare);
+    expect(failureExit).toBeGreaterThan(failure);
+  });
+
+  test("gateway-only deploys leave pointer promotion inside the supervisor transaction", async () => {
+    const selfDeploy = await Bun.file(
+      resolve(repoRoot, "deploy/self-deploy.sh"),
+    ).text();
+    const branch = selfDeploy.indexOf('if [ "$release_impact" = "gateway-handoff" ]');
+    const handoff = selfDeploy.indexOf("gateway-supervisor.ts", branch);
+    const branchEnd = selfDeploy.indexOf("\n  fi\n\n  # Open the watchdog", handoff);
+    const gatewayBranch = selfDeploy.slice(branch, branchEnd);
+    expect(branch).toBeGreaterThan(0);
+    expect(handoff).toBeGreaterThan(branch);
+    expect(branchEnd).toBeGreaterThan(handoff);
+    expect(gatewayBranch).not.toContain('release_cmd switch "$target_sha"');
+    expect(gatewayBranch).toContain('release_cmd current-sha');
+  });
+
   test("supervises a separate minimal actor process on launchd", () => {
     const plist = renderSessionKernelPlist();
     const launcher = renderSessionKernelLauncher();

@@ -15,6 +15,10 @@ describe("executor deployment", () => {
     );
     expect(executor).not.toContain("PartOf=opensession.service");
     expect(gateway).toContain("Wants=opensession-executor.service");
+    expect(gateway).toContain("RuntimeDirectory=opensession-gateway");
+    expect(gateway).toContain(
+      "ExecStart=/home/ubuntu/.bun/bin/bun run packages/core/opensession-server/src/server/gateway-supervisor.ts",
+    );
     expect(gateway).not.toContain("Requires=opensession-executor.service");
     expect(gateway).toContain("# EXECUTOR_CREDENTIAL:");
     expect(gateway).not.toContain(

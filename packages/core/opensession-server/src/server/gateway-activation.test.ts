@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
 import {
+  acquireGatewayActivationLease,
   gatewayRole,
   waitForGatewayActivationIfStandby,
   type GatewayPreloadedMessage,
@@ -78,7 +79,9 @@ describe("gateway activation preload barrier", () => {
   test("entrypoint waits before every production boot effect", async () => {
     const entry = await Bun.file(resolve(import.meta.dir, "../../opensession.ts")).text();
     const barrier = entry.indexOf("await waitForGatewayActivationIfStandby()");
+    const lease = entry.indexOf("await acquireGatewayActivationLease");
     expect(barrier).toBeGreaterThan(0);
+    expect(lease).toBeGreaterThan(barrier);
     for (const effect of [
       "devInstanceBootError()",
       "startRunRpcServer()",
@@ -88,8 +91,54 @@ describe("gateway activation preload barrier", () => {
       "await startSessionKernelActor()",
       "await ensureFrontendBuilt()",
     ]) {
-      expect(entry.indexOf(effect)).toBeGreaterThan(barrier);
+      expect(entry.indexOf(effect)).toBeGreaterThan(lease);
     }
+  });
+
+  test("holds an OS lease until explicit release", async () => {
+    let ended = false;
+    let finish!: (code: number) => void;
+    const exited = new Promise<number>((resolve) => {
+      finish = resolve;
+    });
+    const lease = await acquireGatewayActivationLease({
+      env: { HOME: "/tmp/test-home" },
+      spawn(command) {
+        expect(command).toContain("/tmp/test-home/.opensession/deploy/gateway-active.lock");
+        return {
+          stdin: {
+            end() {
+              ended = true;
+              finish(0);
+            },
+          },
+          stdout: new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("LO"));
+              controller.enqueue(new TextEncoder().encode("CKED\n"));
+              controller.close();
+            },
+          }),
+          stderr: new Response("").body!,
+          exited,
+        };
+      },
+    });
+    expect(ended).toBe(false);
+    await lease.release();
+    expect(ended).toBe(true);
+  });
+
+  test("fails closed when the active lease is held", async () => {
+    await expect(acquireGatewayActivationLease({
+      env: { HOME: "/tmp/test-home" },
+      spawn: () => ({
+        stdin: { end() {} },
+        stdout: new Response("").body!,
+        stderr: new Response("busy").body!,
+        exited: Promise.resolve(1),
+      }),
+    })).rejects.toThrow("already held");
   });
 
   test("fails closed on an activation nonce mismatch", async () => {
