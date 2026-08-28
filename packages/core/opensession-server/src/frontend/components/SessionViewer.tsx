@@ -5853,9 +5853,9 @@ export function SessionViewer({
 				const keepInSidebarAction = (inMenu: boolean) =>
 					canKeepInSidebar &&
 					(inMenu ? (
-						<Menu.Item onClick={keepInSidebar} title="Add to your sidebar">
+						<Menu.Item onClick={keepInSidebar} title="Add to sidebar">
 							<KeepInSidebarIcon className={MENU_ICON} />
-							<span className="grow">Add to your sidebar</span>
+							<span className="grow">Add to sidebar</span>
 						</Menu.Item>
 					) : (
 						<Button
@@ -5864,9 +5864,9 @@ export function SessionViewer({
 							className="mr-1.5"
 							icon={<KeepInSidebarIcon />}
 							onClick={keepInSidebar}
-							title="Add to your sidebar"
+							title="Add to sidebar"
 						>
-							Add to your sidebar
+							Add to sidebar
 						</Button>
 					));
 				// Share rides inline on a wide header but tucks into the ⋯ overflow
