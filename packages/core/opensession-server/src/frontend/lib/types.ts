@@ -748,6 +748,26 @@ export interface PrHostCapabilities {
   commitNotes: boolean;
 }
 
+export interface PrDiffResponse {
+  number: number;
+  headRefOid: string;
+  patch: string;
+  diffVersion?: string;
+  skippedFiles?: number;
+}
+
+export interface ReviewGuideSection {
+  title: string;
+  explanation: string;
+  files: string[];
+}
+
+export interface ReviewGuideData {
+  number: number;
+  headRefOid: string;
+  sections: ReviewGuideSection[];
+}
+
 export interface PrDetails {
   number: number;
   title: string;
