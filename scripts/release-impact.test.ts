@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { classifyRuntimeComponents, classifyRuntimeImpact } from "./release-impact";
+import {
+  classifyRuntimeComponents,
+  classifyRuntimeImpact,
+  releaseRuntimePaths,
+} from "./release-impact";
 
 const gatewayPath = "packages/core/opensession-server/src/server/routes/system.ts";
 const sharedPath = "packages/core/opensession-server/src/server/runtime-generation.ts";
@@ -20,7 +24,6 @@ describe("generated release impact", () => {
   test("restarts the stable supervisor when its own runtime changes", () => {
     const supervisor = "packages/core/opensession-server/src/server/gateway-supervisor.ts";
     const graph = closures();
-    graph.gateway.add(supervisor);
     expect(classifyRuntimeImpact([supervisor], graph)).toBe("supervisor-restart");
     expect(classifyRuntimeImpact([supervisor, sharedPath], graph)).toBe(
       "coordinated-supervisor-restart",
@@ -31,6 +34,15 @@ describe("generated release impact", () => {
     for (const path of [sharedPath, "packages/core/protocol/src/session.ts", "bun.lock", "unknown.ts"]) {
       expect(classifyRuntimeImpact([path], closures())).toBe("coordinated");
     }
+  });
+
+  test("deployment support and tests never restart protocol peers", () => {
+    expect(releaseRuntimePaths([
+      "docs/gateway-handoffs.md",
+      "scripts/release-impact.ts",
+      "scripts/release-impact.test.ts",
+      "packages/core/opensession-server/src/frontend/App.tsx",
+    ])).toEqual([]);
   });
 
   test("identifies peers independently so unchanged services stay running", () => {

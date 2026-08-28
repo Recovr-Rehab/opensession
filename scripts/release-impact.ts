@@ -90,7 +90,8 @@ export function classifyRuntimeComponents(
       components.executor = true;
       continue;
     }
-    const known = closures.gateway.has(path) || closures.kernel.has(path) || closures.executor.has(path);
+    const known = path === "packages/core/opensession-server/src/server/gateway-supervisor.ts" ||
+      closures.gateway.has(path) || closures.kernel.has(path) || closures.executor.has(path);
     components.kernel ||= closures.kernel.has(path);
     components.executor ||= closures.executor.has(path);
     if (!known) {
@@ -113,6 +114,21 @@ export function classifyRuntimeImpact(
   return components.supervisor ? "supervisor-restart" : "gateway-handoff";
 }
 
+export function releaseRuntimePaths(paths: string[]): string[] {
+  const deploySupportPaths = new Set([
+    "scripts/deploy-canary.ts",
+    "scripts/release-impact.ts",
+    "scripts/validate-frontend-build.ts",
+  ]);
+  return paths.filter((path) =>
+    path !== "AGENTS.md" &&
+    !path.startsWith("docs/") &&
+    !path.endsWith(".test.ts") &&
+    !path.endsWith(".spec.ts") &&
+    !deploySupportPaths.has(path) &&
+    !path.startsWith("packages/core/opensession-server/src/frontend/"));
+}
+
 export async function classifyReleaseImpact(options: {
   fromRoot: string;
   toRoot: string;
@@ -129,13 +145,18 @@ export async function classifyReleaseImpact(options: {
   if (requiresRootDeploy(paths)) return { impact: "root", paths, closures: {} };
   if (isFrontendOnlyRelease(paths)) return { impact: "frontend-only", paths, closures: {} };
 
-  const runtimePaths = paths.filter((path) =>
-    path !== "AGENTS.md" &&
-    !path.startsWith("docs/") &&
-    !path.endsWith(".test.ts") &&
-    !path.endsWith(".spec.ts") &&
-    !path.startsWith("packages/core/opensession-server/src/frontend/"));
-  if (runtimePaths.length === 0) return { impact: "frontend-only", paths, closures: {} };
+  const runtimePaths = releaseRuntimePaths(paths);
+  // Non-runtime support files still need `current` to advance, but no protocol
+  // peer changed. The shell controller handles this as a cheap gateway handoff;
+  // true frontend-only releases were returned above and are promoted in-process.
+  if (runtimePaths.length === 0) {
+    return {
+      impact: "gateway-handoff",
+      paths,
+      closures: {},
+      components: { gateway: true, supervisor: false, kernel: false, executor: false },
+    };
+  }
 
   const [gateway, kernel, executor] = await Promise.all([
     combinedClosure(options.fromRoot, options.toRoot, ENTRIES.gateway),
