@@ -5861,8 +5861,9 @@ export function SessionViewer({
 						<Button
 							size="md"
 							variant="default"
-							className="mr-1.5"
+							className="mr-1.5 text-fg"
 							icon={<KeepInSidebarIcon />}
+							iconTone="full"
 							onClick={keepInSidebar}
 							title="Add to sidebar"
 						>
