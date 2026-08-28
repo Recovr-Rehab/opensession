@@ -1237,20 +1237,22 @@ function AddClaudeAccountForm({
 	useEffect(() => {
 		if (!account) return;
 		let cancelled = false;
-		void (async () => {
-			await (async () => {
-const res = await fetch(`${BASE_PATH}/api/claude-accounts/oauth-login`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ accountId: account.id }),
-				});
-				const body = await res.json();
-				if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-				if (!cancelled) setLogin(body);
-})().catch(async (cause: any) => {
-if (!cancelled) setError(cause.message);
-});
-		})();
+		void request<{ id: string; url: string }>(
+			"/claude-accounts/oauth-login",
+			{
+				method: "POST",
+				body: { accountId: account.id },
+				label: "Could not start Claude sign-in",
+			},
+		).then(
+			(nextLogin) => {
+				if (!cancelled) setLogin(nextLogin);
+			},
+			(cause: unknown) => {
+				if (!cancelled)
+					setError(errorMessage(cause, "Could not start Claude sign-in"));
+			},
+		);
 		return () => {
 			cancelled = true;
 			abortPendingOAuth(pending);
@@ -1260,23 +1262,21 @@ if (!cancelled) setError(cause.message);
 	async function handleAddToken() {
 		setSaving(true);
 		setError(null);
-		await (async () => {
-const res = await fetch(`${BASE_PATH}/api/claude-accounts`, {
+		try {
+			const added = await request<ClaudeAccountInfo>("/claude-accounts", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
+				body: {
 					name: name.trim(),
 					token: token.replace(/\s+/g, ""),
 					...(owner.trim() ? { owner: owner.trim() } : {}),
-				}),
+				},
+				label: "Could not add Anthropic account",
 			});
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			setAccount(body);
+			setAccount(added);
 			onAccountAdded();
-})().catch(async (cause: any) => {
-setError(cause.message);
-});
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not add Anthropic account"));
+		}
 		setSaving(false);
 	}
 
@@ -1284,22 +1284,20 @@ setError(cause.message);
 		if (!login) return;
 		setSaving(true);
 		setError(null);
-		await (async () => {
-const res = await fetch(
-				`${BASE_PATH}/api/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`,
+		try {
+			const result = await request<{ account?: ClaudeAccountInfo }>(
+				`/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`,
 				{
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ code }),
+					body: { code },
+					label: "Could not connect Anthropic usage tracking",
 				},
 			);
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			pending.current.done = true;
 			toast(
 				`Usage tracking connected for ${
-					body.account
-						? providerAccountLabel(body.account)
+					result.account
+						? providerAccountLabel(result.account)
 						: account
 							? providerAccountLabel(account)
 							: "Claude"
@@ -1307,10 +1305,12 @@ const res = await fetch(
 			);
 			onAccountAdded();
 			onDone();
-})().catch(async (cause: any) => {
-setError(cause.message);
+		} catch (cause) {
+			setError(
+				errorMessage(cause, "Could not connect Anthropic usage tracking"),
+			);
 			setSaving(false);
-});
+		}
 	}
 
 	if (account) {
