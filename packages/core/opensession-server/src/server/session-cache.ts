@@ -12,6 +12,7 @@ import {
 	getAllSessionsAsync,
 	readNativeSession,
 	readNativeSessionListRow,
+	readSlackSession,
 	type SessionArchiveSlice,
 } from "./sessions";
 import {
@@ -509,8 +510,8 @@ export function findSession(sessionId: string): UnifiedSession | undefined {
 	// Native ids map directly to the one session file we own. Detail and run
 	// paths should not depend on a materialized list snapshot having observed a
 	// newly created session, and they should never scan the list to open one.
-	const native = readNativeSession(sessionId);
-	if (native) return enrichSessionRuntime([native])[0];
+	const direct = readNativeSession(sessionId) ?? readSlackSession(sessionId);
+	if (direct) return enrichSessionRuntime([direct])[0];
 	return getCachedSessions().find(
 		(s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
 	);
@@ -519,12 +520,11 @@ export function findSession(sessionId: string): UnifiedSession | undefined {
 export async function findSessionAsync(
 	sessionId: string,
 ): Promise<UnifiedSession | undefined> {
-	// Native ids map one-to-one to files we own. Reading that file lets a deep
-	// link and its transcript watch open while the sidebar's cold list scan runs
-	// in parallel. External and historical alias ids still need the full merged
-	// scan because only that scan knows which source won deduplication.
-	const native = readNativeSession(sessionId);
-	if (native) return enrichSessionRuntime([native])[0];
+	// Native ids and exact Slack deep links map one-to-one to files. Reading that
+	// file lets a newly announced conversation open before the materialized list
+	// projection has observed it. Historical aliases still need the merged list.
+	const direct = readNativeSession(sessionId) ?? readSlackSession(sessionId);
+	if (direct) return enrichSessionRuntime([direct])[0];
 	return (await getCachedSessionsAsync()).find(
 		(s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
 	);
