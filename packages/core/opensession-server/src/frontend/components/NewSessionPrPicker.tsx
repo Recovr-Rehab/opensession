@@ -72,12 +72,14 @@ export function NewSessionPrPicker({
 				sideOffset={6}
 				className="w-[min(380px,calc(100vw-1rem))]"
 			>
-				<Menu.GroupLabel>Start from</Menu.GroupLabel>
-				<Menu.Item onClick={onClear} className="phone:min-h-11">
-					<IconNewBranch className="shrink-0 text-dim" size={20} />
-					<span className="min-w-0 grow truncate">New branch</span>
-					<Menu.Check on={!selected} className="text-dim" />
-				</Menu.Item>
+				<Menu.Group>
+					<Menu.GroupLabel>Start from</Menu.GroupLabel>
+					<Menu.Item onClick={onClear} className="phone:min-h-11">
+						<IconNewBranch className="shrink-0 text-dim" size={20} />
+						<span className="min-w-0 grow truncate">New branch</span>
+						<Menu.Check on={!selected} className="text-dim" />
+					</Menu.Item>
+				</Menu.Group>
 				<Menu.Separator />
 				{pullRequests === null ? (
 					<Menu.Item disabled className="phone:min-h-11 text-faint">
