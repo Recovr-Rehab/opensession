@@ -41,6 +41,7 @@ import { DESK_NOTE } from "./desk";
 import { deskBriefingFor } from "./desk-state";
 import { personalOutputStyleNoteFor } from "./personal-output-style";
 import { personalPromptNoteFor } from "./personal-prompts";
+import { PSTACK_MODE_NOTE } from "./pstack-mode";
 import {
 	findSession,
 	getCachedSessions,
@@ -234,6 +235,7 @@ export async function buildSessionNote(
 	return (
 		[
 			session.presetNote || "",
+			session.pstackMode ? PSTACK_MODE_NOTE : "",
 			// The standing Desk session gets its concierge charter first — role
 			// discipline for the summonable overlay (see desk.ts) — then the
 			// user's live state, rebuilt per turn (desk-state.ts) so it can
