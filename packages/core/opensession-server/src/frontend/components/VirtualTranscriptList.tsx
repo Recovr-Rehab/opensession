@@ -506,6 +506,13 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		if (!container || !callback) return;
 		this.topApproachContainer = container;
 		this.topApproachScrollTop = container.scrollTop;
+		// The child mounts before SessionViewer's layout effect restores the live
+		// edge. Sample again after layout so a one-step Home key or scrollbar jump
+		// compares against that restored offset rather than the pre-layout zero.
+		requestAnimationFrame(() => {
+			if (this.topApproachContainer === container)
+				this.topApproachScrollTop = container.scrollTop;
+		});
 		container.addEventListener("scroll", this.onTopApproachScroll, { passive: true });
 		container.addEventListener("wheel", this.onTopApproachWheel, { passive: true });
 		container.addEventListener("touchstart", this.onTopApproachTouchStart, {
