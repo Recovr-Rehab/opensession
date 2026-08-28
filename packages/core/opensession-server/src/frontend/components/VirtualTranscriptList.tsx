@@ -116,6 +116,7 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	private topApproachCallback: (() => void) | undefined;
 	private topApproachTimer: number | undefined;
 	private topApproachTouchY: number | null = null;
+	private topApproachScrollTop: number | null = null;
 	private topApproachGate = new TranscriptTopApproachGate();
 	private rowObserver: ResizeObserver | null = null;
 	private rowRefs = new Map<string, (node: HTMLDivElement | null) => void>();
@@ -438,6 +439,15 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	};
 
 	private onTopApproachScroll = () => {
+		const scrollTop = this.topApproachContainer?.scrollTop;
+		if (scrollTop !== undefined) {
+			if (
+				this.topApproachScrollTop !== null &&
+				didScrollTranscriptTowardHistory(this.topApproachScrollTop, scrollTop)
+			)
+				this.topApproachGate.request();
+			this.topApproachScrollTop = scrollTop;
+		}
 		if (this.topApproachTimer !== undefined) return;
 		this.topApproachTimer = window.setTimeout(() => {
 			this.topApproachTimer = undefined;
@@ -478,6 +488,7 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		);
 		this.topApproachContainer = null;
 		this.topApproachTouchY = null;
+		this.topApproachScrollTop = null;
 		if (this.topApproachTimer !== undefined) {
 			window.clearTimeout(this.topApproachTimer);
 			this.topApproachTimer = undefined;
@@ -494,6 +505,7 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		if (containerChanged) this.topApproachGate.reset();
 		if (!container || !callback) return;
 		this.topApproachContainer = container;
+		this.topApproachScrollTop = container.scrollTop;
 		container.addEventListener("scroll", this.onTopApproachScroll, { passive: true });
 		container.addEventListener("wheel", this.onTopApproachWheel, { passive: true });
 		container.addEventListener("touchstart", this.onTopApproachTouchStart, {
@@ -659,6 +671,13 @@ export function shouldTransitionTranscriptItemPosition(
 	// A prompt may move when its optimistic row becomes a durable transcript
 	// range. That identity handoff must be visually inert, not a delayed glide.
 	return !item.arrivalAliases?.length;
+}
+
+export function didScrollTranscriptTowardHistory(
+	previousOffset: number,
+	nextOffset: number,
+): boolean {
+	return nextOffset < previousOffset - 0.5;
 }
 
 export function shouldAdjustTranscriptScroll(
