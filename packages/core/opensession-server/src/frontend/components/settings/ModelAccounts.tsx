@@ -1,4 +1,3 @@
-import { BASE_PATH } from "../../lib/base";
 import React, {
 	useCallback,
 	useEffect,
@@ -113,20 +112,17 @@ interface CodexUsageBucket {
 
 // ── Shared bits ────────────────────────────────────────────────────────────
 
-/** Who an account belongs to: the shared pool, or one person's own
- *  subscription. Both account lists render this same row control. */
-/** Cancel an in-flight OAuth login when its effect tears down. Reads the
- * latest pending id at teardown time, which is the point. */
 function abortPendingOAuth(pending: { current: { id?: string; done: boolean } }) {
 	const { id, done } = pending.current;
 	if (!done && id) {
-		fetch(
-			`${BASE_PATH}/api/claude-accounts/oauth-login/${encodeURIComponent(id)}`,
-			{ method: "DELETE" },
-		).catch(() => {});
+		void request(
+			`/claude-accounts/oauth-login/${encodeURIComponent(id)}`,
+			{ method: "DELETE", label: "Could not cancel Claude sign-in" },
+		).catch(() => undefined);
 	}
 }
 
+/** Choose the shared pool or one person's subscription. */
 function OwnerSelect({
 	value,
 	onChange,
@@ -1582,90 +1578,86 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 	const [oauthCode, setOauthCode] = useState("");
 	const [pendingDone, setPendingDone] = useState(false);
 
-	// Abandoning a half-finished sign-in has to release it server-side, and the
-	// dialog can now be dismissed by Escape or the backdrop as well as by
-	// Cancel. The Effect Event gives unmount cleanup the latest committed login.
 	const cleanupPendingLogin = useEffectEvent(() => {
 		if (pendingDone) return;
-		const loginId =
+		const deviceLoginId =
 			login && (login.state === "starting" || login.state === "awaiting_code")
 				? login.id
-				: undefined;
-		if (loginId)
-			fetch(`${BASE_PATH}/api/codex-accounts/device-login/${encodeURIComponent(loginId)}`, {
-				method: "DELETE",
-			}).catch(() => {});
-		if (oauth?.id)
-			fetch(`${BASE_PATH}/api/codex-accounts/oauth-login/${encodeURIComponent(oauth.id)}`, {
-				method: "DELETE",
-			}).catch(() => {});
+				: null;
+		if (deviceLoginId) {
+			void request(
+				`/codex-accounts/device-login/${encodeURIComponent(deviceLoginId)}`,
+				{ method: "DELETE", label: "Could not cancel ChatGPT sign-in" },
+			).catch(() => undefined);
+		}
+		if (oauth) {
+			void request(
+				`/codex-accounts/oauth-login/${encodeURIComponent(oauth.id)}`,
+				{ method: "DELETE", label: "Could not cancel ChatGPT sign-in" },
+			).catch(() => undefined);
+		}
 	});
 	useEffect(() => () => cleanupPendingLogin(), []);
 
-	// Poll an in-flight device sign-in until it lands (or fails). The tick
-	// reads the live login/onAdded through an effect event; the effect only
-	// re-arms when the login identity or its phase changes.
 	const pollDeviceLoginTick = useEffectEvent(async () => {
-		await (async () => {
-const res = await fetch(
-				`${BASE_PATH}/api/codex-accounts/device-login/${encodeURIComponent(login?.id ?? "")}`
+		if (!login?.id) return;
+		try {
+			const next = await request<CodexDeviceLogin>(
+				`/codex-accounts/device-login/${encodeURIComponent(login.id)}`,
+				{ label: "Could not refresh ChatGPT sign-in" },
 			);
-			if (!res.ok) return;
-			const next: CodexDeviceLogin = await res.json();
 			setLogin(next);
 			if (next.state === "done") {
 				setPendingDone(true);
 				onAdded();
 			}
-})().catch(async () => {
-
-});
+		} catch {
+			// Keep polling. A transient refresh failure does not end the device flow.
+		}
 	});
 	const loginId = login?.id;
 	const loginState = login?.state;
 	useEffect(() => {
 		if (!loginId || loginState === "done" || loginState === "error") return;
-		const t = setInterval(() => void pollDeviceLoginTick(), 2000);
-		return () => clearInterval(t);
+		const timer = setInterval(() => void pollDeviceLoginTick(), 2000);
+		return () => clearInterval(timer);
 	}, [loginId, loginState]);
 
 	async function handleStartDeviceLogin() {
 		setSaving(true);
 		setError(null);
-		await (async () => {
-const res = await fetch(`${BASE_PATH}/api/codex-accounts/device-login`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					...(owner.trim() ? { owner: owner.trim() } : {}),
-				}),
-			});
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			setLogin(body);
-})().catch(async (e: any) => {
-setError(e.message);
-});
+		try {
+			const next = await request<CodexDeviceLogin>(
+				"/codex-accounts/device-login",
+				{
+					method: "POST",
+					body: owner.trim() ? { owner: owner.trim() } : {},
+					label: "Could not start ChatGPT device sign-in",
+				},
+			);
+			setLogin(next);
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not start ChatGPT device sign-in"));
+		}
 		setSaving(false);
 	}
 
 	async function handleStartOauth() {
 		setSaving(true);
 		setError(null);
-		await (async () => {
-const res = await fetch(`${BASE_PATH}/api/codex-accounts/oauth-login`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					...(owner.trim() ? { owner: owner.trim() } : {}),
-				}),
-			});
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			setOauth(body);
-})().catch(async (e: any) => {
-setError(e.message);
-});
+		try {
+			const next = await request<{ id: string; url: string }>(
+				"/codex-accounts/oauth-login",
+				{
+					method: "POST",
+					body: owner.trim() ? { owner: owner.trim() } : {},
+					label: "Could not start ChatGPT sign-in",
+				},
+			);
+			setOauth(next);
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not start ChatGPT sign-in"));
+		}
 		setSaving(false);
 	}
 
@@ -1673,49 +1665,44 @@ setError(e.message);
 		if (!oauth) return;
 		setSaving(true);
 		setError(null);
-		await fetch(
-			`${BASE_PATH}/api/codex-accounts/oauth-login/${encodeURIComponent(oauth.id)}`,
-			{
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ code: oauthCode }),
-			},
-		)
-			.then(async (res) => {
-				const body = await res.json();
-				if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-				toast(`Codex account ${providerAccountLabel(body.account)} added to the pool`);
-				setPendingDone(true);
-				onAdded();
-			})
-			.catch((error: any) => {
-				setError(error.message);
-				setSaving(false);
-			});
+		try {
+			const { account } = await request<{ account: CodexAccountInfo }>(
+				`/codex-accounts/oauth-login/${encodeURIComponent(oauth.id)}`,
+				{
+					method: "POST",
+					body: { code: oauthCode },
+					label: "Could not complete ChatGPT sign-in",
+				},
+			);
+			toast(`Codex account ${providerAccountLabel(account)} added to the pool`);
+			setPendingDone(true);
+			onAdded();
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not complete ChatGPT sign-in"));
+			setSaving(false);
+		}
 	}
 
 	async function handleAdd() {
 		setSaving(true);
 		setError(null);
-		await (async () => {
-			const res = await fetch(`${BASE_PATH}/api/codex-accounts`, {
+		try {
+			await request("/codex-accounts", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
+				body: {
 					...(kind === "api_key" ? { name: name.trim() } : {}),
 					kind,
 					value: value.trim(),
 					...(owner.trim() ? { owner: owner.trim() } : {}),
-				}),
+				},
+				label: "Could not add OpenAI account",
 			});
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			setPendingDone(true);
 			onAdded();
-		})().catch((error: any) => {
-			setError(error.message);
+		} catch (cause) {
+			setError(errorMessage(cause, "Could not add OpenAI account"));
 			setSaving(false);
-		});
+		}
 	}
 
 	const loginPending = login && (login.state === "starting" || login.state === "awaiting_code");
