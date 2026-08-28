@@ -461,15 +461,21 @@ extension Session {
 /// either way it means "not a person's session". Tolerant of both shapes.
 struct AutomationFlag: Decodable, Equatable, Hashable {
     let isAutomation: Bool
+    /// The configured automation name, when the wire sent the string form.
+    /// Team activity uses it to file a run under that automation's owner.
+    let name: String?
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let flag = try? container.decode(Bool.self) {
             isAutomation = flag
-        } else if let name = try? container.decode(String.self) {
-            isAutomation = !name.isEmpty
+            name = nil
+        } else if let value = try? container.decode(String.self) {
+            isAutomation = !value.isEmpty
+            name = value.isEmpty ? nil : value
         } else {
             isAutomation = false
+            name = nil
         }
     }
 }

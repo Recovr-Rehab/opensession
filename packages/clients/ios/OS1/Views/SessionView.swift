@@ -58,6 +58,7 @@ struct SessionView: View {
     /// that follows — nil simply leaves those entries out of the menu.
     private let onRenameWorkspace: ((String) -> Void)?
     private let onArchiveWorkspace: (() -> Void)?
+    private let onDeleteWorkspace: (() -> Void)?
     /// macOS has no sibling strip: its sidebar is the live-session switcher.
     /// The selected session's toolbar still offers the workspace's closed
     /// siblings, and hands restoration back to that sidebar's owner.
@@ -268,6 +269,7 @@ struct SessionView: View {
         onNextChat: (() -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
         onArchiveWorkspace: (() -> Void)? = nil,
+        onDeleteWorkspace: (() -> Void)? = nil,
         onRestoreArchivedSession: ((Session) async -> Void)? = nil,
         workspaceHistory: WorkspaceSessionHistory? = nil
     ) {
@@ -284,6 +286,7 @@ struct SessionView: View {
         self.onNextChat = onNextChat
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
+        self.onDeleteWorkspace = onDeleteWorkspace
         self.onRestoreArchivedSession = onRestoreArchivedSession
         self.workspaceHistory = workspaceHistory
     }
@@ -297,6 +300,7 @@ struct SessionView: View {
         onNextChat: (() -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
         onArchiveWorkspace: (() -> Void)? = nil,
+        onDeleteWorkspace: (() -> Void)? = nil,
         onRestoreArchivedSession: ((Session) async -> Void)? = nil,
         workspaceHistory: WorkspaceSessionHistory? = nil
     ) {
@@ -309,6 +313,7 @@ struct SessionView: View {
         self.onNextChat = onNextChat
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
+        self.onDeleteWorkspace = onDeleteWorkspace
         self.onRestoreArchivedSession = onRestoreArchivedSession
         self.workspaceHistory = workspaceHistory
     }
@@ -927,6 +932,7 @@ struct SessionView: View {
                 onNewSession: onNewSession,
                 onRenameWorkspace: onRenameWorkspace,
                 onArchiveWorkspace: onArchiveWorkspace,
+                onDeleteWorkspace: onDeleteWorkspace,
                 showWorktreeInfo: $showWorktreeInfo,
                 showPrPanel: $showPrPanel,
                 renaming: $renamingWorkspace,
@@ -1596,6 +1602,7 @@ private struct SessionActionsMenu: View {
     let onNewSession: (() -> Void)?
     let onRenameWorkspace: ((String) -> Void)?
     let onArchiveWorkspace: (() -> Void)?
+    let onDeleteWorkspace: (() -> Void)?
     @Binding var showWorktreeInfo: Bool
     @Binding var showPrPanel: Bool
     @Binding var renaming: Bool
@@ -1801,6 +1808,11 @@ private struct SessionActionsMenu: View {
                             Label("Archive", systemImage: "archivebox")
                         }
                     }
+                    if workspace.workspaceId?.isEmpty == false, let onDeleteWorkspace {
+                        Button(role: .destructive, action: onDeleteWorkspace) {
+                            Label("Delete workspace", systemImage: "trash")
+                        }
+                    }
                 }
             }
         } label: {
@@ -1990,6 +2002,8 @@ struct SessionTabsView: View {
     let onRenameWorkspace: (String) -> Void
     /// Archive every session of the worktree, from the session's overflow menu.
     let onArchiveWorkspace: () -> Void
+    /// Permanently delete the established workspace after the list confirms it.
+    let onDeleteWorkspace: () -> Void
     /// Close (archive) a session closed from the tab strip.
     let onCloseTab: (Session) -> Void
     /// Hydrate and restore a closed sibling. The returned whole session becomes
@@ -2042,6 +2056,7 @@ struct SessionTabsView: View {
         onNextChat: (() -> Void)?,
         onRenameWorkspace: @escaping (String) -> Void,
         onArchiveWorkspace: @escaping () -> Void,
+        onDeleteWorkspace: @escaping () -> Void,
         onCloseTab: @escaping (Session) -> Void,
         onRestoreTab: @escaping (Session) async -> Session?
     ) {
@@ -2054,6 +2069,7 @@ struct SessionTabsView: View {
         self.onNextChat = onNextChat
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
+        self.onDeleteWorkspace = onDeleteWorkspace
         self.onCloseTab = onCloseTab
         self.onRestoreTab = onRestoreTab
         _activeId = State(initialValue: session.id)
@@ -2145,6 +2161,7 @@ struct SessionTabsView: View {
                             onArchiveWorkspace()
                             dismiss()
                         },
+                        onDeleteWorkspace: onDeleteWorkspace,
                         workspaceHistory: overflowMenuHistory
                     )
                     // What the transcript's asset chips and the overflow menu
