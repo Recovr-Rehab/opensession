@@ -431,12 +431,22 @@ if [ "$TARGET_SCHEMA" -gt "$SCHEMA_FLOOR" ]; then
   mv "$DEPLOY_STATE/minimum-kernel-schema.tmp" "$DEPLOY_STATE/minimum-kernel-schema"
 fi
 
+GATEWAY_COORDINATED=0
 if [ "$RESTART_KERNEL" = "1" ]; then
-  echo "[deploy] stopping gateway before replacing its actor protocol peer"
-  if ! drain_gateway_for_supervisor_restart; then
-    echo "[deploy] installed supervisor lacks fast service drain; using compatibility stop"
+  echo "[deploy] preparing gateway before replacing its actor protocol peer"
+  if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "0" ] \
+    && [ "$SOCKET_ACTIVE" = "1" ] \
+    && [ -S /run/opensession-gateway/control.sock ] \
+    && "$SERVICE_BUN" \
+      "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+      prepare-coordinated "$RELEASE_DIR" "$TARGET_COMMIT"; then
+    GATEWAY_COORDINATED=1
+  else
+    if ! drain_gateway_for_supervisor_restart; then
+      echo "[deploy] installed supervisor lacks fast service drain; using compatibility stop"
+    fi
+    systemctl stop opensession.service
   fi
-  systemctl stop opensession.service
   if [ "$SOCKET_ACTIVE" = "0" ]; then
     echo "[deploy] activating the persistent gateway socket"
     systemctl enable --now opensession.socket
@@ -550,7 +560,11 @@ fi
 # it when the installed unit is unchanged; replacing it again only resets
 # already-accepted proxy connections. A changed unit still gets one fast drain
 # before systemd transfers the inherited listener.
-if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "1" ]; then
+if [ "$GATEWAY_COORDINATED" = "1" ]; then
+  "$SERVICE_BUN" \
+    "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+    activate-coordinated
+elif [ "$GATEWAY_UNIT_NEEDS_SYNC" = "1" ]; then
   drain_gateway_for_supervisor_restart || true
   systemctl restart opensession.service
 elif ! systemctl is-active --quiet opensession.service; then
@@ -563,6 +577,11 @@ fi
 for _ in $(seq 1 30); do
   sleep 2
   if curl -fs --max-time 4 "$HEALTH_URL" >/dev/null 2>&1; then
+    if [ "$GATEWAY_COORDINATED" = "1" ]; then
+      "$SERVICE_BUN" \
+        "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+        commit-coordinated
+    fi
     echo "[deploy] healthy after restart"
     exit 0
   fi
