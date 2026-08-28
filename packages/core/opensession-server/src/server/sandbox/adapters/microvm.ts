@@ -631,7 +631,9 @@ export class MicrovmProvider implements SandboxProvider {
         callbackBaseUrl,
       );
       await bootstrapRemoteSandbox(bootstrapDriver, "microvm");
-      const cloneUrl = await remoteCloneUrl(repo);
+      const cloneUrl = await remoteCloneUrl(repo, {
+        credential: spec.cloneCredential,
+      });
       await setupRemoteWorkspace(
         driver,
         cwd,

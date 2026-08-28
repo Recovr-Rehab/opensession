@@ -646,9 +646,12 @@ export async function remoteCloneUrl(repo: {
   ghRepo?: string;
   host?: "github" | "codestorage";
   csRepo?: string;
-}): Promise<string> {
+}, options: { credential?: "configured" | "none" } = {}): Promise<string> {
   const origin = await hostGit(["remote", "get-url", "origin"], repo.repo);
   if (repo.host === "codestorage") {
+    if (options.credential === "none") {
+      throw new Error(`repo ${repo.id} does not expose a credential-free code.storage clone`);
+    }
     const csRepoId = repo.csRepo || (origin ? parseCsRemote(origin)?.repoId : undefined);
     if (!csRepoId) {
       throw new Error(
@@ -670,7 +673,9 @@ export async function remoteCloneUrl(repo: {
       `repo ${repo.id} has no https-reachable origin (origin="${redactUrl(origin) || "none"}") — remote sandboxes clone over https; set an origin or ghRepo`,
     );
   }
-  return await injectCloneCredential(https);
+  return options.credential === "none"
+    ? credentialFreeHttpsUrl(https)
+    : await injectCloneCredential(https);
 }
 
 /**

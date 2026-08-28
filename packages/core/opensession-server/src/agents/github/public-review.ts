@@ -288,6 +288,7 @@ export async function verifyPublicPrInMicrovm(
       mode: "ask",
       trustProfile: "automation",
       egressAllowlist: [],
+      cloneCredential: "none",
     });
     try {
       const headRef = `refs/opensession/public-review/${input.prNumber}/head`;

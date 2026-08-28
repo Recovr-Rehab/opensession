@@ -73,6 +73,9 @@ export interface SandboxSessionSpec {
   trustProfile?: "interactive" | "automation";
   /** Hostnames, IPs, CIDRs, or URLs permitted for automation egress. */
   egressAllowlist?: string[];
+  /** Force a credential-free HTTPS clone. Public untrusted-source jobs must
+   * never receive the configured repository clone credential. */
+  cloneCredential?: "configured" | "none";
 }
 
 export interface ExecOpts {

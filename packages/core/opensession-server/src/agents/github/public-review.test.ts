@@ -134,6 +134,7 @@ describe("public PR review policy", () => {
     const verifyCall = review.indexOf("await verifyPublicPrInMicrovm", publicBranch);
     const toolLessCall = review.indexOf("await runToollessPublicReview", publicBranch);
     expect(source.slice(verify, toolLess)).toContain("refs/pull/${input.prNumber}/head");
+    expect(source.slice(verify, toolLess)).toContain('cloneCredential: "none"');
     expect(source.slice(verify)).not.toContain("launchRun(");
     expect(destroy).toBeGreaterThan(verify);
     expect(inference).toBeGreaterThan(toolLess);
