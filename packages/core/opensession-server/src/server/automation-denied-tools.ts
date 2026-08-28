@@ -54,8 +54,8 @@ export const AUTOMATION_DENIED_TOOLS: Record<string, string> = {
   // allowlist featurebase-reader (read-only) on automations that see ticket text.
   mcp__featurebase__reply_to_ticket: FEATUREBASE_WRITE_DENIAL,
   mcp__featurebase__reply_to_conversation: FEATUREBASE_WRITE_DENIAL,
-  mcp__featurebase-writer__reply_to_ticket: FEATUREBASE_WRITE_DENIAL,
-  mcp__featurebase-writer__reply_to_conversation: FEATUREBASE_WRITE_DENIAL,
+  "mcp__featurebase-writer__reply_to_ticket": FEATUREBASE_WRITE_DENIAL,
+  "mcp__featurebase-writer__reply_to_conversation": FEATUREBASE_WRITE_DENIAL,
   // WorkOS: read-only — no identity mutation or impersonation from a run
   mcp__workos__create_organization: WORKOS_WRITE_DENIAL,
   mcp__workos__create_organization_membership: WORKOS_WRITE_DENIAL,

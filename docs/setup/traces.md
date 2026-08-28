@@ -23,28 +23,33 @@ not enough. Publishing reads Pi JSONL under `~/.opensession/pi/sessions/<id>/`.
    clicks **Connect Traces**. They authorize GitHub on traces.com. The GitHub
    login must match.
 
-Tokens live in `~/.opensession/traces-auth.json` (mode 0600) keyed by GitHub
-login. They are never returned by the API.
+Tokens live in `~/.opensession/traces-auth.json` by default (mode 0600) keyed
+by GitHub login. Override the path with `OPENSESSION_TRACES_AUTH_STORE`. They
+are never returned by the API.
 
 ## What gets published
 
 After a successful interactive Pi turn (`prompt`, `slack`, `linear`, `goal`,
-`create`, `workflow`), Open Session shares the latest Pi JSONL as that session's
-`createdByLogin`. Shares for the same session are serialized so overlapping
-turns cannot pile up. The share is private. The traces.com URL is stored on the
-session as `externalRefs` kind `traces-trace`. The device token is passed as
-`TRACES_CLI_AUTH_TOKEN` in an isolated child environment, never on argv.
+`create`, `workflow`), and only while Traces is enabled (`ENABLE_TRACES_AGENT`
+or `integrations.traces.enabled`), Open Session shares the latest Pi JSONL as
+that session's `createdByLogin`. Shares for the same session are serialized so
+overlapping turns cannot pile up. The share is private. The traces.com URL is
+stored on the session as `externalRefs` kind `traces-trace`. The device token
+is passed as `TRACES_CLI_AUTH_TOKEN` in an isolated child environment, never
+on argv.
 
-Skipped: automations, GitHub bot runs, sessions with no linked Traces account.
+Skipped: Traces disabled, automations, GitHub bot runs, sessions without
+`createdByLogin`, sessions with no linked Traces account.
 
 ## Env / config
 
 | Var / key | Notes |
 | --- | --- |
 | `ENABLE_TRACES_AGENT` | literal `true` to load the module |
+| `OPENSESSION_TRACES_AUTH_STORE` | optional path for the device-session store (default `~/.opensession/traces-auth.json`) |
 | `TRACES_NAMESPACE_SLUG` | org slug to publish into; optional if the connected session's active namespace is already the team org |
 | `TRACES_BIN` | optional path to the `traces` binary |
-| `TRACES_API_BASE` | default `https://actions.traces.com` |
+| `TRACES_API_BASE` | HTTPS origin, default `https://actions.traces.com` |
 | `integrations.traces.enabled` | used when the env flag is unset |
 | `integrations.traces.namespaceSlug` | same as `TRACES_NAMESPACE_SLUG` |
 | `integrations.traces.apiBase` | REST origin |
@@ -59,5 +64,5 @@ Join key is GitHub login:
 - Open Session: `createdByLogin` (GitHub App user sign-in)
 - Traces: personal namespace slug, else `displayName` on `GET /v1/session`
 
-If those do not match, connect is rejected. On a single-user install with no
-GitHub gate and exactly one connected Traces account, that account is used.
+If those do not match, connect is rejected. Sessions without `createdByLogin`
+are not published.

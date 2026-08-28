@@ -1451,6 +1451,7 @@ export async function runAutomation(
       updateSessionFile(bksId, (data) => {
         // Widen to Partial: the file may not exist yet (create-if-absent).
         const existing: Partial<NativeSessionFile> = data;
+        const incomingRef = eventExternalRef;
         return {
           id: bksId,
           claudeSessionId: "",
@@ -1479,9 +1480,18 @@ export async function runAutomation(
             ? { automationEvent: options.eventContext.slice(0, 10_000) }
             : {}),
           ...(plainThreadId ? { plainThreadId } : {}),
-          ...(eventExternalRef ? { externalRefs: [eventExternalRef] } : {}),
           ...(ticketWorkspaceId ? { workspaceId: ticketWorkspaceId } : {}),
           ...existing,
+          ...(incomingRef
+            ? {
+                externalRefs: [
+                  ...(existing.externalRefs || []).filter(
+                    (ref) => !(ref.kind === incomingRef.kind && ref.id === incomingRef.id),
+                  ),
+                  incomingRef,
+                ],
+              }
+            : {}),
           ...(engineSessionId
             ? engineSessionPatch(effectiveProvider, engineSessionId)
             : {}),

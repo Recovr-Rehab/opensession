@@ -7281,6 +7281,7 @@ export function SessionViewer({
 							<FeedItemPane
 								panel={videoPanel}
 								title={videoTitle || undefined}
+								onOpenSession={onOpenSession}
 							/>
 						</div>
 					) : showTerminal ? (

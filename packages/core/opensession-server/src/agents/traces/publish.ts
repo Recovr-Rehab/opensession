@@ -9,9 +9,9 @@ import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
 import { PI_STATE_DIR } from "../../server/pi-runner";
 import { invalidateSessionsCache } from "../../server/session-cache";
 import type { NativeSessionFile } from "../../server/types";
-import { tracesBin, tracesNamespaceSlug } from "./config";
-import { listTracesAccounts, markTracesAccountStale, tracesCredentialForLogin } from "./auth";
-import { shouldPublishSession } from "./policy";
+import { tracesBin, tracesEnabled, tracesNamespaceSlug } from "./config";
+import { markTracesAccountStale, tracesCredentialForLogin } from "./auth";
+import { publisherLogin, shouldPublishSession } from "./policy";
 import { tracesShareEnv } from "./share-env";
 
 function sanitizeId(id: string): string {
@@ -43,18 +43,13 @@ function latestPiJsonl(osSessionId: string): string | null {
   return best?.path ?? null;
 }
 
-function publisherLogin(session: NativeSessionFile): string | null {
-  if (session.createdByLogin) return session.createdByLogin;
-  const connected = listTracesAccounts();
-  return connected.length === 1 ? connected[0].githubLogin : null;
-}
-
 const inflight = new Map<string, Promise<unknown>>();
 
 export async function shareOpenSessionTrace(
   osSessionId: string,
   journalKind?: string,
 ): Promise<{ ok: boolean; skipped?: string; url?: string; error?: string }> {
+  if (!tracesEnabled()) return { ok: true, skipped: "traces-disabled" };
   const session = readSession(osSessionId);
   if (!session) return { ok: false, skipped: "missing-session" };
   if (!shouldPublishSession(session, journalKind)) {

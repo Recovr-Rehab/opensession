@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { rmSync } from "fs";
 import { githubLoginFromTracesSession } from "./auth";
-import { shouldPublishSession } from "./policy";
+import { publisherLogin, shouldPublishSession } from "./policy";
 import { tracesShareEnv } from "./share-env";
 import type { NativeSessionFile } from "../../server/types";
 
@@ -22,6 +22,13 @@ describe("githubLoginFromTracesSession", () => {
         actor: { namespace: { slug: "recovr", type: "org" } },
       }),
     ).toBe("joshuaoliver");
+  });
+});
+
+describe("publisherLogin", () => {
+  it("does not infer ownership from connected-account count", () => {
+    expect(publisherLogin({ id: "s1" } as NativeSessionFile)).toBeNull();
+    expect(publisherLogin({ id: "s1", createdByLogin: "josh" } as NativeSessionFile)).toBe("josh");
   });
 });
 

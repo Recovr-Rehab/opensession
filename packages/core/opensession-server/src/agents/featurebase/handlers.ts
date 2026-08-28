@@ -2,6 +2,7 @@ import { archiveSessionsForFeaturebaseRef } from "./archive";
 import { isTerminalStatusType } from "./api";
 import { featurebaseMentionHandle } from "./config";
 import { htmlToText } from "./html";
+import { featurebaseMentionRe } from "./mention";
 
 export const TICKET_CREATED = "featurebase:ticket_created";
 export const POST_CREATED = "featurebase:post_created";
@@ -84,7 +85,7 @@ function payloadFor(topic: string, item: Record<string, unknown>): Record<string
 async function deliverMention(ticketId: string, noteId: string, text: string): Promise<void> {
   const handle = featurebaseMentionHandle();
   if (!handle) return;
-  const re = new RegExp(`@?${handle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i");
+  const re = featurebaseMentionRe(handle);
   if (!re.test(text)) return;
   const { tryGetSessionControl } = await import("../../server/session-control");
   const { getCachedSessions } = await import("../../server/session-cache");
