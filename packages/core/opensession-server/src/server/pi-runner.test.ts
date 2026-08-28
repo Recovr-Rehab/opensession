@@ -164,6 +164,7 @@ describe("assistant transcript output", () => {
         content: "I should inspect the repository.",
         timestamp: "2026-08-24T12:00:00.000Z",
         model: "gpt-5.6-terra",
+        isReasoning: true,
       },
       {
         id: "t1",

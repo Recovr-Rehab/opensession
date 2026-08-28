@@ -198,12 +198,15 @@ export function piAssistantTranscriptEntries(
       name?: unknown;
       arguments?: unknown;
     };
+    const reasoning =
+      block.type === "thinking" && typeof block.thinking === "string"
+        ? block.thinking
+        : "";
+    const isReasoning = reasoning.length > 0;
     const prose =
       block.type === "text" && typeof block.text === "string"
         ? block.text
-        : block.type === "thinking" && typeof block.thinking === "string"
-          ? block.thinking
-          : "";
+        : reasoning;
     if (prose.trim()) {
       entries.push({
         id: proseIndex === 0 ? messageId : `${messageId}-b${proseIndex}`,
@@ -211,6 +214,7 @@ export function piAssistantTranscriptEntries(
         content: prose,
         timestamp,
         model,
+        ...(isReasoning ? { isReasoning: true } : {}),
       });
       proseIndex++;
     } else if (block.type === "toolCall" && block.id) {

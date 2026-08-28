@@ -43,6 +43,7 @@ describe("readPiNativeTranscript", () => {
 				type: "assistant",
 				content: "I should inspect the repository.",
 				timestamp: "2026-08-24T12:00:00.000Z",
+				isReasoning: true,
 			},
 			{
 				id: "tool-1",

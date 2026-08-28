@@ -146,10 +146,11 @@ export function readPiNativeTranscript(
 		const messageId = id || crypto.randomUUID();
 		let proseIndex = 0;
 		for (const block of blocks(row.message)) {
+			const isReasoning = role === "assistant" && block.type === "thinking";
 			const prose =
 				block.type === "text"
 					? block.text
-					: role === "assistant" && block.type === "thinking"
+					: isReasoning
 						? block.thinking
 						: undefined;
 			if (prose?.trim()) {
@@ -158,6 +159,7 @@ export function readPiNativeTranscript(
 					type: role === "assistant" ? "assistant" : "user",
 					content: prose,
 					timestamp: ts,
+					...(isReasoning ? { isReasoning: true } : {}),
 				});
 				proseIndex++;
 			} else if (block.type === "toolCall" && block.name) {

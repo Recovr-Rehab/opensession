@@ -38,9 +38,10 @@ import {
 } from "./ShippedChangeComposer";
 import { SessionContextMessage } from "./SessionContextMessage";
 import { visibleTranscriptHydrationDemand } from "./session-viewer/transcript-hydration";
+import { isLegacyReasoningHeading } from "../lib/reasoning-display";
 
 type RenderBlock =
-	| { kind: "entry"; entry: TranscriptEntry }
+	| { kind: "entry"; entry: TranscriptEntry; reasoning?: boolean }
 	| { kind: "turn"; items: TranscriptEntry[]; expandWhileRunning: boolean }
 	| {
 			kind: "footer";
@@ -358,7 +359,15 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 			flushTools();
 			// Model output is conversation, not work chrome. Keeping every message
 			// as its own block makes it impossible for a tool disclosure to hide it.
-			blocks.push({ kind: "entry", entry });
+			// Bold-only intermediate rows are the reasoning-summary shape persisted
+			// before `isReasoning` existed; keep their presentation quiet too.
+			blocks.push({
+				kind: "entry",
+				entry,
+				reasoning:
+					entry.isReasoning ||
+					(entry !== final && isLegacyReasoningHeading(entry.content)),
+			});
 		}
 		flushTools();
 		// Quiet actions under the settled answer, the files the turn wrote, and
@@ -497,6 +506,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 										reviewBlockRole(inner).kind !== "handoff" ? (
 										<MessageBubble
 											entry={inner.entry}
+											reasoning={inner.reasoning}
 											pendingDelivery={pendingDeliveryEntryIds.has(inner.entry.id)}
 											owner={owner}
 											sessionId={sessionId}
@@ -547,6 +557,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 			) : (
 				<MessageBubble
 					entry={block.entry}
+					reasoning={block.reasoning}
 					pendingDelivery={pendingDeliveryEntryIds.has(block.entry.id)}
 					owner={owner}
 					sessionId={sessionId}
