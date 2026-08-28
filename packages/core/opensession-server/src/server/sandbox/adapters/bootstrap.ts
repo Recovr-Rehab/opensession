@@ -737,6 +737,45 @@ export function bootstrapSignature(): string {
   );
 }
 
+/** Toolchain identity for DURABLE repo templates: everything bootstrap
+ * installs that a restored sandbox cannot cheaply reconcile in place.
+ * Deliberately excludes the runnerSha commit pin itself: on adoption,
+ * bootstrapRemoteSandbox already reconciles a stale checkout with a shallow
+ * fetch + detached checkout of the pin, an incremental frozen-lockfile
+ * install, and a forced runner recompile — seconds to a minute inside the
+ * restored filesystem. Keying templates on the pin instead threw away every
+ * provider artifact (full re-clone + project setup + re-snapshot) on every
+ * deploy. The runner repo's committed lockfile stands in for the dependency
+ * payload: templates survive code-only runner bumps and still rotate when
+ * the dependency set actually moves. */
+export function runnerToolchainSignature(): string {
+  const cfg = sandboxConfig();
+  const base = cfg.runnerSha
+    ? runnerLockfileOid(cfg.runnerSha)
+    : cfg.runnerBundleUrl || "unpinned";
+  return (
+    `${base}+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
+    `+gh@${REMOTE_GH_VERSION}+${REMOTE_RUNTIME_REVISION}`
+  );
+}
+
+/** bun.lock blob oid at the pinned runner commit — falling back to the local
+ * checkout's HEAD when the pin isn't resolvable here, then to the pin itself
+ * so an unreadable repo degrades to per-deploy invalidation, never to silent
+ * reuse across an unknown dependency change. */
+function runnerLockfileOid(runnerSha: string): string {
+  for (const rev of [runnerSha, "HEAD"]) {
+    const proc = Bun.spawnSync({
+      cmd: ["git", "-C", REPO_ROOT, "rev-parse", "--verify", "--quiet", `${rev}:bun.lock`],
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const oid = proc.exitCode === 0 ? proc.stdout.toString().trim() : "";
+    if (oid) return `lock:${oid}`;
+  }
+  return runnerSha;
+}
+
 function remoteRunnerInstallCommand(force = false): string {
   const temporary = `${REMOTE_RUNNER_BINARY}.tmp`;
   return (

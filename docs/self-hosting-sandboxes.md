@@ -225,6 +225,16 @@ Honest status, because these are the newest parts:
   the requested branch; setup-input changes invalidate them separately.
   Explicitly prepared Daytona and Modal images refresh on a 30-minute cadence,
   while Box uses six hours to conserve its daily start quota.
+- Prepared templates are keyed on the runner toolchain and the repo's
+  committed setup inputs, not on the runner's commit pin: an ordinary deploy
+  bumps the pin, and adoption reconciles it inside the restored filesystem
+  (shallow fetch + detached checkout + incremental install), so templates
+  survive deploys instead of rebuilding on every one. The default setup
+  inputs are `.agents/setup`, `.agents/sandbox-environment.json` and
+  `bun.lock`; a repo can declare extra committed files or directories in
+  `.agents/sandbox-environment.json` under `preparationInputs` (for example
+  `["patches", "Cargo.lock"]`) so its own invalidation surface travels with
+  the repo.
 
 If you are starting out, use Docker and leave prewarm alone. The enable command
 turns Docker snapshots on; set `snapshots.enabled` to false if you prefer no

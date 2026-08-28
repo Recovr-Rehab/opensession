@@ -33,7 +33,7 @@ import type { RemotePtyHandle, RemotePtyIo } from "./daytona";
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
-  bootstrapSignature,
+  runnerToolchainSignature,
   findRemoteStateBySession,
   listRemoteStates,
   makeRemoteSandbox,
@@ -415,8 +415,11 @@ function cloneDiskExists(idx: number, storeDir: string): boolean {
 
 function repoTemplateKey(repoId: string): string {
   const repo = repoId.replace(/[^A-Za-z0-9_.-]+/g, "-").slice(0, 80);
+  // Toolchain, not the runner commit pin: adoption's bootstrapRemoteSandbox
+  // reconciles a stale pin inside the cloned disk, so templates survive
+  // ordinary deploys instead of rebuilding on every one.
   const signature = createHash("sha256")
-    .update(bootstrapSignature())
+    .update(runnerToolchainSignature())
     .digest("hex")
     .slice(0, 16);
   return `repo-${repo}-${signature}`;
