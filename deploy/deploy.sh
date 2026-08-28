@@ -574,7 +574,13 @@ if [ "$GATEWAY_COORDINATED" = "1" ]; then
 fi
 if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "1" ] \
   || [ "$(supervisor_generation || true)" != "$TARGET_COMMIT" ]; then
-  drain_gateway_for_supervisor_restart || true
+  if [ "$GATEWAY_COORDINATED" = "1" ]; then
+    "$SERVICE_BUN" \
+      "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+      commit-coordinated
+    GATEWAY_COORDINATED=0
+  fi
+  drain_gateway_for_supervisor_restart
   systemctl restart opensession.service
   # The replacement reconciles the durable transaction journal against the
   # selected generation; the old in-memory transaction no longer exists.
