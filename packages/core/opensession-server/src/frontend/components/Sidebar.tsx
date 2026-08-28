@@ -171,6 +171,7 @@ import {
 	IconFeed,
 	IconPeople,
 	IconPullRequest,
+	IconBrowserTab,
 } from "./icons";
 import { Button } from "../ui/button";
 import { useConfirm } from "../ui/confirm";
@@ -553,6 +554,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	onOpenReports,
 	analyticsActive,
 	onOpenAnalytics,
+	controlUiActive,
+	onOpenControlUi,
 	onSelect,
 	onOpenReview,
 	onOpenTicket,
@@ -2935,6 +2938,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			active: analyticsActive,
 			onClick: onOpenAnalytics,
 			title: "Sessions, tokens, models & PRs over time",
+		},
+		{
+			id: "control-ui",
+			label: SIDEBAR_TOOL_LABELS["control-ui"],
+			icon: <IconBrowserTab />,
+			active: controlUiActive,
+			onClick: onOpenControlUi,
+			title: "Start a session that can inspect and drive a UI",
 		},
 	];
 	// Tools this width offers at all — the switches below only choose among

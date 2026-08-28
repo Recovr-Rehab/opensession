@@ -134,6 +134,13 @@ const CORE_TOOLS: {
 		category: "Work",
 	},
 	{
+		slug: "control-ui",
+		name: "Control UI",
+		description:
+			"Start a session prepared to reproduce, inspect, and verify interface behavior.",
+		category: "Build",
+	},
+	{
 		slug: "catchup",
 		name: "Catch up",
 		description:

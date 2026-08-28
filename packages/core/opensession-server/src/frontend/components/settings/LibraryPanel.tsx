@@ -9,6 +9,7 @@ import { BRANDS, displayName } from "../../brand-logos";
 import { IconTile } from "../BrandTile";
 import {
 	IconBolt,
+	IconBrowserTab,
 	IconChart,
 	IconCheckCircle,
 	IconInbox,
@@ -97,6 +98,7 @@ type Glyph = { icon: ComponentType<{ size?: number }>; tone: MarkTone };
  *  sidebar already names it. */
 const TOOL_GLYPHS: Record<string, Glyph> = {
 	tasks: { icon: IconListCircles, tone: "sky" },
+	"control-ui": { icon: IconBrowserTab, tone: "indigo" },
 	plain: { icon: IconMail, tone: "orange" },
 	catchup: { icon: IconInbox, tone: "green" },
 	supporttinder: { icon: IconMessages, tone: "coral" },

@@ -139,9 +139,22 @@ test("the new session title uses the visible names of pasted session links", asy
   const createEnd = source.indexOf("const canCreate =", createStart);
   const createPayload = source.slice(createStart, createEnd);
 
-  expect(createPayload).toContain(
-    "titlePrompt: projectComposerSessions(prompt).displayText",
-  );
+  expect(createPayload).toContain("projectComposerSessions(prompt).displayText");
+  expect(createPayload).toContain("selectedSkill?.label || prompt");
+});
+
+test("a launcher-selected skill stays out of the visible prompt", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+  const createStart = source.indexOf('type: "create_session"');
+  const createEnd = source.indexOf("const canCreate =", createStart);
+  const createPayload = source.slice(createStart, createEnd);
+  const createGate = source.slice(createEnd, source.indexOf("const createRef", createEnd));
+
+  expect(createPayload).toContain("skill: selectedSkill.name");
+  expect(createPayload).not.toContain("/skill:");
+  expect(createGate).toContain("!!selectedSkill");
+  expect(source).toContain("label={selectedSkill.label}");
+  expect(source).toContain("What should Control UI reproduce or verify?");
 });
 
 test("the floating composer owns app-wide file drops", async () => {

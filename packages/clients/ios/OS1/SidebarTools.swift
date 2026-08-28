@@ -20,20 +20,21 @@ enum SidebarTools {
     static let feed = "feed"
     static let prs = "prs"
     static let tasks = "tasks"
+    static let controlUI = "control-ui"
     static let plain = "plain"
     static let catchUp = "catchup"
     static let reports = "reports"
 
-    /// What an account shows when nobody has chosen. Support Tinder and
-    /// Analytics have no phone surface here, but the whole list is mirrored
-    /// because it is the agreement with the web: absent means exactly this, on
-    /// both clients. Keep it in step with DEFAULT_VISIBLE_TOOLS in
+    /// The shared visibility defaults when nobody has chosen. Control UI,
+    /// Support Tinder, and Analytics have no native surface here, but the whole
+    /// list is mirrored so a native preference write cannot change what the web
+    /// shows. Keep it in step with DEFAULT_VISIBLE_TOOLS in
     /// packages/core/opensession-server/src/frontend/lib/sidebar-tools.ts.
     static let allIds = [
-        feed, prs, tasks, plain, catchUp, "supporttinder", reports,
+        feed, prs, tasks, controlUI, plain, catchUp, "supporttinder", reports,
         "analytics",
     ]
-    static let defaultVisible = [feed, prs, plain, catchUp]
+    static let defaultVisible = [feed, prs, controlUI, plain, catchUp]
     static var defaultHidden: [String] { allIds.filter { !defaultVisible.contains($0) } }
     static var defaultHiddenJSON: String { encode(defaultHidden) }
 

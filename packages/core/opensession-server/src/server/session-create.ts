@@ -50,6 +50,8 @@ import { configuredInteractiveDefaultModel } from "./model-catalog";
 import { notifyMentions } from "./mentions";
 import { newSessionId } from "./paths";
 import { enablesPstackMode, PSTACK_MODE_NOTE } from "./pstack-mode";
+import { selectedSkillName, selectedSkillPrompt } from "./skill-paths";
+import { searchSkills } from "./skills";
 import { wrapContext } from "./prompt-context";
 import {
 	acknowledgePromptDispatch,
@@ -162,6 +164,8 @@ export interface CreateSessionMessage {
 	fastMode?: unknown;
 	accountId?: string;
 	mcpServers?: unknown;
+	/** Skill selected by a launcher, kept out of the person's visible prompt. */
+	skill?: unknown;
 	repo?: unknown;
 	/** Repos to work in beside `repo` (the palette's multi-select picker). */
 	attachRepos?: unknown;
@@ -1798,6 +1802,21 @@ export async function handleCreateSessionMessage(
 	};
 
 	const { prompt, user, mode } = msg;
+	let selectedSkill: string | undefined;
+	let openingTask = prompt;
+	if (msg.skill !== undefined) {
+		if (typeof msg.skill !== "string") {
+			failCreate("Invalid selected skill");
+			return;
+		}
+		try {
+			selectedSkill = selectedSkillName(msg.skill);
+			openingTask = selectedSkillPrompt(selectedSkill, prompt);
+		} catch {
+			failCreate("Invalid selected skill");
+			return;
+		}
+	}
 	const titlePrompt =
 		typeof msg.titlePrompt === "string" ? msg.titlePrompt.slice(0, 2000) : prompt;
 	const requestId =
@@ -2281,6 +2300,15 @@ export async function handleCreateSessionMessage(
 			attachBranch,
 		);
 
+		if (
+			selectedSkill &&
+			!searchSkills(wtPath, selectedSkill, 1).some(
+				(skill) => skill.name === selectedSkill,
+			)
+		) {
+			throw new Error(`Selected skill "${selectedSkill}" is not available`);
+		}
+
 		const title = (await nameKnownSessionReferencesForTitle(titlePrompt))
 			.trim()
 			.split("\n")[0]
@@ -2352,7 +2380,7 @@ export async function handleCreateSessionMessage(
 				...attachment,
 			});
 		let openingPrompt = withUploadsNote(
-			prompt,
+			openingTask,
 			attachmentSources.map((attachment) => ({
 				name: attachment.name,
 				path: creationAttachmentPath(

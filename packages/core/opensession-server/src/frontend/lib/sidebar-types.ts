@@ -76,6 +76,10 @@ export interface Props {
 	analyticsActive: boolean;
 	/** Open the Analytics view (sessions/tokens/models/PRs over time). */
 	onOpenAnalytics: () => void;
+	/** True while the Control UI launcher owns the new-session palette. */
+	controlUiActive: boolean;
+	/** Open a new-session palette with Control UI already selected. */
+	onOpenControlUi: () => void;
 	onSelect: (session: UnifiedSession) => void;
 	/** Foreground a session's Review view-tab (from a session row's context menu). */
 	onOpenReview: (session: UnifiedSession) => void;

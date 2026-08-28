@@ -395,6 +395,8 @@ export type ProtocolClientMessage =
       model?: string;
       /** Optional MCP server allowlist for the opening run. [] means none. */
       mcpServers?: string[];
+      /** Skill chosen by a launcher, applied without writing slash syntax into the prompt. */
+      skill?: string;
       /** Execute on a managed Executor from this provider. Omit to use this machine. */
       executor?: ExecutorProvider;
       /** @deprecated Transitional pre-Executor selection. Use executor. */

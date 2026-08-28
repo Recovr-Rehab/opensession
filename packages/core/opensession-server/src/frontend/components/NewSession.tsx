@@ -51,6 +51,7 @@ import {
   IconChevronRight,
   IconConnections,
   IconDotsHorizontal,
+  IconBolt,
   IconEye,
   IconReturn,
   IconBox,
@@ -97,6 +98,7 @@ import { NewSessionPrPicker } from "./NewSessionPrPicker";
 import { askSurface } from "../lib/tinted-surface";
 import { toast } from "../ui/toast";
 import { cn } from "../ui/cn";
+import type { SelectedSkill } from "../lib/selected-skill";
 import { PhoneTopBar, PhoneTopBarAction } from "../ui/top-bar";
 import {
 	paletteIconBtn,
@@ -125,6 +127,8 @@ interface Props {
   /** Services selected before the palette opens, such as from a command-menu
    *  shortcut. They use the same chips and create payload as manual picks. */
   initialMcpServers?: string[];
+  /** Skill chosen by a launcher. Shown as context, not slash syntax. */
+  initialSkill?: SelectedSkill;
   forceMode?: "ask" | "code" | "scratch";
   /** When starting a session inside a workspace, the session joins that workspace… */
   workspaceId?: string;
@@ -485,7 +489,7 @@ function draftParkInFlight(text: string, workspaceId?: string): boolean {
   );
 }
 
-export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, initialMcpServers, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, workspaces, sessions, onCreateStarted }: Props) {
+export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, initialMcpServers, initialSkill, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, workspaces, sessions, onCreateStarted }: Props) {
   const [prefill] = useState(readPrefill);
   // What the session may do, and nothing else — the footer's Ask toggle. The
   // repo is a separate axis, so Scratch is not a third value here: it is what
@@ -795,6 +799,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>(
     () => initialMcpServers || [],
   );
+  const [selectedSkill, setSelectedSkill] = useState(initialSkill);
   const [availableMcpServers, setAvailableMcpServers] = useState<string[]>([]);
   useEffect(() => {
     fetchToolAccounts()
@@ -1151,7 +1156,7 @@ pendingDraftParks.delete(operation);
       startPoint.kind === "pull-request"
         ? startPoint.pullRequest.branch
         : startPoint.kind === "new"
-          ? newBranch.trim() || fallbackBranchName(prompt)
+          ? newBranch.trim() || fallbackBranchName(prompt || selectedSkill?.label || "")
           : startPoint.branch;
     const attachRepos = extraRepos.filter((id) => id !== createRepo);
     const createMode = mode;
@@ -1228,7 +1233,8 @@ pendingDraftParks.delete(operation);
       branch: createMode === "code" || selectedPullRequest ? branch : "",
       ...(selectedPullRequest ? { fromPr: true } : {}),
       prompt,
-      titlePrompt: projectComposerSessions(prompt).displayText,
+      titlePrompt:
+        projectComposerSessions(prompt).displayText || selectedSkill?.label || prompt,
       user: getCurrentUser(),
       ...(model ? { model } : {}),
       effort,
@@ -1238,6 +1244,7 @@ pendingDraftParks.delete(operation);
       // Omitting the field would make the server re-apply the user's default.
       ...(sandboxStatus ? { sandbox: sandboxProvider || "local" } : {}),
       ...(selectedMcpServers.length ? { mcpServers: selectedMcpServers } : {}),
+      ...(selectedSkill ? { skill: selectedSkill.name } : {}),
       ...(images.length ? { images } : {}),
       ...(files.length
         ? {
@@ -1294,7 +1301,7 @@ pendingDraftParks.delete(operation);
     // create with the same message (resolveRequestedSandbox). Block here
     // so the wall is discovered before submit, not after.
     !sandboxModelWarning &&
-    (hasPromptText || images.length > 0 || files.length > 0);
+    (hasPromptText || !!selectedSkill || images.length > 0 || files.length > 0);
 
   /** The latest `handleCreate`, for a caller that has to wait a render before
    *  it can create. The dictation bar's ↑ is the one: it writes the transcript
@@ -1588,18 +1595,29 @@ pendingDraftParks.delete(operation);
           )}
         >
 
-      {/* Picked services, above the field like every other thing attached to
-          what you are about to send. The picker is two levels inside a menu,
-          so without this the only trace of a pick is a count on the overflow
-          button, and the pick governs the whole session rather than one
-          prompt. The row stays mounted so the last chip can animate out. */}
+      {/* Session-wide context, above the field like every other thing attached
+          to what you are about to send. A launcher-selected skill stays out of
+          the prompt, while picked services would otherwise only leave a count
+          in the overflow menu. The row stays mounted so the last chip can
+          animate out. */}
       <div className="flex flex-wrap items-start gap-x-1 px-4 phone:px-3 phone:pt-1">
-        {selectedMcpServers.length > 0 && (
+        {(selectedSkill || selectedMcpServers.length > 0) && (
           <span className="mr-1 self-center text-meta font-medium text-faint phone:block desktop:hidden">
             Using
           </span>
         )}
         <AnimatePresence initial={false}>
+          {selectedSkill && (
+            <ComposerContextChip
+              key={`skill:${selectedSkill.name}`}
+              icon={<IconBolt size={15} />}
+              label={selectedSkill.label}
+              title={`${selectedSkill.label} is selected for this session.`}
+              onRemove={() => setSelectedSkill(undefined)}
+              removeLabel={`Remove ${selectedSkill.label}`}
+              disabled={busy}
+            />
+          )}
           {selectedMcpServers.map((mcp) => (
             <ComposerContextChip
               key={mcp}
@@ -1627,7 +1645,11 @@ pendingDraftParks.delete(operation);
           // "what to work on" in that mode invites a prompt the session
           // cannot carry out.
           placeholder={
-            mode === "ask" ? "What do you want to find out?" : "What do you want to work on?"
+            selectedSkill?.name === "control-ui"
+              ? "What should Control UI reproduce or verify?"
+              : mode === "ask"
+                ? "What do you want to find out?"
+                : "What do you want to work on?"
           }
           disabled={busy}
           images={images}
