@@ -622,6 +622,10 @@ export function WorkspaceSummaryBody({
 		go(onOpenAssets);
 	}
 
+	function openUncommittedChanges() {
+		go(() => onOpenPanelTab("changes"));
+	}
+
 	function askCommit() {
 		if (!send) return;
 		send({
@@ -1299,21 +1303,35 @@ setFixBusy(false);
 			{dirty > 0 && (
 				<div className={groupClass}>
 					<div className={WS_SUMMARY_SECTION}>Uncommitted</div>
-					<button
-						className={WS_SUMMARY_ROW}
-						onClick={askCommit}
-						disabled={!send}
-					>
-						<span className={WS_SUMMARY_RAIL}>
-							<IconClock size={20} className={WS_SUMMARY_ICON} />
-						</span>
-						<span className={WS_SUMMARY_LABEL}>
-							{prompted
-								? "Asked to commit"
-								: `${dirty} file${dirty === 1 ? "" : "s"} uncommitted`}
-						</span>
-						{!prompted && <span className={WS_SUMMARY_ACTION}>Commit</span>}
-					</button>
+					<div className="mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-stretch gap-1 phone:h-11">
+						<button
+							type="button"
+							className={cn(WS_SUMMARY_ROW, "mx-0 h-full w-auto min-w-0 flex-1")}
+							onClick={openUncommittedChanges}
+							title="View uncommitted changes"
+						>
+							<span className={WS_SUMMARY_RAIL}>
+								<IconClock size={20} className={WS_SUMMARY_ICON} />
+							</span>
+							<span className={WS_SUMMARY_LABEL}>
+								{dirty} file{dirty === 1 ? "" : "s"} uncommitted
+							</span>
+						</button>
+						{send && (
+							<button
+								type="button"
+								className={cn(
+									WS_SUMMARY_ACTION,
+									"focus-ring shrink-0 cursor-pointer rounded-row border-none bg-transparent px-2 hover:bg-hover disabled:cursor-default disabled:hover:bg-transparent",
+								)}
+								onClick={askCommit}
+								disabled={prompted}
+								title={`Ask ${AGENT_NAME} to commit the uncommitted changes and push`}
+							>
+								{prompted ? "Asked" : "Commit"}
+							</button>
+						)}
+					</div>
 				</div>
 			)}
 

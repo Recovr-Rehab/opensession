@@ -22,6 +22,14 @@ test("workspace surfaces keep committed and uncommitted work separate", () => {
 	expect(infoSource).toContain("<CommitRow key={commit.sha} commit={commit} />");
 });
 
+test("uncommitted work opens Changes without using the separate commit action", () => {
+	expect(summarySource).toContain("function openUncommittedChanges()");
+	expect(summarySource).toContain('go(() => onOpenPanelTab("changes"))');
+	expect(summarySource).toContain("onClick={openUncommittedChanges}");
+	expect(summarySource).toContain("onClick={askCommit}");
+	expect(summarySource).toContain('title="View uncommitted changes"');
+});
+
 test("an assigned reviewer can be changed or cleared from the summary", () => {
 	expect(summarySource).toContain("reviewRequestSessionId?: string");
 	expect(summarySource).toContain("Clear review request");
