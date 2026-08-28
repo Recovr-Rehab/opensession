@@ -549,8 +549,17 @@ export function SidebarItem({
 					</span>
 				)}
 				{/* Nobody started this one in a composer. The same quiet mark covers
-				    automation runs, report tasks, and sessions an agent minted itself. */}
-				{!editing && sessionWasAgentStarted(session) && <AutoCreatedMark />}
+				    automation runs, report tasks, and sessions an agent minted itself.
+				    Its plus keeps an unclaimed row in this sidebar. */}
+				{!editing && sessionWasAgentStarted(session) && (
+					<AutoCreatedMark
+						onKeep={
+							onSetStatus && !mine && !isClaimed(session)
+								? () => onSetStatus("mine")
+								: undefined
+						}
+					/>
+				)}
 				{/* Started somewhere else: a Slack thread, a Linear issue. Same slot
 				    and ink as the mark above, since both answer "where did this row
 				    come from" for a list that mixes origins. */}
@@ -731,8 +740,8 @@ export function SidebarItem({
 													kind: "item",
 													icon: <IconInbox size={20} />,
 													label: isClaimed(session)
-														? "Remove from my workspaces"
-														: "Add to my workspaces",
+														? "Stop keeping in sidebar"
+														: "Keep in sidebar",
 													onClick: () =>
 														onSetStatus(isClaimed(session) ? null : "mine"),
 												} as const,
@@ -847,8 +856,8 @@ function MobileActionSheet({
 						>
 							<IconInbox size={22} />
 							{isClaimed(session)
-								? "Remove from my workspaces"
-								: "Add to my workspaces"}
+								? "Stop keeping in sidebar"
+								: "Keep in sidebar"}
 						</SheetItem>
 					)}
 					{onSetStatus && (

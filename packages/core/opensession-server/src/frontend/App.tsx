@@ -4020,7 +4020,7 @@ if (siblingCreateRef.current === optimisticId)
 	// Lanes are per-user (lib/lanes.ts): setting one moves the row in YOUR
 	// sidebar only, so teammates can hold the same workspace in their own
 	// lanes. Clearing also drops any legacy global override, so "Auto" (and
-	// "Remove from my workspaces") releases rows pinned before lanes went
+	// "Stop keeping in sidebar") releases rows pinned before lanes went
 	// per-user. Shared by the sidebar rows' menus and the viewer's ⋯ menu.
 	const setSessionLanes = (sessions: UnifiedSession[], status: Lane | null) => {
 		for (const c of sessions) {

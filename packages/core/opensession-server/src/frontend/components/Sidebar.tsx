@@ -433,12 +433,17 @@ function WorkspaceContextMenu({
 				),
 		});
 	const rowClaimed = sessions.some((session) => isClaimed(session));
-	const rowMine = sessions.some((session) => ownedBy(session, currentUser));
-	if (sessions.length > 0 && (!rowMine || rowClaimed))
+	const rowNaturallyInSidebar = sessions.some(
+		(session) =>
+			!session.spawnedBy &&
+			!session.automation &&
+			ownedBy(session, currentUser),
+	);
+	if (sessions.length > 0 && (!rowNaturallyInSidebar || rowClaimed))
 		entries.push({
 			kind: "item",
 			icon: <IconInbox size={20} />,
-			label: rowClaimed ? "Remove from my workspaces" : "Add to my workspaces",
+			label: rowClaimed ? "Stop keeping in sidebar" : "Keep in sidebar",
 			onClick: () => onSetStatus(sessions, rowClaimed ? null : "mine"),
 		});
 	entries.push({
@@ -1507,7 +1512,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			)
 				continue;
 			// Automations render in their own band — EXCEPT runs YOU claimed
-			// (right-click → Add to my workspaces / Set status): those graduate
+			// (right-click → Keep in sidebar / Set status): those graduate
 			// into the workspace rows and take part in your lanes like your own
 			// work, sitting in In progress while they run and Backlog once idle.
 			// Lanes are per-user, so a claimed run moves only for the user who
@@ -3123,6 +3128,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const rowPin = workspacePinState(row);
 		const pinned = rowPin.pinned;
 		const toggleRowPin = rowPin.toggle;
+		const claimed = row.sessions.some((session) => isClaimed(session));
+		const naturallyInSidebar = row.sessions.some(
+			(session) =>
+				!session.spawnedBy &&
+				!session.automation &&
+				ownedBy(session, currentUser),
+		);
+		const canKeepInSidebar =
+			row.sessions.length > 0 && !claimed && !naturallyInSidebar;
 		// Active snooze → the row wears a wake countdown instead of the idle time.
 		const snoozeIso = activeSnoozeKeys.has(row.key)
 			? (snoozes[row.key] ?? null)
@@ -3402,8 +3416,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</span>
 				)}
 				{/* Keep machine origin beside the row whether it came from the
-				    automation identity, an automation run, or a report's Fix action. */}
-				{!editing && rowWasAgentStarted(row) && <AutoCreatedMark />}
+				    automation identity, an automation run, or a report's Fix action.
+				    Until claimed, its plus keeps the row in this sidebar. */}
+				{!editing && rowWasAgentStarted(row) && (
+					<AutoCreatedMark
+						onKeep={
+							canKeepInSidebar
+								? () => onSetStatus(row.sessions, "mine")
+								: undefined
+						}
+					/>
+				)}
 				{/* Where the work came from, when the whole row came from one place:
 				    a Slack thread, a Linear issue. Same slot and ink as the mark
 				    above (SidebarItem carries the session-row half). */}
