@@ -111,7 +111,7 @@ import { getSubagentTranscript, listSubagents } from "../subagents";
 import { getTitleOverride, setTitleOverride } from "../title-overrides";
 import { getGeneratedTitle } from "../generated-titles";
 import { buildWorkspaceOverview, resolveTranscriptImage, } from "../workspace-overview";
-import { type Workspace, deleteWorkspace, getWorkspace, workspaceName, } from "../workspaces";
+import { type Workspace, deleteWorkspace, getWorkspace, workspaceNameSnapshot, } from "../workspaces";
 import { prHostFor } from "../pr-host";
 import { getRepo, NO_REPO, removeWorktree, repoForPath } from "../worktree";
 import { preparingWorkspaces } from "../ws-hub";
@@ -422,24 +422,15 @@ async function sessionListRuntimeSignals(): Promise<SessionListRuntimeSignals> {
 type SessionEnrichmentContext = {
 	defaultRepoId: string;
 	prsByRepo: ReturnType<typeof getPrsByRepo>;
-	workspaceNames: Map<string, string | undefined>;
+	workspaceNames: ReadonlyMap<string, string>;
 };
 
 function sessionEnrichmentContext(): SessionEnrichmentContext {
 	return {
 		defaultRepoId: defaultRepo().id,
 		prsByRepo: getPrsByRepo(),
-		workspaceNames: new Map(),
+		workspaceNames: workspaceNameSnapshot(),
 	};
-}
-
-function enrichedWorkspaceName(
-	workspaceId: string,
-	context: SessionEnrichmentContext,
-): string | undefined {
-	if (!context.workspaceNames.has(workspaceId))
-		context.workspaceNames.set(workspaceId, workspaceName(workspaceId) ?? undefined);
-	return context.workspaceNames.get(workspaceId);
 }
 
 function enrichSession(
@@ -466,7 +457,9 @@ function enrichSession(
 		? context.prsByRepo.get(s.repo || context.defaultRepoId)?.get(s.branch)
 		: undefined;
 	const quarantine = signals?.quarantines.get(s.id);
-	const safety = quarantine ? publicSessionSafety(quarantine) : undefined;
+	const safety = quarantine
+		? publicSessionSafety(quarantine, signals?.runtime.claimedJournalSessions)
+		: undefined;
 	return {
 		...s,
 		...(safety
@@ -507,7 +500,7 @@ function enrichSession(
 		// load — so a row that had only session titles to work with showed a
 		// tab name until it arrived, then changed under the reader.
 		...(s.workspaceId
-			? { workspaceName: enrichedWorkspaceName(s.workspaceId, context) }
+			? { workspaceName: context.workspaceNames.get(s.workspaceId) }
 			: {}),
 		waitingForInput: signals
 			? signals.waitingForInput.has(s.id)

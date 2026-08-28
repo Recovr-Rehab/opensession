@@ -120,6 +120,7 @@ export function invalidateSessionsCache(): void {
 export interface SessionRuntimeSnapshot {
 	runStarts: Map<string, string>;
 	journalBusy: Set<string>;
+	claimedJournalSessions: Set<string>;
 }
 
 /** Capture shared run-journal state once for a whole list projection. */
@@ -129,7 +130,9 @@ export function sessionRuntimeSnapshot(): SessionRuntimeSnapshot {
 	// its bks id and its engine session id across records; key on both).
 	const runStarts = new Map<string, string>();
 	const journalBusy = new Set<string>();
+	const claimedJournalSessions = new Set<string>();
 	for (const r of activeRunRecords()) {
+		if (r.claimedAt && r.osSessionId) claimedJournalSessions.add(r.osSessionId);
 		if (!r.startedAt) continue;
 		for (const key of [r.osSessionId, r.claudeSessionId]) {
 			if (!key) continue;
@@ -138,7 +141,7 @@ export function sessionRuntimeSnapshot(): SessionRuntimeSnapshot {
 			if (!prev || r.startedAt < prev) runStarts.set(key, r.startedAt);
 		}
 	}
-	return { runStarts, journalBusy };
+	return { runStarts, journalBusy, claimedJournalSessions };
 }
 
 export function enrichSessionRuntime(
