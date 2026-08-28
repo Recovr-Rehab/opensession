@@ -377,32 +377,75 @@ type SessionListRuntimeSignals = {
 	runtime: SessionRuntimeSnapshot;
 };
 
+const RUNTIME_SIGNALS_TTL_MS = 250;
+let runtimeSignalsCache:
+	| { value: SessionListRuntimeSignals; expiresAt: number }
+	| undefined;
+let runtimeSignalsRefresh: Promise<SessionListRuntimeSignals> | undefined;
+
 async function sessionListRuntimeSignals(): Promise<SessionListRuntimeSignals> {
-	const [waitingForInput, queuedCounts, quarantines] = await Promise.all([
-		pendingAskIdsAwaitingAnswer(),
-		clientVisibleQueuedCounts(),
-		sessionQuarantines(),
-	]);
-	const quarantineBySession = new Map(
-		quarantines.map((entry) => [entry.sessionId, entry]),
-	);
-	// Every visible queued prompt has a process owner. Boot restoration and
-	// enqueue normally arm it; list reconciliation closes the last crash window.
-	for (const [sessionId, count] of queuedCounts) {
-		if (count > 0 && !quarantineBySession.has(sessionId))
-			watchExternalRunAndDrain(sessionId);
-	}
+	if (runtimeSignalsCache && runtimeSignalsCache.expiresAt > Date.now())
+		return runtimeSignalsCache.value;
+	if (runtimeSignalsRefresh) return runtimeSignalsRefresh;
+	runtimeSignalsRefresh = (async () => {
+		const [waitingForInput, queuedCounts, quarantines] = await Promise.all([
+			pendingAskIdsAwaitingAnswer(),
+			clientVisibleQueuedCounts(),
+			sessionQuarantines(),
+		]);
+		const quarantineBySession = new Map(
+			quarantines.map((entry) => [entry.sessionId, entry]),
+		);
+		// Every visible queued prompt has a process owner. Boot restoration and
+		// enqueue normally arm it; list reconciliation closes the last crash window.
+		for (const [sessionId, count] of queuedCounts) {
+			if (count > 0 && !quarantineBySession.has(sessionId))
+				watchExternalRunAndDrain(sessionId);
+		}
+		const value = {
+			waitingForInput,
+			queuedCounts,
+			quarantines: quarantineBySession,
+			runtime: sessionRuntimeSnapshot(),
+		};
+		runtimeSignalsCache = {
+			value,
+			expiresAt: Date.now() + RUNTIME_SIGNALS_TTL_MS,
+		};
+		return value;
+	})().finally(() => {
+		runtimeSignalsRefresh = undefined;
+	});
+	return runtimeSignalsRefresh;
+}
+
+type SessionEnrichmentContext = {
+	defaultRepoId: string;
+	prsByRepo: ReturnType<typeof getPrsByRepo>;
+	workspaceNames: Map<string, string | undefined>;
+};
+
+function sessionEnrichmentContext(): SessionEnrichmentContext {
 	return {
-		waitingForInput,
-		queuedCounts,
-		quarantines: quarantineBySession,
-		runtime: sessionRuntimeSnapshot(),
+		defaultRepoId: defaultRepo().id,
+		prsByRepo: getPrsByRepo(),
+		workspaceNames: new Map(),
 	};
+}
+
+function enrichedWorkspaceName(
+	workspaceId: string,
+	context: SessionEnrichmentContext,
+): string | undefined {
+	if (!context.workspaceNames.has(workspaceId))
+		context.workspaceNames.set(workspaceId, workspaceName(workspaceId) ?? undefined);
+	return context.workspaceNames.get(workspaceId);
 }
 
 function enrichSession(
 	s: UnifiedSession,
 	signals?: SessionListRuntimeSignals,
+	context = sessionEnrichmentContext(),
 ) {
 	// The materialized row may still say a completed run is active. Reconcile
 	// both edges from live runtime state before serializing any list or detail.
@@ -420,7 +463,7 @@ function enrichSession(
 		getReviewRequest(s.id) ??
 		s.aliasIds?.map((id) => getReviewRequest(id)).find(Boolean);
 	const currentPr = s.branch
-		? getPrsByRepo().get(s.repo || defaultRepo().id)?.get(s.branch)
+		? context.prsByRepo.get(s.repo || context.defaultRepoId)?.get(s.branch)
 		: undefined;
 	const quarantine = signals?.quarantines.get(s.id);
 	const safety = quarantine ? publicSessionSafety(quarantine) : undefined;
@@ -457,14 +500,14 @@ function enrichSession(
 					prChecks: currentPr.checks,
 				}
 			: {}),
-		repo: s.repo || defaultRepo().id,
+		repo: s.repo || context.defaultRepoId,
 		// The name of the workspace this session is filed under. A sidebar row
 		// names a workspace, never one of its tabs, and the workspace list is
 		// a separate (much larger) fetch that lands seconds later on a cold
 		// load — so a row that had only session titles to work with showed a
 		// tab name until it arrived, then changed under the reader.
 		...(s.workspaceId
-			? { workspaceName: workspaceName(s.workspaceId) ?? undefined }
+			? { workspaceName: enrichedWorkspaceName(s.workspaceId, context) }
 			: {}),
 		waitingForInput: signals
 			? signals.waitingForInput.has(s.id)
@@ -807,10 +850,11 @@ function refreshSidebarSessionsResponse(
 	if (current) return current;
 	const refresh = (async () => {
 		const signals = await sessionListRuntimeSignals();
+		const context = sessionEnrichmentContext();
 		const indexed = indexedSidebarSessions(scope.selectedSessionId);
 		const sliced = (
 			indexed ?? (await getCachedSessionsAsync("exclude"))
-		).map((session) => enrichSession(session, signals));
+		).map((session) => enrichSession(session, signals, context));
 		shareWorkspacePrRefs(sliced);
 		const bounded = indexed ? sliced : sidebarLiveSessions(sliced);
 		const scoped = scopeSessionsForSidebar(
@@ -840,6 +884,7 @@ function refreshSessionsResponse(
 	if (current) return current;
 	const refresh = (async () => {
 		const signals = await sessionListRuntimeSignals();
+		const context = sessionEnrichmentContext();
 		const slice =
 			variant === "exclude"
 				? "exclude"
@@ -851,7 +896,7 @@ function refreshSessionsResponse(
 				? indexedSidebarSessions()
 				: indexedSessions(slice);
 		const sliced = (indexed ?? (await getCachedSessionsAsync(slice))).map(
-			(session) => enrichSession(session, signals),
+			(session) => enrichSession(session, signals, context),
 		);
 		shareWorkspacePrRefs(sliced);
 		const listed =
@@ -1031,7 +1076,10 @@ export async function handleSessionsRoutes(
 					inWorkspaceGroup(session, scope),
 				);
 			const signals = await sessionListRuntimeSignals();
-			const rows = selected.map((session) => enrichSession(session, signals));
+			const context = sessionEnrichmentContext();
+			const rows = selected.map((session) =>
+				enrichSession(session, signals, context),
+			);
 			shareWorkspacePrRefs(rows);
 			const text = JSON.stringify(
 				variant === "only-slim"

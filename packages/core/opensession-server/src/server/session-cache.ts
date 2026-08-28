@@ -308,7 +308,10 @@ export async function getCachedSessionsAsync(
 export async function getSessionListSnapshotAsync(
 	slice: SessionArchiveSlice = "include",
 ): Promise<UnifiedSession[]> {
-	return indexedSessions(slice) ?? getAllSessionsAsync(slice);
+	// Share the cache's cooperative fallback instead of starting an independent
+	// full scan. This also persists coverage in the list projection, so boot
+	// maintenance cannot rescan every historical session again 90 seconds later.
+	return indexedSessions(slice) ?? getCachedSessionsAsync(slice);
 }
 
 /**
