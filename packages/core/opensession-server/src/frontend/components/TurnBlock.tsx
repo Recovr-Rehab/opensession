@@ -535,7 +535,10 @@ function isCompactTool(
   result: TranscriptEntry | undefined
 ): boolean {
   const name = entry.toolName || "Tool";
-  if (!COMPACT_TOOL_FAMILIES.has(toolFamily(name))) return false;
+  const routine =
+    canonicalToolName(name) === "ListAgents" ||
+    COMPACT_TOOL_FAMILIES.has(toolFamily(name));
+  if (!routine) return false;
   if (assetToolPath(name, entry.toolInput)) return false;
   return !result?.featuredMedia?.length;
 }

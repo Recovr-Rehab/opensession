@@ -62,7 +62,6 @@ import {
   IconListCircles,
   IconWrench,
   IconChevronDown,
-  IconX,
   IconExpand,
   IconArrowUpRight,
 } from "./icons";
@@ -594,14 +593,10 @@ export const ToolCallBlock = function ToolCallBlock({
         {pending ? (
           // Neutral, not green: green on this row already means "added" (the
           // +N stat) and "passed" elsewhere, so a green ring on a step that can
-          // still end in a red × reads as a verdict instead of a state. Border
-          // written one side at a time — a `border-color` shorthand next to a
+          // still fail reads as a verdict instead of a state. Border written
+          // one side at a time — a `border-color` shorthand next to a
           // `border-top-color` is a two-utilities-one-property race.
           <span className="size-[11px] flex-shrink-0 self-center animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim" />
-        ) : failed ? (
-          <span className="flex-shrink-0 self-center text-faint opacity-70">
-            <IconX size={18} />
-          </span>
         ) : !result ? (
           <span className="flex-shrink-0 text-meta text-faint">–</span>
         ) : null}
