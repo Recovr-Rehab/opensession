@@ -32,6 +32,11 @@ final class SessionViewModelTests: XCTestCase {
         SessionViewModel(session: Session(id: "bks-1"))
     }
 
+    func testServerHandoffUsesTheFastReconnectCadence() {
+        XCTAssertEqual(SessionViewModel.reconnectDelay, .seconds(2))
+        XCTAssertEqual(SessionViewModel.handoffReconnectDelay, .milliseconds(250))
+    }
+
     private func entry(
         _ id: String, _ type: String, text: String? = nil, toolUseId: String? = nil
     ) -> TranscriptEntry {
