@@ -594,7 +594,12 @@ export const MessageBubble = function MessageBubble({
 	// predates the field, which is what a rolling deploy looks like.
 	const e = (classifyEntry(entry));
 	const displayContent = e.content;
-	const enterClass = transcriptEnterClass(enter);
+	// Capture the mount decision. A final assistant frame can clear `live` one
+	// commit after the message appears; removing the class then would cut its
+	// one-shot entrance off mid-fade. Keeping the finished class does not replay
+	// the keyframe on ordinary re-renders.
+	const [animateArrival] = useState(enter);
+	const enterClass = transcriptEnterClass(animateArrival);
 
 	// An answered question is a durable sent receipt. It keeps the question and
 	// exact answer visible without making the old choices look actionable.
