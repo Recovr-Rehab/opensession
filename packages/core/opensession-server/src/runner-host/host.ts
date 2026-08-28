@@ -565,6 +565,7 @@ try {
     author: spec.author,
     user: spec.user,
     fallbackModel: spec.fallbackModel,
+    accountAffinityKey: spec.accountAffinityKey,
     effort: spec.effort,
     fastMode: spec.fastMode,
     accountId: spec.accountId,
@@ -572,7 +573,7 @@ try {
     usageCredits: spec.usageCredits,
     prReviewer: spec.prReviewer,
     journal: {
-      osSessionId: spec.osSessionId,
+      ...(spec.lifecycle === "auxiliary" ? {} : { osSessionId: spec.osSessionId }),
       kind: spec.journalKind || "prompt",
       firstJournaledAt: spec.firstJournaledAt,
       resumeAttempts: spec.resumeAttempts,

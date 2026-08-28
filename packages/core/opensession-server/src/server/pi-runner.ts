@@ -108,6 +108,10 @@ import {
 } from "./pi-runtime-binding";
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
 import {
+  controlPlaneWorkloadCommand,
+  stopUserScope,
+} from "./systemd-scopes";
+import {
   createMcpRuntime,
   splitMcpMigrationBoundary,
   type McpRuntime,
@@ -1287,25 +1291,29 @@ export function makePiBashTool(input: {
       // when the timeout fires). Absent setsid (macOS), degrade to the
       // direct-child kill.
       const setsidPath = Bun.which("setsid");
+      const directCommand = setsidPath
+        ? [setsidPath, "/bin/bash", "-c", command]
+        : ["/bin/bash", "-c", command];
+      const scoped = controlPlaneWorkloadCommand(
+        directCommand,
+        `opensession-agent-cmd-${crypto.randomUUID().slice(0, 13)}`,
+        { env: input.env },
+      );
       let timedOut = false;
       let exitCode: number | null = null;
       try {
-        const proc = Bun.spawn(
-          setsidPath
-            ? [setsidPath, "/bin/bash", "-c", command]
-            : ["/bin/bash", "-c", command],
-          {
-            cwd: input.cwd,
-            env: input.env,
-            stdin: "ignore",
-            stdout: "pipe",
-            stderr: "pipe",
-          }
-        );
+        const proc = Bun.spawn(scoped.command, {
+          cwd: input.cwd,
+          env: scoped.env,
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+        });
         const killTree = () => {
+          if (scoped.unit) stopUserScope(scoped.unit);
           const killGroup = (sig: "SIGTERM" | "SIGKILL") => {
             try {
-              if (setsidPath) process.kill(-proc.pid, sig);
+              if (!scoped.unit && setsidPath) process.kill(-proc.pid, sig);
               else proc.kill(sig);
             } catch {}
           };

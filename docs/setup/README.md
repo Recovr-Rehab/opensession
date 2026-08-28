@@ -40,7 +40,7 @@ flowchart LR
 
   kernel["session kernel service :3849<br/>authoritative session decisions"]
   launch["run orchestration<br/>fixed-policy executor for<br/>Linux system-scope local runs"]
-  runner["Pi turn<br/>detached run host, Sandbox runner,<br/>or in-process fallback"]
+  runner["Pi turn<br/>detached run host or<br/>Sandbox runner"]
 
   clients --> http
   hooks -->|webhooks and OAuth| wh

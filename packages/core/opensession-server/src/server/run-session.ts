@@ -2669,17 +2669,16 @@ async function runSessionPromptInner(
 	// run-host unit (host-client.ts) that survives `systemctl restart` and is
 	// reattached by the boot sweep (resumeLocalHostRun). Transcript writes are
 	// proxied back over the host protocol, so the server stays the store's
-	// only writer. Kill switch: OPENSESSION_PI_DETACH=0 (the generic
-	// disable-run-hosts file and runAgentHosted's in-process fallback also
-	// apply). Automation-owned sessions ride it too, with the automation's
+	// only writer. On systemd hosts this path fails closed if detached hosts are
+	// unavailable; it never absorbs an engine into the gateway's control-plane
+	// cgroup. Automation-owned sessions ride it too, with the automation's
 	// scoping intact: proxy names come from the same fail-closed automation
 	// set the run-rpc fallback builder serves, the repos note and MCP grant
 	// identity are withheld, and the automation's prReviewer rides the spec.
 	const hostedRun =
 		!runnerRun &&
 		!sandboxRun &&
-		routedEngine === "pi" &&
-		process.env.OPENSESSION_PI_DETACH !== "0"
+		routedEngine === "pi"
 			? runAgentHosted({
 					osSessionId: session.id,
 					prompt,

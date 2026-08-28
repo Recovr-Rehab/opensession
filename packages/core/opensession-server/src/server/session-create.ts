@@ -28,7 +28,6 @@ import {
 	isAgentSessionCancelled,
 	type StreamEvent,
 	markSessionStarting,
-	runAgent,
 	unmarkSessionStarting,
 } from "./agent-runner";
 import {
@@ -44,6 +43,7 @@ import { ensureGeneratedTitle } from "./generated-titles";
 import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
 import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
 import { interactiveMcpServers } from "./interactive-mcp";
+import { runAgentHosted } from "./host-client";
 import { parseTranscriptAsync } from "./jsonl-parser";
 import { accountProviderForModel, interactiveFallbackModel, modelLabel, providerFor, resolveModel, } from "./models";
 import { configuredInteractiveDefaultModel } from "./model-catalog";
@@ -1392,47 +1392,44 @@ export async function openCreatedSession(
 				creationSettled = true;
 				await acknowledgePromptDispatch(bksId, openingPromptEntryId);
 			};
-			for await (const event of sandboxOpeningRun ?? runnerOpeningRun ?? runAgent({
+			const openingMcp = interactiveMcpServers(spec.user, bksId);
+			const openingReposNote = [
+				spec.presetNote || "",
+				pstackMode ? PSTACK_MODE_NOTE : "",
+				// A session that spans repos is handed the persisted map rather
+				// than a reconstructed branch note.
+				spanning
+					? buildReposNote(spanning)
+					: buildBranchNote({
+							mode: spec.mode,
+							branch: spec.branch,
+							worktreeDir: spec.wtPath,
+						}),
+				await memoryNoteFor(spec.user, [
+					...spec.memoryRepoIds,
+					...attachedRepoIds,
+				]),
+			].filter(Boolean).join("\n\n") || undefined;
+			const localOpeningRun = runAgentHosted({
+				osSessionId: bksId,
 				prompt: openingPromptForRun,
 				// A recovered create is the same logical turn. Reuse the durable
-				// intake id so Pi and the context log upsert the original rows
-				// instead of rendering the opening message again after each restart.
+				// intake id so the transcript upserts the original user row.
 				promptEntryId: openingPromptEntryId,
+				startToken,
+				shouldCancel: () => isAgentSessionCancelled(bksId, startToken),
 				cwd: spec.wtPath,
 				mode: spec.mode,
+				mcpGrantUser: spec.user,
 				model: spec.model,
 				effort: spec.effort,
 				fastMode: spec.fastMode,
 				accountId: spec.accountId,
 				fallbackModel: interactiveFallbackModel(spec.model),
-				// Feed workspaces default to their feed's scoped list (least
-				// privilege) — same value the session file persists above.
-				// May be undefined at runtime (see ResolvedCreate.runMcpServers).
 				mcpServers: spec.runMcpServers as McpScope,
-				reposNote:
-					[
-						spec.presetNote || "",
-						pstackMode ? PSTACK_MODE_NOTE : "",
-						// A session that spans repos is handed the map of them
-						// (which repo is where, on which branch) in place of the
-						// branch note — buildReposNote carries that note inside it.
-						spanning
-							? buildReposNote(spanning)
-							: buildBranchNote({
-									mode: spec.mode,
-									branch: spec.branch,
-									worktreeDir: spec.wtPath,
-								}),
-						await memoryNoteFor(spec.user, [
-							...spec.memoryRepoIds,
-							...attachedRepoIds,
-						]),
-					]
-						.filter(Boolean)
-						.join("\n\n") || undefined,
+				proxyMcpServers: Object.keys(openingMcp),
+				reposNote: openingReposNote,
 				images: spec.images,
-				// Fork: resume the source engine session into a new branch,
-				// optionally from a specific past message.
 				...(spec.fork
 					? {
 							sessionId: spec.fork.engineSessionId,
@@ -1440,22 +1437,16 @@ export async function openCreatedSession(
 							resumeSessionAt: spec.fork.resumeAt,
 						}
 					: {}),
-				inProcessMcp: interactiveMcpServers(spec.user, bksId),
 				confirmTools: STRIPE_CONFIRM_TOOLS,
-				aws: true, // interactive sessions keep AWS read access (via injected creds)
-				// Whose commits these are. Passing `user` alone is not enough:
-				// the git identity is a separate option, and this is a
-				// session's whole first turn, which for most sessions is where
-				// the work lands. Without it that work commits under the
-				// machine's default identity and shows up under nobody. The
-				// sandbox and runner paths above resolve the same identity
-				// inside their own launchers.
+				aws: true,
 				author: commitAuthorFor(spec.user, spec.createdBy),
-				user: spec.user, // gate per-user MCP servers (allowedUsers) to the creator
-				journal: { osSessionId: bksId, kind: "create" },
-				startToken,
+				user: spec.user,
+				journalKind: "create",
+				trustProfile: "interactive",
 				onAskUser: makeAskHandler(bksId),
-			})) {
+				fallbackInProcessMcp: () => openingMcp,
+			});
+			for await (const event of sandboxOpeningRun ?? runnerOpeningRun ?? localOpeningRun) {
 				// Opening turns use this event ladder instead of run-session's
 				// follow-up ladder. Consume Pi's exact boundary acknowledgement here
 				// too, including context-only steers that transcript parsing hides.

@@ -498,6 +498,37 @@ describe("HostHandle model recovery", () => {
 		}
 	});
 
+  test("keeps auxiliary worker frames out of the parent session", async () => {
+    const root = mkdtempSync(join(tmpdir(), "host-client-auxiliary-test-"));
+    roots.push(root);
+    const store = new TranscriptStore(join(root, "transcripts.db"), { actorOwned: true });
+    const previous = __setTranscriptStoreForTest(store);
+    const spec: RunHostSpec = {
+      hostId: "rh-workflow-worker",
+      osSessionId: "os-parent-session",
+      lifecycle: "auxiliary",
+      transcriptTarget: "none",
+      prompt: "review",
+      cwd: "/tmp",
+    };
+    const handle = makeHandle(spec);
+    try {
+      expect(hostRunBusy(spec.osSessionId)).toBe(false);
+      (handle as any).handleMsg({
+        t: "transcript",
+        engineSessionId: "engine-workflow-worker",
+        lines: [transcriptLineUser("inspect", "workflow-prompt")],
+      });
+      await handle.waitForPendingProjections();
+
+      expect(store.readTail("engine-workflow-worker", 10).entries).toEqual([]);
+      expect(store.readTail(spec.osSessionId, 10).entries).toEqual([]);
+    } finally {
+      (handle as any).finish();
+      __setTranscriptStoreForTest(previous);
+    }
+  });
+
   test("closes after an end frame that follows a failed transcript projection", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-client-projection-failure-test-"));
     roots.push(root);

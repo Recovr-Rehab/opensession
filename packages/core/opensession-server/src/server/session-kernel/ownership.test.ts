@@ -92,6 +92,13 @@ describe("single session ownership", () => {
 		expect(host).not.toContain("runtimeWork(");
 	});
 
+	test("workflow agents cannot execute inside the gateway control plane", () => {
+		const workflow = read("workflow-execute.ts");
+		expect(workflow).toContain("runAuxiliaryAgentHosted");
+		expect(workflow).toContain('transcriptTarget: "none"');
+		expect(workflow).not.toContain("runAgent(");
+	});
+
 	test("run, queue, ask and session-file state delegate to SessionKernel", () => {
 		expect(read("run-state.ts")).toContain("sessionKernel(sessionId)");
 		expect(read("queue-state.ts")).toContain("new DeliveryOwnedMap");
@@ -390,10 +397,10 @@ describe("single session ownership", () => {
 		expect(create).toContain("const identity = actorPlan");
 		expect(create.indexOf("openingPromptEntryId = beginPromptDispatch"))
 			.toBeLessThan(create.indexOf("await persist()"));
-		// The direct host run must use the create dispatch's stable transcript id.
-		// Otherwise every cold recovery mints a new user row for the same prompt.
+		// The detached host run must use the create dispatch's stable transcript
+		// id. Otherwise every cold recovery mints another row for one prompt.
 		expect(create).toMatch(
-			/runAgent\(\{[\s\S]*?prompt: openingPromptForRun,[\s\S]*?promptEntryId: openingPromptEntryId,/,
+			/runAgentHosted\(\{[\s\S]*?prompt: openingPromptForRun,[\s\S]*?promptEntryId: openingPromptEntryId,/,
 		);
 		expect(create).not.toContain("if (requeuePromptDispatch(bksId))");
 		const routes = read("routes/sessions.ts");
