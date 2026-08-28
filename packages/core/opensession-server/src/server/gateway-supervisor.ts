@@ -102,6 +102,7 @@ export interface GatewaySupervisorDependencies {
   onUnexpectedExit?(gateway: ManagedGateway, code: number): void;
   recordTransaction?(transaction: GatewayHandoffTransaction): void;
   clearTransaction?(): void;
+  quiescePublicListener?(): void;
 }
 
 function timeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -290,6 +291,11 @@ export class GatewaySupervisor {
     }
     this.shuttingDown = true;
     const gateway = this.active;
+    // Stop accepting from the inherited descriptor first. PID 1 keeps its copy
+    // open and queues new clients while already-accepted requests get a brief
+    // chance to attach to the still-active backend.
+    this.dependencies.quiescePublicListener?.();
+    await Bun.sleep(50);
     this.routeToActive = false;
     gateway.kill(12);
     try {
@@ -819,6 +825,7 @@ async function runSupervisor(): Promise<void> {
   }
   const active = spawnGateway(releaseRoot, "active");
   const proxyMetrics = createGatewayTcpProxyMetrics();
+  let publicListener: ReturnType<typeof startGatewayTcpProxy> | undefined;
   let stopping = false;
   const supervisor = new GatewaySupervisor(active, {
     spawn: spawnGateway,
@@ -827,6 +834,9 @@ async function runSupervisor(): Promise<void> {
     promoteCurrent: promoteGatewayCurrent,
     recordTransaction: writeGatewayHandoffTransaction,
     clearTransaction: clearGatewayHandoffTransaction,
+    quiescePublicListener() {
+      publicListener?.stop(false);
+    },
     onUnexpectedExit(gateway, code) {
       if (stopping) return;
       console.error(`[gateway-supervisor] active gateway ${gateway.pid} exited unexpectedly (${code})`);
@@ -834,7 +844,7 @@ async function runSupervisor(): Promise<void> {
     },
   }, proxyMetrics);
   const controlListener = serveControl(supervisor);
-  const publicListener = startGatewayTcpProxy({
+  publicListener = startGatewayTcpProxy({
     hostname: PUBLIC_HOST,
     port: PUBLIC_PORT,
     backendPort: () => supervisor.backendPort(),
@@ -856,7 +866,7 @@ async function runSupervisor(): Promise<void> {
     if (stopping) return;
     stopping = true;
     controlListener.stop();
-    publicListener.stop();
+    publicListener?.stop();
     await supervisor.shutdown();
     process.exit(0);
   };

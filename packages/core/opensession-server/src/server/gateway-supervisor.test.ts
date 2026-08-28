@@ -66,10 +66,11 @@ describe("gateway supervisor", () => {
       waitReady: async () => {},
       validateRelease: (root) => root,
       promoteCurrent() {},
+      quiescePublicListener() { active.events.push("listener-quiesced"); },
     });
     const result = await supervisor.drainForSupervisorRestart();
     expect(result.ok).toBe(true);
-    expect(active.events).toEqual(["kill:12"]);
+    expect(active.events).toEqual(["listener-quiesced", "kill:12"]);
     expect(supervisor.backendPort()).toBe(0);
   });
 

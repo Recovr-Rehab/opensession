@@ -134,9 +134,9 @@ function startInheritedGatewayTcpProxy(
     port: options.port,
     stop(closeActiveConnections = false) {
       server.close();
-      for (const state of pending) state.client.destroy();
-      pending.clear();
       if (closeActiveConnections) {
+        for (const state of pending) state.client.destroy();
+        pending.clear();
         for (const socket of active) socket.destroy();
         active.clear();
       }
