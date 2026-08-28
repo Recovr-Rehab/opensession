@@ -197,6 +197,7 @@ test("wide Review keeps its controls stable while page navigation moves", () => 
 	expect(reviewToolbarSource).toContain("sticky top-0");
 	expect(reviewToolbarSource).toContain("desktop:mb-0");
 	expect(reviewToolbarSource).toContain("desktop:pb-2");
+	expect(reviewToolbarSource).toContain("h-2.5 shrink-0 -mb-2.5");
 	expect(reviewToolbarSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
 	expect(prPanelSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
 	expect(prPanelSource).toContain(

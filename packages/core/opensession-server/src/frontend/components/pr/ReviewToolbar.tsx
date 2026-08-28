@@ -35,8 +35,10 @@ export function ReviewToolbar({
       {compact && maskStickyFileHeaders && (
         // File headers pin 61px below the scroll edge. Fill everything between
         // the toolbar and that edge so code cannot scroll above its own header.
+        // This flex spacer must not shrink: its negative margin would otherwise
+        // pull the first diff 10px under the toolbar.
         <div
-          className="pointer-events-none sticky top-[52px] z-[5] mx-2 hidden h-2.5 -mb-2.5 overflow-clip rounded-t-lg bg-surface desktop:block"
+          className="pointer-events-none sticky top-[52px] z-[5] mx-2 hidden h-2.5 shrink-0 -mb-2.5 overflow-clip rounded-t-lg bg-surface desktop:block"
           aria-hidden="true"
         />
       )}
