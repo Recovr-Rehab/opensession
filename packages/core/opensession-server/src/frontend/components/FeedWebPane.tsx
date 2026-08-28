@@ -1,6 +1,8 @@
 import React from "react";
 import type { ExternalRef } from "../lib/types";
 import { feedForRefKind } from "../lib/feeds-meta";
+import { SlackChannelPane } from "./SlackChannelPane";
+import { FeaturebasePostPane, FeaturebaseTicketPane } from "./FeaturebasePanes";
 
 /**
  * The generic web panel for feed-item workspaces (the feeds design): a
@@ -55,6 +57,42 @@ export function refWebPanel(ref: ExternalRef): RefWebPanel | null {
 		};
 	}
 	return null;
+}
+
+/** Render a feed-item workspace tab: custom component or iframe fallback. */
+export function FeedItemPane({
+	panel,
+	title,
+	className,
+	onOpenSession,
+}: {
+	panel: RefWebPanel;
+	title?: string;
+	className?: string;
+	onOpenSession?: (id: string) => void;
+}) {
+	if (panel.component === "slack-channel") {
+		return <SlackChannelPane channelId={panel.refId} className={className} />;
+	}
+	if (panel.component === "featurebase-ticket") {
+		return (
+			<FeaturebaseTicketPane
+				ticketId={panel.refId}
+				className={className}
+				onOpenSession={onOpenSession}
+			/>
+		);
+	}
+	if (panel.component === "featurebase-post") {
+		return (
+			<FeaturebasePostPane
+				postId={panel.refId}
+				className={className}
+				onOpenSession={onOpenSession}
+			/>
+		);
+	}
+	return <FeedWebPane panel={panel} title={title} className={className} />;
 }
 
 export function FeedWebPane({

@@ -52,7 +52,8 @@ Their code workspaces usually track branches and worktrees. GitHub changes can
 produce pull requests; on code.storage, a pushed branch is the change request.
 
 **Feed projects** are external systems, reached through an integration or an
-MCP server. Plain is a project — its items are support tickets. So are Slack,
+MCP server. Plain is a project — its items are support tickets. Featurebase
+adds two: tickets and feedback posts. So are Slack,
 your videos, your issue tracker. Their items are things that already exist
 somewhere else; opening one gets you a workspace for it, created on first touch
 and reused forever after.
@@ -252,12 +253,12 @@ Worker provides containment, not a hard security sandbox.
 
 ## Integrations
 
-An integration connects an external system: Slack, Linear, Plain, GitHub,
+An integration connects an external system: Slack, Linear, Plain, Featurebase, GitHub,
 Stripe. Each owns its webhook routes and a background loop, and each is off
 until you enable it.
 
 Integrations do two things in the model above. They can **back a feed project**
-(Plain's tickets, Slack's channels), and they bring work in without the UI: a
+(Plain's tickets, Featurebase's tickets and posts, Slack's channels), and they bring work in without the UI: a
 Slack thread becomes a session you can reply into from Slack; a pull request review
 becomes a session that fixes the comments; a support ticket triggers a triage
 automation. The session is always the same object underneath — you can open any of

@@ -170,6 +170,9 @@ const PRESETS: Array<{ label: string; cron: string }> = [
 
 const EVENT_OPTIONS: Array<{ key: string; label: string }> = [
   { key: "plain:thread_created", label: "Plain · new support ticket created" },
+  { key: "featurebase:ticket_created", label: "Featurebase · new support ticket created" },
+  { key: "featurebase:post_created", label: "Featurebase · new feedback post created" },
+  { key: "featurebase:conversation_created", label: "Featurebase · new conversation started" },
   { key: "stripe:charge.dispute.created", label: "Stripe · dispute (chargeback) created" },
   { key: "github:pr_merged", label: "GitHub · PR merged" },
 ];

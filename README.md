@@ -1,7 +1,7 @@
 # Open Session
 
 Self-hosted agent-infrastructure server: a web UI plus Slack, Linear, Plain,
-and GitHub agents, driving coding sessions through the Pi engine in git worktrees on your own box, or in isolated
+Featurebase, and GitHub agents, driving coding sessions through the Pi engine in git worktrees on your own box, or in isolated
 sandboxes.
 Supports multiple Codex and Claude subscriptions and model APIs.
 
@@ -56,7 +56,7 @@ download.
 Open the URL, add a model account in Workspace → Providers, pick a repo, write
 a prompt, and create the session. A turn that actually runs is the proof the
 install works, not a health check. Connect your GitHub account later from
-Settings → Connections. Configure Slack, Linear, Plain, GitHub agent intake,
+Settings → Connections. Configure Slack, Linear, Plain, Featurebase, GitHub agent intake,
 and other integrations under Settings → Integrations; see
 [docs/setup/github.md](docs/setup/github.md).
 

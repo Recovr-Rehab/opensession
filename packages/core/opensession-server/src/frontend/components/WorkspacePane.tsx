@@ -23,8 +23,7 @@ import {
 } from "../lib/api";
 import { Composer } from "./Composer";
 import { ConversationPane } from "./ConversationPane";
-import { FeedWebPane, refWebPanel } from "./FeedWebPane";
-import { SlackChannelPane } from "./SlackChannelPane";
+import { FeedItemPane, refWebPanel } from "./FeedWebPane";
 import { MarkdownRepoProvider } from "./MarkdownBody";
 import { PrPanel, type PrReviewPage } from "./PrPanel";
 import type { PrFocus } from "../lib/pr-focus";
@@ -878,14 +877,11 @@ export function WorkspacePane({
 	if (tab === "video" && webPanel) {
 		return withPanel(
 			<div className={`${VIEW_MAIN} flex flex-col h-full min-h-0`}>
-				{webPanel.component === "slack-channel" ? (
-					<SlackChannelPane channelId={webPanel.refId} />
-				) : (
-					<FeedWebPane
-						panel={webPanel}
-						title={webRef?.title || workspace.name}
-					/>
-				)}
+				<FeedItemPane
+					panel={webPanel}
+					title={webRef?.title || workspace.name}
+					onOpenSession={onOpenSession}
+				/>
 			</div>,
 		);
 	}

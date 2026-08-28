@@ -124,7 +124,7 @@ input or a future output.
 ## 4. Integrations — react to an external system
 
 An integration is an agent module that can own webhook routes and background
-work. Slack, Linear, Plain, GitHub, and Stripe all use this seam.
+work. Slack, Linear, Plain, Featurebase, GitHub, and Stripe all use this seam.
 
 Append an entry to `packages/core/opensession-server/src/server/integrations/registry.ts`:
 

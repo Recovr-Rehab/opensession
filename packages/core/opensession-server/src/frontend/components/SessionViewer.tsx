@@ -243,8 +243,7 @@ import { PrPanel } from "./PrPanel";
 import { PrStatusBar } from "./PrStatusBar";
 
 import { ConversationPane } from "./ConversationPane";
-import { FeedWebPane, type RefWebPanel } from "./FeedWebPane";
-import { SlackChannelPane } from "./SlackChannelPane";
+import { FeedItemPane, type RefWebPanel } from "./FeedWebPane";
 import { feedForRefKind } from "../lib/feeds-meta";
 import { WorkflowPanel } from "./WorkflowPanel";
 import { AssetsPanel, useSessionAssets } from "./AssetsPanel";
@@ -7279,14 +7278,10 @@ export function SessionViewer({
 						// component (Slack channel Conversation) via the panel
 						// registry (the feeds design).
 						<div className={VIEWER_REVIEW_MAIN}>
-							{videoPanel.component === "slack-channel" ? (
-								<SlackChannelPane channelId={videoPanel.refId} />
-							) : (
-								<FeedWebPane
-									panel={videoPanel}
-									title={videoTitle || undefined}
-								/>
-							)}
+							<FeedItemPane
+								panel={videoPanel}
+								title={videoTitle || undefined}
+							/>
 						</div>
 					) : showTerminal ? (
 						// Nothing here on purpose: the shells are mounted once below,

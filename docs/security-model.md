@@ -36,7 +36,8 @@ configuration for the run.
 - Automation runs hard-deny _customer-facing, identity-mutating, and incident.io
   mutation_ tools (enforced for direct runs and interactive resumes of
   automation sessions):
-  Plain thread writes (reply_to_thread, mark_thread_done/todo, snooze_thread)
+  Plain thread writes (reply_to_thread, mark_thread_done/todo, snooze_thread),
+  Featurebase customer-facing ticket/conversation replies,
   and the WorkOS write/destructive subset (create/delete/update user+org,
   revoke, invitations, password/verification emails, impersonation URLs).
   incident.io is declare-and-read only: `incident_create` may create a triage

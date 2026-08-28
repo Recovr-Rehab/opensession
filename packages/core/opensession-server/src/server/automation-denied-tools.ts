@@ -45,6 +45,13 @@ export const AUTOMATION_DENIED_TOOLS: Record<string, string> = {
   mcp__plain__mark_thread_done: PLAIN_WRITE_DENIAL,
   mcp__plain__mark_thread_todo: PLAIN_WRITE_DENIAL,
   mcp__plain__snooze_thread: PLAIN_WRITE_DENIAL,
+  // Featurebase: customer-facing conversation/ticket replies stay human-gated
+  // through /api/featurebase/*. Allowlist automations to featurebase-reader
+  // (or equivalent) so Writer tools never share a run with ticket/post text.
+  mcp__featurebase__reply_to_ticket: PLAIN_WRITE_DENIAL,
+  mcp__featurebase__reply_to_conversation: PLAIN_WRITE_DENIAL,
+  mcp__featurebase-writer__reply_to_ticket: PLAIN_WRITE_DENIAL,
+  mcp__featurebase-writer__reply_to_conversation: PLAIN_WRITE_DENIAL,
   // WorkOS: read-only — no identity mutation or impersonation from a run
   mcp__workos__create_organization: WORKOS_WRITE_DENIAL,
   mcp__workos__create_organization_membership: WORKOS_WRITE_DENIAL,

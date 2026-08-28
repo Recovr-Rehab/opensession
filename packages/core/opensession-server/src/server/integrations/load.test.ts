@@ -36,6 +36,8 @@ describe("integration registry", () => {
       "grafana",
       "github",
       "codestorage",
+      "featurebase",
+      "traces",
     ]);
   });
 

@@ -17,6 +17,8 @@ import {
 } from "../lib/slack-setup";
 import { IconTile } from "./BrandTile";
 import { CodeStorageConfiguration } from "./CodeStorageConfiguration";
+import { FeaturebaseConfiguration } from "./FeaturebaseConfiguration";
+import { TracesConfiguration } from "./TracesConfiguration";
 import { GithubAppFields } from "./GithubAppFields";
 import { PlainRouterConfiguration } from "./PlainRouterConfiguration";
 import { SlackManifestGuide } from "./SlackManifestGuide";
@@ -116,6 +118,41 @@ function guideFor(
 				permissions: [
 					<>Give the machine user access to read threads and create internal notes.</>,
 					<>Keep customer replies human-controlled; the built-in triage flow writes an internal note, not a customer reply.</>,
+				],
+			};
+
+		case "traces":
+			return {
+				description: "Publish Open Session runs to traces.com as each person's GitHub identity.",
+				steps: [
+					<>Install the Traces CLI on this server and keep it on the service user's PATH.</>,
+					<>Invite teammates to the Traces org. Set TRACES_NAMESPACE_SLUG to that org slug if it is not the namespace they land in after login.</>,
+					<>Each person opens this dialog while signed into Open Session with GitHub, clicks Connect Traces, and authorizes the same GitHub account on traces.com.</>,
+					<>Enable Traces, save, and restart. Interactive sessions they own are uploaded as them. Automations are never uploaded.</>,
+				],
+				permissions: [
+					<>A shared API key cannot author as a person. Do not paste a trk_ key for publishing.</>,
+					<>Open Session matches Traces to the GitHub login on the session (createdByLogin).</>,
+				],
+			};
+
+		case "featurebase":
+			return {
+				description: "Connect Featurebase tickets and feedback posts, and send webhooks to Open Session.",
+				steps: [
+					<>In Featurebase, create an API key with access to tickets, posts, and comments.</>,
+					<>
+						Create a webhook for <strong>ticket.created</strong>, <strong>ticket.updated</strong>, <strong>post.created</strong>, <strong>post.updated</strong>, <strong>conversation.user.created</strong>, and <strong>conversation.admin.noted</strong>. Use this endpoint:
+						<Value value={url("/featurebase/webhook")} />
+					</>,
+					<>Paste the API key and webhook signing secret into the fields above. After you save and restart, reopen this dialog and copy your admin id from the connection check.</>,
+					<>Set the portal URL to your public Featurebase origin, for example https://support.recovr.com.</>,
+					<>Add the Featurebase Reader MCP in Connections. Keep Writer off automations that read customer text.</>,
+					<>Enable Featurebase, save, and restart Open Session. Then send a test webhook from Featurebase.</>,
+				],
+				permissions: [
+					<>Customer replies and public comments stay human-gated in Open Session. Triage automations write internal notes only.</>,
+					<>Set FEATUREBASE_ADMIN_ID to your Featurebase admin id so replies and notes have an author.</>,
 				],
 			};
 
@@ -583,10 +620,18 @@ export function IntegrationSetupDialog({
 						)}
 						{visibleEnv.length > 0 && (
 							<ConfigurationSection
-								title={integration.id === "github" ? "Webhooks and mentions" : "Credentials"}
+								title={
+									integration.id === "github"
+										? "Webhooks and mentions"
+										: integration.id === "featurebase"
+											? "API key and webhook"
+											: "Credentials"
+								}
 								description={
 									integration.id === "github"
 										? "Verify inbound events and choose extra handles that wake the PR agent."
+										: integration.id === "featurebase"
+											? "Saved on this server. After the first save, restart and reopen this dialog to verify the connection."
 										: "Credentials stay on this server and are never shown back."
 								}
 							>
@@ -635,6 +680,16 @@ export function IntegrationSetupDialog({
 					<CodeStorageConfiguration onChanged={refreshIntegration} />
 				)}
 				{integration.id === "plain" && <PlainRouterConfiguration />}
+				{integration.id === "featurebase" && (
+					<FeaturebaseConfiguration
+						apiKeyPresent={
+							integration.env.some((envVar) => envVar.name === "FEATUREBASE_API_KEY" && envVar.present)
+						}
+					/>
+				)}
+				{integration.id === "traces" && (
+					<TracesConfiguration enabled={integration.enabled} />
+				)}
 
 				{/* Open on a first setup, closed once there are credentials to keep:
 				    the recipe is a one-time read, the fields are not. */}

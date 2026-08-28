@@ -136,6 +136,18 @@
       "workspaceId": "w_01ABCDEFGHJKMNPQRSTVWXYZ00",
       "apiUrl": "https://core-api.uk.plain.com/graphql/v1"
     },
+    "featurebase": {
+      "enabled": false,
+      "orgUrl": "https://feedback.example.com",
+      "adminId": "6614fb278783f574b3c21e87",
+      "mentionHandle": "assistant",
+      "apiBase": "https://do.featurebase.app"
+    },
+    "traces": {
+      "enabled": false,
+      "namespaceSlug": "acme",
+      "apiBase": "https://actions.traces.com"
+    },
     "stripe": {
       "enabled": false
     },

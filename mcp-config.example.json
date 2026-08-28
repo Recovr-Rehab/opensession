@@ -8,6 +8,11 @@
       "type": "http",
       "url": "https://mcp.sentry.dev/mcp"
     },
+    "featurebase-reader": {
+      "_comment": "Featurebase Reader MCP. Use the URL from Featurebase Settings → MCP. Keep Writer on a separate server with allowedUsers; never allowlist Writer on automations that read ticket or post text.",
+      "type": "http",
+      "url": "https://mcp.featurebase.app/mcp"
+    },
     "my-custom-server": {
       "_comment": "Example: your own stdio MCP server. `command` (+ optional `args`) is spawned per run; pass its credentials via the per-server `env` block.",
       "command": "bun",

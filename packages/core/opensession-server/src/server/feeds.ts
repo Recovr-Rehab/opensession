@@ -437,11 +437,13 @@ export async function ensureFeedsRegistered(): Promise<void> {
   try {
     const { getAgents } = await import("./agents-registry");
     for (const a of getAgents()) {
-      if (!a.getFeed || feedAgentsSeen.has(a.name)) continue;
+      if ((!a.getFeeds && !a.getFeed) || feedAgentsSeen.has(a.name)) continue;
       feedAgentsSeen.add(a.name);
       try {
-        const provider = a.getFeed();
-        if (provider) registerFeed(provider);
+        const providers = a.getFeeds ? a.getFeeds() : a.getFeed ? [a.getFeed()] : [];
+        for (const provider of providers) {
+          if (provider) registerFeed(provider);
+        }
       } catch (e) {
         console.error(`[feeds] ${a.name}.getFeed() failed:`, e);
       }

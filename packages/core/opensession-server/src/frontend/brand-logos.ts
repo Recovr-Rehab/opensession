@@ -24,6 +24,12 @@ export const BRANDS: Record<string, { bg: string; fg?: string }> = {
   slack: { bg: "#4a154b" },
   linear: { bg: "#5e6ad2" },
   plain: { bg: "#29df9a", fg: "#071c18" },
+  featurebase: { bg: "#4f46e5" },
+  traces: { bg: "#111111" },
+  "featurebase-tickets": { bg: "#4f46e5" },
+  "featurebase-posts": { bg: "#4f46e5" },
+  "featurebase-reader": { bg: "#4f46e5" },
+  "featurebase-writer": { bg: "#4f46e5" },
   sentry: { bg: "#362d59" },
   workos: { bg: "#6363f1" },
   tinybird: { bg: "#27f795", fg: "#08080a" },
@@ -74,6 +80,10 @@ const DISPLAY_NAMES: Record<string, string> = {
   elevenlabs: "ElevenLabs",
   github: "GitHub",
   "grafana-poller": "Grafana Poller",
+  "featurebase-tickets": "Featurebase tickets",
+  "featurebase-posts": "Featurebase feedback",
+  "featurebase-reader": "Featurebase",
+  "featurebase-writer": "Featurebase",
   incident: "incident.io",
   codestorage: "Code Storage",
 };
@@ -99,6 +109,12 @@ export function brandLogo(name: string): BrandLogo | undefined {
 }
 
 export const BRAND_LOGOS: Record<string, BrandLogo> = {
+  "featurebase": {
+    "viewBox": "0 0 24 24",
+    "paths": [
+      "M5 4.5h9.2a5.3 5.3 0 0 1 0 10.6H9.2V19.5H5V4.5Zm4.2 3.6v3.4h5a1.7 1.7 0 1 0 0-3.4H9.2Z"
+    ]
+  },
   "plain": {
     "viewBox": "0 0 24 24",
     "paths": [
