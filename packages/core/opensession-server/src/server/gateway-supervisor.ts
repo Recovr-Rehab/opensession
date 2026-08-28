@@ -16,7 +16,7 @@ import {
   startGatewayTcpProxy,
   type GatewayTcpProxyMetrics,
 } from "./gateway-tcp-proxy";
-import { stableFrontendHttpResponse } from "./stable-frontend";
+import { createStableFrontendResponder } from "./stable-frontend";
 import { publishGatewayBackendPort } from "./gateway-routing";
 
 export const GATEWAY_CONTROL_SOCKET =
@@ -1001,12 +1001,18 @@ async function runSupervisor(): Promise<void> {
   }, proxyMetrics);
   const controlListener = serveControl(supervisor);
   if (!externalIngress) {
+    const stableFrontend = createStableFrontendResponder(deployStateRoot(), {
+      liveStatus: () => ({
+        backendSelected: supervisor.backendPort() > 0,
+        proxy: { ...proxyMetrics },
+      }),
+    });
     publicListener = startGatewayTcpProxy({
       hostname: PUBLIC_HOST,
       port: PUBLIC_PORT,
       backendPort: () => supervisor.backendPort(),
       metrics: proxyMetrics,
-      fallbackHttp: (request) => stableFrontendHttpResponse(deployStateRoot(), request),
+      fallbackHttp: stableFrontend,
       listenFd: inheritedGatewaySocketFd(),
     });
   }
