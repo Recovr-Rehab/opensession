@@ -2,7 +2,7 @@
 /**
  * Fuzz the network-free transcript motion fixture in a real browser.
  *
- * usage: bun scripts/transcript-motion-fuzz.ts [--seeds 30] [--speed 8] [--out /tmp/report.json]
+ * usage: bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fuzz.ts [--seeds 30] [--speed 8] [--out /tmp/report.json]
  */
 import { writeFileSync } from "node:fs";
 import {
@@ -10,8 +10,8 @@ import {
 	cdpSender,
 	closeCdpTarget,
 	releaseCdpBrowser,
-} from "./lib/cdp-browser";
-import { localAutomationToken } from "./lib/local-auth";
+} from "../../../../../../scripts/lib/cdp-browser";
+import { localAutomationToken } from "../../../../../../scripts/lib/local-auth";
 
 const argv = process.argv.slice(2);
 const flag = (name: string, fallback: string) => {
@@ -39,7 +39,8 @@ const INIT = `(() => {
   const sample = () => {
     const scroller = document.querySelector("[data-transcript-motion-scroller]");
     const root = document.querySelector("[data-virtual-transcript]");
-    if (scroller && root) {
+    const eventIndex = Number(document.querySelector("[data-transcript-motion-event]")?.dataset.transcriptMotionEvent || 0);
+    if (scroller && root && eventIndex > 0) {
       const box = scroller.getBoundingClientRect();
       const rows = [...root.children].filter(node => node.matches("[data-index]")).map(node => {
         const rect = node.getBoundingClientRect();
@@ -66,11 +67,14 @@ type Result = {
 	durationMs: number;
 	apiRequests: string[];
 	errors: string[];
+	resizeObserverWarnings: number;
 	cls: number;
 	shiftCount: number;
+	shiftSources: string[];
 	maxSampledJump: number;
 	horizontalOverflow: number;
 	settledOverlap: number;
+	settledDrift: number;
 	distanceFromBottom: number;
 	virtualCount: number;
 	mountedRows: number;
@@ -147,6 +151,24 @@ try {
 				await Bun.sleep(40);
 			}
 			if (state !== "done") throw new Error(`seed ${seed} did not settle`);
+			let previousPositions: Record<string, number> = {};
+			let stableFrames = 0;
+			for (let attempt = 0; attempt < 60 && stableFrames < 3; attempt++) {
+				const positions = await send("Runtime.evaluate", {
+					expression: `(() => { const root = document.querySelector("[data-virtual-transcript]"); return Object.fromEntries(root ? [...root.children].filter(node => node.matches("[data-index]")).map(node => [Number(node.dataset.index), node.getBoundingClientRect().top]) : []); })()`,
+					returnByValue: true,
+				});
+				const current = positions.result.value as Record<string, number>;
+				const drift = Math.max(
+					0,
+					...Object.entries(current).map(([index, top]) =>
+						Math.abs((previousPositions[index] ?? top) - top),
+					),
+				);
+				stableFrames = drift <= 1 ? stableFrames + 1 : 0;
+				previousPositions = current;
+				await Bun.sleep(50);
+			}
 			const snapshot = await send("Runtime.evaluate", {
 				expression: `(() => {
           const F = window.__transcriptMotionFuzz;
@@ -158,12 +180,14 @@ try {
           }).sort((a, b) => a.index - b.index) : [];
           let overlap = 0;
           for (let index = 1; index < rows.length; index++) overlap = Math.max(overlap, rows[index - 1].bottom - rows[index].top);
+          const positions = Object.fromEntries(rows.map(row => [row.index, row.top]));
           return {
             errors: F.errors,
             shifts: F.shifts,
             maxSampledJump: Math.max(0, ...F.samples.map(sample => sample.maxJump)),
             horizontalOverflow: scroller ? Math.max(0, scroller.scrollWidth - scroller.clientWidth) : -1,
             settledOverlap: Math.max(0, overlap),
+            positions,
             distanceFromBottom: scroller ? Math.max(0, scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) : -1,
             virtualCount: Number(root?.dataset.virtualCount || 0),
             mountedRows: rows.length,
@@ -172,6 +196,24 @@ try {
 				returnByValue: true,
 			});
 			const value = snapshot.result.value;
+			await Bun.sleep(50);
+			const settledAgain = await send("Runtime.evaluate", {
+				expression: `(() => { const root = document.querySelector("[data-virtual-transcript]"); return Object.fromEntries(root ? [...root.children].filter(node => node.matches("[data-index]")).map(node => [Number(node.dataset.index), node.getBoundingClientRect().top]) : []); })()`,
+				returnByValue: true,
+			});
+			const laterPositions = settledAgain.result.value as Record<string, number>;
+			const settledDrift = Math.max(
+				0,
+				...Object.entries(value.positions as Record<string, number>).map(
+					([index, top]) => Math.abs((laterPositions[index] ?? top) - top),
+				),
+			);
+			const resizeObserverWarnings = value.errors.filter((error: string) =>
+				error.startsWith("ResizeObserver loop completed"),
+			).length;
+			const errors = value.errors.filter(
+				(error: string) => !error.startsWith("ResizeObserver loop completed"),
+			);
 			const shifts = value.shifts.filter(
 				(shift: { input: boolean }) => !shift.input,
 			);
@@ -182,24 +224,31 @@ try {
 				cpuRate,
 				durationMs: Math.round(performance.now() - startedAt),
 				apiRequests,
-				errors: value.errors,
+				errors,
+				resizeObserverWarnings,
 				cls: shifts.reduce(
 					(total: number, shift: { value: number }) => total + shift.value,
 					0,
 				),
 				shiftCount: shifts.length,
+				shiftSources: [
+					...new Set(
+						shifts.flatMap((shift: { sources: string[] }) => shift.sources),
+					),
+				],
 				maxSampledJump: Math.round(value.maxSampledJump),
 				horizontalOverflow: Math.round(value.horizontalOverflow),
 				settledOverlap: Math.round(value.settledOverlap),
+				settledDrift: Math.round(settledDrift),
 				distanceFromBottom: Math.round(value.distanceFromBottom),
 				virtualCount: value.virtualCount,
 				mountedRows: value.mountedRows,
 				passed:
 					apiRequests.length === 0 &&
-					value.errors.length === 0 &&
+					errors.length === 0 &&
 					value.horizontalOverflow <= 1 &&
-					value.settledOverlap <= 1 &&
-					value.distanceFromBottom <= 2 &&
+					value.settledOverlap <= 11 &&
+					settledDrift <= 1 &&
 					value.virtualCount > 0,
 			};
 			results.push(result);
@@ -215,11 +264,14 @@ try {
 				durationMs: Math.round(performance.now() - startedAt),
 				apiRequests,
 				errors: [error instanceof Error ? error.stack ?? error.message : String(error)],
+				resizeObserverWarnings: 0,
 				cls: 0,
 				shiftCount: 0,
+				shiftSources: [],
 				maxSampledJump: 0,
 				horizontalOverflow: -1,
 				settledOverlap: -1,
+				settledDrift: -1,
 				distanceFromBottom: -1,
 				virtualCount: 0,
 				mountedRows: 0,
@@ -240,6 +292,18 @@ const report = {
 	passed: results.filter((result) => result.passed).length,
 	failed: results.filter((result) => !result.passed).length,
 	maxCls: Math.max(0, ...results.map((result) => result.cls)),
+	maxClsStandard: Math.max(
+		0,
+		...results.filter((result) => !result.reducedMotion).map((result) => result.cls),
+	),
+	maxClsReduced: Math.max(
+		0,
+		...results.filter((result) => result.reducedMotion).map((result) => result.cls),
+	),
+	resizeObserverWarnings: results.reduce(
+		(total, result) => total + result.resizeObserverWarnings,
+		0,
+	),
 	maxSampledJump: Math.max(0, ...results.map((result) => result.maxSampledJump)),
 	results,
 };

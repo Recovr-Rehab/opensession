@@ -187,7 +187,7 @@ function TranscriptMotionPlayer({
 					entries={state.entries}
 					optimisticEntries={state.optimisticEntries}
 					live={state.busy}
-					sessionId={`transcript-motion-${scenario.seed}`}
+					sessionId=""
 					liveTurnStore={liveTurnStore}
 					onLiveLayout={relayout}
 				/>
