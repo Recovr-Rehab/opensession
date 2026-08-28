@@ -31,8 +31,8 @@ import React, {
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
-import { MarkdownRepoProvider } from "./components/MarkdownBody";
 import { NavigationProvider } from "./components/NavigationProvider";
+import { SessionPaneProviders } from "./components/SessionPaneProviders";
 import { Sidebar, type SidebarHandle } from "./components/Sidebar";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
 import { cn } from "./ui/cn";
@@ -349,9 +349,6 @@ const Settings = deferred<SettingsProps>(async () => {
 // Stable empty stack, so a session with no sub-agent open hands the same array
 // identity down every render (the transcript memo compares props by identity).
 const NO_SUBAGENTS: SubagentRef[] = [];
-// An optimistic session must not consume transcript frames from the socket that
-// is still watching the tab it replaced. It starts listening after persistence.
-const IGNORE_WS_MESSAGES = () => () => {};
 
 // A link into a sub-agent carries agent ids, never their labels. The pane reads
 // the real one off the sub-agent's own transcript and reports it back, so the
@@ -524,7 +521,8 @@ export function App({
   const [forceFirstMile, setForceFirstMile] = useState(landedOnFirstMile);
   const auth = useAuthStatus();
   const githubConnectionState = useGithubConnectionState(route.view);
-  const { connected, send, setTyping, addHandler } = useWebSocket();
+  const mainSocket = useWebSocket();
+  const { connected, send, setTyping, addHandler } = mainSocket;
   // A disconnected socket may miss list invalidations. The first connection
   // races the initial list load and needs no extra fetch; later reconnects do.
   const webSocketConnectedOnceRef = useRef(false);
@@ -4599,11 +4597,19 @@ export function App({
     requestedSurfaceId?: string,
   ) => {
     const surfaceId = requestedSurfaceId ?? viewerSession.id;
+    const pendingSocket = surfaceId === pendingSessionId;
+    const sessionSocket = pendingSocket
+      ? socket.sessionSocketIgnoringMessages
+      : socket.sessionSocket;
     return (
       // A `#5528` written anywhere in this pane's transcript means a PR in the
       // pane's OWN repo — which is why the context is per pane rather than
       // app-wide: a split view can hold two sessions on two different repos.
-      <MarkdownRepoProvider key={viewerSession.id} repo={viewerSession.repo}>
+      <SessionPaneProviders
+        key={viewerSession.id}
+        repo={viewerSession.repo}
+        socket={sessionSocket}
+      >
         <SessionViewer
           key={viewerSession.id}
           canRepairSafety={auth?.admin === true}
@@ -4630,10 +4636,8 @@ export function App({
             // this can't double-record.
             rememberArchived([viewerSession.id]);
           }}
-          send={socket.send}
           setTyping={socket.setTyping}
-          addHandler={socket.addHandler}
-          connected={socket.connected}
+          connected={socket.connected && !pendingSocket}
           pendingCreation={
             focused && route.view === "session" && route.id === pendingSessionId
           }
@@ -4803,7 +4807,7 @@ export function App({
               : undefined
           }
         />
-      </MarkdownRepoProvider>
+      </SessionPaneProviders>
     );
   };
 
@@ -5692,20 +5696,12 @@ export function App({
                                 sessions.find(
                                   (candidate) => candidate.id === id,
                                 ) ?? currentSession;
-                              const paneSocket =
-                                id === pendingSessionId
-                                  ? {
-                                      ...socket,
-                                      connected: false,
-                                      addHandler: IGNORE_WS_MESSAGES,
-                                    }
-                                  : socket;
                               return (
                                 <>
                                   {renderTabBar(side)}
                                   {renderSessionPane(
                                     session,
-                                    paneSocket,
+                                    socket,
                                     focused,
                                     true,
                                     id ?? session.id,
@@ -5717,17 +5713,7 @@ export function App({
                         ) : (
                           renderSessionPane(
                             currentSession,
-                            {
-                              connected:
-                                connected &&
-                                currentSession.id !== pendingSessionId,
-                              send,
-                              setTyping,
-                              addHandler:
-                                currentSession.id === pendingSessionId
-                                  ? IGNORE_WS_MESSAGES
-                                  : addHandler,
-                            },
+                            mainSocket,
                             true,
                             false,
                           )

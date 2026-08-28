@@ -42,8 +42,6 @@ import type {
   SessionNote,
   SessionSlackShare,
   TranscriptEntry,
-  WSServerMessage,
-  WSClientMessage,
   AskQuestion,
 } from "../lib/types";
 import {
@@ -144,6 +142,7 @@ import {
 import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { useNavigation } from "../hooks/useNavigation";
+import { useSessionSocket } from "../hooks/useSessionSocket";
 import {
   dedupeViewers,
   facepileAvatarStyle,
@@ -407,9 +406,7 @@ interface Props {
   /** Called after a successful archive (not unarchive), with whether archiving
 	    gracefully stopped an in-flight owned turn — so the parent can toast. */
   onArchived?: (stoppedRun: boolean) => void;
-  send: (msg: WSClientMessage) => void;
   setTyping: (sessionId: string, active: boolean) => void;
-  addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
   connected: boolean;
   /** A client-minted session whose server record is still being persisted. */
   pendingCreation?: boolean;
@@ -690,9 +687,7 @@ export function SessionViewer({
   canOpenNextChat,
   onArchive,
   onArchived,
-  send,
   setTyping,
-  addHandler,
   connected,
   pendingCreation = false,
   optimisticEmpty = false,
@@ -754,6 +749,7 @@ export function SessionViewer({
   onSubagentLabel,
 }: Props) {
   const navigation = useNavigation();
+  const { send, addHandler } = useSessionSocket();
   const goBack = navigation.goBack;
   const openNextChat = canOpenNextChat ? navigation.openNextChat : undefined;
   const openNewSession = canStartNewSession
@@ -7068,8 +7064,6 @@ export function SessionViewer({
               <PrPanel
                 onOpenPr={openPr}
                 sessionId={session.id}
-                send={send}
-                addHandler={addHandler}
                 sessions={allSessions || workspaceSessions || []}
                 onOpenSessionById={openSession}
                 editGate={connected && !isBusy && !noEngine}
@@ -7858,12 +7852,7 @@ export function SessionViewer({
 					    tears the PTYs down; they also die with the socket. */}
           {hasWorkspace && !waitingForWorkspace && terminalTabOpen ? (
             <div className={showTerminal ? VIEWER_REVIEW_MAIN : "hidden"}>
-              <ShellPanel
-                sessionId={session.id}
-                send={send}
-                addHandler={addHandler}
-                visible={showTerminal}
-              />
+              <ShellPanel sessionId={session.id} visible={showTerminal} />
             </div>
           ) : null}
         </div>
@@ -8004,8 +7993,6 @@ export function SessionViewer({
                         <div className="min-h-0 flex-1">
                           <ShellPanel
                             sessionId={session.id}
-                            send={send}
-                            addHandler={addHandler}
                             visible={desktopPanelPage === "terminal"}
                           />
                         </div>
