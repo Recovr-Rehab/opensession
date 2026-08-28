@@ -142,6 +142,25 @@ describe("session kernel service deployment", () => {
     expect(selfDeploy.slice(prepare, activate)).not.toContain("stop_gateway");
   });
 
+  test("root rollouts reject duplicate, stale, and ordinary-release targets", async () => {
+    const rootDeploy = await Bun.file(resolve(repoRoot, "deploy/deploy.sh")).text();
+    expect(rootDeploy).toContain("is already current; refusing a duplicate root rollout");
+    expect(rootDeploy).toContain("is not latest origin/main");
+    expect(rootDeploy).toContain("changes no root-owned deployment artifacts");
+    expect(rootDeploy).toContain("use deploy_self so frontend and component impact classification applies");
+    expect(rootDeploy).toContain('exec 9<>"$DEPLOY_STATE/.lock"');
+  });
+
+  test("compatibility root rollouts cannot socket-activate a half-replaced gateway", async () => {
+    const rootDeploy = await Bun.file(resolve(repoRoot, "deploy/deploy.sh")).text();
+    const compatibility = rootDeploy.indexOf("installed supervisor lacks fast service drain");
+    const stopCanary = rootDeploy.indexOf("stop_canary", compatibility);
+    const stopGateway = rootDeploy.indexOf("systemctl stop opensession.service", compatibility);
+    expect(compatibility).toBeGreaterThan(0);
+    expect(stopCanary).toBeGreaterThan(compatibility);
+    expect(stopGateway).toBeGreaterThan(stopCanary);
+  });
+
   test("root rollouts reuse the coordinated supervisor transaction when units are stable", async () => {
     const rootDeploy = await Bun.file(resolve(repoRoot, "deploy/deploy.sh")).text();
     const prepare = rootDeploy.indexOf("prepare-coordinated");

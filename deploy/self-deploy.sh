@@ -76,9 +76,11 @@ HEALTH_SLEEP=2
 WATCHDOG_WINDOW_SECS=900   # 15 min after the last self-deploy restart
 WATCHDOG_FAIL_THRESHOLD=3
 DEPLOY_LOCK_WAIT_SECS="${OPENSESSION_DEPLOY_LOCK_WAIT_SECS:-900}"
-DEPLOY_COALESCE_SECS="${OPENSESSION_DEPLOY_COALESCE_SECS:-3}"
+DEPLOY_COALESCE_SECS="${OPENSESSION_DEPLOY_COALESCE_SECS:-15}"
+DEPLOY_COALESCE_MAX_SECS="${OPENSESSION_DEPLOY_COALESCE_MAX_SECS:-60}"
 case "$DEPLOY_LOCK_WAIT_SECS" in (''|*[!0-9]*) DEPLOY_LOCK_WAIT_SECS=900 ;; esac
-case "$DEPLOY_COALESCE_SECS" in (''|*[!0-9]*) DEPLOY_COALESCE_SECS=3 ;; esac
+case "$DEPLOY_COALESCE_SECS" in (''|*[!0-9]*) DEPLOY_COALESCE_SECS=15 ;; esac
+case "$DEPLOY_COALESCE_MAX_SECS" in (''|*[!0-9]*) DEPLOY_COALESCE_MAX_SECS=60 ;; esac
 
 PIN_FILE="$STATE_DIR/last-known-good"
 MARKER_FILE="$STATE_DIR/last-deploy-marker"
@@ -558,12 +560,31 @@ do_deploy() {
     exit 1
   fi
 
-  # Give a commit burst a tiny quiet period, then select the newest compatible
-  # target that another caller actually requested. This turns A/B/C calls into
-  # one deploy of C without making an exact-SHA request absorb unrelated commits
-  # merely because they also landed on origin/main. Never automatically retry a
-  # target that just failed its health gate.
-  if [ "$DEPLOY_COALESCE_SECS" -gt 0 ]; then sleep "$DEPLOY_COALESCE_SECS"; fi
+  # Wait for a real quiet window, not a one-shot delay. Every newly requested
+  # commit extends the window, up to a hard cap, so a stream of sequential agent
+  # pushes becomes one rollout instead of a restart train. Exact-SHA requests
+  # still absorb only compatible commits explicitly present in REQUESTS_DIR.
+  if [ "$DEPLOY_COALESCE_SECS" -gt 0 ]; then
+    local debounce_started debounce_deadline quiet_deadline newest_request seen_request now
+    debounce_started="$(date +%s)"
+    debounce_deadline=$((debounce_started + DEPLOY_COALESCE_MAX_SECS))
+    quiet_deadline=$((debounce_started + DEPLOY_COALESCE_SECS))
+    seen_request="$(find "$REQUESTS_DIR" -maxdepth 1 -type f -printf '%T@ %f\n' 2>/dev/null | sort -n | tail -n 1 || true)"
+    while :; do
+      now="$(date +%s)"
+      [ "$now" -lt "$quiet_deadline" ] && [ "$now" -lt "$debounce_deadline" ] || break
+      sleep 1
+      newest_request="$(find "$REQUESTS_DIR" -maxdepth 1 -type f -printf '%T@ %f\n' 2>/dev/null | sort -n | tail -n 1 || true)"
+      if [ "$newest_request" != "$seen_request" ]; then
+        seen_request="$newest_request"
+        now="$(date +%s)"
+        quiet_deadline=$((now + DEPLOY_COALESCE_SECS))
+        if [ "$quiet_deadline" -gt "$debounce_deadline" ]; then
+          quiet_deadline="$debounce_deadline"
+        fi
+      fi
+    done
+  fi
   git_repo fetch --prune origin
   failed_target="$(sed -n 's/.*"ok":false.*"target":"\([^"]*\)".*/\1/p' "$RESULT_FILE" 2>/dev/null | tail -n 1)"
   for request in "$REQUESTS_DIR"/*; do

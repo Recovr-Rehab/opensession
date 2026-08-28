@@ -247,6 +247,9 @@ describe("deploy/self-deploy.sh", () => {
 		expect(script).toContain("already deployed or superseded");
 		expect(script).toContain("into newest requested target");
 		expect(script).toContain("refusing an automatic queued retry");
+		expect(script).toContain("DEPLOY_COALESCE_SECS:-15");
+		expect(script).toContain("DEPLOY_COALESCE_MAX_SECS:-60");
+		expect(script).toContain('quiet_deadline=$((now + DEPLOY_COALESCE_SECS))');
 	});
 
 	test("the server launches through the fixed privileged helper", async () => {
