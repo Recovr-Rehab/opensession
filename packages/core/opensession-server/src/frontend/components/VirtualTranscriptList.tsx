@@ -31,6 +31,10 @@ export interface VirtualTranscriptItem {
 	key: string;
 	anchorId: string;
 	entryIds: string[];
+	/** Entry object identities change when an existing semantic row gains live
+	 * content without gaining another entry id. Used only to select the handful
+	 * of rows that need a synchronous post-commit measurement. */
+	measureVersion?: readonly unknown[];
 	estimateSize: number;
 	/** Keep the estimate until sparse payload content is available to measure. */
 	measure?: boolean;
@@ -604,15 +608,21 @@ export function committedTranscriptMeasureKeys(
 	previous: VirtualTranscriptItem[],
 	next: VirtualTranscriptItem[],
 ): Set<string> {
-	const previousIds = new Map(previous.map((item) => [item.key, item.entryIds]));
+	const previousItems = new Map(previous.map((item) => [item.key, item]));
 	const changed = new Set<string>();
 	for (const item of next) {
 		if (item.measure === false) continue;
-		const before = previousIds.get(item.key);
+		const before = previousItems.get(item.key);
+		const beforeVersion = before?.measureVersion;
+		const nextVersion = item.measureVersion;
 		if (
 			!before ||
-			before.length !== item.entryIds.length ||
-			before.some((id, index) => id !== item.entryIds[index])
+			before.entryIds.length !== item.entryIds.length ||
+			before.entryIds.some((id, index) => id !== item.entryIds[index]) ||
+			beforeVersion?.length !== nextVersion?.length ||
+			Boolean(
+				nextVersion?.some((version, index) => version !== beforeVersion?.[index]),
+			)
 		)
 			changed.add(item.key);
 	}

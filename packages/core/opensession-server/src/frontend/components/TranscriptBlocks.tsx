@@ -466,6 +466,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 				key,
 				anchorId: renderBlockAnchor(block, key),
 				entryIds: entriesInBlock.map((entry) => entry.id),
+				measureVersion: entriesInBlock,
 				estimateSize: renderBlockEstimate(block),
 				content: (
 					<ReviewLoopBlock
@@ -589,6 +590,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 			key,
 			anchorId: renderBlockAnchor(block, key),
 			entryIds: entriesInBlock.map((entry) => entry.id),
+			measureVersion: entriesInBlock,
 			estimateSize: renderBlockEstimate(block),
 			// A footer overlaps the answer above it, so its margin belongs to the
 			// measured wrapper rather than inside the contained row.
@@ -856,6 +858,7 @@ function IndexedTranscriptBlocks(props: Props) {
 				key,
 				anchorId: key,
 				entryIds,
+				measureVersion: item.kind === "entry" ? [item.entry] : itemEntries,
 				estimateSize,
 				measure: true,
 				content:
