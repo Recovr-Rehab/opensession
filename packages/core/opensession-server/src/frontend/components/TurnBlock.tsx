@@ -14,7 +14,11 @@ import { ClampedBody, EntryImages, EntryVideos } from "./MessageBubble";
 import { IconChevronDown, IconStack } from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";
-import { msgReasoningBody, msgReasoningTitle } from "../lib/msg-classes";
+import {
+  msgReasoningBody,
+  msgReasoningShimmer,
+  msgReasoningTitle,
+} from "../lib/msg-classes";
 import { reasoningDisplay } from "../lib/reasoning-display";
 import { formatDuration } from "../lib/time";
 import {
@@ -77,6 +81,7 @@ export const TurnBlock = function TurnBlock({
   const pathRoots = useToolPathRoots();
   const tools = items.filter((it) => it.type === "tool_use");
   const messages = items.filter((it) => it.type === "assistant");
+  const activeReasoning = live ? messages[messages.length - 1] : undefined;
   const hasNarration = messages.length > 0;
 
   // Default fold state follows the two preferences (Settings → Preferences),
@@ -272,6 +277,7 @@ export const TurnBlock = function TurnBlock({
               <TurnMessage
                 key={sec.entry.id}
                 entry={sec.entry}
+                active={sec.entry === activeReasoning}
                 sessionId={sessionId}
               />
             ) : (
@@ -644,15 +650,25 @@ function sameRunInputs(
 /** A reasoning update inside the work rail, stripped of provider bold chrome. */
 function TurnMessage({
   entry,
+  active,
   sessionId,
 }: {
   entry: TranscriptEntry;
+  active: boolean;
   sessionId?: string;
 }) {
   const { title, body } = reasoningDisplay(entry.content);
   return (
     <div className="my-2 px-1" data-eid={entry.id} data-reasoning="">
-      {title && <div className={msgReasoningTitle}>{title}</div>}
+      {title ? (
+        <div className={cn(msgReasoningTitle, active && msgReasoningShimmer)}>
+          {title}
+        </div>
+      ) : active ? (
+        // Some providers expose prose thinking rather than a short status
+        // heading. Keep that prose readable and shimmer a stable activity label.
+        <div className={cn(msgReasoningTitle, msgReasoningShimmer)}>Thinking</div>
+      ) : null}
       {body && (
         <ClampedBody
           className={cn(msgReasoningBody, "markdown")}
