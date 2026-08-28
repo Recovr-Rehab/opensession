@@ -408,6 +408,14 @@ describe("single session ownership", () => {
 			expect(source.indexOf("sessionKernel(bksId).creationState()"))
 				.toBeLessThan(source.indexOf("actorCreationSetupPlan(bksId, createIdentity)"));
 		}
+		// A stale create replay for any completed engine must return before setup
+		// planning mutates the actor. Pi owns a distinct session-id slot.
+		expect(create.indexOf("recoveringSession?.piSessionId")).toBeLessThan(
+			create.indexOf("actorCreationSetupPlan(bksId, createIdentity)"),
+		);
+		expect(wiring.indexOf("completedCreate?.piSessionId")).toBeLessThan(
+			wiring.indexOf("actorCreationSetupPlan(bksId, createIdentity)"),
+		);
 		expect(create).toContain("failCreate(error instanceof Error");
 		expect(create).toContain("if (projected) return projected");
 		expect(create.indexOf("if (projected) return projected")).toBeLessThan(

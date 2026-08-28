@@ -633,10 +633,10 @@ registerSessionControl({
 					new Date(durableCreation.updatedAt).toISOString(),
 			};
 		}
-		let createPlan = await actorCreationSetupPlan(bksId, createIdentity);
 		if (
 			completedCreate?.claudeSessionId ||
-			completedCreate?.codexThreadId
+			completedCreate?.codexThreadId ||
+			completedCreate?.piSessionId
 		) {
 			clearCreatePlan(bksId);
 			return {
@@ -645,6 +645,7 @@ registerSessionControl({
 				createdAt: completedCreate.createdAt || new Date().toISOString(),
 			};
 		}
+		let createPlan = await actorCreationSetupPlan(bksId, createIdentity);
 		// Fork: branch a new session off an existing one — same rules as the
 		// web create (shares the source's cwd/branch/model; Claude sources are
 		// cloned via SDK forkSession, others get a transcript handoff). An

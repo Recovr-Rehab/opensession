@@ -1845,10 +1845,10 @@ export async function handleCreateSessionMessage(
 		finishCreate();
 		return response;
 	}
-	let createPlan = await actorCreationSetupPlan(bksId, createIdentity);
 	if (
 		recoveringSession?.claudeSessionId ||
-		recoveringSession?.codexThreadId
+		recoveringSession?.codexThreadId ||
+		recoveringSession?.piSessionId
 	) {
 		clearCreatePlan(bksId);
 		const response = replayedSessionCreatedResult(
@@ -1859,6 +1859,7 @@ export async function handleCreateSessionMessage(
 		finishCreate();
 		return response;
 	}
+	let createPlan = await actorCreationSetupPlan(bksId, createIdentity);
 	// This WebSocket create is interactive. The raw credential reaches only the
 	// server-owned materializer; recovery persists and resolves its principal.
 	const githubCredential = ws.data.authLogin
