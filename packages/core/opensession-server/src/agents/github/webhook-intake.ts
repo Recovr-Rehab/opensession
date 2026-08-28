@@ -15,6 +15,7 @@ import {
   isGithubDeliveryProcessed,
   markGithubDeliveryProcessed,
 } from "./webhook-deliveries";
+import { handleGithubPrEvent } from "./webhook";
 
 const GITHUB_WEBHOOK_BODY_LIMIT = 1024 * 1024;
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
@@ -89,9 +90,10 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
     event === "pull_request_review_comment" ||
     event === "workflow_run"
   ) {
-    import("./webhook")
-      .then((m) => m.handleGithubPrEvent(event, payload))
-      .catch((e) => console.error("[github] agent dispatch failed:", e));
+    // The handler starts long-running work in the background, but first commits
+    // accepted debounce/mention intent synchronously. Await that small admission
+    // step so a successful webhook response always has durable recovery state.
+    await handleGithubPrEvent(event, payload);
   }
 
   return Response.json({ ok: true });

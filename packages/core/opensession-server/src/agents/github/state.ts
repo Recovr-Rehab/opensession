@@ -66,6 +66,15 @@ export interface GithubPrState {
     requestedBy: string;
     receivedAt: string;
   };
+  /** A synchronize event accepted for review but still inside its debounce
+   * window. Persisted because the timer itself cannot survive a restart. */
+  pendingReview?: {
+    headRef: string;
+    headSha: string;
+    title: string;
+    firstPushAt: string;
+    dueAt: string;
+  };
   /** Review → owning-session fix rounds (handoff.ts); cleared when a review
    *  comes back satisfied or the PR closes. */
   handoff?: HandoffState;

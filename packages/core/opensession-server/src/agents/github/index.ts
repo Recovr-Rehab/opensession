@@ -27,7 +27,11 @@ import {
 } from "./constants";
 import { DEFAULT_REVIEW_PROMPT } from "./prompts";
 import { DEFAULT_GITHUB_FLOW_MCP_SERVERS } from "./run";
-import { setGithubSessionInvalidate, resolveReviewConfig } from "./webhook";
+import {
+  setGithubSessionInvalidate,
+  resolveReviewConfig,
+  restorePendingDebouncedReviews,
+} from "./webhook";
 import { githubWebhookCount, loadGithubDeliveries } from "./webhook-deliveries";
 import { handleGithubWebhook } from "./webhook-intake";
 import {
@@ -379,10 +383,11 @@ export class GithubAgent implements AgentModule {
     ensureReviewAutomation();
     ensureDocsSyncAutomation();
     await recoverInterrupted();
+    restorePendingDebouncedReviews(listPrStates());
     startPendingMentionRetry();
     // Safety net under all of the above: the webhook path is fire-once, so
-    // work lost AFTER an event was consumed (debounce killed by a restart,
-    // review dead on dry pools, missed delivery) is re-fired by the sweep.
+    // reviews that die on dry pools or whose delivery never arrives are
+    // re-fired by the sweep. Accepted debounce work recovers from PR state.
     const { startReconcileSweep } = await import("./reconcile");
     startReconcileSweep();
     // Cross-PR learning: periodically re-distill the per-repo learned review

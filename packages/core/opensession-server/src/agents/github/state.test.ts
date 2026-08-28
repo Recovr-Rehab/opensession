@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
+import { nextReviewDebounce, reviewDebounceDelay } from "./review-debounce";
 import { homedir, tmpdir } from "os";
 import { join } from "path";
 
@@ -30,7 +31,7 @@ afterAll(() => {
   // every root it could have resolved to, so no run leaves state behind.
   for (const root of [SCRATCH, savedRoot, process.env.HOME, homedir()]) {
     if (!root) continue;
-    for (const pr of [PR, PR + 1, PR + 2])
+    for (const pr of [PR, PR + 1, PR + 2, PR + 3])
       rmSync(`${root}/.opensession-github/${pr}.json`, { force: true });
   }
 });
@@ -116,5 +117,41 @@ describe("concurrent writers on one PR's state", () => {
     expect(activeRunCancellationRequested(pr, "review")).toBe(true);
     expect(requestActiveRunCancellation(pr, HEAD, "simplify")).toBe(false);
     expect(readPrState(pr)?.activeRun?.cancelRequestedAt).toBeTruthy();
+  });
+
+  test("a review commit preserves a newer debounced head", () => {
+    const pr = PR + 3;
+    updatePrState(pr, HEAD, (s) => {
+      s.pendingReview = {
+        headRef: HEAD,
+        headSha: "new-head",
+        title: "A newer push",
+        firstPushAt: new Date(1_000).toISOString(),
+        dueAt: new Date(5_000).toISOString(),
+      };
+    });
+
+    recordReviewed(pr, HEAD, "old-head", {
+      findings: 0,
+      blocking: 0,
+      sha: "old-head",
+      at: new Date().toISOString(),
+    });
+
+    expect(readPrState(pr)?.pendingReview?.headSha).toBe("new-head");
+  });
+});
+
+describe("review debounce timing", () => {
+  test("keeps the quiet period but caps a continuous push burst", () => {
+    const first = nextReviewDebounce(undefined, 1_000, 4_000, 10_000);
+    expect(first).toEqual({ firstPushAt: 1_000, dueAt: 5_000 });
+
+    const second = nextReviewDebounce(first.firstPushAt, 3_000, 4_000, 10_000);
+    expect(second).toEqual({ firstPushAt: 1_000, dueAt: 7_000 });
+
+    const capped = nextReviewDebounce(first.firstPushAt, 9_500, 4_000, 10_000);
+    expect(capped).toEqual({ firstPushAt: 1_000, dueAt: 11_000 });
+    expect(reviewDebounceDelay(capped.dueAt, 12_000)).toBe(0);
   });
 });
