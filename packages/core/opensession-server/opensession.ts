@@ -974,10 +974,10 @@ if (!g.__opensessionBooted) {
 			console.error("[session-kernel] recovery gate failed; restarting fail-closed:", error);
 			setTimeout(() => process.exit(1), 1_000).unref?.();
 		});
-		// 1.5s: enough for boot-time state (agents, watchers, session-control
-		// registry) to settle before we start resuming, without adding dead air to
-		// every restart. Paired with the shorter drain above for faster recovery.
-		}, 1500);
+		// Yield once so the listener and boot-time registries finish installing,
+		// then recover immediately. The old fixed 1.5s delay had no ownership or
+		// readiness prerequisite and only extended every handoff.
+		}, 0);
 	} else {
 		setServiceReadiness("ready");
 	}

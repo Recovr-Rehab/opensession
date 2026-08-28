@@ -82,6 +82,7 @@ describe("gateway activation preload barrier", () => {
     const lease = entry.indexOf("await acquireGatewayActivationLease");
     expect(barrier).toBeGreaterThan(0);
     expect(lease).toBeGreaterThan(barrier);
+    expect(entry).not.toContain("}, 1500);");
     for (const effect of [
       "devInstanceBootError()",
       "startRunRpcServer()",
