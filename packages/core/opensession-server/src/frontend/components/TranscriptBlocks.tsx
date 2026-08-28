@@ -6,6 +6,7 @@ import {
 	type TranscriptIndexedRange,
 } from "../lib/transcript-index";
 import {
+	transcriptArrivalAliases,
 	turnMountKey,
 	turnScrollAnchor,
 } from "../lib/transcript-block-identity";
@@ -473,6 +474,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 				key,
 				anchorId: renderBlockAnchor(block, key),
 				entryIds: entriesInBlock.map((entry) => entry.id),
+				arrivalAliases: transcriptArrivalAliases(entriesInBlock),
 				measureVersion: transcriptMeasureVersion(entriesInBlock),
 				estimateSize: renderBlockEstimate(block),
 				content: (
@@ -597,6 +599,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 			key,
 			anchorId: renderBlockAnchor(block, key),
 			entryIds: entriesInBlock.map((entry) => entry.id),
+			arrivalAliases: transcriptArrivalAliases(entriesInBlock),
 			measureVersion: transcriptMeasureVersion(entriesInBlock),
 			estimateSize: renderBlockEstimate(block),
 			// A footer overlaps the answer above it, so its margin belongs to the
@@ -865,6 +868,9 @@ function IndexedTranscriptBlocks(props: Props) {
 				key,
 				anchorId: key,
 				entryIds,
+				arrivalAliases: transcriptArrivalAliases(
+					item.kind === "entry" ? [item.entry] : itemEntries,
+				),
 				measureVersion: transcriptMeasureVersion(
 					item.kind === "entry" ? [item.entry] : itemEntries,
 				),

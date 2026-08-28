@@ -15,7 +15,10 @@ import {
 	seededBlockEstimate,
 	type TranscriptSizes,
 } from "../lib/transcript-sizes";
-import { newTailBlockKeys } from "../lib/transcript-block-identity";
+import {
+	newTailBlockKeys,
+	shouldAnimateTranscriptItemArrival,
+} from "../lib/transcript-block-identity";
 import {
 	TRANSCRIPT_ARRIVING_POSITION_CLASS,
 	transcriptEnterClass,
@@ -31,6 +34,9 @@ export interface VirtualTranscriptItem {
 	key: string;
 	anchorId: string;
 	entryIds: string[];
+	/** Previously rendered entry identities this row durably replaces. A fresh
+	 * outer block with one of these aliases is reconciliation, not an arrival. */
+	arrivalAliases?: string[];
 	/** Semantic entry revisions for content changes that do not add another id.
 	 * Used only to select the handful of rows that need a synchronous
 	 * post-commit measurement. */
@@ -129,6 +135,9 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	 *  missing from the set just arrived live and plays the entrance fade. Keys
 	 *  stay in the set once seen, so a virtualizer remount never replays it. */
 	private mountedKeys: Set<string> | null = null;
+	/** Entry identities already painted inside those blocks. Unlike block keys,
+	 * these survive an optimistic row becoming a new durable transcript range. */
+	private mountedEntryIds = new Set<string>();
 	private seeded: { session: string; sizes?: TranscriptSizes } | null = null;
 	private virtualizer: Virtualizer<HTMLDivElement, HTMLDivElement>;
 
@@ -557,12 +566,22 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		// "mounted by the previous build" is virtualizer knowledge: the function
 		// component above is compiler-managed and may re-render without a new
 		// item list, and a ref-based previous-set there is a compile error.
+		const itemsByKey = new Map(this.props.items.map((item) => [item.key, item]));
 		const entering = newTailBlockKeys(
 			this.mountedKeys,
 			this.props.items.map((item) => item.key),
-		);
+		).filter((key) => {
+			const item = itemsByKey.get(key);
+			return (
+				!item ||
+				shouldAnimateTranscriptItemArrival(item, this.mountedEntryIds)
+			);
+		});
 		if (this.mountedKeys === null) this.mountedKeys = new Set();
-		for (const item of this.props.items) this.mountedKeys.add(item.key);
+		for (const item of this.props.items) {
+			this.mountedKeys.add(item.key);
+			for (const entryId of item.entryIds) this.mountedEntryIds.add(entryId);
+		}
 		const enteringSet = new Set(entering);
 		const result = (
 			<div

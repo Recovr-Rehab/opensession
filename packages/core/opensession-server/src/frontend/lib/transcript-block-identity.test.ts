@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
 	newTailBlockKeys,
+	shouldAnimateTranscriptItemArrival,
+	transcriptArrivalAliases,
 	turnMountKey,
 	turnScrollAnchor,
 } from "./transcript-block-identity";
@@ -18,6 +20,37 @@ describe("transcript turn identity", () => {
 		expect(turnScrollAnchor([entry("second"), entry("third")])).toBe(
 			turnScrollAnchor([entry("first"), entry("second"), entry("third")]),
 		);
+	});
+});
+
+describe("optimistic transcript identity", () => {
+	test("carries every optimistic identity into a durable batched row", () => {
+		expect(
+			transcriptArrivalAliases([
+				{
+					id: "durable-batch",
+					type: "user",
+					sourceMessageIds: ["client-first", "client-second"],
+				},
+			]),
+		).toEqual([
+			"outbox-durable-batch",
+			"outbox-client-first",
+			"outbox-client-second",
+		]);
+	});
+
+	test("does not animate a durable block over its mounted optimistic alias", () => {
+		const durable = { arrivalAliases: ["outbox-client-prompt"] };
+		expect(
+			shouldAnimateTranscriptItemArrival(
+				durable,
+				new Set(["outbox-client-prompt"]),
+			),
+		).toBe(false);
+		expect(
+			shouldAnimateTranscriptItemArrival(durable, new Set(["older-entry"])),
+		).toBe(true);
 	});
 });
 
