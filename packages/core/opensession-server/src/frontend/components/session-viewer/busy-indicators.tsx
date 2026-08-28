@@ -6,7 +6,8 @@ import { PageLoader } from "../../ui/page-loader";
 import { Spinner } from "../../ui/spinner";
 import { PulseDot } from "../../ui/status";
 import { cn } from "../../ui/cn";
-import { msgRow } from "../../lib/msg-classes";
+import { busyActivityStatus } from "../../lib/busy-activity";
+import { msgActivityShimmer, msgRow } from "../../lib/msg-classes";
 
 /** The chat canvas while a new session's worktree is being prepared. The
  * opening message stays visible in the composer queue until it can move into
@@ -74,22 +75,36 @@ export function ConversationLoading() {
 	);
 }
 
-// Ticking elapsed-time label for the busy dot row. Self-ticking
-// so the 10Hz re-render stays inside this tiny span, not the whole viewer.
-function BusyElapsed({ since }: { since: number }) {
+// Persistent turn-level fallback for providers that emit no visible reasoning
+// or tool event for a while. It only claims what the client knows: the request
+// is active. The 1Hz ticker stays inside this tiny node instead of re-rendering
+// the transcript, and the elapsed value is hidden from assistive tech so it is
+// not announced every second.
+function BusyWorking({ since }: { since: number | null }) {
 	const [now, setNow] = useState(() => Date.now());
 	useEffect(() => {
-		const t = setInterval(() => setNow(Date.now()), 100);
+		if (since == null) return;
+		setNow(Date.now());
+		const t = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(t);
-	}, []);
-	const s = Math.max(0, now - since) / 1000;
-	let label: string;
-	if (s < 60) label = `${s.toFixed(1)}s`;
-	else if (s < 3600)
-		label = `${Math.floor(s / 60)}m, ${(s % 60).toFixed(1)}s`;
-	else label = `${Math.floor(s / 3600)}h, ${Math.floor((s % 3600) / 60)}m`;
-	// Tabular figures so a 10Hz counter doesn't jitter its own width.
-	return <span className="text-meta text-faint tabular-nums">{label}</span>;
+	}, [since]);
+	const status = busyActivityStatus(since == null ? 0 : now - since);
+	return (
+		<>
+			<span
+				role="status"
+				aria-live="polite"
+				className={cn("text-meta font-medium", msgActivityShimmer)}
+			>
+				{status.label}
+			</span>
+			{status.elapsed && (
+				<span aria-hidden="true" className="text-meta text-faint tabular-nums">
+					· {status.elapsed}
+				</span>
+			)}
+		</>
+	);
 }
 
 // How long a steer may wait before the chip starts showing how long it has
@@ -183,7 +198,7 @@ export function BusyInline({
 			{stoppingSince != null ? (
 				<BusyStopping since={stoppingSince} />
 			) : (
-				since != null && <BusyElapsed since={since} />
+				<BusyWorking since={since} />
 			)}
 		</div>
 	);
