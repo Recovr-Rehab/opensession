@@ -235,6 +235,13 @@ function renderBlockAnchor(block: RenderBlock, key: string): string {
 	return key;
 }
 
+function transcriptMeasureVersion(entries: TranscriptEntry[]): string[] {
+	return entries.map(
+		(entry) =>
+			`${entry.id}:${entry.changeSeq ?? ""}:${entry.content.length}:${entry.contentLength ?? ""}:${entry.images?.length ?? 0}:${entry.videos?.length ?? 0}:${entry.files?.length ?? 0}:${entry.isError ? 1 : 0}`,
+	);
+}
+
 function renderBlockEstimate(block: RenderBlock): number {
 	if (block.kind === "turn") return 40;
 	if (block.kind === "footer") return 32;
@@ -466,7 +473,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 				key,
 				anchorId: renderBlockAnchor(block, key),
 				entryIds: entriesInBlock.map((entry) => entry.id),
-				measureVersion: entriesInBlock,
+				measureVersion: transcriptMeasureVersion(entriesInBlock),
 				estimateSize: renderBlockEstimate(block),
 				content: (
 					<ReviewLoopBlock
@@ -590,7 +597,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 			key,
 			anchorId: renderBlockAnchor(block, key),
 			entryIds: entriesInBlock.map((entry) => entry.id),
-			measureVersion: entriesInBlock,
+			measureVersion: transcriptMeasureVersion(entriesInBlock),
 			estimateSize: renderBlockEstimate(block),
 			// A footer overlaps the answer above it, so its margin belongs to the
 			// measured wrapper rather than inside the contained row.
@@ -858,7 +865,9 @@ function IndexedTranscriptBlocks(props: Props) {
 				key,
 				anchorId: key,
 				entryIds,
-				measureVersion: item.kind === "entry" ? [item.entry] : itemEntries,
+				measureVersion: transcriptMeasureVersion(
+					item.kind === "entry" ? [item.entry] : itemEntries,
+				),
 				estimateSize,
 				measure: true,
 				content:

@@ -31,9 +31,9 @@ export interface VirtualTranscriptItem {
 	key: string;
 	anchorId: string;
 	entryIds: string[];
-	/** Entry object identities change when an existing semantic row gains live
-	 * content without gaining another entry id. Used only to select the handful
-	 * of rows that need a synchronous post-commit measurement. */
+	/** Semantic entry revisions for content changes that do not add another id.
+	 * Used only to select the handful of rows that need a synchronous
+	 * post-commit measurement. */
 	measureVersion?: readonly unknown[];
 	estimateSize: number;
 	/** Keep the estimate until sparse payload content is available to measure. */

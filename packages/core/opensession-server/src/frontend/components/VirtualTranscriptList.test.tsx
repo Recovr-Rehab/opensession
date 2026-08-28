@@ -47,13 +47,11 @@ describe("VirtualTranscriptList", () => {
 		expect(
 			[...committedTranscriptMeasureKeys(before, [item(0), extended, added])],
 		).toEqual(["block-1", "block-2"]);
-		const oldEntry = {};
-		const newEntry = {};
 		expect(
 			[
 				...committedTranscriptMeasureKeys(
-					[{ ...item(0), measureVersion: [oldEntry] }],
-					[{ ...item(0), measureVersion: [newEntry] }],
+					[{ ...item(0), measureVersion: ["entry-0:10"] }],
+					[{ ...item(0), measureVersion: ["entry-0:20"] }],
 				),
 			],
 		).toEqual(["block-0"]);
