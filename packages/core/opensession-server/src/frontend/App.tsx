@@ -30,6 +30,7 @@ import React, {
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
+import { AppShell } from "./components/AppShell";
 import { NavigationProvider } from "./components/NavigationProvider";
 import { SessionPaneProviders } from "./components/SessionPaneProviders";
 import { Sidebar, type SidebarHandle } from "./components/Sidebar";
@@ -37,14 +38,11 @@ import { Tooltip, TooltipProvider } from "./ui/tooltip";
 import { cn } from "./ui/cn";
 import {
   APP_BODY,
-  DETAIL_PANE,
   DETAIL_TOPBAR,
   DETAIL_TOPBAR_ACTIONS,
   DETAIL_TOPBAR_TITLE,
   DETAIL_TOPBAR_TITLE_TEXT,
-  RIGHT_PANEL_SLOT,
   tabSplitDropPreviewClass,
-  WORKSPACE_SHELL,
 } from "./lib/app-shell-classes";
 import {
   appHeader,
@@ -5032,419 +5030,394 @@ export function App({
                   />
                 </div>
 
-                <div className={WORKSPACE_SHELL}>
-                  <main className={DETAIL_PANE} ref={captureDetailPane}>
-                    {/* WCO back/forward fallback: the primary cluster lives in the
-						    sidebar's top chrome row, which vanishes when the sidebar is
-						    collapsed — this floating copy shows only then (CSS-gated). */}
-                    <TitleBar pane />
-                    {/* The overlapping collapsed controls require the pane's header to
-						    opt out of native dragging. Keep one empty grip beside them so the
-						    window can still move without stealing any control's clicks. */}
-                    <div
-                      className="wco-collapsed-drag-handle"
-                      aria-hidden="true"
-                    />
-                    {/* Floating re-open control, shown only while the desktop sidebar
+                <AppShell
+                  paneRef={captureDetailPane}
+                  rightPanelRef={setRightPanelEl}
+                >
+                  {/* Floating re-open control, shown only while the desktop sidebar
 						    is collapsed (CSS-gated). Mirrors the brand-row toggle so the
 						    sidebar can always be brought back. */}
-                    <Tooltip
-                      label="Show sidebar"
-                      side="right"
-                      shortcut={["⌘", "B"]}
-                    >
-                      {/* `sidebar-reopen` stays as a hook: base.css exempts it from the
+                  <Tooltip
+                    label="Show sidebar"
+                    side="right"
+                    shortcut={["⌘", "B"]}
+                  >
+                    {/* `sidebar-reopen` stays as a hook: base.css exempts it from the
 							    desktop shell's drag region and re-anchors it past the
 							    traffic lights. `top` matches the open row's center,
 							    accounting for its 1px bottom divider; `left` is the same 8px
 							    anchor the open sidebar's brand row uses. */}
-                      <button
-                        className={cn(
-                          SIDEBAR_CHROME_BTN,
-                          "sidebar-reopen absolute top-[calc((var(--desktop-header-h)-35px)/2)] left-2 z-20 hidden size-[34px] p-0",
-                          sidebarCollapsed && "desktop:inline-flex",
-                        )}
-                        onClick={toggleSidebarCollapsed}
-                        aria-label="Show sidebar"
-                      >
-                        {panelIcon}
-                      </button>
-                    </Tooltip>
-                    {/* Top bar: session name + actions (portaled in by SessionViewer)
+                    <button
+                      className={cn(
+                        SIDEBAR_CHROME_BTN,
+                        "sidebar-reopen absolute top-[calc((var(--desktop-header-h)-35px)/2)] left-2 z-20 hidden size-[34px] p-0",
+                        sidebarCollapsed && "desktop:inline-flex",
+                      )}
+                      onClick={toggleSidebarCollapsed}
+                      aria-label="Show sidebar"
+                    >
+                      {panelIcon}
+                    </button>
+                  </Tooltip>
+                  {/* Top bar: session name + actions (portaled in by SessionViewer)
 						    on session routes, a plain title otherwise. Sits above the tab
 						    strip so the session identity reads first, tabs below it. */}
-                    <TopBar className={DETAIL_TOPBAR} ref={setTopbarEl}>
-                      {route.view !== "session" &&
-                        // A workspace portals in the same header row a session
-                        // does (WorkspacePane) rather than taking the plain title.
-                        !(route.view === "workspace" && routeWorkspace) &&
-                        topbarTitle && (
-                          // Where you are, not the page's heading: these routes are
-                          // pages, and a page keeps its name in its body. The bar picks
-                          // that name up once it has scrolled out of sight, the way the
-                          // chat header names the session. See hooks/useLargeTitle.ts.
-                          <TopBarTitle
-                            className={cn(
-                              DETAIL_TOPBAR_TITLE,
-                              (route.view === "prs" || route.view === "feed") &&
-                                PR_PAGE_COLUMN,
-                            )}
+                  <TopBar className={DETAIL_TOPBAR} ref={setTopbarEl}>
+                    {route.view !== "session" &&
+                      // A workspace portals in the same header row a session
+                      // does (WorkspacePane) rather than taking the plain title.
+                      !(route.view === "workspace" && routeWorkspace) &&
+                      topbarTitle && (
+                        // Where you are, not the page's heading: these routes are
+                        // pages, and a page keeps its name in its body. The bar picks
+                        // that name up once it has scrolled out of sight, the way the
+                        // chat header names the session. See hooks/useLargeTitle.ts.
+                        <TopBarTitle
+                          className={cn(
+                            DETAIL_TOPBAR_TITLE,
+                            (route.view === "prs" || route.view === "feed") &&
+                              PR_PAGE_COLUMN,
+                          )}
+                        >
+                          <span
+                            className={DETAIL_TOPBAR_TITLE_TEXT}
+                            data-shown={titleHandedOver || undefined}
                           >
-                            <span
-                              className={DETAIL_TOPBAR_TITLE_TEXT}
-                              data-shown={titleHandedOver || undefined}
-                            >
-                              {topbarTitle}
-                            </span>
-                            {/* Filled by the page, if it has controls to put here. */}
-                            <TopBarActions
-                              className={cn(
-                                DETAIL_TOPBAR_ACTIONS,
-                                route.view === "prs" && "ml-4 flex-1 pl-0",
-                              )}
-                              ref={setTopbarActionsEl}
-                            />
-                          </TopBarTitle>
-                        )}
-                    </TopBar>
-                    {!activeTabSplit && tabStripVisible && renderTabBar(null)}
-                    {splitDropSide && (
-                      <div
-                        className={tabSplitDropPreviewClass(splitDropSide)}
-                        // Once there IS a split, the preview outlines the column the
-                        // tab would join at its real width — the even halves it
-                        // defaults to are only right for the drop that creates one.
-                        style={
-                          activeTabSplit
-                            ? ({
-                                "--split-preview-share": `${
-                                  (splitDropSide === "left"
-                                    ? activeTabSplit.ratio
-                                    : 1 - activeTabSplit.ratio) * 100
-                                }%`,
-                              } as React.CSSProperties)
-                            : undefined
+                            {topbarTitle}
+                          </span>
+                          {/* Filled by the page, if it has controls to put here. */}
+                          <TopBarActions
+                            className={cn(
+                              DETAIL_TOPBAR_ACTIONS,
+                              route.view === "prs" && "ml-4 flex-1 pl-0",
+                            )}
+                            ref={setTopbarActionsEl}
+                          />
+                        </TopBarTitle>
+                      )}
+                  </TopBar>
+                  {!activeTabSplit && tabStripVisible && renderTabBar(null)}
+                  {splitDropSide && (
+                    <div
+                      className={tabSplitDropPreviewClass(splitDropSide)}
+                      // Once there IS a split, the preview outlines the column the
+                      // tab would join at its real width — the even halves it
+                      // defaults to are only right for the drop that creates one.
+                      style={
+                        activeTabSplit
+                          ? ({
+                              "--split-preview-share": `${
+                                (splitDropSide === "left"
+                                  ? activeTabSplit.ratio
+                                  : 1 - activeTabSplit.ratio) * 100
+                              }%`,
+                            } as React.CSSProperties)
+                          : undefined
+                      }
+                      aria-hidden="true"
+                    />
+                  )}
+                  {route.view === "workspace" ? (
+                    routeWorkspace ? (
+                      <WorkspacePane
+                        key={route.id}
+                        onOpenPr={(repo, branch) =>
+                          navigate({ view: "pr", repo, branch })
                         }
-                        aria-hidden="true"
-                      />
-                    )}
-                    {route.view === "workspace" ? (
-                      routeWorkspace ? (
-                        <WorkspacePane
-                          key={route.id}
-                          onOpenPr={(repo, branch) =>
-                            navigate({ view: "pr", repo, branch })
-                          }
-                          focusPr={reviewFocusPr ?? undefined}
-                          workspace={routeWorkspace}
-                          workspaceSessions={workspaceSessions}
-                          sessions={sessions}
-                          tabStripVisible={tabStripVisible}
-                          onNewSession={
-                            workspaceSessions.some((session) => session.desk) ||
-                            emptyWorkspaceSession
-                              ? undefined
-                              : (origin) =>
-                                  void handleNewSession("share", null, origin)
-                          }
-                          tab={
-                            reviewActive
-                              ? "review"
-                              : conversationActive
-                                ? "conversation"
-                                : videoActive
-                                  ? "video"
-                                  : null
-                          }
-                          connected={connected}
-                          send={send}
-                          addHandler={addHandler}
-                          onOpenSession={openSession}
-                          topbarEl={topbarEl}
-                          headerActionsEl={headerActionsEl}
-                          onRenameWorkspace={async (name) => {
-                            await (async () => {
-                              await updateWorkspaceApi(routeWorkspace.id, {
-                                name,
-                              });
-                            })().catch(async (error) => {
-                              console.error("Rename workspace failed:", error);
-                            });
-                            refreshWorkspaces();
-                          }}
-                          archivedSessions={archivedSessions}
-                          onRestoreSession={restoreSession}
-                          onArchiveWorkspace={() =>
-                            archiveWorkspaceFromHeader(workspaceSessions)
-                          }
-                          onDeleteWorkspace={() =>
-                            deleteWorkspaceFromHeader(routeWorkspace.id)
-                          }
-                          rightPanelEl={rightPanelEl}
-                        />
-                      ) : workspacesLoaded ? (
-                        <EmptyState>Workspace not found.</EmptyState>
-                      ) : (
-                        <LoadingState>Loading workspace…</LoadingState>
-                      )
-                    ) : route.view === "pr" ? (
-                      route.branch === undefined ? (
-                        // Number-only: nothing to preview until the resolve above
-                        // finds the PR's workspace and replaces this route.
-                        prRefMissing ? (
-                          <EmptyState>{`${repoLabel(route.repo)} has no pull request #${route.number}.`}</EmptyState>
-                        ) : (
-                          <LoadingState>{`Opening #${route.number}…`}</LoadingState>
-                        )
-                      ) : (
-                        <PrQueuePreview
-                          key={`${route.repo}:${route.branch}`}
-                          repo={route.repo}
-                          branch={route.branch}
-                          sessions={sessions}
-                          onOpenSession={(id) =>
-                            navigate({ view: "session", id })
-                          }
-                          onOpenPr={(repo, branch) =>
-                            navigate({ view: "pr", repo, branch })
-                          }
-                          send={send}
-                          addHandler={addHandler}
-                        />
-                      )
-                    ) : route.view === "reports" ? (
-                      <Reports
-                        selectedAutomationId={route.automationId}
-                        selectedReportId={route.reportId}
-                        onSelect={(automationId, reportId) =>
-                          navigate(
-                            { view: "reports", automationId, reportId },
-                            { replace: true },
-                          )
-                        }
-                        onBack={() =>
-                          navigate({ view: "reports" }, { replace: true })
-                        }
-                        onOpenSession={(id) =>
-                          navigate({ view: "session", id })
-                        }
-                        onOpenSupport={(threadId) =>
-                          navigate({ view: "support", threadId })
-                        }
-                        onOpenNewSession={openPrefilledSession}
-                        addHandler={addHandler}
-                      />
-                    ) : route.view === "analytics" ? (
-                      <Analytics />
-                    ) : route.view === "feed" ? (
-                      <Feed
+                        focusPr={reviewFocusPr ?? undefined}
+                        workspace={routeWorkspace}
+                        workspaceSessions={workspaceSessions}
                         sessions={sessions}
-                        teamViewing={teamViewing}
-                        headerActionsEl={topbarActionsEl}
-                        onSelect={(id) => navigate({ view: "session", id })}
-                      />
-                    ) : route.view === "tasks" ? (
-                      <Tasks
-                        addHandler={addHandler}
-                        onOpenSession={(id) =>
-                          navigate({ view: "session", id })
+                        tabStripVisible={tabStripVisible}
+                        onNewSession={
+                          workspaceSessions.some((session) => session.desk) ||
+                          emptyWorkspaceSession
+                            ? undefined
+                            : (origin) =>
+                                void handleNewSession("share", null, origin)
                         }
-                      />
-                    ) : route.view === "plain" ? (
-                      <SupportInbox
-                        threadId={route.threadId ?? null}
-                        sessions={sessions}
-                        onSelectThread={(threadId) =>
-                          navigate({ view: "plain", threadId })
+                        tab={
+                          reviewActive
+                            ? "review"
+                            : conversationActive
+                              ? "conversation"
+                              : videoActive
+                                ? "video"
+                                : null
                         }
-                        onOpenSession={(id) =>
-                          navigate({ view: "session", id })
-                        }
-                      />
-                    ) : route.view === "support" ? (
-                      <SupportPreview
-                        key={route.threadId}
-                        threadId={route.threadId}
                         connected={connected}
                         send={send}
                         addHandler={addHandler}
-                        onOpenSession={(id) =>
-                          navigate({ view: "session", id })
+                        onOpenSession={openSession}
+                        topbarEl={topbarEl}
+                        headerActionsEl={headerActionsEl}
+                        onRenameWorkspace={async (name) => {
+                          await (async () => {
+                            await updateWorkspaceApi(routeWorkspace.id, {
+                              name,
+                            });
+                          })().catch(async (error) => {
+                            console.error("Rename workspace failed:", error);
+                          });
+                          refreshWorkspaces();
+                        }}
+                        archivedSessions={archivedSessions}
+                        onRestoreSession={restoreSession}
+                        onArchiveWorkspace={() =>
+                          archiveWorkspaceFromHeader(workspaceSessions)
                         }
+                        onDeleteWorkspace={() =>
+                          deleteWorkspaceFromHeader(routeWorkspace.id)
+                        }
+                        rightPanelEl={rightPanelEl}
                       />
-                    ) : route.view === "reviews" ? (
-                      <Reviews
+                    ) : workspacesLoaded ? (
+                      <EmptyState>Workspace not found.</EmptyState>
+                    ) : (
+                      <LoadingState>Loading workspace…</LoadingState>
+                    )
+                  ) : route.view === "pr" ? (
+                    route.branch === undefined ? (
+                      // Number-only: nothing to preview until the resolve above
+                      // finds the PR's workspace and replaces this route.
+                      prRefMissing ? (
+                        <EmptyState>{`${repoLabel(route.repo)} has no pull request #${route.number}.`}</EmptyState>
+                      ) : (
+                        <LoadingState>{`Opening #${route.number}…`}</LoadingState>
+                      )
+                    ) : (
+                      <PrQueuePreview
+                        key={`${route.repo}:${route.branch}`}
+                        repo={route.repo}
+                        branch={route.branch}
                         sessions={sessions}
-                        selectedId={route.id ?? null}
-                        onSelect={(id) => navigate({ view: "reviews", id })}
                         onOpenSession={(id) =>
                           navigate({ view: "session", id })
                         }
                         onOpenPr={(repo, branch) =>
                           navigate({ view: "pr", repo, branch })
                         }
-                        onAddToInput={addToSessionInput}
                         send={send}
                         addHandler={addHandler}
                       />
-                    ) : route.view === "archived" ? (
-                      <Archived
-                        sessions={sessions}
-                        loaded={archivedLoaded}
-                        onSelect={(s) =>
-                          navigate({ view: "session", id: s.id })
-                        }
-                        onChanged={refresh}
-                        topbarActionsEl={topbarActionsEl}
-                        mobileActionsEl={headerActionsEl}
-                      />
-                    ) : route.view === "supporttinder" ? (
-                      <SupportTinder
-                        onExit={leaveDeck}
-                        onOpenSession={(id) =>
-                          navigate({ view: "session", id })
-                        }
-                      />
-                    ) : route.view === "catchup" ? (
-                      <CatchUpDeck
-                        sessions={sessions}
-                        workspaces={workspaces}
-                        send={send}
-                        connected={connected}
-                        onArchive={(sessions) => {
-                          const archive = async () => {
-                            await (async () => {
-                              await Promise.all(
-                                sessions.map((c) =>
-                                  archiveSessionApi(c.id, true),
-                                ),
-                              );
-                              // Swiping through the deck archives fast — one entry per
-                              // card keeps ⌘Z an undo of the last swipe, not of the
-                              // whole session.
-                              rememberArchived(sessions.map((c) => c.id));
-                            })().catch(async (e) => {
-                              console.error("Archive failed:", e);
-                            });
-                            refresh();
-                          };
-                          confirmRunningCloses(sessions, () => void archive());
-                        }}
-                        onOpenSession={(id) =>
-                          navigate({ view: "session", id })
-                        }
-                        onNewWorkspace={() => openPalette()}
-                        onExit={leaveDeck}
-                      />
-                    ) : route.view === "session" ? (
-                      currentSession ? (
-                        activeTabSplit ? (
-                          <SessionSplit
-                            focusedSide={focusedSide}
-                            ratio={activeTabSplit.ratio}
-                            onFocusSide={(side) => {
-                              const id = activeIdFor(side);
-                              if (!id) return;
-                              if (viewTabKind(id)) selectViewTab(id);
-                              else {
-                                setActiveViewTab(null);
-                                navigate(
-                                  { view: "session", id },
-                                  { replace: true },
-                                );
-                              }
-                            }}
-                            onRatioChange={(ratio) =>
-                              tabOrderKey &&
-                              saveTabSplit(tabOrderKey, {
-                                ...toStoredSplit(activeTabSplit),
-                                ratio,
-                              })
-                            }
-                            renderColumn={(side, socket, focused) => {
-                              const id = activeIdFor(side);
-                              const session =
-                                sessions.find(
-                                  (candidate) => candidate.id === id,
-                                ) ?? currentSession;
-                              return (
-                                <>
-                                  {renderTabBar(side)}
-                                  {renderSessionPane(
-                                    session,
-                                    socket,
-                                    focused,
-                                    true,
-                                    id ?? session.id,
-                                  )}
-                                </>
-                              );
-                            }}
-                          />
-                        ) : (
-                          renderSessionPane(
-                            currentSession,
-                            mainSocket,
-                            true,
-                            false,
-                          )
+                    )
+                  ) : route.view === "reports" ? (
+                    <Reports
+                      selectedAutomationId={route.automationId}
+                      selectedReportId={route.reportId}
+                      onSelect={(automationId, reportId) =>
+                        navigate(
+                          { view: "reports", automationId, reportId },
+                          { replace: true },
                         )
-                      ) : (
-                        <div className="flex flex-1 items-center justify-center">
-                          {(() => {
-                            const isLoading =
-                              loading || route.id === pendingSessionId;
-                            if (sessionsError && !isLoading) {
-                              return (
-                                <EmptyState
-                                  title="Couldn't load this session"
-                                  action={
-                                    <Button
-                                      size="sm"
-                                      onClick={() => void refresh()}
-                                    >
-                                      Try again
-                                    </Button>
-                                  }
-                                >
-                                  Check the connection to this server.
-                                </EmptyState>
+                      }
+                      onBack={() =>
+                        navigate({ view: "reports" }, { replace: true })
+                      }
+                      onOpenSession={(id) => navigate({ view: "session", id })}
+                      onOpenSupport={(threadId) =>
+                        navigate({ view: "support", threadId })
+                      }
+                      onOpenNewSession={openPrefilledSession}
+                      addHandler={addHandler}
+                    />
+                  ) : route.view === "analytics" ? (
+                    <Analytics />
+                  ) : route.view === "feed" ? (
+                    <Feed
+                      sessions={sessions}
+                      teamViewing={teamViewing}
+                      headerActionsEl={topbarActionsEl}
+                      onSelect={(id) => navigate({ view: "session", id })}
+                    />
+                  ) : route.view === "tasks" ? (
+                    <Tasks
+                      addHandler={addHandler}
+                      onOpenSession={(id) => navigate({ view: "session", id })}
+                    />
+                  ) : route.view === "plain" ? (
+                    <SupportInbox
+                      threadId={route.threadId ?? null}
+                      sessions={sessions}
+                      onSelectThread={(threadId) =>
+                        navigate({ view: "plain", threadId })
+                      }
+                      onOpenSession={(id) => navigate({ view: "session", id })}
+                    />
+                  ) : route.view === "support" ? (
+                    <SupportPreview
+                      key={route.threadId}
+                      threadId={route.threadId}
+                      connected={connected}
+                      send={send}
+                      addHandler={addHandler}
+                      onOpenSession={(id) => navigate({ view: "session", id })}
+                    />
+                  ) : route.view === "reviews" ? (
+                    <Reviews
+                      sessions={sessions}
+                      selectedId={route.id ?? null}
+                      onSelect={(id) => navigate({ view: "reviews", id })}
+                      onOpenSession={(id) => navigate({ view: "session", id })}
+                      onOpenPr={(repo, branch) =>
+                        navigate({ view: "pr", repo, branch })
+                      }
+                      onAddToInput={addToSessionInput}
+                      send={send}
+                      addHandler={addHandler}
+                    />
+                  ) : route.view === "archived" ? (
+                    <Archived
+                      sessions={sessions}
+                      loaded={archivedLoaded}
+                      onSelect={(s) => navigate({ view: "session", id: s.id })}
+                      onChanged={refresh}
+                      topbarActionsEl={topbarActionsEl}
+                      mobileActionsEl={headerActionsEl}
+                    />
+                  ) : route.view === "supporttinder" ? (
+                    <SupportTinder
+                      onExit={leaveDeck}
+                      onOpenSession={(id) => navigate({ view: "session", id })}
+                    />
+                  ) : route.view === "catchup" ? (
+                    <CatchUpDeck
+                      sessions={sessions}
+                      workspaces={workspaces}
+                      send={send}
+                      connected={connected}
+                      onArchive={(sessions) => {
+                        const archive = async () => {
+                          await (async () => {
+                            await Promise.all(
+                              sessions.map((c) =>
+                                archiveSessionApi(c.id, true),
+                              ),
+                            );
+                            // Swiping through the deck archives fast — one entry per
+                            // card keeps ⌘Z an undo of the last swipe, not of the
+                            // whole session.
+                            rememberArchived(sessions.map((c) => c.id));
+                          })().catch(async (e) => {
+                            console.error("Archive failed:", e);
+                          });
+                          refresh();
+                        };
+                        confirmRunningCloses(sessions, () => void archive());
+                      }}
+                      onOpenSession={(id) => navigate({ view: "session", id })}
+                      onNewWorkspace={() => openPalette()}
+                      onExit={leaveDeck}
+                    />
+                  ) : route.view === "session" ? (
+                    currentSession ? (
+                      activeTabSplit ? (
+                        <SessionSplit
+                          focusedSide={focusedSide}
+                          ratio={activeTabSplit.ratio}
+                          onFocusSide={(side) => {
+                            const id = activeIdFor(side);
+                            if (!id) return;
+                            if (viewTabKind(id)) selectViewTab(id);
+                            else {
+                              setActiveViewTab(null);
+                              navigate(
+                                { view: "session", id },
+                                { replace: true },
                               );
                             }
-                            const title = !isLoading
-                              ? "Session not found"
-                              : route.id === pendingSessionId
-                                ? pendingNewWorkspace
-                                  ? "Starting a new workspace…"
-                                  : "Starting a new session…"
-                                : "Loading session…";
-                            return isLoading ? (
-                              <LoadingState>{title}</LoadingState>
-                            ) : (
-                              <EmptyState title={title}>
-                                It may have been deleted.
+                          }}
+                          onRatioChange={(ratio) =>
+                            tabOrderKey &&
+                            saveTabSplit(tabOrderKey, {
+                              ...toStoredSplit(activeTabSplit),
+                              ratio,
+                            })
+                          }
+                          renderColumn={(side, socket, focused) => {
+                            const id = activeIdFor(side);
+                            const session =
+                              sessions.find(
+                                (candidate) => candidate.id === id,
+                              ) ?? currentSession;
+                            return (
+                              <>
+                                {renderTabBar(side)}
+                                {renderSessionPane(
+                                  session,
+                                  socket,
+                                  focused,
+                                  true,
+                                  id ?? session.id,
+                                )}
+                              </>
+                            );
+                          }}
+                        />
+                      ) : (
+                        renderSessionPane(
+                          currentSession,
+                          mainSocket,
+                          true,
+                          false,
+                        )
+                      )
+                    ) : (
+                      <div className="flex flex-1 items-center justify-center">
+                        {(() => {
+                          const isLoading =
+                            loading || route.id === pendingSessionId;
+                          if (sessionsError && !isLoading) {
+                            return (
+                              <EmptyState
+                                title="Couldn't load this session"
+                                action={
+                                  <Button
+                                    size="sm"
+                                    onClick={() => void refresh()}
+                                  >
+                                    Try again
+                                  </Button>
+                                }
+                              >
+                                Check the connection to this server.
                               </EmptyState>
                             );
-                          })()}
-                        </div>
-                      )
-                    ) : sessionsError && sessions.length === 0 && !loading ? (
-                      <EmptyState
-                        title="Couldn't load sessions"
-                        action={
-                          <Button size="sm" onClick={() => void refresh()}>
-                            Try again
-                          </Button>
-                        }
-                      >
-                        Check the connection to this server.
-                      </EmptyState>
-                    ) : productEmpty && githubConnectionState === "loading" ? (
-                      <LoadingState className="min-h-0 flex-1">
-                        Checking GitHub…
-                      </LoadingState>
-                    ) : productEmpty ? (
-                      /* With nothing to open, the page IS the new-session card: the
+                          }
+                          const title = !isLoading
+                            ? "Session not found"
+                            : route.id === pendingSessionId
+                              ? pendingNewWorkspace
+                                ? "Starting a new workspace…"
+                                : "Starting a new session…"
+                              : "Loading session…";
+                          return isLoading ? (
+                            <LoadingState>{title}</LoadingState>
+                          ) : (
+                            <EmptyState title={title}>
+                              It may have been deleted.
+                            </EmptyState>
+                          );
+                        })()}
+                      </div>
+                    )
+                  ) : sessionsError && sessions.length === 0 && !loading ? (
+                    <EmptyState
+                      title="Couldn't load sessions"
+                      action={
+                        <Button size="sm" onClick={() => void refresh()}>
+                          Try again
+                        </Button>
+                      }
+                    >
+                      Check the connection to this server.
+                    </EmptyState>
+                  ) : productEmpty && githubConnectionState === "loading" ? (
+                    <LoadingState className="min-h-0 flex-1">
+                      Checking GitHub…
+                    </LoadingState>
+                  ) : productEmpty ? (
+                    /* With nothing to open, the page IS the new-session card: the
 							   same palette rendered in place, so the empty state is
 							   something you can type into rather than a button that opens
 							   somewhere else. The sidebar carries the matching row for the
@@ -5454,73 +5427,65 @@ export function App({
 							   sidebar +): one instance at a time, and since both persist
 							   the same "new-session" draft, whatever was typed here is
 							   already in the one that opens. */
-                      <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-8">
-                        <div className="flex w-full max-w-[680px] flex-col">
-                          {!palette.open && (
-                            <NewSession
-                              inline
-                              focusSeq={draftFocusSeq}
-                              onBack={() => {}}
-                              send={send}
-                              addHandler={addHandler}
-                              connected={connected}
-                              workspaces={workspaces}
-                              sessions={sessions}
-                              onCreateStarted={startNewSessionCreate}
-                            />
-                          )}
-                        </div>
+                    <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-8">
+                      <div className="flex w-full max-w-[680px] flex-col">
+                        {!palette.open && (
+                          <NewSession
+                            inline
+                            focusSeq={draftFocusSeq}
+                            onBack={() => {}}
+                            send={send}
+                            addHandler={addHandler}
+                            connected={connected}
+                            workspaces={workspaces}
+                            sessions={sessions}
+                            onCreateStarted={startNewSessionCreate}
+                          />
+                        )}
                       </div>
-                    ) : !isPhone ? (
-                      /* Phones never see this pane: the fullscreen sidebar is the
+                    </div>
+                  ) : !isPhone ? (
+                    /* Phones never see this pane: the fullscreen sidebar is the
 							   root page and sits over the detail shell. Mounting Prs
 							   beneath it built a ~50k-element tree on every return to
 							   the root, freezing the back-swipe for seconds. */
-                      <Prs
-                        sessions={sessions}
-                        send={send}
-                        addHandler={addHandler}
-                        onSelect={(s) =>
-                          navigate({ view: "session", id: s.id })
-                        }
-                        onNewSession={() => openPalette()}
-                        onShowArchived={refreshArchived}
-                        onOpenAnalytics={() => navigate({ view: "analytics" })}
-                        onAddToSidebar={async (pr) => {
-                          const { workspaceId } = await resolveWorkspaceApi({
-                            pr: {
-                              repo: pr.repo,
-                              branch: pr.branch,
-                              number: pr.number,
-                              title: pr.title,
-                            },
-                          });
-                          refreshWorkspaces();
-                          return workspaceId;
-                        }}
-                        onOpenWorkspace={(workspaceId, pr) => {
-                          focusReviewPr({
+                    <Prs
+                      sessions={sessions}
+                      send={send}
+                      addHandler={addHandler}
+                      onSelect={(s) => navigate({ view: "session", id: s.id })}
+                      onNewSession={() => openPalette()}
+                      onShowArchived={refreshArchived}
+                      onOpenAnalytics={() => navigate({ view: "analytics" })}
+                      onAddToSidebar={async (pr) => {
+                        const { workspaceId } = await resolveWorkspaceApi({
+                          pr: {
                             repo: pr.repo,
                             branch: pr.branch,
                             number: pr.number,
-                            workspaceId,
-                          });
-                          navigate({
-                            view: "workspace",
-                            id: workspaceId,
-                            tab: "review",
-                          });
-                        }}
-                        topbarActionsEl={topbarActionsEl}
-                      />
-                    ) : null}
-                  </main>
-
-                  {/* Full-height right column inside the same rounded workspace shell as
-						    the detail pane. The active session's workspace/sub-agent panel
-						    portals in here. */}
-                  <div className={RIGHT_PANEL_SLOT} ref={setRightPanelEl} />
-                </div>
+                            title: pr.title,
+                          },
+                        });
+                        refreshWorkspaces();
+                        return workspaceId;
+                      }}
+                      onOpenWorkspace={(workspaceId, pr) => {
+                        focusReviewPr({
+                          repo: pr.repo,
+                          branch: pr.branch,
+                          number: pr.number,
+                          workspaceId,
+                        });
+                        navigate({
+                          view: "workspace",
+                          id: workspaceId,
+                          tab: "review",
+                        });
+                      }}
+                      topbarActionsEl={topbarActionsEl}
+                    />
+                  ) : null}
+                </AppShell>
               </div>
             )}
 
