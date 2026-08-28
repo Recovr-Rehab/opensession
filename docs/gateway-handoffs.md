@@ -17,8 +17,9 @@ machinery, or service units use the coordinated rollout instead.
    before acquiring the lease or producing effects.
 4. The supervisor sends activation only after the old child has exited.
 5. After the old child exits, the supervisor atomically moves the immutable
-   runtime pointer before activation. Gateway, executor, and SessionKernel must
-   then report the exact same immutable generation before effects are admitted.
+   runtime pointer before activation. Coordinated releases require all three
+   processes to report the target generation. Gateway-only releases carry the
+   peers' retained generation separately from the gateway's own release.
 6. Coordinated rollback parks the target gateway first, restores the pointer
    and both peers, and only then admits the previous gateway. Mixed generations
    never run during recovery.
@@ -84,4 +85,7 @@ guessing protocol compatibility.
 Each deploy also writes its generated dependency-impact manifest and runs a
 continuous HTTP/WebSocket canary. Supervisor status reports accepted, queued,
 retried and timed-out connections plus maximum backend wait, so handoff latency
-and loss are directly observable.
+and loss are directly observable. New proxy connections are quiesced before a
+child drain; root rollouts use the same coordinated transaction, and supervisor
+source changes explicitly transfer acceptance back to the systemd socket before
+the supervisor process is replaced.

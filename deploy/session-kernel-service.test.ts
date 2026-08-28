@@ -142,6 +142,18 @@ describe("session kernel service deployment", () => {
     expect(selfDeploy.slice(prepare, activate)).not.toContain("stop_gateway");
   });
 
+  test("root rollouts reuse the coordinated supervisor transaction when units are stable", async () => {
+    const rootDeploy = await Bun.file(resolve(repoRoot, "deploy/deploy.sh")).text();
+    const prepare = rootDeploy.indexOf("prepare-coordinated");
+    const kernel = rootDeploy.indexOf("restarting session kernel actor service", prepare);
+    const activate = rootDeploy.indexOf("activate-coordinated", kernel);
+    const commit = rootDeploy.indexOf("commit-coordinated", activate);
+    expect(prepare).toBeGreaterThan(0);
+    expect(kernel).toBeGreaterThan(prepare);
+    expect(activate).toBeGreaterThan(kernel);
+    expect(commit).toBeGreaterThan(activate);
+  });
+
   test("gateway-only deploys leave pointer promotion inside the supervisor transaction", async () => {
     const selfDeploy = await Bun.file(
       resolve(repoRoot, "deploy/self-deploy.sh"),
