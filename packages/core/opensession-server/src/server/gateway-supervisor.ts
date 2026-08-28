@@ -56,6 +56,7 @@ type CoordinatedRequest = {
     | "park_coordinated"
     | "abort_coordinated"
     | "commit_coordinated"
+    | "drain_supervisor"
     | "status";
 };
 
@@ -138,7 +139,12 @@ export class GatewaySupervisor {
   private watchActive(gateway: ManagedGateway): void {
     void gateway.exited.then((code) => {
       setTimeout(() => {
-        if (this.active === gateway && !this.handoffPromise && !this.coordinated) {
+        if (
+          this.active === gateway &&
+          !this.handoffPromise &&
+          !this.coordinated &&
+          !this.shuttingDown
+        ) {
           this.dependencies.onUnexpectedExit?.(gateway, code);
         }
       }, 0);
@@ -270,6 +276,34 @@ export class GatewaySupervisor {
     this.coordinated = null;
     this.dependencies.clearTransaction?.();
     return { ok: true, message: "coordinated handoff committed", pid, phase: "idle" };
+  }
+
+  async drainForSupervisorRestart(): Promise<ControlResponse> {
+    if (this.shuttingDown || this.handoffPromise || this.coordinated) {
+      return { ok: false, message: "gateway supervisor cannot drain during another lifecycle operation" };
+    }
+    this.shuttingDown = true;
+    const gateway = this.active;
+    gateway.kill(12);
+    try {
+      await timeout(
+        gateway.exited,
+        15_000,
+        "active gateway did not complete its fast supervisor drain",
+      );
+    } catch {
+      gateway.kill(9);
+      await timeout(gateway.exited, 5_000, "active gateway survived supervisor drain SIGKILL");
+    }
+    const expiry = setTimeout(() => {
+      this.dependencies.onUnexpectedExit?.(gateway, 75);
+    }, 30_000);
+    expiry.unref?.();
+    return {
+      ok: true,
+      message: "gateway drained; restart the supervisor now",
+      pid: gateway.pid,
+    };
   }
 
   status(): ControlResponse {
@@ -685,6 +719,8 @@ function serveControl(supervisor: GatewaySupervisor): ReturnType<typeof Bun.list
               response = await supervisor.abortCoordinated();
             } else if (request.type === "commit_coordinated") {
               response = supervisor.commitCoordinated();
+            } else if (request.type === "drain_supervisor") {
+              response = await supervisor.drainForSupervisorRestart();
             } else if (request.type === "status") {
               response = supervisor.status();
             } else throw new Error("unknown supervisor request");
@@ -812,6 +848,7 @@ if (import.meta.main) {
     "park-coordinated",
     "abort-coordinated",
     "commit-coordinated",
+    "drain-supervisor",
     "status",
   ].includes(process.argv[2] || "")) {
     const action = process.argv[2];
@@ -829,7 +866,9 @@ if (import.meta.main) {
               ? { type: "abort_coordinated" }
               : action === "commit-coordinated"
                 ? { type: "commit_coordinated" }
-                : { type: "status" };
+                : action === "drain-supervisor"
+                  ? { type: "drain_supervisor" }
+                  : { type: "status" };
     const response = await requestSupervisor(request);
     console.log(JSON.stringify(response));
     process.exit(response.ok ? 0 : 1);

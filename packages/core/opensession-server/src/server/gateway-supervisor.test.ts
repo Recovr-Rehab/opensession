@@ -55,6 +55,23 @@ describe("gateway supervisor", () => {
     expect(inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "0" }, 42)).toBeUndefined();
   });
 
+  test("fast-drains the child before a supervisor service restart", async () => {
+    const active = controlledGateway(1, "/releases/current");
+    active.gateway.kill = (signal = 15) => {
+      active.events.push(`kill:${signal}`);
+      active.finish(0);
+    };
+    const supervisor = new GatewaySupervisor(active.gateway, {
+      spawn: () => active.gateway,
+      waitReady: async () => {},
+      validateRelease: (root) => root,
+      promoteCurrent() {},
+    });
+    const result = await supervisor.drainForSupervisorRestart();
+    expect(result.ok).toBe(true);
+    expect(active.events).toEqual(["kill:12"]);
+  });
+
   test("activates a preloaded candidate only after observing the old exit", async () => {
     const old = controlledGateway(1, "/releases/old");
     const candidate = controlledGateway(2, "/releases/new", true);
