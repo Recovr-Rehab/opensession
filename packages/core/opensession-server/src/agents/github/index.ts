@@ -30,7 +30,7 @@ import { DEFAULT_GITHUB_FLOW_MCP_SERVERS } from "./run";
 import {
   setGithubSessionInvalidate,
   resolveReviewConfig,
-  restorePendingDebouncedReviews,
+  restoreDesiredReviews,
 } from "./webhook";
 import { githubWebhookCount, loadGithubDeliveries } from "./webhook-deliveries";
 import { handleGithubWebhook } from "./webhook-intake";
@@ -383,7 +383,7 @@ export class GithubAgent implements AgentModule {
     ensureReviewAutomation();
     ensureDocsSyncAutomation();
     await recoverInterrupted();
-    restorePendingDebouncedReviews(listPrStates());
+    restoreDesiredReviews(listPrStates());
     startPendingMentionRetry();
     // Safety net under all of the above: the webhook path is fire-once, so
     // reviews that die on dry pools or whose delivery never arrives are
