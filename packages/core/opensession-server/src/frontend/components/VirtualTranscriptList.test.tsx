@@ -20,7 +20,15 @@ function item(index: number): VirtualTranscriptItem {
 	};
 }
 
+const source = await Bun.file(
+	new URL("./VirtualTranscriptList.tsx", import.meta.url),
+).text();
+
 describe("VirtualTranscriptList", () => {
+	test("defers observer fallback while keeping semantic measurement pre-paint", () => {
+		expect(source).toContain("useAnimationFrameWithResizeObserver: true");
+		expect(source).toContain("this.measureCommittedRows(prevProps)");
+	});
 	test("keeps the live-edge tail in the same virtual coordinate space", () => {
 		expect(virtualTranscriptRange([10, 11], 40, 3)).toEqual([10, 11, 37, 38, 39]);
 		expect(virtualTranscriptRange([0, 1], 2, 24)).toEqual([0, 1]);

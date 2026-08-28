@@ -3,10 +3,11 @@
 The session renderer exposes `window.__sessionPerf()` in development and production.
 It returns recent samples, counters, and p50/p95/max summaries.
 
-Telemetry is scoped to the current page lifetime. Summaries use the latest 2,000
-samples across all metric names, `recent` contains the latest 100 samples, and
-counters are cumulative with no reset API. Reload before measuring one run; for
-counters, before/after deltas can also isolate the run.
+Telemetry is scoped to the current page lifetime. Each metric keeps its latest
+200 samples independently, so a high-frequency scroll metric cannot evict rare
+stream or input measurements. `recent` contains the latest 100 samples across
+all metrics, and counters are cumulative with no reset API. Reload before
+measuring one run; for counters, before/after deltas can also isolate the run.
 
 Runtime targets:
 
@@ -40,14 +41,23 @@ bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fixtur
 OPENSESSION_URL=http://127.0.0.1:4899 \
   bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fuzz.ts \
     --seeds 24 --speed 8 --out /tmp/transcript-motion-report.json
+OPENSESSION_URL=http://127.0.0.1:4899 \
+  bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fuzz.ts \
+    --profile stream --seeds 1 --speed 1 --out /tmp/transcript-stream-report.json
 ```
 
 That browser gate rejects API requests, runtime errors, ResizeObserver loop
 warnings, stale streaming rows, horizontal overflow, settled drift above 1 px,
-more than 64 mounted transcript rows, CLS above 0.15 (0.2 under 6x CPU), a frame
-above 300 ms (1,200 ms throttled), or a long task above the same whole-scenario
-budgets. These broader fixture budgets include initial React work and viewport
-changes; they do not replace the tighter 100-delta/s runtime target above.
+a phone keyboard pulse that leaves follow mode more than 4 px from the live
+edge, more than 64 mounted transcript rows, CLS above
+0.15 (0.2 under 6x CPU), a frame above 300 ms (1,200 ms throttled), or a long
+task above the same whole-scenario budgets.
+
+CI also runs `--profile stream --seeds 1 --speed 1`: a 10,000-entry transcript
+receives 100 deltas over one real second. It requires all 100 frames to arrive,
+at most 70 frame-coalesced store publications, and no stream-time long task over
+100 ms. This stream-specific gate enforces the tighter runtime target without
+confusing it with initial React work or the motion fixture's viewport changes.
 
 For a scoped run, compare the before/after deltas of `stream_frames_received` and
 `stream_paints`. Despite its name, `stream_paints` counts animation-frame-driven

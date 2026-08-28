@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	applyTranscriptMotionEvent,
 	makeTranscriptMotionScenario,
+	makeTranscriptStreamPerformanceScenario,
 	transcriptMotionFixtureOptions,
 } from "./transcript-motion-scenarios";
 
@@ -50,6 +51,15 @@ describe("transcript motion scenarios", () => {
 		}
 	});
 
+	test("builds the 10k-entry 100-delta stream workload", () => {
+		const scenario = makeTranscriptStreamPerformanceScenario();
+		expect(scenario.initial.entries).toHaveLength(10_000);
+		expect(
+			scenario.events.filter((event) => event.kind === "stream-append"),
+		).toHaveLength(100);
+		expect(scenario.events.at(-1)?.kind).toBe("stream-finish");
+	});
+
 	test("updates growing entries without reordering their row", () => {
 		const scenario = makeTranscriptMotionScenario(7);
 		let state = scenario.initial;
@@ -74,7 +84,13 @@ describe("transcript motion scenarios", () => {
 				"/opensession/__fixtures/transcript-motion",
 				"?seed=9&speed=100",
 			),
-		).toEqual({ seed: 9, speed: 20 });
+		).toEqual({ seed: 9, speed: 20, profile: "motion" });
+		expect(
+			transcriptMotionFixtureOptions(
+				"/__fixtures/transcript-motion",
+				"?profile=stream",
+			),
+		).toEqual({ seed: 1, speed: 1, profile: "stream" });
 		expect(transcriptMotionFixtureOptions("/session/example", "")).toBeNull();
 	});
 });

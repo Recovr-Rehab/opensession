@@ -21,6 +21,7 @@ import { TranscriptViewStore } from "../lib/transcript-view-store";
 import {
 	measureSessionPerf,
 	recordSessionPerf,
+	scheduleTranscriptDomNodeSample,
 } from "../lib/session-performance";
 import { AGENT_NAME, DEFAULT_DOC_TITLE, sessionSourceName } from "../lib/brand";
 import { brandLogo } from "../brand-logos";
@@ -1114,12 +1115,8 @@ export function SessionViewer({
 				entries: transcriptViewStore.getSnapshot().length,
 			});
 			transcriptCommitCount.current++;
-			if (phase === "mount" || transcriptCommitCount.current % 20 === 0) {
-				recordSessionPerf(
-					"transcript_dom_nodes",
-					document.querySelectorAll(".viewer-messages [data-eid]").length,
-				);
-			}
+			if (phase === "mount" || transcriptCommitCount.current % 20 === 0)
+				scheduleTranscriptDomNodeSample();
 		},
 		[transcriptViewStore],
 	);

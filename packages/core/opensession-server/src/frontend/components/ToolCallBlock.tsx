@@ -292,7 +292,7 @@ function RunningToolDuration({ entry }: { entry: TranscriptEntry }) {
   return (
     <span
       data-tool-duration
-      className="hidden flex-shrink-0 text-meta tabular-nums text-faint group-hover:block"
+      className="flex-shrink-0 text-meta tabular-nums text-faint"
     >
       {formatToolDuration(durationMs)}
     </span>
@@ -325,6 +325,7 @@ export const ToolCallBlock = function ToolCallBlock({
     rememberedExpanded ?? Boolean(result?.featuredMedia?.length)
   );
   const userToggledRef = useRef(rememberedExpanded !== undefined);
+  const [durationVisible, setDurationVisible] = useState(false);
   function rememberExpansion(next: boolean) {
     userToggledRef.current = true;
     transcriptDisclosureLedger.write("tool-call", sessionId, [entry.id], next);
@@ -431,6 +432,10 @@ export const ToolCallBlock = function ToolCallBlock({
         type="button"
         aria-expanded={expanded}
         onClick={() => rememberExpansion(!expanded)}
+        onMouseEnter={pending ? () => setDurationVisible(true) : undefined}
+        onMouseLeave={pending ? () => setDurationVisible(false) : undefined}
+        onFocus={pending ? () => setDurationVisible(true) : undefined}
+        onBlur={pending ? () => setDurationVisible(false) : undefined}
         className={cn(
           // Baseline, not centre: the 14px tool name, the 13px mono path and
           // the 11px trailing meta all ride this row, and centring aligns
@@ -584,7 +589,7 @@ export const ToolCallBlock = function ToolCallBlock({
         {duration && (
           <span className="flex-shrink-0 text-meta tabular-nums text-faint">{duration}</span>
         )}
-        {pending && <RunningToolDuration entry={entry} />}
+        {pending && durationVisible && <RunningToolDuration entry={entry} />}
 
         {pending ? (
           // Neutral, not green: green on this row already means "added" (the

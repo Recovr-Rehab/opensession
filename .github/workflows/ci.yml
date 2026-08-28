@@ -85,6 +85,10 @@ jobs:
           CDP_PORT=9222 OPENSESSION_URL=http://127.0.0.1:4899 \
             bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fuzz.ts \
               --seeds 24 --speed 8 --out "$RUNNER_TEMP/transcript-motion-report.json"
+          CDP_PORT=9222 OPENSESSION_URL=http://127.0.0.1:4899 \
+            bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fuzz.ts \
+              --profile stream --seeds 1 --speed 1 \
+              --out "$RUNNER_TEMP/transcript-stream-report.json"
 
       # The snapshot scenarios are exactly the part of that sweep the ordering
       # problem eats: they redirect the sessions dir, transcript store, MCP

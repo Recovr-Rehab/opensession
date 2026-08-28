@@ -21,6 +21,7 @@ const flag = (name: string, fallback: string) => {
 const SEEDS = Math.max(1, Number(flag("seeds", "24")) || 24);
 const SPEED = Math.min(20, Math.max(0.1, Number(flag("speed", "8")) || 8));
 const OUT = flag("out", "");
+const PROFILE = flag("profile", "motion") === "stream" ? "stream" : "motion";
 const APP = process.env.OPENSESSION_URL ?? "http://127.0.0.1:3850";
 const MAX_CLS = 0.15;
 const MAX_THROTTLED_CLS = 0.2;
@@ -97,6 +98,10 @@ type Result = {
 	maxFrameMs: number;
 	maxLongTaskMs: number;
 	longTaskCount: number;
+	longTasks: Array<{ t: number; duration: number; event: number }>;
+	streamFramesReceived: number;
+	streamPaints: number;
+	transcriptCommitP95: number;
 	horizontalOverflow: number;
 	settledOverlap: number;
 	settledDrift: number;
@@ -105,6 +110,8 @@ type Result = {
 	mountedRows: number;
 	streamingRows: number;
 	viewportResized: boolean;
+	keyboardAnchorDrift: number;
+	keyboardBottomDistance: number;
 	failures: string[];
 	passed: boolean;
 };
@@ -164,11 +171,13 @@ try {
 				});
 			await send("Page.addScriptToEvaluateOnNewDocument", { source: INIT });
 			await send("Page.navigate", {
-				url: `${APP}/__fixtures/transcript-motion?seed=${seed}&speed=${SPEED}`,
+				url: `${APP}/__fixtures/transcript-motion?seed=${seed}&speed=${SPEED}&profile=${PROFILE}`,
 			});
 			const deadline = performance.now() + 30_000;
 			let state = "";
 			let viewportResized = false;
+			let keyboardAnchorDrift = 0;
+			let keyboardBottomDistance = 0;
 			while (performance.now() < deadline) {
 				const response = await send("Runtime.evaluate", {
 					expression: `(() => ({
@@ -179,10 +188,27 @@ try {
 				});
 				const progress = response.result.value as { state?: string; event?: number };
 				state = String(progress.state ?? "");
-				if (!viewportResized && width <= 720 && (progress.event ?? 0) >= 3) {
+				if (
+					PROFILE === "motion" &&
+					!viewportResized &&
+					width <= 720 &&
+					(progress.event ?? 0) >= 3
+				) {
 					viewportResized = true;
-					// Exercise the phone's keyboard/visual-viewport path while tools and
-					// stream rows are still changing, then restore the shipped viewport.
+					// Pause the deterministic timeline and explicitly enter follow mode,
+					// so viewport geometry is the only thing allowed to move the anchor.
+					await send("Runtime.evaluate", {
+						expression: `(() => { const control = window.__transcriptMotionControl; if (!control) return false; control.paused = true; control.followLatest(); return true; })()`,
+						returnByValue: true,
+					});
+					// Let the already-received reveal finish. Pausing scenario delivery does
+					// not cancel LiveTurnStore's word-safe catch-up frames, and measuring
+					// while one is still pending would blame text growth on the keyboard.
+					await Bun.sleep(500);
+					const beforeResize = await send("Runtime.evaluate", {
+						expression: `(() => { const scroller = document.querySelector("[data-transcript-motion-scroller]"); const prompt = [...document.querySelectorAll(".msg-user")].at(-1); if (!scroller || !prompt) return null; const box = scroller.getBoundingClientRect(); return { anchor: prompt.getBoundingClientRect().top - box.top, bottom: Math.max(0, scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) }; })()`,
+						returnByValue: true,
+					});
 					await send("Emulation.setDeviceMetricsOverride", {
 						width,
 						height: Math.max(480, height - 260),
@@ -195,6 +221,18 @@ try {
 						height,
 						deviceScaleFactor: 1,
 						mobile: false,
+					});
+					await Bun.sleep(80);
+					const afterResize = await send("Runtime.evaluate", {
+						expression: `(() => { const scroller = document.querySelector("[data-transcript-motion-scroller]"); const prompt = [...document.querySelectorAll(".msg-user")].at(-1); if (!scroller || !prompt) return null; const box = scroller.getBoundingClientRect(); return { anchor: prompt.getBoundingClientRect().top - box.top, bottom: Math.max(0, scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) }; })()`,
+						returnByValue: true,
+					});
+					const before = beforeResize.result.value as { anchor: number; bottom: number } | null;
+					const after = afterResize.result.value as { anchor: number; bottom: number } | null;
+					keyboardAnchorDrift = before && after ? Math.abs(after.anchor - before.anchor) : Number.POSITIVE_INFINITY;
+					keyboardBottomDistance = after?.bottom ?? Number.POSITIVE_INFINITY;
+					await send("Runtime.evaluate", {
+						expression: `window.__transcriptMotionControl && (window.__transcriptMotionControl.paused = false)`,
 					});
 				}
 				if (state === "done") break;
@@ -239,6 +277,8 @@ try {
             maxFrameMs: Math.max(0, ...F.samples.map(sample => sample.frameMs)),
             maxLongTaskMs: Math.max(0, ...F.longTasks.filter(task => task.event > 0).map(task => task.duration)),
             longTaskCount: F.longTasks.filter(task => task.event > 0).length,
+            longTasks: F.longTasks.filter(task => task.event > 0),
+            perf: window.__sessionPerf?.() ?? null,
             horizontalOverflow: scroller ? Math.max(0, scroller.scrollWidth - scroller.clientWidth) : -1,
             settledOverlap: Math.max(0, overlap),
             positions,
@@ -278,6 +318,13 @@ try {
 				(total: number, shift: { value: number }) => total + shift.value,
 				0,
 			);
+			const streamFramesReceived = Number(
+				value.perf?.counters?.stream_frames_received ?? 0,
+			);
+			const streamPaints = Number(value.perf?.counters?.stream_paints ?? 0);
+			const transcriptCommitP95 = Number(
+				value.perf?.metrics?.react_transcript_commit_ms?.p95 ?? 0,
+			);
 			const failures = [
 				...(apiRequests.length ? [`${apiRequests.length} API requests`] : []),
 				...(errors.length ? [`${errors.length} runtime errors`] : []),
@@ -293,11 +340,25 @@ try {
 				(cpuRate > 1 ? MAX_THROTTLED_FRAME_MS : MAX_FRAME_MS)
 					? [`frame ${Math.round(value.maxFrameMs)}ms`]
 					: []),
+				...(PROFILE === "stream" && value.maxLongTaskMs > 100
+					? [`stream long task ${Math.round(value.maxLongTaskMs)}ms > 100ms`]
+					: []),
+				...(PROFILE === "stream" && streamFramesReceived !== 100
+					? [`received ${streamFramesReceived}/100 stream frames`]
+					: []),
+				...(PROFILE === "stream" && streamPaints > 70
+					? [`published ${streamPaints} stream paints > 70`]
+					: []),
 				...(value.horizontalOverflow > 1 ? [`${Math.round(value.horizontalOverflow)}px horizontal overflow`] : []),
 				...(value.settledOverlap > 11 ? [`${Math.round(value.settledOverlap)}px row overlap`] : []),
 				...(settledDrift > 1 ? [`${Math.round(settledDrift)}px settled drift`] : []),
+				...(viewportResized && keyboardBottomDistance > 4
+					? [`keyboard left ${Math.round(keyboardBottomDistance)}px below the live edge`]
+					: []),
 				...(value.virtualCount <= 0 ? ["no virtual rows"] : []),
-				...(value.streamingRows > 0 ? [`${value.streamingRows} stale streaming rows`] : []),
+				...(PROFILE === "motion" && value.streamingRows > 0
+					? [`${value.streamingRows} stale streaming rows`]
+					: []),
 				...(value.mountedRows > MAX_MOUNTED_ROWS
 					? [`${value.mountedRows} mounted rows > ${MAX_MOUNTED_ROWS}`]
 					: []),
@@ -323,6 +384,10 @@ try {
 				maxFrameMs: Math.round(value.maxFrameMs),
 				maxLongTaskMs: Math.round(value.maxLongTaskMs),
 				longTaskCount: value.longTaskCount,
+				longTasks: value.longTasks,
+				streamFramesReceived,
+				streamPaints,
+				transcriptCommitP95,
 				horizontalOverflow: Math.round(value.horizontalOverflow),
 				settledOverlap: Math.round(value.settledOverlap),
 				settledDrift: Math.round(settledDrift),
@@ -331,6 +396,8 @@ try {
 				mountedRows: value.mountedRows,
 				streamingRows: value.streamingRows,
 				viewportResized,
+				keyboardAnchorDrift: Math.round(keyboardAnchorDrift),
+				keyboardBottomDistance: Math.round(keyboardBottomDistance),
 				failures,
 				passed: failures.length === 0,
 			};
@@ -356,6 +423,10 @@ try {
 				maxFrameMs: 0,
 				maxLongTaskMs: 0,
 				longTaskCount: 0,
+				longTasks: [],
+				streamFramesReceived: 0,
+				streamPaints: 0,
+				transcriptCommitP95: 0,
 				horizontalOverflow: -1,
 				settledOverlap: -1,
 				settledDrift: -1,
@@ -364,6 +435,8 @@ try {
 				mountedRows: 0,
 				streamingRows: 0,
 				viewportResized: false,
+				keyboardAnchorDrift: -1,
+				keyboardBottomDistance: -1,
 				failures: ["run failed"],
 				passed: false,
 			});
@@ -377,6 +450,7 @@ try {
 }
 
 const report = {
+	profile: PROFILE,
 	seeds: SEEDS,
 	speed: SPEED,
 	passed: results.filter((result) => result.passed).length,
@@ -398,6 +472,15 @@ const report = {
 	maxContentJump: Math.max(0, ...results.map((result) => result.maxContentJump)),
 	maxFrameMs: Math.max(0, ...results.map((result) => result.maxFrameMs)),
 	maxLongTaskMs: Math.max(0, ...results.map((result) => result.maxLongTaskMs)),
+	maxTranscriptCommitP95: Math.max(
+		0,
+		...results.map((result) => result.transcriptCommitP95),
+	),
+	streamFramesReceived: results.reduce(
+		(total, result) => total + result.streamFramesReceived,
+		0,
+	),
+	streamPaints: results.reduce((total, result) => total + result.streamPaints, 0),
 	budgets: {
 		maxCls: MAX_CLS,
 		maxThrottledCls: MAX_THROTTLED_CLS,

@@ -1,6 +1,7 @@
 import { stripBasePath } from "./base";
 import type { TranscriptEntry } from "./types";
 import type { OptimisticTranscriptEntry } from "./transcript-state";
+import { makeSessionFixture, makeStreamDeltas } from "./session-performance-fixtures";
 
 export type TranscriptMotionScenarioState = {
 	entries: TranscriptEntry[];
@@ -254,6 +255,28 @@ export function makeTranscriptMotionScenario(rawSeed: number): TranscriptMotionS
 	};
 }
 
+export function makeTranscriptStreamPerformanceScenario(): TranscriptMotionScenario {
+	const entries = makeSessionFixture(10_000);
+	const deltas = makeStreamDeltas(100, 1);
+	return {
+		seed: 0,
+		initial: { entries, optimisticEntries: [], busy: true },
+		events: [
+			{ atMs: 50, kind: "stream-start" },
+			...deltas.map(
+				(delta): TranscriptMotionScenarioEvent => ({
+					atMs: 100 + delta.atMs,
+					kind: "stream-append",
+					text: delta.text,
+					blockId: "stream-performance-block",
+				}),
+			),
+			{ atMs: 1_100, kind: "stream-finish" },
+		],
+		durationMs: 1_100,
+	};
+}
+
 export function applyTranscriptMotionEvent(
 	state: TranscriptMotionScenarioState,
 	event: TranscriptMotionScenarioEvent,
@@ -296,7 +319,7 @@ export function applyTranscriptMotionEvent(
 export function transcriptMotionFixtureOptions(
 	pathname: string,
 	search: string,
-): { seed: number; speed: number } | null {
+): { seed: number; speed: number; profile: "motion" | "stream" } | null {
 	if (stripBasePath(pathname) !== "/__fixtures/transcript-motion") return null;
 	const params = new URLSearchParams(search);
 	const seed = Number(params.get("seed") ?? 1);
@@ -304,5 +327,6 @@ export function transcriptMotionFixtureOptions(
 	return {
 		seed: Number.isFinite(seed) ? Math.max(1, Math.floor(seed)) : 1,
 		speed: Number.isFinite(speed) ? Math.min(20, Math.max(0.1, speed)) : 1,
+		profile: params.get("profile") === "stream" ? "stream" : "motion",
 	};
 }
