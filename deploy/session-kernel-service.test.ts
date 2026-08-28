@@ -11,12 +11,15 @@ import {
 const repoRoot = resolve(import.meta.dir, "..");
 
 describe("session kernel service deployment", () => {
-  test("makes the authenticated actor service a fail-closed gateway dependency", async () => {
+  test("orders the authenticated actor before the gateway without coupling their stop lifecycle", async () => {
     const gateway = await renderUnit("system");
     const actor = await Bun.file(
       resolve(repoRoot, "opensession-session-kernel.service"),
     ).text();
-    expect(gateway).toContain("Requires=opensession-session-kernel.service");
+    expect(gateway).toContain(
+      "Wants=opensession-session-kernel.service opensession-executor.service",
+    );
+    expect(gateway).not.toContain("Requires=opensession-session-kernel.service");
     expect(gateway).toContain("LoadCredential=session-kernel-token:");
     expect(actor).toContain("IPAddressAllow=localhost");
     expect(actor).toContain("IPAddressDeny=any");
