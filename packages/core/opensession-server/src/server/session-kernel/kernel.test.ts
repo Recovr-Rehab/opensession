@@ -1120,6 +1120,16 @@ describe("SessionKernel", () => {
 		});
 	});
 
+	test("derives an executor-compatible physical host id for opening recovery", async () => {
+		const { runnerOpeningHostId } = await import("../session-create");
+		const first = runnerOpeningHostId("logical-opening", 3);
+		expect(first).toMatch(
+			/^rh-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+		);
+		expect(runnerOpeningHostId("logical-opening", 3)).toBe(first);
+		expect(runnerOpeningHostId("logical-opening", 4)).not.toBe(first);
+	});
+
 	test("settles a recovered opening when its journal retires after durable turn completion", async () => {
 		const sessionId = `local-opening-retired-${crypto.randomUUID()}`;
 		const identity = `local-opening-request-${crypto.randomUUID()}`;

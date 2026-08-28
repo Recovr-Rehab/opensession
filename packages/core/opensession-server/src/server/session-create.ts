@@ -410,11 +410,18 @@ async function attachCreateRepos(
 	return attached;
 }
 
-function runnerOpeningHostId(runId: string, generation: number): string {
+export function runnerOpeningHostId(runId: string, generation: number): string {
 	const digest = new Bun.CryptoHasher("sha256")
 		.update(`${runId}:${generation}`)
 		.digest("hex");
-	return `rh-opening-${digest.slice(0, 32)}`;
+	return [
+		"rh",
+		digest.slice(0, 8),
+		digest.slice(8, 12),
+		digest.slice(12, 16),
+		digest.slice(16, 20),
+		digest.slice(20, 32),
+	].join("-");
 }
 
 const activeOpeningCreates = new Map<
