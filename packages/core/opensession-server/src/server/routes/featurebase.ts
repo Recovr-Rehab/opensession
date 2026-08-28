@@ -101,7 +101,7 @@ export async function handleFeaturebaseRoutes(
       user?: string;
     } | null;
     const text = typeof body?.text === "string" ? body.text.trim() : "";
-    const kind = body?.kind === "note" ? "note" : "reply";
+    const kind = body?.kind === "reply" ? "reply" : "note";
     if (!text) return Response.json({ error: "Empty message" }, { status: 400 });
     const senderName = requestUser(ctx, body?.user);
     const firstName = senderName.split(/\s+/)[0] || "";
@@ -114,7 +114,11 @@ export async function handleFeaturebaseRoutes(
           ? firstName
             ? `${senderName} (via Open Session):\n\n${text}`
             : text
-          : firstName && !new RegExp(`\\b${firstName}\\b`, "i").test(text)
+          : firstName &&
+              !new RegExp(
+                `\\b${firstName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+                "i",
+              ).test(text)
             ? `${text}\n\n— ${firstName}`
             : text;
       await replyToTicket(ticket, signed, kind);

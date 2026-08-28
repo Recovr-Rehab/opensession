@@ -203,6 +203,17 @@ function person(raw: unknown): FeaturebasePerson {
   };
 }
 
+function personIfPresent(raw: unknown): FeaturebasePerson | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const value = person(raw);
+  return value.id || value.name || value.email ? value : null;
+}
+
+function formatPerson(who: FeaturebasePerson): string {
+  if (who.name && who.email) return `${who.name} <${who.email}>`;
+  return who.name || who.email || "";
+}
+
 function status(raw: unknown): FeaturebaseStatus {
   const rec = asRecord(raw);
   return {
@@ -276,7 +287,7 @@ function normalizeComment(raw: unknown): FeaturebaseComment | null {
   const id = asString(rec.id);
   if (!id) return null;
   const html = asString(rec.content) || asString(rec.bodyHtml) || "";
-  const author = person(rec.author) || person(rec.user);
+  const author = personIfPresent(rec.author) || personIfPresent(rec.user) || person(null);
   return {
     id,
     text: asString(rec.bodyMarkdown) || htmlToText(html) || asString(rec.content) || "",
@@ -490,8 +501,7 @@ export async function connectionStatus(): Promise<{
 }
 
 export function formatTicketContext(ticket: FeaturebaseTicket): string {
-  const author = [ticket.author.name, ticket.author.email].filter(Boolean).join(" <") +
-    (ticket.author.email && ticket.author.name ? ">" : "");
+  const author = formatPerson(ticket.author);
   const lines = [
     `Ticket ${ticket.ticketNumber != null ? `TK-${ticket.ticketNumber}` : ticket.id}: ${ticket.title}`,
     `Status: ${ticket.status.name || ticket.status.type || "unknown"}`,

@@ -44,7 +44,8 @@ configuration for the run.
   incident, while incident updates, follow-up writes, escalation responses,
   alert attachment changes, investigation controls, extension writes, and
   skill-feedback writes are stripped. Reads stay allowed; suggested customer
-  replies go in an internal Plain note. Linear (including issue creation) and
+  replies go in an internal Plain note (or the Featurebase session report —
+  Featurebase automations are Reader-only). Linear (including issue creation) and
   Sentry are internal, so their writes are allowed. That is the "spin off
   work" affordance.
 - Automations run on Pi in detached run hosts. `runAutomation` maps every

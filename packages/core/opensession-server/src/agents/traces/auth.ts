@@ -23,6 +23,7 @@ export interface TracesConnectedAccount {
   namespaceSlug: string;
   namespaceType: string;
   connectedAt: string;
+  needsReconnect?: boolean;
 }
 
 interface StoredAccount extends TracesConnectedAccount {
@@ -77,7 +78,16 @@ function publicAccount(account: StoredAccount): TracesConnectedAccount {
     namespaceSlug: account.namespaceSlug,
     namespaceType: account.namespaceType,
     connectedAt: account.connectedAt,
+    ...(account.needsReconnect ? { needsReconnect: true } : {}),
   };
+}
+
+export function markTracesAccountStale(login: string): void {
+  const store = readStore();
+  const account = store.users[loginKey(login)];
+  if (!account || account.needsReconnect) return;
+  account.needsReconnect = true;
+  writeStore(store);
 }
 
 export function listTracesAccounts(): TracesConnectedAccount[] {
@@ -258,6 +268,7 @@ async function completeAndStore(
     namespaceSlug: ns?.slug || session.namespaceSlug || "",
     namespaceType: ns?.type || session.namespaceType || "",
     connectedAt: new Date().toISOString(),
+    needsReconnect: undefined,
   };
   store.users[loginKey(githubLogin)] = account;
   writeStore(store);

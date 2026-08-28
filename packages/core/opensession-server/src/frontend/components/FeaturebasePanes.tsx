@@ -25,16 +25,24 @@ import {
 	type FeaturebaseTicket,
 } from "../lib/api/featurebase";
 
+function statusBackground(color: string | null): string | undefined {
+	if (!color || !/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color.trim())) {
+		return undefined;
+	}
+	return `color-mix(in srgb, ${color.trim()} 22%, transparent)`;
+}
+
+function ticketApiId(ticket: FeaturebaseTicket, fallback: string): string {
+	return ticket.ticketNumber != null ? String(ticket.ticketNumber) : fallback;
+}
+
 function StatusChip({ status }: { status: FeaturebaseStatus }) {
 	const label = status.name || status.type || "Unknown";
+	const background = statusBackground(status.color);
 	return (
 		<span
 			className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium text-fg"
-			style={
-				status.color
-					? { background: `color-mix(in srgb, ${status.color} 22%, transparent)` }
-					: undefined
-			}
+			style={background ? { background } : undefined}
 		>
 			{label}
 		</span>
@@ -217,7 +225,7 @@ export function FeaturebaseTicketPane({
 							disabled={triaging}
 							onClick={() => {
 								setTriaging(true);
-								void startFeaturebaseTicketTriage(ticket.id)
+								void startFeaturebaseTicketTriage(ticketApiId(ticket, ticketId))
 									.then(onOpenSession)
 									.catch((e: Error) => setError(e.message))
 									.finally(() => setTriaging(false));
@@ -258,10 +266,11 @@ export function FeaturebaseTicketPane({
 					onSend={async (text) => {
 						setSending(true);
 						try {
-							await sendFeaturebaseTicketMessage(ticket.id, text, kind, user);
+							await sendFeaturebaseTicketMessage(ticketApiId(ticket, ticketId), text, kind, user);
 							load();
 						} catch (e: any) {
 							setError(e.message);
+							throw e;
 						} finally {
 							setSending(false);
 						}
@@ -392,6 +401,7 @@ export function FeaturebasePostPane({
 							load();
 						} catch (e: any) {
 							setError(e.message);
+							throw e;
 						} finally {
 							setSending(false);
 						}

@@ -116,7 +116,8 @@ Create them from the Automations gallery. Scope each one:
 - Posts: `eventKey: "featurebase:post_created"`, ask mode, Reader + Linear.
 - **Denied writes** still strip customer-facing reply tool names. Do not put a
   Writer connector on these runs.
-- Customer replies stay on the Ticket pane's human composer.
+- The run's deliverable is the session report (suggested reply / classification),
+  not a Featurebase write. Customer replies stay on the Ticket pane's human composer.
 
 ## Security
 

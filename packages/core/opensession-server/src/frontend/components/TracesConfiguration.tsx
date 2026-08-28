@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { SettingsSection } from "../ui/settings";
 import { InlineAlert, LoadingState } from "../ui/state";
@@ -18,6 +18,14 @@ export function TracesConfiguration({ enabled }: { enabled: boolean }) {
 	const [me, setMe] = useState<TracesConnectedAccount | null>(null);
 	const [connecting, setConnecting] = useState(false);
 	const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
+	const aliveRef = useRef(true);
+
+	useEffect(() => {
+		aliveRef.current = true;
+		return () => {
+			aliveRef.current = false;
+		};
+	}, []);
 
 	async function refresh() {
 		setLoading(true);
@@ -46,10 +54,13 @@ export function TracesConfiguration({ enabled }: { enabled: boolean }) {
 			window.open(start.verificationUrl, "_blank", "noopener,noreferrer");
 			const deadline = Date.now() + start.expiresIn * 1000;
 			while (Date.now() < deadline) {
+				if (!aliveRef.current) return;
 				await new Promise((r) => setTimeout(r, Math.max(start.pollInterval, 2) * 1000));
+				if (!aliveRef.current) return;
 				const poll = await pollTracesConnect(start.state);
 				if (poll.status === "pending") continue;
 				if (poll.status === "error") throw new Error(poll.error);
+				if (!aliveRef.current) return;
 				setMe(poll.account);
 				setVerificationUrl(null);
 				setConnecting(false);
@@ -97,6 +108,7 @@ export function TracesConfiguration({ enabled }: { enabled: boolean }) {
 					<p className="m-0 text-sm text-fg">
 						Connected as <strong>{me.displayName}</strong>
 						{me.namespaceSlug ? ` · @${me.namespaceSlug}` : ""}
+						{me.needsReconnect ? " · reconnect required" : ""}
 					</p>
 					<Button size="sm" variant="ghost" onClick={() => void disconnect()}>
 						Disconnect

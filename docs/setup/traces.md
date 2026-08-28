@@ -30,8 +30,10 @@ login. They are never returned by the API.
 
 After a successful interactive Pi turn (`prompt`, `slack`, `linear`, `goal`,
 `create`, `workflow`), Open Session shares the latest Pi JSONL as that session's
-`createdByLogin`. The share is private. The traces.com URL is stored on the
-session as `externalRefs` kind `traces-trace`.
+`createdByLogin`. Shares for the same session are serialized so overlapping
+turns cannot pile up. The share is private. The traces.com URL is stored on the
+session as `externalRefs` kind `traces-trace`. The device token is passed as
+`TRACES_CLI_AUTH_TOKEN` in an isolated child environment, never on argv.
 
 Skipped: automations, GitHub bot runs, sessions with no linked Traces account.
 

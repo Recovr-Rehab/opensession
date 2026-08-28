@@ -50,6 +50,15 @@ describe("normalizePost", () => {
     expect(post?.boardName).toBe("Feature Request");
     expect(post?.upvoteCount).toBe(12);
   });
+
+  it("uses comment user when author is missing", () => {
+    const post = normalizePost({
+      id: "p1",
+      title: "Dark mode",
+      comments: [{ id: "c1", content: "yes", user: { name: "Bea" } }],
+    });
+    expect(post?.comments[0]?.authorName).toBe("Bea");
+  });
 });
 
 describe("ticketPathId", () => {

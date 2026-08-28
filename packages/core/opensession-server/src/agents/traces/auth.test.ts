@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import { rmSync } from "fs";
 import { githubLoginFromTracesSession } from "./auth";
 import { shouldPublishSession } from "./policy";
+import { tracesShareEnv } from "./share-env";
 import type { NativeSessionFile } from "../../server/types";
 
 describe("githubLoginFromTracesSession", () => {
@@ -38,5 +40,19 @@ describe("shouldPublishSession", () => {
   it("publishes interactive kinds", () => {
     expect(shouldPublishSession(base, "prompt")).toBe(true);
     expect(shouldPublishSession(base, "slack")).toBe(true);
+  });
+});
+
+describe("tracesShareEnv", () => {
+  it("puts the device token in env, not a copy of process.env", () => {
+    const env = tracesShareEnv("device-secret");
+    try {
+      expect(env.TRACES_CLI_AUTH_TOKEN).toBe("device-secret");
+      expect(env.HOME).toBeTruthy();
+      expect(env.HOME).not.toBe(process.env.HOME);
+      expect(env.FEATUREBASE_API_KEY).toBeUndefined();
+    } finally {
+      if (env.HOME) rmSync(env.HOME, { recursive: true, force: true });
+    }
   });
 });

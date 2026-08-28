@@ -7,6 +7,7 @@ export interface TracesConnectedAccount {
 	namespaceSlug: string;
 	namespaceType: string;
 	connectedAt: string;
+	needsReconnect?: boolean;
 }
 
 export async function fetchTracesStatus(): Promise<{

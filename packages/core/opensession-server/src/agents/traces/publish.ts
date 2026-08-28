@@ -1,7 +1,7 @@
 /**
  * Publish an Open Session Pi transcript to traces.com as the session owner.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "fs";
 import { join } from "path";
 import { executeSessionProjection } from "../../server/session-projection-executor";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
@@ -10,8 +10,9 @@ import { PI_STATE_DIR } from "../../server/pi-runner";
 import { invalidateSessionsCache } from "../../server/session-cache";
 import type { NativeSessionFile } from "../../server/types";
 import { tracesBin, tracesNamespaceSlug } from "./config";
-import { listTracesAccounts, tracesCredentialForLogin } from "./auth";
+import { listTracesAccounts, markTracesAccountStale, tracesCredentialForLogin } from "./auth";
 import { shouldPublishSession } from "./policy";
+import { tracesShareEnv } from "./share-env";
 
 function sanitizeId(id: string): string {
   return id.replace(/[^A-Za-z0-9._-]/g, "_");
@@ -48,6 +49,8 @@ function publisherLogin(session: NativeSessionFile): string | null {
   return connected.length === 1 ? connected[0].githubLogin : null;
 }
 
+const inflight = new Map<string, Promise<unknown>>();
+
 export async function shareOpenSessionTrace(
   osSessionId: string,
   journalKind?: string,
@@ -72,39 +75,48 @@ export async function shareOpenSessionTrace(
     sourcePath,
     "--agent",
     "pi",
-    "--key",
-    cred.deviceKey,
     "--visibility",
     "private",
     "--json",
   ];
-  const proc = Bun.spawn([tracesBin(), ...args], {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, TRACES_API_KEY: "" },
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  if (exitCode !== 0) {
-    const detail = (stderr || stdout).trim().slice(0, 500) || `traces share exited ${exitCode}`;
-    console.warn(`[traces] share failed for ${osSessionId}: ${detail}`);
-    return { ok: false, error: detail };
-  }
-  let parsed: { data?: { sharedUrl?: string; traceId?: string }; sharedUrl?: string; traceId?: string } =
-    {};
+  const env = tracesShareEnv(cred.deviceKey);
+  const scratchHome = env.HOME;
   try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    return { ok: false, error: "traces share returned non-JSON" };
+    const proc = Bun.spawn([tracesBin(), ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      env,
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    if (exitCode !== 0) {
+      const detail = (stderr || stdout).trim().slice(0, 500) || `traces share exited ${exitCode}`;
+      if (/401|AUTH_REQUIRED|not logged in|unauthorized/i.test(detail)) {
+        markTracesAccountStale(login);
+      }
+      console.warn(`[traces] share failed for ${osSessionId}: ${detail}`);
+      return { ok: false, error: detail };
+    }
+    let parsed: { data?: { sharedUrl?: string; traceId?: string }; sharedUrl?: string; traceId?: string } =
+      {};
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      return { ok: false, error: "traces share returned non-JSON" };
+    }
+    const url = parsed.data?.sharedUrl || parsed.sharedUrl;
+    const traceId = parsed.data?.traceId || parsed.traceId;
+    if (!url && !traceId) return { ok: false, error: "traces share returned no url" };
+    await recordShareRef(osSessionId, traceId || osSessionId, url || `https://traces.com/s/${traceId}`);
+    return { ok: true, url: url || undefined };
+  } finally {
+    try {
+      rmSync(scratchHome, { recursive: true, force: true });
+    } catch {}
   }
-  const url = parsed.data?.sharedUrl || parsed.sharedUrl;
-  const traceId = parsed.data?.traceId || parsed.traceId;
-  if (!url && !traceId) return { ok: false, error: "traces share returned no url" };
-  await recordShareRef(osSessionId, traceId || osSessionId, url || `https://traces.com/s/${traceId}`);
-  return { ok: true, url: url || undefined };
 }
 
 async function recordShareRef(sessionId: string, traceId: string, url: string): Promise<void> {
@@ -127,7 +139,12 @@ async function recordShareRef(sessionId: string, traceId: string, url: string): 
 }
 
 export function scheduleShareOpenSessionTrace(osSessionId: string, journalKind?: string): void {
-  void shareOpenSessionTrace(osSessionId, journalKind).catch((error) =>
-    console.warn(`[traces] share threw for ${osSessionId}:`, error),
-  );
+  const previous = inflight.get(osSessionId) || Promise.resolve();
+  const next = previous
+    .then(() => shareOpenSessionTrace(osSessionId, journalKind))
+    .catch((error) => console.warn(`[traces] share threw for ${osSessionId}:`, error))
+    .finally(() => {
+      if (inflight.get(osSessionId) === next) inflight.delete(osSessionId);
+    });
+  inflight.set(osSessionId, next);
 }

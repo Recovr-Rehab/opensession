@@ -39,19 +39,23 @@ const INCIDENT_WRITE_DENIAL =
   "(mcp__incident__incident_create, which starts in triage for a human to accept) " +
   "and read incident data, nothing more. Put anything else you want done in your " +
   "internal note or final report for a human to action.";
+const FEATUREBASE_WRITE_DENIAL =
+  "This tool isn't available in automation runs — they are read-only toward " +
+  "Featurebase tickets and posts. Put the suggested reply or comment in the " +
+  "session report for a human to send from the Featurebase pane.";
 export const AUTOMATION_DENIED_TOOLS: Record<string, string> = {
   // Plain: read + internal note only, never customer-facing or state-changing
   mcp__plain__reply_to_thread: PLAIN_WRITE_DENIAL,
   mcp__plain__mark_thread_done: PLAIN_WRITE_DENIAL,
   mcp__plain__mark_thread_todo: PLAIN_WRITE_DENIAL,
   mcp__plain__snooze_thread: PLAIN_WRITE_DENIAL,
-  // Featurebase: customer-facing conversation/ticket replies stay human-gated
-  // through /api/featurebase/*. Allowlist automations to featurebase-reader
-  // (or equivalent) so Writer tools never share a run with ticket/post text.
-  mcp__featurebase__reply_to_ticket: PLAIN_WRITE_DENIAL,
-  mcp__featurebase__reply_to_conversation: PLAIN_WRITE_DENIAL,
-  mcp__featurebase-writer__reply_to_ticket: PLAIN_WRITE_DENIAL,
-  mcp__featurebase-writer__reply_to_conversation: PLAIN_WRITE_DENIAL,
+  // Featurebase: customer-facing replies stay human-gated through
+  // /api/featurebase/*. Exact names, same pattern as Plain. Operators should
+  // allowlist featurebase-reader (read-only) on automations that see ticket text.
+  mcp__featurebase__reply_to_ticket: FEATUREBASE_WRITE_DENIAL,
+  mcp__featurebase__reply_to_conversation: FEATUREBASE_WRITE_DENIAL,
+  mcp__featurebase-writer__reply_to_ticket: FEATUREBASE_WRITE_DENIAL,
+  mcp__featurebase-writer__reply_to_conversation: FEATUREBASE_WRITE_DENIAL,
   // WorkOS: read-only — no identity mutation or impersonation from a run
   mcp__workos__create_organization: WORKOS_WRITE_DENIAL,
   mcp__workos__create_organization_membership: WORKOS_WRITE_DENIAL,
