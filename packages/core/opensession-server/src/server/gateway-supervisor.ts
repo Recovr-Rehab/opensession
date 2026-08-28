@@ -127,6 +127,7 @@ export class GatewaySupervisor {
     failure?: string;
   } | null = null;
   private shuttingDown = false;
+  private routeToActive = true;
 
   constructor(
     private active: ManagedGateway,
@@ -158,6 +159,10 @@ export class GatewaySupervisor {
 
   activeGateway(): ManagedGateway {
     return this.active;
+  }
+
+  backendPort(): number {
+    return this.routeToActive ? this.active.backendPort : 0;
   }
 
   handoff(request: HandoffRequest): Promise<ControlResponse> {
@@ -245,6 +250,7 @@ export class GatewaySupervisor {
     this.dependencies.promoteCurrent(pending.previous.releaseRoot);
     const rollback = this.dependencies.spawn(pending.previous.releaseRoot, "active");
     this.selectActive(rollback);
+    this.routeToActive = true;
     try {
       await timeout(
         this.dependencies.waitReady(rollback),
@@ -284,6 +290,7 @@ export class GatewaySupervisor {
     }
     this.shuttingDown = true;
     const gateway = this.active;
+    this.routeToActive = false;
     gateway.kill(12);
     try {
       await timeout(
@@ -335,6 +342,7 @@ export class GatewaySupervisor {
     const nonce = crypto.randomUUID();
     const candidate = this.dependencies.spawn(releaseRoot, "standby", nonce);
     this.standby = candidate;
+    let previousExited = false;
     try {
       await timeout(candidate.preloaded!, PRELOAD_TIMEOUT_MS, "candidate gateway did not preload in time");
       this.dependencies.recordTransaction?.({
@@ -344,10 +352,13 @@ export class GatewaySupervisor {
         candidatePid: candidate.pid,
         updatedAt: new Date().toISOString(),
       });
+      this.routeToActive = false;
       previous.kill(12);
       await timeout(previous.exited, EXIT_TIMEOUT_MS, "active gateway did not exit in time");
+      previousExited = true;
       this.dependencies.promoteCurrent(releaseRoot);
       this.selectActive(candidate);
+      this.routeToActive = true;
       const expiry = setTimeout(() => {
         // Pointer authority already names the target. Do not guess that the old
         // gateway is still protocol-compatible after an abandoned peer update;
@@ -376,6 +387,7 @@ export class GatewaySupervisor {
       candidate.kill(9);
       await candidate.exited.catch(() => 0);
       this.standby = null;
+      if (!previousExited) this.routeToActive = true;
       this.dependencies.clearTransaction?.();
       return { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
@@ -385,6 +397,7 @@ export class GatewaySupervisor {
     if (this.shuttingDown) return;
     this.shuttingDown = true;
     if (this.coordinated) clearTimeout(this.coordinated.timeout);
+    this.routeToActive = false;
     const children = new Set([this.active, this.standby].filter(Boolean) as ManagedGateway[]);
     for (const child of children) child.kill(child === this.active ? 15 : 9);
     await Promise.all([...children].map((child) => child.exited.catch(() => 0)));
@@ -419,6 +432,7 @@ export class GatewaySupervisor {
       });
 
       if (this.shuttingDown) throw new Error("gateway supervisor is shutting down");
+      this.routeToActive = false;
       previous.kill(12);
       try {
         await timeout(
@@ -451,6 +465,7 @@ export class GatewaySupervisor {
       });
       candidate.activate(nonce);
       this.selectActive(candidate);
+      this.routeToActive = true;
       await timeout(
         this.dependencies.waitReady(candidate),
         READY_TIMEOUT_MS,
@@ -479,6 +494,7 @@ export class GatewaySupervisor {
       this.dependencies.promoteCurrent(previous.releaseRoot);
       const rollback = this.dependencies.spawn(previous.releaseRoot, "active");
       this.selectActive(rollback);
+      this.routeToActive = true;
       try {
         await timeout(
           this.dependencies.waitReady(rollback),
@@ -811,7 +827,7 @@ async function runSupervisor(): Promise<void> {
   const publicListener = startGatewayTcpProxy({
     hostname: PUBLIC_HOST,
     port: PUBLIC_PORT,
-    backendPort: () => supervisor.activeGateway().backendPort,
+    backendPort: () => supervisor.backendPort(),
     metrics: proxyMetrics,
     listenFd: inheritedGatewaySocketFd(),
   });

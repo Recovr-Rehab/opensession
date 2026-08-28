@@ -70,6 +70,7 @@ describe("gateway supervisor", () => {
     const result = await supervisor.drainForSupervisorRestart();
     expect(result.ok).toBe(true);
     expect(active.events).toEqual(["kill:12"]);
+    expect(supervisor.backendPort()).toBe(0);
   });
 
   test("activates a preloaded candidate only after observing the old exit", async () => {
@@ -105,6 +106,7 @@ describe("gateway supervisor", () => {
     await Bun.sleep(0);
     expect(old.events).toEqual(["kill:12"]);
     expect(candidate.events).toEqual([]);
+    expect(supervisor.backendPort()).toBe(0);
 
     order.push("old-exited");
     old.finish(0);
@@ -118,6 +120,7 @@ describe("gateway supervisor", () => {
       "ready",
     ]);
     expect(supervisor.activeGateway()).toBe(candidate.gateway);
+    expect(supervisor.backendPort()).toBe(candidate.gateway.backendPort);
   });
 
   test("parks a coordinated candidate until protocol peers are replaced", async () => {
