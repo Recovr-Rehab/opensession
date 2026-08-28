@@ -19,6 +19,7 @@ type KeepTriggerProps = {
 test("visible but unclaimed rows offer an inline keep action", () => {
 	let kept = 0;
 	const action = KeepInSidebarMark({ onKeep: () => kept++ }) as ReactElement<{
+		label: string;
 		children: ReactElement<KeepTriggerProps>;
 	}>;
 	const trigger = action.props.children;
@@ -27,6 +28,7 @@ test("visible but unclaimed rows offer an inline keep action", () => {
 		stopPropagation: () => {},
 	};
 
+	expect(action.props.label).toBe("Keep in sidebar");
 	expect(trigger.props.role).toBe("button");
 	expect(trigger.props["aria-label"]).toBe("Keep in sidebar");
 	expect(trigger.props["data-sidebar-keep"]).toBe("");
@@ -34,4 +36,17 @@ test("visible but unclaimed rows offer an inline keep action", () => {
 	trigger.props.onClick(event);
 	trigger.props.onKeyDown({ ...event, key: "Enter" });
 	expect(kept).toBe(2);
+});
+
+test("the inline action can describe adding a teammate's session", () => {
+	const action = KeepInSidebarMark({
+		onKeep: () => {},
+		label: "Add to your sidebar",
+	}) as ReactElement<{
+		label: string;
+		children: ReactElement<KeepTriggerProps>;
+	}>;
+
+	expect(action.props.label).toBe("Add to your sidebar");
+	expect(action.props.children.props["aria-label"]).toBe("Add to your sidebar");
 });

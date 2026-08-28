@@ -29,10 +29,12 @@ export function KeepInSidebarIcon({
 /** The inline claim affordance for a row that is visible but not yet kept. */
 export function KeepInSidebarMark({
 	onKeep,
+	label = "Keep in sidebar",
 	className,
 	onMouseEnter,
 }: {
 	onKeep: () => void;
+	label?: string;
 	className?: string;
 	onMouseEnter?: () => void;
 }) {
@@ -42,11 +44,11 @@ export function KeepInSidebarMark({
 		onKeep();
 	};
 	return (
-		<Tooltip label="Keep in sidebar">
+		<Tooltip label={label}>
 			<span
 				role="button"
 				tabIndex={0}
-				aria-label="Keep in sidebar"
+				aria-label={label}
 				data-sidebar-keep=""
 				className={cn(
 					"focus-ring relative shrink-0 cursor-pointer items-center justify-center rounded-md text-faint transition-[color,scale] hover:text-fg active:scale-[0.96] motion-reduce:transform-none",

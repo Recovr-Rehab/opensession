@@ -682,6 +682,7 @@ export function SidebarItem({
 			)}
 			{!isPhone && canKeepInSidebar && (
 				<KeepInSidebarMark
+					label="Add to your sidebar"
 					className={cn(ROW_ACTION, "right-[7px]")}
 					onMouseEnter={closeHover}
 					onKeep={() => onSetStatus?.("mine")}
@@ -743,7 +744,7 @@ export function SidebarItem({
 													icon: <IconInbox size={20} />,
 													label: isClaimed(session)
 														? "Stop keeping in sidebar"
-														: "Keep in sidebar",
+														: "Add to your sidebar",
 													onClick: () =>
 														onSetStatus(isClaimed(session) ? null : "mine"),
 												} as const,
@@ -864,7 +865,7 @@ function MobileActionSheet({
 							<IconInbox size={22} />
 							{isClaimed(session)
 								? "Stop keeping in sidebar"
-								: "Keep in sidebar"}
+								: "Add to your sidebar"}
 						</SheetItem>
 					)}
 					{onSetStatus && (
