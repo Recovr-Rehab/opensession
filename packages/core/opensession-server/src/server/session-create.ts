@@ -118,7 +118,7 @@ import {
 	sessionTurn,
 	sessionTurnSnapshot,
 } from "./session-kernel";
-import { ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor, } from "./worktree";
+import { ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForSessionCreate, worktreeHeadBranch, worktreePathFor, } from "./worktree";
 import { type WSClientData, broadcastToSession, preparingWorkspaces, } from "./ws-hub";
 import {
 	markReplayedCommandResult,
@@ -172,6 +172,7 @@ export interface CreateSessionMessage {
 	sandbox?: unknown;
 	runner?: unknown;
 	worktreeMode?: unknown;
+	checkoutMode?: unknown;
 	workspaceId?: unknown;
 	/** Workspace that supplied a model preset for an otherwise independent create. */
 	modelWorkspaceId?: unknown;
@@ -2031,6 +2032,15 @@ export async function handleCreateSessionMessage(
 		: msg.worktreeMode === "stack"
 			? "stack"
 			: "share";
+	// A personal choice overrides only the repository's default for a fresh code
+	// workspace. PR starts, forks and existing workspace worktrees keep their
+	// explicit destination in the branches below.
+	const usesSharedCheckout = sharedCheckoutForSessionCreate(
+		repo,
+		msg.checkoutMode,
+	);
+	const isolatesConfiguredSharedCheckout =
+		!usesSharedCheckout && !!repo.sharedCheckout && msg.checkoutMode === "worktree";
 	let workspace = recoveringSession?.workspaceId
 		? getWorkspace(recoveringSession.workspaceId)
 		: typeof msg.workspaceId === "string" && msg.workspaceId
@@ -2073,7 +2083,7 @@ export async function handleCreateSessionMessage(
 		// lookup below would silently reuse the worktree anyway —
 		// re-submitted prompt slugs and existing branches picked in the
 		// unscoped palette both hit this). Only then mint a fresh one.
-		if (!isAsk && !forkSource && !fromPr && !sharedCheckoutForNewSessions(repo) && branch) {
+		if (!isAsk && !forkSource && !fromPr && !usesSharedCheckout && branch) {
 			const existingWt = (await listWorktrees(repo.id)).find(
 				(w) => w.branch === branch,
 			)?.path;
@@ -2183,9 +2193,10 @@ export async function handleCreateSessionMessage(
 			// checkout exists; only the first-ever create pays a worktree
 			// add (ensureAskCheckout).
 			wtPath = await ensureAskCheckout(repo.id);
-		} else if (sharedCheckoutForNewSessions(repo)) {
-			// Open Session: code sessions edit the live main checkout on the
-			// default branch (hot-reloads in the running server). No worktree.
+		} else if (usesSharedCheckout && !workspace?.worktreeDir) {
+			// This repository's default, or the person's override, points a fresh
+			// code workspace at the live main checkout. An existing workspace's
+			// owned worktree remains the more specific destination.
 			wtPath = repo.repo;
 		} else if (workspace?.worktreeDir && worktreeMode === "share") {
 			// Share the workspace's owned worktree (parallel sessions, one branch).
@@ -2209,7 +2220,9 @@ export async function handleCreateSessionMessage(
 				// before we bake the name into the path + session file.
 				if (branch)
 					branch = await resolveUniqueBranch(branch, repo.id);
-				wtPath = worktreePathFor(branch, repo.id);
+				wtPath = worktreePathFor(branch, repo.id, {
+					isolated: isolatesConfiguredSharedCheckout,
+				});
 				// Volume-mode sandbox (docs/self-hosting-sandboxes.md): the
 				// workspace is cloned into a per-session volume INSIDE the
 				// sandbox — skip host createWorktree entirely. The session
@@ -2249,7 +2262,7 @@ export async function handleCreateSessionMessage(
 			!workspace.worktreeDir &&
 			!isAsk &&
 			!isScratch &&
-			(!sharedCheckoutForNewSessions(repo) || fromPr) &&
+			(!usesSharedCheckout || fromPr) &&
 			(worktreeMode !== "stack" || !workspace.branch)
 		) {
 			updateWorkspace(workspace.id, {
@@ -2267,7 +2280,7 @@ export async function handleCreateSessionMessage(
 					? ""
 					: selectedRunner
 						? branch
-						: sharedCheckoutForNewSessions(repo)
+						: usesSharedCheckout && wtPath === repo.repo
 						? repo.defaultBranch
 						: workspace?.worktreeDir === wtPath
 							? workspace.branch || branch
@@ -2531,7 +2544,7 @@ export async function handleCreateSessionMessage(
 			gitEnv: githubGitEnv,
 			needsWorktree,
 			worktreeKind: fromPr ? "existing" : "new",
-			worktreeIsolated: false,
+			worktreeIsolated: isolatesConfiguredSharedCheckout,
 			materializeWorktree: needsWorktree
 				? actorWorktreeMaterializer({
 						sessionId: bksId,
@@ -2540,7 +2553,7 @@ export async function handleCreateSessionMessage(
 						branch,
 						worktreePath: wtPath,
 						baseBranch: stackBase,
-						isolated: false,
+						isolated: isolatesConfiguredSharedCheckout,
 						existingBranch: fromPr,
 						credentialPrincipal: githubCredential?.principal,
 					})

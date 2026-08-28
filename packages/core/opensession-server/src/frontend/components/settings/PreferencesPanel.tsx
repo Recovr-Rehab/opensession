@@ -53,6 +53,12 @@ import {
 	setSendKeyPref,
 } from "../../lib/send-key-pref";
 import {
+	getSessionCheckoutPref,
+	onSessionCheckoutPrefChanged,
+	setSessionCheckoutPref,
+	type SessionCheckoutPref,
+} from "../../lib/session-checkout-pref";
+import {
 	getTurnActivityPrefs,
 	onTurnActivityChanged,
 	setToolCallsPref,
@@ -489,6 +495,16 @@ export function PreferencesPanel() {
 		() => onDefaultRepoPrefChanged(() => setRepoPref(getDefaultRepoPref())),
 		[],
 	);
+	const [checkoutPref, setCheckoutPref] = useState<SessionCheckoutPref>(
+		getSessionCheckoutPref,
+	);
+	useEffect(
+		() =>
+			onSessionCheckoutPrefChanged(() =>
+				setCheckoutPref(getSessionCheckoutPref()),
+			),
+		[],
+	);
 	const [turnActivity, setTurnActivity] =
 		useState<TurnActivityPrefs>(getTurnActivityPrefs);
 	useEffect(
@@ -571,6 +587,22 @@ export function PreferencesPanel() {
 									})),
 								]}
 								onChange={setDefaultRepoPref}
+							/>
+						}
+					/>
+					<SettingRow
+						title="Code workspace"
+						desc="Where new code sessions make changes."
+						control={
+							<Select
+								label="Code workspace"
+								value={checkoutPref}
+								options={[
+									{ value: "default", label: "Use repository default" },
+									{ value: "checkout", label: "Local checkout" },
+									{ value: "worktree", label: "Separate worktree" },
+								]}
+								onChange={setSessionCheckoutPref}
 							/>
 						}
 					/>

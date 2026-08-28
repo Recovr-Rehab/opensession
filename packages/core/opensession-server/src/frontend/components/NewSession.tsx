@@ -36,6 +36,10 @@ import { effectiveSendKey, MOD_ENTER_GLYPH } from "../lib/send-key";
 import { isApple } from "../lib/platform";
 import { NO_REPO } from "../lib/session-repo";
 import { getDefaultRepoPref, setDefaultRepoPref } from "../lib/default-repo-pref";
+import {
+  getSessionCheckoutPref,
+  onSessionCheckoutPrefChanged,
+} from "../lib/session-checkout-pref";
 import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
 import { fallbackBranchName } from "../lib/workspace-draft";
 import { newSessionDefaultRepo } from "../lib/new-session-repo";
@@ -547,10 +551,14 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // plain scratch dir when it doesn't.
   const mode: "ask" | "code" | "scratch" =
     permission === "ask" ? "ask" : repo === NO_REPO ? "scratch" : "code";
-  // A second repo is an isolated worktree on this session's branch, which only
-  // a Code session with a repo has. Ask reads one pinned checkout and Scratch
-  // has no checkout at all, so neither can carry one.
-  const canAddRepos = mode === "code" && startPoint.kind !== "pull-request";
+  const [checkoutPref, setCheckoutPref] = useState(getSessionCheckoutPref);
+  useEffect(
+    () =>
+      onSessionCheckoutPrefChanged(() =>
+        setCheckoutPref(getSessionCheckoutPref()),
+      ),
+    [],
+  );
   const repoOptions = (items: RepoInfo[]): RepoOption[] =>
     items.map((item) => ({
       id: item.id,
@@ -573,6 +581,18 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     const seeded = repoOptions(cachedRepos());
     return seeded.length ? resolveDefaultRepo(seeded) : "";
   });
+  const startsInLocalCheckout =
+    mode === "code" &&
+    startPoint.kind === "new" &&
+    (checkoutPref === "checkout" ||
+      (checkoutPref === "default" &&
+        !!repos.find((option) => option.id === repo)?.sharedCheckout));
+  // A second repo is an isolated worktree on this session's branch. Ask,
+  // Scratch, pull-request starts, and local-checkout sessions cannot carry one.
+  const canAddRepos =
+    mode === "code" &&
+    startPoint.kind !== "pull-request" &&
+    !startsInLocalCheckout;
   useEffect(() => {
     let live = true;
     fetchRepos().then((items) => {
@@ -1214,6 +1234,9 @@ pendingDraftParks.delete(operation);
       clientSessionId,
       mode: createMode,
       repo: createRepo,
+      // A branch or PR picked in this palette is more specific than the standing
+      // preference, so it keeps its isolated worktree.
+      checkoutMode: startPoint.kind === "new" ? checkoutPref : "worktree",
       // Repos to work in beside `repo`. The server cuts each an isolated
       // worktree on this session's branch before the first turn runs, so the
       // agent is told about them in the same breath as its own checkout.
@@ -1324,13 +1347,17 @@ pendingDraftParks.delete(operation);
       ? `PR #${startPoint.pullRequest.number}`
       : startPoint.kind === "worktree"
         ? startPoint.branch
-        : "New branch";
+        : startsInLocalCheckout
+          ? "Local checkout"
+          : "New branch";
   const createFromOptions: Array<{ label: string; point: SessionStartPoint }> = [
     {
       point: { kind: "new" },
-      label: workspaceId && forceBranch
-        ? `New stacked branch (off ${forceBranch})`
-        : "New branch",
+      label: startsInLocalCheckout
+        ? "Local checkout"
+        : workspaceId && forceBranch
+          ? `New stacked branch (off ${forceBranch})`
+          : "New branch",
     },
     ...worktrees.map((wt) => ({
       point: { kind: "worktree" as const, branch: wt.branch },
@@ -1342,12 +1369,15 @@ pendingDraftParks.delete(operation);
   // behind a button it has to light that button up to be visible at all.
   const branchPicked =
     mode === "code" &&
+    !startsInLocalCheckout &&
     (startPoint.kind === "pull-request" ||
       (startPoint.kind === "worktree" && startPoint.branch !== forceBranch));
-  // A row worth opening needs a second thing to pick. With no sibling
-  // worktrees there is only "New branch", which is what a create does anyway.
+  // A row worth opening needs a second thing to pick. A local-checkout default
+  // still shows the row when an existing worktree offers a deliberate override.
   const showBranchPicker =
-    mode === "code" && (worktrees.length > 0 || startPoint.kind !== "new");
+    mode === "code" &&
+    (worktrees.length > 0 ||
+      (!startsInLocalCheckout && startPoint.kind !== "new"));
 
   // Which edges of the prompt earn a hairline. The field measures its own
   // scroller and reports; holding the previous object when nothing moved is
@@ -1487,7 +1517,10 @@ pendingDraftParks.delete(operation);
                 icon: <RepoTile name={p.id} />,
                 // A shared-checkout repo has no isolated worktree to attach,
                 // so it can be the session's repo but never a second one.
-                singleOnly: p.sharedCheckout,
+                singleOnly:
+                  startPoint.kind === "new" &&
+                  (checkoutPref === "checkout" ||
+                    (checkoutPref === "default" && p.sharedCheckout)),
               })),
               // Either mode can run without a repo, and the Ask toggle in the
               // footer says which one you get: Ask reads nothing, Code writes

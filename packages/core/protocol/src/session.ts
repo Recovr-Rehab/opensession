@@ -395,6 +395,11 @@ export type ProtocolClientMessage =
        * stack a new worktree off it, or ask (no worktree).
        */
       worktreeMode?: "share" | "stack" | "ask";
+      /**
+       * Where a new code workspace starts. `default` follows the repository's
+       * setting; the explicit choices are a per-user override.
+       */
+      checkoutMode?: "default" | "checkout" | "worktree";
       model?: string;
       /** Optional MCP server allowlist for the opening run. [] means none. */
       mcpServers?: string[];
