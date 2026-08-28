@@ -606,81 +606,88 @@ export function PrPanel({
 
   const load = useCallback(
     (force = false): Promise<void> => {
-      if (loadTargetKey !== activeLoadTargetRef.current)
+      if (loadTargetKey !== activeLoadTargetRef.current) {
         return Promise.resolve();
-    const existing = loadInFlightRef.current;
-    if (!force && existing?.key === loadTargetKey) return existing.promise;
+      }
+      const existing = loadInFlightRef.current;
+      if (!force && existing?.key === loadTargetKey) return existing.promise;
 
-    const generation = ++loadGenerationRef.current;
-    setDiffLoading(true);
-    let prSettled = false;
-    let diffSettled = false;
-    let prResult: PrDetails | null = null;
-    let diffResult: PrDiffData | null = null;
-    const isCurrent = () =>
-      generation === loadGenerationRef.current &&
-      loadTargetKey === activeLoadTargetRef.current;
-    const commitDiff = () => {
-      if (!isCurrent() || !prSettled || !diffSettled) return;
-      setDiff(
-        diffResult?.headRefOid === prResult?.headRefOid ? diffResult : null,
-      );
-      setDiffLoading(false);
-    };
+      const generation = ++loadGenerationRef.current;
+      setDiffLoading(true);
+      let prSettled = false;
+      let diffSettled = false;
+      let prResult: PrDetails | null = null;
+      let diffResult: PrDiffData | null = null;
+      const isCurrent = () =>
+        generation === loadGenerationRef.current &&
+        loadTargetKey === activeLoadTargetRef.current;
+      const commitDiff = () => {
+        if (!isCurrent() || !prSettled || !diffSettled) return;
+        setDiff(
+          diffResult?.headRefOid === prResult?.headRefOid ? diffResult : null,
+        );
+        setDiffLoading(false);
+      };
+
       const prRequest = (
         previewRepo && previewBranch
-      ? fetchPrPreview(previewRepo, previewBranch)
-      : fetchPr(sessionId, loadRepo, loadBranch)
-    )
-      .then((data) => {
-        prSettled = true;
-        prResult = data;
-        if (isCurrent()) {
-          setPr(data);
-          setLoadError(null);
-        }
-        commitDiff();
-      })
-      .catch((error) => {
-        prSettled = true;
-        prResult = null;
-          if (isCurrent())
-            setLoadError(errorMessage(error, "Failed to load the pull request."));
-        commitDiff();
-      })
-      .finally(() => {
-        if (isCurrent()) setLoading(false);
-      });
+          ? fetchPrPreview(previewRepo, previewBranch)
+          : fetchPr(sessionId, loadRepo, loadBranch)
+      )
+        .then((data) => {
+          prSettled = true;
+          prResult = data;
+          if (isCurrent()) {
+            setPr(data);
+            setLoadError(null);
+          }
+          commitDiff();
+        })
+        .catch((error) => {
+          prSettled = true;
+          prResult = null;
+          if (isCurrent()) {
+            setLoadError(
+              errorMessage(error, "Failed to load the pull request."),
+            );
+          }
+          commitDiff();
+        })
+        .finally(() => {
+          if (isCurrent()) setLoading(false);
+        });
       const diffRequest = (
         previewRepo && previewBranch
-      ? fetchPrPreviewDiff(previewRepo, previewBranch)
-      : fetchPrDiff(sessionId, loadRepo, loadBranch)
-    )
-      .then((data) => {
-        diffSettled = true;
-        diffResult = data;
-        if (isCurrent()) setDiffError(null);
-        commitDiff();
-      })
-      .catch((error) => {
-        diffSettled = true;
-        diffResult = null;
-          if (isCurrent())
-            setDiffError(errorMessage(error, "Failed to load pull request changes."));
-        commitDiff();
-      });
-    // A linked PR has no local worktree in this session — no git state.
+          ? fetchPrPreviewDiff(previewRepo, previewBranch)
+          : fetchPrDiff(sessionId, loadRepo, loadBranch)
+      )
+        .then((data) => {
+          diffSettled = true;
+          diffResult = data;
+          if (isCurrent()) setDiffError(null);
+          commitDiff();
+        })
+        .catch((error) => {
+          diffSettled = true;
+          diffResult = null;
+          if (isCurrent()) {
+            setDiffError(
+              errorMessage(error, "Failed to load pull request changes."),
+            );
+          }
+          commitDiff();
+        });
       const gitRequest = (
         previewRepo || loadLinked
-      ? Promise.resolve(null)
-      : fetchGitStatus(sessionId, loadRepo)
-    )
-      .then((data) => {
-        if (isCurrent()) setGit(data);
-      })
-      .catch(() => {
-        if (isCurrent()) setGit(null);
-      });
+          ? Promise.resolve(null)
+          : fetchGitStatus(sessionId, loadRepo)
+      )
+        .then((data) => {
+          if (isCurrent()) setGit(data);
+        })
+        .catch(() => {
+          if (isCurrent()) setGit(null);
+        });
       const reviewThreadsRequest = prRequest.then(async () => {
         if (!prResult) return;
         try {
@@ -700,14 +707,23 @@ export function PrPanel({
         gitRequest,
         reviewThreadsRequest,
       ]).then(() => undefined);
-    loadInFlightRef.current = { key: loadTargetKey, promise };
+      loadInFlightRef.current = { key: loadTargetKey, promise };
       void promise.then(() => {
-        if (loadInFlightRef.current?.promise === promise)
+        if (loadInFlightRef.current?.promise === promise) {
           loadInFlightRef.current = null;
+        }
       });
       return promise;
     },
-    [sessionId, loadTargetKey, previewRepo, previewBranch, loadRepo, loadBranch, loadLinked],
+    [
+      sessionId,
+      loadTargetKey,
+      previewRepo,
+      previewBranch,
+      loadRepo,
+      loadBranch,
+      loadLinked,
+    ],
   );
 
   useEffect(() => {
