@@ -64,9 +64,11 @@ export type OptimisticTranscriptEntry = TranscriptEntry & {
  * comparing clocks. The current tail id is the primary causal anchor; seq is a
  * fallback when that payload was paged out or replaced during reconciliation.
  *
- * This is linear in the loaded transcript plus pending rows. The old timestamp
- * sort was O(n log n) and could put assistant output above its prompt whenever
- * the browser clock ran ahead of the server or a frame landed late.
+ * The common path is linear in the loaded transcript plus pending rows. If an
+ * anchor payload was paged out, a lazily-built seq index adds O(log n) per
+ * pending row. The old timestamp sort was O(n log n) and could put assistant
+ * output above its prompt whenever the browser clock ran ahead of the server or
+ * a frame landed late.
  */
 export function mergeOptimisticTranscriptEntries(
 	entries: TranscriptEntry[],
@@ -75,6 +77,7 @@ export function mergeOptimisticTranscriptEntries(
 	if (optimistic.length === 0) return entries;
 	const positions = new Map(entries.map((entry, index) => [entry.id, index]));
 	const buckets = new Map<number, OptimisticTranscriptEntry[]>();
+	let seqPositions: Array<{ seq: number; position: number }> | undefined;
 
 	for (const entry of optimistic) {
 		let index: number | undefined;
@@ -88,13 +91,17 @@ export function mergeOptimisticTranscriptEntries(
 			if (position !== undefined) index = position + 1;
 		}
 		if (index === undefined && entry.optimisticAfterSeq !== undefined) {
-			index = 0;
-			for (let position = 0; position < entries.length; position++) {
-				const seq = entries[position]!.seq;
-				if (seq === undefined) continue;
-				if (seq > entry.optimisticAfterSeq) break;
-				index = position + 1;
+			seqPositions ??= entries.flatMap((candidate, position) =>
+				candidate.seq === undefined ? [] : [{ seq: candidate.seq, position }],
+			);
+			let low = 0;
+			let high = seqPositions.length;
+			while (low < high) {
+				const middle = (low + high) >>> 1;
+				if (seqPositions[middle]!.seq <= entry.optimisticAfterSeq) low = middle + 1;
+				else high = middle;
 			}
+			index = low === 0 ? 0 : seqPositions[low - 1]!.position + 1;
 		}
 		index ??= entries.length;
 		const bucket = buckets.get(index);
