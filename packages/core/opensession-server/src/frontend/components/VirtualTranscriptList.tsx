@@ -118,13 +118,6 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	private renderedGrowth:
 		| { key: string; version: number | undefined }
 		| undefined;
-	/** A newly mounted tail row often starts at the previous row's cached end,
-	 * then moves when that previous row sheds its optimistic copy. Keep position
-	 * transitions on briefly so the correction glides instead of flashing a gap. */
-	private arrivingKeys = new Set<string>();
-	private arrivalGeneration = 0;
-	private scheduledArrivalGeneration = 0;
-	private arrivalTimer: number | undefined;
 	/** Every block key this adapter instance has ever mounted. The first build
 	 *  seeds it (opening a session is not an arrival); afterwards, a tail key
 	 *  missing from the set just arrived live and plays the entrance fade. Keys
@@ -176,7 +169,6 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 	) {
 		this.virtualizer._willUpdate();
 		this.scheduleHeadGrowthClear();
-		this.scheduleArrivalClear();
 		if (snapshot !== null) {
 			// Height gained by this commit's own mutation goes back on scrollTop
 			// before paint, holding the reader's place while history grows above.
@@ -199,7 +191,6 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		if (this.visibleTimer !== undefined) window.clearTimeout(this.visibleTimer);
 		if (this.headGrowthTimer !== undefined)
 			window.clearTimeout(this.headGrowthTimer);
-		if (this.arrivalTimer !== undefined) window.clearTimeout(this.arrivalTimer);
 		this.rowObserver?.disconnect();
 	}
 
@@ -244,24 +235,6 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 			this.headGrowthTimer = undefined;
 			if (this.headGrowthGeneration === generation) this.headGrowthKeys.clear();
 		}, 750);
-	}
-
-	private scheduleArrivalClear() {
-		if (
-			this.arrivingKeys.size === 0 ||
-			this.scheduledArrivalGeneration === this.arrivalGeneration
-		)
-			return;
-		this.scheduledArrivalGeneration = this.arrivalGeneration;
-		if (this.arrivalTimer !== undefined) window.clearTimeout(this.arrivalTimer);
-		const generation = this.arrivalGeneration;
-		this.arrivalTimer = window.setTimeout(() => {
-			this.arrivalTimer = undefined;
-			if (this.arrivalGeneration !== generation) return;
-			this.arrivingKeys.clear();
-			if (this.mounted)
-				this.setState(({ revision }) => ({ revision: revision + 1 }));
-		}, 500);
 	}
 
 	private syncSeeded(sizeCacheKey?: string) {
@@ -547,10 +520,6 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 			this.mountedKeys,
 			this.props.items.map((item) => item.key),
 		);
-		if (entering.length > 0) {
-			for (const key of entering) this.arrivingKeys.add(key);
-			this.arrivalGeneration++;
-		}
 		if (this.mountedKeys === null) this.mountedKeys = new Set();
 		for (const item of this.props.items) this.mountedKeys.add(item.key);
 		const enteringSet = new Set(entering);
@@ -575,7 +544,12 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 							className={cn(
 								"absolute left-0 top-0 w-full",
 								item.className,
-								this.arrivingKeys.has(item.key) &&
+								// Tail rows can move when an optimistic prompt becomes a
+								// durable range or a live message grows the row before it.
+								// Transition their virtual position so those causal inserts
+								// glide instead of flashing a gap or overlap for one frame.
+								virtualItem.index >=
+									Math.max(0, this.props.items.length - this.props.trailingMounted) &&
 									TRANSCRIPT_ARRIVING_POSITION_CLASS,
 							)}
 							style={{ transform: `translateY(${virtualItem.start}px)` }}
