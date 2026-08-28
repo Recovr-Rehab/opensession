@@ -309,7 +309,6 @@ import { onTranscriptDisclosure } from "../lib/transcript-disclosures";
 import { takePendingSessionFork } from "../lib/pending-session-fork";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
-import { ownedBy } from "../lib/sidebar-lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
 import {
   useShortcutKeys,
@@ -2459,19 +2458,15 @@ export function SessionViewer({
     () => isHiddenForSession(session),
     () => false,
   );
-  // A linked session can be open without belonging to your sidebar: teammate
-  // work, automation runs and agent-spawned probes all stay out until claimed.
-  // A normal session you started (or a workspace with one) is already yours.
-  const naturallyInSidebar = claimSessions.some(
-    (c) => !c.spawnedBy && !c.automation && ownedBy(c, currentUser),
-  );
+  // An open session can sit outside your sidebar for many reasons: teammate
+  // work, automation runs, spawned probes, or your own chat that only lives in
+  // the transient bands. Until it is claimed into a lane it is not really kept,
+  // so every unclaimed session offers the add affordance.
   const canKeepInSidebar =
-    !session.archived &&
-    !!onSetStatus &&
-    (hiddenFromSidebar || (!claimed && !naturallyInSidebar));
+    !session.archived && !!onSetStatus && (hiddenFromSidebar || !claimed);
   function keepInSidebar() {
     unhideForSession(session);
-    if (!claimed && !naturallyInSidebar) onSetStatus?.(claimSessions, "mine");
+    if (!claimed) onSetStatus?.(claimSessions, "mine");
   }
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
