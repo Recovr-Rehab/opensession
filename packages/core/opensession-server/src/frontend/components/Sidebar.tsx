@@ -317,6 +317,7 @@ import {
 	WsStatusMark,
 } from "./sidebar/HoverCards";
 import { AutoCreatedMark } from "./sidebar/AutoCreatedMark";
+import { KeepInSidebarMark } from "./sidebar/KeepInSidebarMark";
 import { OriginMark } from "./sidebar/OriginMark";
 import { AutomationReportRow } from "./sidebar/AutomationReportRow";
 import { ActiveSubagentRows } from "./sidebar/ActiveSubagentRows";
@@ -3415,18 +3416,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						{stripPrTitlePrefix(row.name)}
 					</span>
 				)}
-				{/* Keep machine origin beside the row whether it came from the
-				    automation identity, an automation run, or a report's Fix action.
-				    Until claimed, its plus keeps the row in this sidebar. */}
-				{!editing && rowWasAgentStarted(row) && (
-					<AutoCreatedMark
-						onKeep={
-							canKeepInSidebar
-								? () => onSetStatus(row.sessions, "mine")
-								: undefined
-						}
-					/>
-				)}
+				{/* A visible-but-unclaimed row gets the actionable inbox-plus mark.
+				    Once kept, an agent-started row returns to its passive robot origin. */}
+				{!editing &&
+					(canKeepInSidebar ? (
+						<KeepInSidebarMark
+							onKeep={() => onSetStatus(row.sessions, "mine")}
+						/>
+					) : rowWasAgentStarted(row) ? (
+						<AutoCreatedMark />
+					) : null)}
 				{/* Where the work came from, when the whole row came from one place:
 				    a Slack thread, a Linear issue. Same slot and ink as the mark
 				    above (SidebarItem carries the session-row half). */}

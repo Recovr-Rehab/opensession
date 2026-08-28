@@ -30,6 +30,7 @@ import { BottomSheet, SheetBody, SheetItem, SheetSeparator, SheetTitle } from ".
 import { Tooltip } from "../../ui/tooltip";
 import { RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
 import { AutoCreatedMark } from "./AutoCreatedMark";
+import { KeepInSidebarMark } from "./KeepInSidebarMark";
 import {
 	LanePickerPage,
 	LaneStatusMark,
@@ -140,6 +141,7 @@ export function SidebarItem({
 	const archiveKeys = useShortcutKeys("session-archive");
 	const waitingForInput = !!session.waitingForInput;
 	const failed = runNeedsAttention(session);
+	const canKeepInSidebar = !!onSetStatus && !mine && !isClaimed(session);
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState("");
 	// Desktop right-click menu (mobile long-press opens the action sheet).
@@ -548,18 +550,14 @@ export function SidebarItem({
 						{stripPrTitlePrefix(session.title)}
 					</span>
 				)}
-				{/* Nobody started this one in a composer. The same quiet mark covers
-				    automation runs, report tasks, and sessions an agent minted itself.
-				    Its plus keeps an unclaimed row in this sidebar. */}
-				{!editing && sessionWasAgentStarted(session) && (
-					<AutoCreatedMark
-						onKeep={
-							onSetStatus && !mine && !isClaimed(session)
-								? () => onSetStatus("mine")
-								: undefined
-						}
-					/>
-				)}
+				{/* A visible-but-unclaimed row gets the actionable inbox-plus mark.
+				    Once kept, an agent-started row returns to its passive robot origin. */}
+				{!editing &&
+					(canKeepInSidebar ? (
+						<KeepInSidebarMark onKeep={() => onSetStatus?.("mine")} />
+					) : sessionWasAgentStarted(session) ? (
+						<AutoCreatedMark />
+					) : null)}
 				{/* Started somewhere else: a Slack thread, a Linear issue. Same slot
 				    and ink as the mark above, since both answer "where did this row
 				    come from" for a list that mixes origins. */}

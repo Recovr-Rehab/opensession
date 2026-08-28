@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ReactElement } from "react";
-import { AutoCreatedMark } from "./AutoCreatedMark";
+import { KeepInSidebarMark } from "./KeepInSidebarMark";
 
 type ActivationEvent = {
 	key?: string;
@@ -15,12 +15,12 @@ type KeepTriggerProps = {
 	onKeyDown: (event: ActivationEvent) => void;
 };
 
-test("agent mark offers an inline keep action until claimed", () => {
+test("visible but unclaimed rows offer an inline keep action", () => {
 	let kept = 0;
-	const actionable = AutoCreatedMark({ onKeep: () => kept++ }) as ReactElement<{
+	const action = KeepInSidebarMark({ onKeep: () => kept++ }) as ReactElement<{
 		children: ReactElement<KeepTriggerProps>;
 	}>;
-	const trigger = actionable.props.children;
+	const trigger = action.props.children;
 	const event = {
 		preventDefault: () => {},
 		stopPropagation: () => {},
@@ -32,11 +32,4 @@ test("agent mark offers an inline keep action until claimed", () => {
 	trigger.props.onClick(event);
 	trigger.props.onKeyDown({ ...event, key: "Enter" });
 	expect(kept).toBe(2);
-
-	const claimed = AutoCreatedMark({}) as ReactElement<{
-		role: string;
-		"data-sidebar-keep"?: string;
-	}>;
-	expect(claimed.props.role).toBe("img");
-	expect(claimed.props["data-sidebar-keep"]).toBeUndefined();
 });
