@@ -122,8 +122,8 @@ export function Security({ onOpenSession }: Props) {
     await (async () => {
       const autos = await fetchAutomations();
       setRecurring(
-        (autos as RecurringScan[]).filter((a) =>
-          /deepsec|security scan/i.test(a.name),
+        autos.filter((automation) =>
+          /deepsec|security scan/i.test(automation.name),
         ),
       );
     })().catch(async () => {});
