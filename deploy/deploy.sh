@@ -122,12 +122,13 @@ REPO_DIR="$RELEASE_DIR"
 CANARY_DIR="$DEPLOY_STATE/results"
 CANARY_FILE="$CANARY_DIR/$(date -u +%Y%m%dT%H%M%SZ)-root-canary-${TARGET_COMMIT:0:10}.json"
 install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0700 "$CANARY_DIR"
-run_as_service_user "$SERVICE_BUN" "$REPO_DIR/scripts/deploy-canary.ts" \
+setsid runuser -u "$SERVICE_USER" -- \
+  "$SERVICE_BUN" "$REPO_DIR/scripts/deploy-canary.ts" \
   "${HEALTH_URL%/ready}/live" "$CANARY_FILE" &
 CANARY_PID=$!
 stop_canary() {
   if [ -n "${CANARY_PID:-}" ]; then
-    kill -TERM "$CANARY_PID" 2>/dev/null || true
+    kill -TERM -- "-$CANARY_PID" 2>/dev/null || true
     wait "$CANARY_PID" 2>/dev/null || true
     CANARY_PID=""
     if [ -s "$CANARY_FILE" ]; then
@@ -367,6 +368,16 @@ rollback_release() {
   systemctl stop opensession.service || true
   systemctl stop opensession-session-kernel.service || true
   run_release switch "$PREVIOUS_HEAD"
+  if ! grep -q "inheritedGatewaySocketFd" \
+    "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" 2>/dev/null; then
+    echo "[deploy] previous supervisor predates socket activation; restoring its direct-bind unit"
+    systemctl disable --now opensession.socket || true
+    awk -v workdir="$CURRENT_LINK" '
+      /^WorkingDirectory=/ { print "WorkingDirectory=" workdir; next }
+      { print }
+    ' "$CURRENT_LINK/opensession.service" > /etc/systemd/system/opensession.service
+    systemctl daemon-reload
+  fi
   systemctl restart opensession-executor.service
   systemctl restart opensession-session-kernel.service
   systemctl restart opensession.service

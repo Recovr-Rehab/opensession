@@ -396,10 +396,6 @@ export async function renderUnit(
       `LoadCredential=session-kernel-token:${USER_SESSION_KERNEL_TOKEN_PATH}`,
     )
     .replace(
-      /^Wants=opensession-session-kernel\.service opensession-executor\.service$/m,
-      "Wants=opensession-session-kernel.service",
-    )
-    .replace(
       /^After=network\.target opensession\.socket opensession-session-kernel\.service opensession-executor\.service$/m,
       "After=network.target opensession.socket opensession-session-kernel.service",
     )

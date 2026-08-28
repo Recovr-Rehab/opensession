@@ -21,9 +21,7 @@ describe("session kernel service deployment", () => {
     expect(gateway).toContain("Requires=opensession.socket");
     expect(gateway).toContain("Sockets=opensession.socket");
     expect(socket).toContain("ListenStream=127.0.0.1:3850");
-    expect(gateway).toContain(
-      "Wants=opensession-session-kernel.service opensession-executor.service",
-    );
+    expect(gateway).not.toContain("Wants=opensession-session-kernel.service");
     expect(gateway).not.toContain("Requires=opensession-session-kernel.service");
     expect(gateway).toContain("LoadCredential=session-kernel-token:");
     expect(actor).toContain("IPAddressAllow=localhost");
