@@ -5,6 +5,7 @@ import {
 	committedTranscriptMeasureKeys,
 	VirtualTranscriptList,
 	shouldAdjustTranscriptScroll,
+	shouldTransitionTranscriptItemPosition,
 	type VirtualTranscriptItem,
 	virtualTranscriptRange,
 } from "./VirtualTranscriptList";
@@ -38,6 +39,16 @@ describe("VirtualTranscriptList", () => {
 	test("keeps positive live-edge growth pinned in the measurement frame", () => {
 		expect(shouldAdjustTranscriptScroll(1_200, 600, false, 140)).toBe(true);
 		expect(shouldAdjustTranscriptScroll(1_200, 600, false, -140)).toBe(false);
+	});
+
+	test("keeps prompt reconciliation out of position transitions", () => {
+		expect(shouldTransitionTranscriptItemPosition(item(0))).toBe(true);
+		expect(
+			shouldTransitionTranscriptItemPosition({
+				...item(0),
+				arrivalAliases: ["outbox-prompt"],
+			}),
+		).toBe(false);
 	});
 
 	test("synchronously remeasures new and extended semantic rows", () => {

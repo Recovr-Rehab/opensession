@@ -605,12 +605,12 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 							className={cn(
 								"absolute left-0 top-0 w-full",
 								item.className,
-								// Tail rows can move when an optimistic prompt becomes a
-								// durable range or a live message grows the row before it.
-								// Transition their virtual position so those causal inserts
-								// glide instead of flashing a gap or overlap for one frame.
+								// Live machine rows glide when their measured position moves.
+								// User rows stay fixed: their optimistic-to-durable identity
+								// handoff can arrive seconds later and must not visibly move.
 								virtualItem.index >=
 									Math.max(0, this.props.items.length - this.props.trailingMounted) &&
+									shouldTransitionTranscriptItemPosition(item) &&
 									TRANSCRIPT_ARRIVING_POSITION_CLASS,
 							)}
 							style={{ transform: `translateY(${virtualItem.start}px)` }}
@@ -649,6 +649,14 @@ export function committedTranscriptMeasureKeys(
 			changed.add(item.key);
 	}
 	return changed;
+}
+
+export function shouldTransitionTranscriptItemPosition(
+	item: VirtualTranscriptItem,
+): boolean {
+	// A prompt may move when its optimistic row becomes a durable transcript
+	// range. That identity handoff must be visually inert, not a delayed glide.
+	return !item.arrivalAliases?.length;
 }
 
 export function shouldAdjustTranscriptScroll(
