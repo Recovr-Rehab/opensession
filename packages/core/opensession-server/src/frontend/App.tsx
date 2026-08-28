@@ -4607,13 +4607,19 @@ export function App({
         <SessionViewer
           key={viewerSession.id}
           canRepairSafety={auth?.admin === true}
-          onOpenPr={(repo, branch) => navigate({ view: "pr", repo, branch })}
+          canOpenPr
+          canOpenNextChat={focused && nextChatAvailable}
+          canStartNewSession={!viewerSession.desk && !emptyWorkspaceSession}
+          canOpenNewWorkspace
+          canOpenSession
+          canOpenReview
+          canOpenAssets
+          canOpenPortal
+          canOpenWorkspace
           session={viewerSession}
           focused={focused}
           hideHeader={splitMode && !focused}
           hideRightPanel={splitMode && !focused}
-          onBack={goBack}
-          onNextChat={focused && nextChatAvailable ? openNextChat : undefined}
           onArchive={() => {
             if (focused) sidebarRef.current?.archiveSelected();
             else closeSession(viewerSession);
@@ -4716,28 +4722,12 @@ export function App({
           onOpenSubagent={openSubagent}
           onSubagentBack={popSubagent}
           onSubagentLabel={nameSubagent}
-          onOpenReview={openReview}
           reviewFocusPr={reviewFocusPr}
-          onOpenStaging={openStaging}
           onCloseStaging={closeStagingTab}
-          onOpenPreviewTab={openPreviewTab}
           onClosePreviewTab={closePreviewTab}
-          onOpenPortal={openPortal}
-          onOpenAssets={openAssets}
           onCloseAssets={closeAssetsTab}
-          onOpenTerminal={openTerminal}
           onCloseTerminal={closeTerminalTab}
-          onOpenWorkspace={() => setActiveViewTab(null)}
           allSessions={sessions}
-          onNewSession={
-            viewerSession.desk || emptyWorkspaceSession
-              ? undefined
-              : (mode, origin) => handleNewSession(mode, null, origin)
-          }
-          onNewWorkspace={() => openPalette()}
-          onStartNewChat={(prompt) =>
-            openNewSessionInWorkspace(viewerSession, "share", prompt)
-          }
           // Mirrors SessionTabs' own "render nothing" rule so the header's
           // lone-tab + never doubles up with the strip's — and, just as
           // important, so it APPEARS whenever the strip doesn't. Closed
@@ -4772,8 +4762,6 @@ export function App({
               model: session.model,
               isRunning: session.isRunning,
             }))}
-          onOpenSession={openSession}
-          onOpenNewSession={openPrefilledSession}
           onRunningChange={handleSessionRunningChange}
           onReviewChange={(id, request) =>
             patch(id, { reviewRequest: request ?? undefined })
