@@ -844,35 +844,46 @@ if (generation === guideGenerationRef.current) setGuideLoading(false);
     diff && prPatchVersion
       ? `${loadTargetKey}\0${diff.headRefOid}\0${prPatchVersion}`
       : "";
+  const codeFlowRepo = active?.repo;
+  const codeFlowBranch = active?.branch;
   const loadCodeFlow = useCallback(async () => {
     if ((!diff?.patch && !diff?.skippedFiles) || !codeFlowKey) return;
     const generation = ++codeFlowGenerationRef.current;
+    const isCurrent = () => generation === codeFlowGenerationRef.current;
     setCodeFlowLoading(true);
     setCodeFlowError(null);
-    await (async () => {
-const data = previewRepo && previewBranch
-        ? await fetchPrPreviewCodeFlow(previewRepo, previewBranch)
-        : await fetchPrCodeFlow(sessionId, active?.repo, active?.branch);
-      if (!data)
-        throw new Error("Code flow isn't available for this pull request.");
-      if (data.diffVersion !== prPatchVersion) {
-        if (generation === codeFlowGenerationRef.current) {
+    try {
+      const data =
+        previewRepo && previewBranch
+          ? await fetchPrPreviewCodeFlow(previewRepo, previewBranch)
+          : await fetchPrCodeFlow(sessionId, codeFlowRepo, codeFlowBranch);
+      if (!data) {
+        if (isCurrent())
+          setCodeFlowError("Code flow isn't available for this pull request.");
+      } else if (data.diffVersion !== prPatchVersion) {
+        if (isCurrent()) {
           setCodeFlowError(
             "The pull request updated while code flow was loading. Try again.",
           );
         }
-        return;
-      }
-      if (generation === codeFlowGenerationRef.current)
+      } else if (isCurrent()) {
         setCodeFlow({ key: codeFlowKey, data });
-})().catch(async (error) => {
-if (generation === codeFlowGenerationRef.current)
+      }
+    } catch (error) {
+      if (isCurrent())
         setCodeFlowError(errorMessage(error, "Couldn't load code flow."));
-}).finally(async () => {
-if (generation === codeFlowGenerationRef.current)
-        setCodeFlowLoading(false);
-});
-  }, [diff, codeFlowKey, sessionId, prPatchVersion, previewRepo, previewBranch, active?.repo, active?.branch]);
+    }
+    if (isCurrent()) setCodeFlowLoading(false);
+  }, [
+    diff,
+    codeFlowKey,
+    sessionId,
+    prPatchVersion,
+    previewRepo,
+    previewBranch,
+    codeFlowRepo,
+    codeFlowBranch,
+  ]);
 
   const refreshCodeFlow = async () => {
     codeFlowGenerationRef.current += 1;
