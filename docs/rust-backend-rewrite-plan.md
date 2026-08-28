@@ -26,30 +26,24 @@ will not materially reduce model-provider latency, GitHub latency, sandbox
 startup, or the duration of agent tools. Those need separate product and
 provider optimizations.
 
-## Scope and completion definitions
+## Scope and completion definition
 
 The tracked non-frontend TypeScript server and protocol tree currently contains
 roughly 960 files and 279,000 lines including tests. Treat this as a multi-stage
 migration, not a translation project.
 
-### Practical completion
+Completion means the entire production backend is Rust. The public gateway,
+authentication and policy enforcement, session authority, persistence,
+WebSocket control plane, schedulers, effects, executor, run hosts, MCP runtime,
+agent loop, model-provider clients, integrations, and backend CLI all run
+without Bun, Node.js, `node_modules`, or JavaScript libraries. The
+TypeScript/React frontend remains unchanged and is built ahead of deployment;
+its build toolchain is not part of the production backend runtime.
 
-The public gateway, authentication and policy enforcement, session authority,
-persistence, WebSocket control plane, schedulers, effects, executor, and run
-orchestration run in Rust. A small Bun process may remain behind a private,
-versioned adapter protocol for JavaScript-only model or provider SDKs.
-
-This is the recommended first destination. Rust owns every durable decision and
-security boundary even when an adapter invokes a JavaScript SDK.
-
-### Pure-Rust completion
-
-Replace the remaining engine and provider adapters and remove Bun from the
-production runtime. The TypeScript/React frontend remains unchanged and is
-built ahead of deployment.
-
-Make this a separate final program. Reimplementing fast-moving AI SDKs early
-would add risk without improving the main gateway and concurrency bottlenecks.
+The migration may temporarily run an old Bun role beside its Rust replacement
+for isolated comparison or rollback. That is a migration mechanism, not an
+acceptable end state. A JavaScript provider adapter, SDK sidecar, or hidden Bun
+fallback does not satisfy completion.
 
 ## Non-goals
 
@@ -58,7 +52,8 @@ would add risk without improving the main gateway and concurrency bottlenecks.
 - Do not replace SQLite merely because the implementation language changes.
 - Do not parallelize mutations within one session.
 - Do not introduce a second live writer or dual-write session state.
-- Do not use Rust FFI inside Bun. Use process boundaries and versioned protocols.
+- Do not use Rust FFI inside Bun or embed a JavaScript runtime in Rust. Temporary
+  old/new comparisons use process boundaries and versioned protocols.
 - Do not change security policy, tool availability, or credential scope as an
   incidental part of the rewrite.
 - Do not claim success from microbenchmarks alone.
@@ -105,8 +100,9 @@ Web/native/Chrome clients
     |       +-----------> Rust SessionKernel service
     +-------------------> Rust executor / run-host control
                                  |
-                                 +--> Rust-native engine adapter, or
-                                      private Bun compatibility adapter
+                                 +--> Rust agent runtime
+                                        |--> Rust MCP and local tools
+                                        +--> Rust provider clients
 ```
 
 Keep the existing process roles and the current three-service supervision
@@ -136,8 +132,10 @@ minimal environments, credentials, and independent capacity limits.
 | `opensession-coordinator` | Schedulers, effect dispatch, recovery, projections, and shutdown fencing |
 | `opensession-executor` | Fixed-policy detached host launch, inspect, stop, and capacity admission |
 | `opensession-run-host` | Engine lifecycle, journaling, cancellation, transcript relay, and MCP proxying |
+| `opensession-agent` | Native agent loop, conversation state, steering, compaction, retries, presets, and tool scheduling |
+| `opensession-tools` | Contained local tools, MCP client/runtime, JSON Schema validation, and tool-result rendering |
+| `opensession-providers` | Native Anthropic, OpenAI, and OpenAI-compatible HTTP streaming clients plus account-pool policy |
 | `opensession-integrations` | GitHub, Slack, storage, webhooks, and other HTTP integrations |
-| `opensession-engine-protocol` | Private streaming contract for native and compatibility engine adapters |
 | `opensession-observability` | `tracing`, metrics, health/readiness, audit fields, and redaction |
 | `opensession` | Multi-call binary, config loading, service composition, and CLI |
 
@@ -161,9 +159,9 @@ worker threads.
   behavior.
 - **CPU pool:** use a bounded Rayon pool for parsing, indexing, hashing, diff
   preparation, compression, and other measured CPU-heavy pure work.
-- **External work:** Git, process launch, provider SDKs, sandboxes, object
-  storage, and MCP calls run in bounded task groups with per-kind semaphores and
-  cancellation tokens.
+- **External work:** Git, process launch, provider HTTP streams, sandboxes,
+  object storage, and MCP calls run in bounded task groups with per-kind
+  semaphores and cancellation tokens.
 - **Backpressure:** all channels are bounded. Overload returns an explicit
   retryable response or waits within a documented deadline. It must not create
   unbounded tasks or buffers.
@@ -187,7 +185,7 @@ Phase 0 must record baselines on the same hardware, data fixture, release build,
 and kernel settings. Ratify exact targets after collecting the baseline. The
 initial program targets are:
 
-| Area | Provisional target at practical completion |
+| Area | Provisional target at final completion |
 | --- | --- |
 | Non-model HTTP throughput | At least 2x at the same or lower p95 latency |
 | Independent kernel commands | At least 70% parallel efficiency from 1 to 8 cores |
@@ -263,10 +261,11 @@ Exit gate: TypeScript and Rust decode and re-encode every golden fixture with
 identical domain meaning, and both reject the same invalid security-sensitive
 inputs.
 
-### Phase 2: read-only worker and executor
+### Phase 2: read-only worker, executor, and provider feasibility
 
 Start with roles that prove packaging and service operation without taking
-session write authority.
+session write authority. In parallel, retire the largest technical uncertainty:
+replacing Pi and its JavaScript provider stack.
 
 1. Rewrite `transcript-search-worker` in Rust. It is read-only and provides a
    real parsing, SQLite, and CPU performance comparison.
@@ -275,10 +274,27 @@ session write authority.
    capacity admission, and minimal environment.
 3. Teach the multi-call artifact and installer to select the Rust role while
    retaining a release-level rollback switch.
+4. Build small native provider probes for every required transport. At minimum,
+   cover Anthropic streaming, OpenAI Responses streaming, OpenAI-compatible
+   chat/completions, images, reasoning/thinking, tool calls, usage accounting,
+   cancellation, rate limits, and account rotation.
+5. Produce a signed-off provider support matrix. For each current model and
+   account type, record its documented wire API, authentication method,
+   streaming protocol, resumable state, tool semantics, and whether a direct
+   Rust implementation can preserve it. Do not silently retain a JavaScript SDK
+   or CLI bridge for a row that is difficult to port.
+
+Subscription-backed Claude and ChatGPT accounts are an explicit feasibility
+gate. If they depend on an undocumented or JavaScript-only interface, choose
+openly between implementing a maintainable Rust transport with permission,
+using a documented provider API with different credentials, or dropping that
+account mode. A hidden `claude`, `codex`, or SDK subprocess is not a pure-Rust
+backend fallback.
 
 Exit gate: differential tests match current output, fault tests match current
-failure behavior, artifact installation works on supported platforms, and the
-search benchmark demonstrates a meaningful measured win.
+failure behavior, artifact installation works on supported platforms, the
+search benchmark demonstrates a meaningful measured win, and there is a credible
+native path for every model/account mode retained in the product.
 
 ### Phase 3: SessionKernel service
 
@@ -386,14 +402,96 @@ happy-path route is incomplete.
 Exit gate: Bun no longer owns a public route, durable scheduler, recovery loop,
 or privileged control-plane decision.
 
-### Phase 7: run orchestration and engine adapter boundary
+### Phase 7: native Rust agent runtime and providers
 
-Move lifecycle authority to Rust before replacing AI SDKs.
+Replace Pi rather than wrapping it. This phase moves both lifecycle authority
+and the complete coding-agent loop into Rust.
 
-Define a private, versioned bidirectional engine protocol over a Unix socket or
-stdio framing. Rust sends a fully resolved, non-secret-or-explicitly-scoped run
-spec. The adapter streams typed events and accepts fenced cancellation and tool
-responses.
+#### 7.1 Freeze the behavior that Pi currently supplies
+
+Build fixtures from the current production path for:
+
+- system prompt, context-file, skill, and per-turn context assembly;
+- conversation records, images, thinking, text, tool calls, tool results, usage,
+  stop reasons, and transcript projection;
+- `read`, `grep`, `find`, `ls`, `edit`, `write`, and `bash` schemas, containment,
+  truncation, updates, audit, cancellation, and minimal environments;
+- MCP discovery, search, invocation, OAuth/headers, allowlists, denied tools,
+  per-user gates, timeout, reconnect, and result normalization;
+- sequential tool-batch execution, steering at step boundaries, exact steer
+  identity/retraction, and skipped stale calls;
+- retry/backoff, empty completions, usage-limit classification, account
+  rotation, model fallback, cancellation, and restart;
+- compaction, branch summaries, session resume, engine handoff, presets, Dial
+  oracles, orchestrator workers, and one-shot runs;
+- Anthropic's current durable passthrough/checkpoint behavior, including tool
+  batch settlement and suppression of hidden provider-only digest output.
+
+These fixtures define Open Session behavior. Pi's internal JSONL layout and
+class structure do not.
+
+#### 7.2 Implement the agent state machine
+
+Create a Rust `AgentRuntime` whose core is a deterministic state machine:
+
+```text
+prepare context -> request model -> stream blocks -> execute tool batch
+       ^                                      |             |
+       |                                      v             v
+       +-- compact/retry/steer/follow-up <- settle step <- results
+```
+
+The runtime owns conversation state, request construction, tool scheduling,
+stream normalization, usage, retry policy, compaction, steering, and terminal
+settlement. Provider and tool work returns typed events to the state machine.
+No provider client may mutate transcripts, journals, or SessionKernel directly.
+
+Define a Rust `Provider` trait with a cancellable stream of normalized events:
+start, text/thinking deltas, tool-call fragments, completed tool calls, usage,
+finish reason, retry metadata, and typed failure. Preserve provider-native opaque
+continuation data where required, but keep it out of user-visible transcripts.
+
+#### 7.3 Implement local tools and MCP natively
+
+- Implement contained filesystem tools in Rust with canonical-path and symlink
+  checks at operation time, not only before dispatch.
+- Execute shell commands with an explicit minimal environment, process-group
+  cancellation, bounded output, timeouts, and the existing audit contract.
+- Implement MCP JSON-RPC transports, lifecycle, capability negotiation, tool
+  schema validation, discovery/search, calls, cancellation, OAuth projection,
+  and reconnect in Rust. Do not shell out to a JavaScript MCP SDK.
+- Preserve ask/code tool differences and all unattended-run deny rules before a
+  tool is advertised to the model.
+
+#### 7.4 Implement provider protocols directly in Rust
+
+Use direct HTTP/SSE/WebSocket implementations and provider-owned documented
+wire protocols. Do not load vendor JavaScript SDKs.
+
+- **Anthropic:** Messages streaming, images, thinking/signatures where exposed,
+  tool use/results, prompt caching, usage, errors, cancellation, and supported
+  account authentication.
+- **OpenAI:** Responses streaming, reasoning items, function calls/results,
+  images, usage, service tier, errors, cancellation, and supported API-key or
+  account authentication.
+- **OpenAI-compatible providers:** configurable base URL and key, chat or
+  responses dialect selected explicitly, reasoning-effort mappings, model
+  metadata, and provider-specific error normalization. Cover retained Wafer,
+  Cerebras, OpenRouter, xAI, Moonshot, and other configured catalog entries
+  through declared capabilities rather than protocol guessing.
+
+Implement account selection, affinity, strict pins, exhaustion sidelining, and
+pre-output rotation above the transport so every provider follows one audited
+policy. Never replay a request on another account after replay-unsafe output has
+escaped.
+
+The direct provider protocol may make a Pi/Claude-SDK workaround unnecessary.
+For example, an ordinary Anthropic `tool_use` stop followed by `tool_result`
+does not need a hidden passthrough digest. Preserve the external behavior and
+durable recovery guarantee, not an obsolete implementation trick. Where a
+provider requires opaque continuation state, store and fence it explicitly.
+
+#### 7.5 Integrate with Rust run hosts
 
 Rust owns:
 
@@ -401,37 +499,45 @@ Rust owns:
 - run ID and generation fencing;
 - host launch, adoption, liveness, and cancellation;
 - environment construction and credential projection;
-- MCP allowlists and denied-tool enforcement;
 - context logging and transcript destination writes;
 - fallback policy and terminal outcome projection.
 
-The compatibility Bun adapter owns only SDK-specific translation for Pi,
-Anthropic, Codex, or provider libraries. It cannot mutate SessionKernel or actor
-SQLite directly and does not inherit the gateway environment.
+Run old Pi and the Rust agent only against isolated fixture state during
+comparison. Cut over one provider/account mode at a time at the release level,
+with no per-turn fallback from Rust into Pi. Delete each JavaScript provider
+path once its compatibility and live smoke gates pass.
 
-Then replace adapters individually where Rust ecosystem support is mature and
-where profiling shows a reason. A provider adapter can remain isolated without
-blocking practical completion.
+Exit gate:
 
-Exit gate: Rust can restart, adopt, stop, and settle all supported local,
-sandbox, and Runner executions; killing the compatibility adapter cannot lose
-or duplicate an authoritative turn; and security tests prove that disallowed
-credentials and tools never reach it.
+- every retained model, preset, account mode, local tool, and MCP transport runs
+  through Rust;
+- Rust can restart, adopt, steer, stop, and settle local, sandbox, and Runner
+  executions without losing or duplicating an authoritative turn;
+- differential, transcript snapshot, provider conformance, security, and fault
+  suites pass;
+- the run host starts with no Bun/Node executable or `node_modules` available;
+- Pi, Meridian, the Anthropic JavaScript SDK, and all other backend JavaScript
+  SDK dependencies are absent from the runtime artifact.
 
 ### Phase 8: remove the legacy backend and simplify
 
-- Remove the Bun gateway proxy and TypeScript backend entrypoints after at least
-  one full compatibility window.
+- Remove the Bun gateway proxy, TypeScript backend entrypoints, Pi runner,
+  JavaScript SDK bridges, Worker sidecars, and backend JavaScript dependencies
+  after at least one full compatibility window.
+- Port remaining backend CLI commands to the Rust multi-call binary.
 - Keep explicit migration readers until rollback policy permits removal.
 - Consolidate service templates and release packaging around the Rust binary.
+- Make release verification fail if the production artifact contains a Bun or
+  Node runtime, backend `.js` files, `node_modules`, or an executable fallback
+  to a JavaScript engine/provider path.
 - Re-run profiles and remove compatibility serialization or copies only when
   benchmarks justify it.
-- Decide whether pure-Rust engine adapters and CLI are worth completing.
 - Archive the final protocol fixtures and migration audit procedure.
 
-Exit gate: no production request, durable decision, or recovery path depends on
-the legacy backend. Any remaining JavaScript process is a documented,
-least-privilege provider adapter.
+Exit gate: no production request, durable decision, recovery path, model turn,
+tool call, integration, or CLI command depends on Bun, Node.js, or a JavaScript
+library. The only TypeScript/JavaScript artifact is the prebuilt browser bundle
+served as static content.
 
 ## Verification strategy
 
@@ -481,6 +587,20 @@ Run contract suites for the web/phone bundle, iOS, and Chrome extension against
 both backends throughout phases 3 to 7. Keep at least one mixed-version test for
 every supported rolling or rollback combination.
 
+### Provider and agent conformance
+
+Capture provider streams as secret-free fixtures and replay fragmented SSE or
+WebSocket frames through both implementations. Cover text, thinking, multiple
+and partial tool calls, images, cache/usage fields, malformed events, rate
+limits, transport interruption, cancellation, and opaque continuation state.
+Run live smoke tests for every retained provider/account mode before cutover.
+
+Drive the Rust agent with a deterministic fake provider and fake tools to pin
+step ordering, steering boundaries, retries, compaction, fallback, transcript
+entries, and terminal settlement. The provider test suite and agent-loop test
+suite must remain separate so a provider quirk cannot conceal a state-machine
+bug.
+
 ### Security verification
 
 Port security rules before their routes and keep tests at the enforcement layer:
@@ -528,7 +648,8 @@ has not reconciled journals, actor ownership, or durable effects is not ready.
 | New concurrency creates races | Preserve per-session actors, use bounded message passing, avoid shared mutable maps, and property/fault test |
 | SQLite blocks async workers | Dedicated storage lanes, short busy bounds, per-session quarantine, and no SQLite on network tasks |
 | Two writers corrupt authority | Role-level cutovers with clients stopped, writer claims, and no dual-write mode |
-| JavaScript-only AI/provider SDKs delay completion | Least-privilege process adapter with Rust-owned policy and durability |
+| A subscription account depends on an undocumented or JavaScript-only transport | Resolve in phase 2: implement a permitted native protocol, move that mode to documented API credentials, or remove it; never hide a JavaScript fallback |
+| Provider protocols drift faster than the Rust clients | Capability tables, captured wire fixtures, strict decoding at security boundaries, tolerant decoding of additive events, and per-provider live smoke tests |
 | Gateway proxy weakens authentication | Private authenticated hop, strip synthetic headers, one auth owner per route, remove proxy incrementally |
 | Rust build increases platform/release complexity | Prove packaging with read-only and executor roles before kernel or gateway cutover |
 | Rewrite stalls while TypeScript keeps changing | Protocol ownership, domain freeze windows per slice, small mergeable phases, and delete migrated code promptly |
@@ -539,15 +660,19 @@ has not reconciled journals, actor ownership, or durable effects is not ready.
 The first mergeable changes should be:
 
 1. benchmark and fixture harness with current TypeScript baselines;
-2. endpoint/background-job ownership inventory;
+2. endpoint/background-job and Pi-behavior ownership inventories;
 3. Cargo workspace, release build, logging, config, health, and CI foundation;
 4. protocol schema and cross-language golden tests;
-5. Rust transcript search worker with differential benchmark;
-6. Rust executor with fault and packaging tests;
-7. pure SessionKernel reducer port and property tests;
-8. Rust SessionKernel storage against generated/copied fixtures;
-9. authenticated kernel service canary behind the existing gateway;
-10. Rust gateway shell and read-route migration.
+5. native Anthropic, OpenAI, and OpenAI-compatible streaming probes plus the
+   provider/account support matrix;
+6. deterministic Rust agent state-machine skeleton against a fake provider and
+   fake tools;
+7. Rust transcript search worker with differential benchmark;
+8. Rust executor with fault and packaging tests;
+9. pure SessionKernel reducer port and property tests;
+10. Rust SessionKernel storage against generated/copied fixtures;
+11. authenticated kernel service canary behind the existing gateway;
+12. Rust gateway shell and read-route migration.
 
 Do not begin by translating `opensession.ts` route by route. That would preserve
 its current coupling in another language and postpone the actor, protocol,
@@ -555,24 +680,28 @@ backpressure, and ownership decisions that make multithreading safe.
 
 ## Program-level definition of done
 
-Practical completion requires all of the following:
+Completion requires all of the following:
 
 - Ratified throughput, latency, scaling, memory, and startup targets are met on
   the same hardware and fixtures used for the baseline.
 - Rust owns all public listeners, auth/policy decisions, durable state,
-  orchestration, recovery, and privileged process control.
+  orchestration, recovery, privileged process control, agent turns, tools, MCP,
+  and model-provider communication.
 - Per-session serialization, cross-session parallelism, bounded queues, and
   backpressure are demonstrated under load.
 - Every shipped client passes compatibility tests.
+- Every retained model, preset, provider, and account mode passes agent and
+  provider conformance plus live smoke tests.
 - Crash tests prove no accepted intent is silently lost or executed twice where
   the destination contract promises idempotency.
 - Security enforcement and credential isolation are equivalent or stronger.
 - Deployment, schema compatibility, canary, and rollback procedures are tested
   and documented.
-- The TypeScript backend is removed. Any remaining Bun process is an explicit
-  SDK adapter with no durable authority and a minimal environment.
+- The production backend artifact and service definitions contain no Bun,
+  Node.js, `node_modules`, backend JavaScript, Pi, Meridian, JavaScript SDK, or
+  executable JavaScript fallback. CI enforces this inventory.
+- The prebuilt browser bundle is the only shipped JavaScript and is never
+  executed by the backend.
 - Production observability can attribute latency and saturation to network,
-  actor queue, SQLite, CPU pool, external effect, provider, and client fanout.
-
-Only after those gates should the project decide whether removing the final SDK
-adapter is worth the maintenance cost of pure-Rust completion.
+  actor queue, SQLite, CPU pool, external effect, provider, tool, and client
+  fanout.
