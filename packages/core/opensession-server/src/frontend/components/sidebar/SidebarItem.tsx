@@ -20,6 +20,7 @@ import {
 } from "../../lib/sidebar-classes";
 import { isClaimed, mineStatus, pinnedLane, runNeedsAttention, stripPrTitlePrefix } from "../../lib/sidebar-lanes";
 import { sessionWasAgentStarted } from "../../lib/sidebar-placement";
+import { shouldEmphasizeUnread } from "../../lib/sidebar-unread-session";
 import { LONG_PRESS_MS, LONG_PRESS_SLOP, SWIPE_AXIS_LOCK_PX, SWIPE_COMMIT_MS, SWIPE_OPEN_THRESHOLD, SWIPE_REVEAL_PX, clampSwipe, fullSwipeThreshold, swipeCommitOffset, type SwipeAction } from "../../lib/sidebar-swipe";
 import type { LaneChoice } from "../../lib/sidebar-types";
 import type { UnifiedSession } from "../../lib/types";
@@ -71,7 +72,8 @@ export const SIDEBAR_ROW =
 
 /** A row's title: one line that fades smoothly at the available edge instead
  *  of ending in an ellipsis. Read conversations stay quiet; unread ones
- *  brighten like Slack, a blocked one bolds under its blue wash. */
+ *  brighten immediately, then bold once the agent finishes. A blocked one
+ *  also bolds because it needs a person. */
 /* Pin + archive, hover-revealed on desktop: on hover they take the metadata's
    place at the far right so they don't crowd the title. Long titles run under
    that spot, and what used to cover them was an opaque plate per button — which
@@ -89,7 +91,7 @@ const ROW_ACTION = cn(
 );
 
 export const SIDEBAR_ROW_TITLE =
-	"min-w-0 flex-1 overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] text-body font-medium leading-[1.35] text-dim desktop:text-item-title group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[unread]:font-semibold group-data-[unread]:text-fg";
+	"min-w-0 flex-1 overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] text-body font-medium leading-[1.35] text-dim desktop:text-item-title group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[finished-unread]:font-semibold group-data-[unread]:text-fg";
 
 export function SidebarItem({
 	session,
@@ -443,6 +445,9 @@ export function SidebarItem({
 					data-failed={failed || undefined}
 					data-running={session.isRunning || undefined}
 					data-unread={unread || undefined}
+					data-finished-unread={
+						shouldEmphasizeUnread(unread, session.isRunning) || undefined
+					}
 					style={
 						visibleSwipeOffset
 							? { transform: `translateX(${visibleSwipeOffset}px)` }

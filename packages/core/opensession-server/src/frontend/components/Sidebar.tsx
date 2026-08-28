@@ -121,7 +121,10 @@ import {
 import { Reorder } from "motion/react";
 import { getRecents, onRecentsChanged } from "../lib/recents";
 import { getReads, isUnread, markRead, markUnread, onReadsChanged } from "../lib/reads";
-import { pickUnreadWorkspaceSession } from "../lib/sidebar-unread-session";
+import {
+	pickUnreadWorkspaceSession,
+	shouldEmphasizeUnread,
+} from "../lib/sidebar-unread-session";
 import { mentionFor, onMentionsChanged } from "../lib/mentions";
 import { TeamLensMenu, useTeamPresence } from "./TeamPresence";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
@@ -3232,6 +3235,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					data-waiting={waiting || undefined}
 					data-running={row.running || undefined}
 					data-unread={row.unread || undefined}
+					data-finished-unread={
+						shouldEmphasizeUnread(row.unread, row.running) || undefined
+					}
 					style={
 						swipeOffset
 							? ({ "--swipe-x": `${swipeOffset}px` } as React.CSSProperties)
@@ -3368,6 +3374,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// Same class as a session row's title, so workspace rows pick up
 						// the shared type scale (incl. the phone bump) and the
 						// selected/waiting/unread emphasis from the row's data attributes.
+						// Unread only gains weight after the aggregate run has finished.
 						className={SIDEBAR_ROW_TITLE}
 						onDoubleClick={(e) => {
 							e.stopPropagation();
