@@ -43,6 +43,8 @@ test("an assigned reviewer can be changed or cleared from the summary", () => {
 	expect(summarySource).toContain(
 		"const owner = (previous && reviewRequestSessionId) || session.id",
 	);
+	expect(summarySource).toContain("onReviewChange?.(owner, next)");
+	expect(summarySource).toContain("onReviewChange?.(owner, previous)");
 });
 
 test("popup review heading does not split from a lone PR band", () => {

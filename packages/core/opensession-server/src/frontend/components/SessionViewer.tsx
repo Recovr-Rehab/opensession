@@ -560,7 +560,7 @@ interface Props {
 	    sidebar's review bands flip immediately instead of waiting for a poll. */
 	onReviewChange?: (
 		id: string,
-		req: { to: string; by: string; at: string; accepted?: { by: string; at: string } } | null,
+		req: NonNullable<UnifiedSession["reviewRequest"]> | null,
 	) => void;
 	/**
 	 * Whether the Review pane is foregrounded — driven by the top tab strip's
@@ -6695,6 +6695,7 @@ export function SessionViewer({
 							// together with a GitHub review that completes it.
 							reviewRequest={effectiveReview?.req ?? null}
 							reviewRequestSessionId={effectiveReview?.ownerId}
+							onReviewChange={onReviewChange}
 							prReviewRequested={effectiveReview?.prReviewRequested}
 							running={isRunningLive}
 							send={connected ? send : undefined}
@@ -6944,6 +6945,7 @@ export function SessionViewer({
 												onArchive={handleArchive}
 												reviewRequest={effectiveReview?.req ?? null}
 												reviewRequestSessionId={effectiveReview?.ownerId}
+												onReviewChange={onReviewChange}
 												prReviewRequested={effectiveReview?.prReviewRequested}
 												running={isRunningLive}
 												send={connected ? send : undefined}
