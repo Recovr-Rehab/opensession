@@ -49,7 +49,7 @@ test("the summary separates its headline from PR metadata", () => {
 	const summary = statusBarSource.slice(summaryStart, summaryEnd);
 
 	expect(summaryStart).toBeGreaterThan(-1);
-	expect(summary).toContain("flex-col justify-center gap-0.5");
+	expect(summary).toContain("flex-col justify-center gap-1");
 });
 
 test("the summary's checks preview stays open with its parent", () => {
