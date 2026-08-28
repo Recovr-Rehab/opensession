@@ -1986,6 +1986,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			personFilter: filter.person,
 			snoozed: activeSnoozeKeys.has(r.key),
 			inStatusScope: inScope(r, showAutoCreated),
+			// Only this user's lane is a Keep act. A legacy global manualStatus
+			// still chooses a status within the ordinary list, but must not pull a
+			// review out of every teammate's review section.
+			claimed: r.sessions.some((session) => !!getLane(session.id)),
 		}));
 		// How many rows the switch at the foot of the list moves: held back
 		// right now, or on the page and only there because the machine's work is
