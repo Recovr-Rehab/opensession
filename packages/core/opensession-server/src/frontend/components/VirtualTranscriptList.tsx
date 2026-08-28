@@ -486,25 +486,26 @@ class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, Adap
 		this.virtualizer.setOptions(this.options(this.props));
 		this.virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
 			item,
-			_delta,
+			delta,
 			instance,
 		) => {
-			// At the live edge the follow glue owns positioning: TanStack's
-			// per-row compensation pairs every size change with an equal instant
-			// scrollTop step, which turns a turn's end-of-stream restructure into
-			// a one-frame teleport past the glide (measured 1716px). Readers away
-			// from the edge keep the compensation — it holds their place while
-			// history hydrates above them.
+			// A growing live row must carry scrollTop in the same virtualizer frame.
+			// Leaving all live-edge movement to the React layout effect exposed three
+			// distinct phone paints: new tool content, then a taller virtual root,
+			// then the corrected bottom. Shrinks still fall through to the browser's
+			// clamp/follow pass; compensating only positive growth avoids pushing a
+			// reader past the new end during a turn's final restructure.
 			const scrollEl = instance.scrollElement;
-			if (scrollEl) {
-				const fromBottom =
-					scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
-				if (fromBottom < 120) return false;
-			}
+			const liveEdgeDelta =
+				scrollEl &&
+				scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 120
+					? delta
+					: undefined;
 			return shouldAdjustTranscriptScroll(
 				item.end,
 				instance.scrollOffset ?? 0,
 				this.headGrowthKeys.has(String(item.key)),
+				liveEdgeDelta,
 			);
 		};
 		const virtualItems = this.virtualizer.getVirtualItems();
@@ -556,7 +557,9 @@ export function shouldAdjustTranscriptScroll(
 	itemEnd: number,
 	scrollOffset: number,
 	headGrowth = false,
+	liveEdgeDelta?: number,
 ): boolean {
+	if (liveEdgeDelta !== undefined) return liveEdgeDelta > 0;
 	return headGrowth || itemEnd <= scrollOffset + 1;
 }
 

@@ -34,6 +34,11 @@ describe("VirtualTranscriptList", () => {
 		expect(shouldAdjustTranscriptScroll(1_200, 600, true)).toBe(true);
 	});
 
+	test("keeps positive live-edge growth pinned in the measurement frame", () => {
+		expect(shouldAdjustTranscriptScroll(1_200, 600, false, 140)).toBe(true);
+		expect(shouldAdjustTranscriptScroll(1_200, 600, false, -140)).toBe(false);
+	});
+
 	test("renders complete semantic content without browser measurement", () => {
 		const html = renderToStaticMarkup(
 			<VirtualTranscriptList
