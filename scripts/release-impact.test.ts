@@ -22,6 +22,9 @@ describe("generated release impact", () => {
     const graph = closures();
     graph.gateway.add(supervisor);
     expect(classifyRuntimeImpact([supervisor], graph)).toBe("supervisor-restart");
+    expect(classifyRuntimeImpact([supervisor, sharedPath], graph)).toBe(
+      "coordinated-supervisor-restart",
+    );
   });
 
   test("coordinates shared, protocol, dependency, and unknown runtime changes", () => {

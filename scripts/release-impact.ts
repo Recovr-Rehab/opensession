@@ -7,6 +7,7 @@ export type ReleaseImpact =
   | "gateway-handoff"
   | "supervisor-restart"
   | "coordinated"
+  | "coordinated-supervisor-restart"
   | "root";
 
 const ENTRIES = {
@@ -64,17 +65,18 @@ async function combinedClosure(
 export function classifyRuntimeImpact(
   runtimePaths: string[],
   closures: { gateway: Set<string>; kernel: Set<string>; executor: Set<string> },
-): "gateway-handoff" | "supervisor-restart" | "coordinated" {
+): "gateway-handoff" | "supervisor-restart" | "coordinated" | "coordinated-supervisor-restart" {
   if (runtimePaths.some((path) =>
     path === "package.json" || path === "bun.lock" || path.startsWith("packages/core/protocol/"))) {
     return "coordinated";
   }
-  if (runtimePaths.some((path) => closures.kernel.has(path) || closures.executor.has(path))) {
-    return "coordinated";
-  }
-  if (runtimePaths.includes(
+  const changesSupervisor = runtimePaths.includes(
     "packages/core/opensession-server/src/server/gateway-supervisor.ts",
-  )) return "supervisor-restart";
+  );
+  if (runtimePaths.some((path) => closures.kernel.has(path) || closures.executor.has(path))) {
+    return changesSupervisor ? "coordinated-supervisor-restart" : "coordinated";
+  }
+  if (changesSupervisor) return "supervisor-restart";
   return runtimePaths.every((path) => closures.gateway.has(path))
     ? "gateway-handoff"
     : "coordinated";

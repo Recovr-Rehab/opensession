@@ -726,6 +726,18 @@ do_deploy() {
         && "$BUN_BIN" "$supervisor_controller" activate-coordinated \
         && poll_health \
         && "$BUN_BIN" "$supervisor_controller" commit-coordinated; then
+        if [ "$release_impact" = "coordinated-supervisor-restart" ]; then
+          log "fast-draining the coordinated target to load its supervisor code"
+          "$BUN_BIN" "$supervisor_controller" drain-supervisor
+          run_systemctl restart "$SERVICE_NAME"
+          if ! poll_health; then
+            log "ERROR: target supervisor failed health after coordinated replacement"
+            rollback_to_pin || true
+            write_result false deploy "$(current_release_sha)" "$current" \
+              "coordinated supervisor replacement failed health"
+            exit 1
+          fi
+        fi
         log "healthy after coordinated zero-downtime handoff — deployed ${target_sha:0:10}"
         "$BUN_BIN" "$supervisor_controller" status || true
         write_result true deploy "$target_sha" "$current" \
