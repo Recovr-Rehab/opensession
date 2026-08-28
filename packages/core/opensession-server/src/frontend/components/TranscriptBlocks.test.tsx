@@ -1023,6 +1023,51 @@ describe("TranscriptBlocks indexed ranges", () => {
 		setTurnPrefs(null);
 	});
 
+	test("keeps live assistant output below its optimistic prompt across a model switch", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				live
+				transcriptIndex={[indexRow(1, "assistant")]}
+				entries={[
+					{
+						id: "indexed-1",
+						seq: 1,
+						changeSeq: 1,
+						type: "assistant",
+						content: "Earlier answer",
+						timestamp: "2026-08-12T12:00:01Z",
+					},
+					{
+						id: "model-switch",
+						type: "system",
+						content: "Switched model",
+						timestamp: "2026-08-12T12:00:09Z",
+					},
+					{
+						id: "live-assistant",
+						type: "assistant",
+						content: "Later assistant output",
+						// The server clock is behind the browser that sent the prompt.
+						timestamp: "2026-08-12T12:00:02Z",
+					},
+				]}
+				optimisticEntries={[
+					{
+						id: "outbox-prompt",
+						type: "user",
+						content: "Does this work?",
+						timestamp: "2026-08-12T12:00:10Z",
+						optimisticAfterEntryId: "model-switch",
+						optimisticAfterSeq: 1,
+					},
+				]}
+			/>,
+		);
+		expect(html.indexOf("Does this work?")).toBeLessThan(
+			html.indexOf("Later assistant output"),
+		);
+	});
+
 	test("keeps a partial opening range visible while its prefix hydrates", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks

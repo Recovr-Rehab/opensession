@@ -657,6 +657,7 @@ function IndexedTranscriptBlocks(props: Props) {
 		(atom): atom is Extract<IndexedTimelineAtom, { kind: "range" }> =>
 			atom.kind === "range",
 	);
+	const tailRangeAtom = rangeAtoms[rangeAtoms.length - 1];
 	for (const entry of entries) {
 		if (typeof entry.seq === "number" || indexedIds.has(entry.id)) continue;
 		const timestampMs = Date.parse(entry.timestamp) || 0;
@@ -685,35 +686,25 @@ function IndexedTranscriptBlocks(props: Props) {
 			rangeAtom.timestampMs = Math.max(rangeAtom.timestampMs, timestampMs);
 			continue;
 		}
+		// Live turn frames arrive before their durable sequence numbers. They are
+		// causally after the loaded tail regardless of wall-clock timestamps or
+		// synthetic decorations (for example a model switch) between them. Attach
+		// them directly instead of timestamp-sorting them as standalone rows: that
+		// sort could transiently put assistant output above its optimistic prompt
+		// when the browser clock ran ahead of the server.
+		if (tailRangeAtom && isTurnContinuationEntry(entry)) {
+			tailRangeAtom.continuationEntryIds.push(entry.id);
+			tailRangeAtom.timestampMs = Math.max(
+				tailRangeAtom.timestampMs,
+				timestampMs,
+			);
+			continue;
+		}
 		atoms.push({
 			kind: "entry",
 			entry,
 			timestampMs,
 		});
-	}
-	atoms = sortIndexedTimelineAtoms(atoms);
-	// Live turn frames arrive before their durable sequence numbers. Keep a
-	// separate overlay on the durable tail range so one assistant turn cannot
-	// temporarily split into a settled Worked group and loose calls. Assistant
-	// narration must join the overlay too: it commonly arrives immediately before
-	// a batch of tools, and leaving it standalone prevents every following tool
-	// from reaching the tail range. The range bounds and entry IDs stay
-	// durable-only for sparse hydration requests.
-	const tailRange = ranges[ranges.length - 1];
-	for (let index = 1; index < atoms.length; index++) {
-		const atom = atoms[index]!;
-		const previous = atoms[index - 1]!;
-		if (
-			atom.kind !== "entry" ||
-			previous.kind !== "range" ||
-			previous.range !== tailRange ||
-			!isTurnContinuationEntry(atom.entry)
-		)
-			continue;
-		previous.continuationEntryIds.push(atom.entry.id);
-		previous.timestampMs = Math.max(previous.timestampMs, atom.timestampMs);
-		atoms.splice(index, 1);
-		index--;
 	}
 	for (const note of notes ?? []) {
 		const containing = atoms.find(
