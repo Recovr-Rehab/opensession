@@ -404,6 +404,8 @@ export function App({
     ...(route.view === "session" ? { selectedSessionId: route.id } : {}),
     ...(route.view === "workspace" ? { selectedWorkspaceId: route.id } : {}),
   });
+  const mainSocket = useWebSocket();
+  const { connected, send, setTyping, addHandler } = mainSocket;
   const {
     sessions,
     loading,
@@ -411,7 +413,6 @@ export function App({
     archivedLoaded,
     refreshArchived,
     refresh,
-    refreshInvalidated,
     inject,
     unstick,
     patch,
@@ -419,6 +420,7 @@ export function App({
   } = useSessions({
     loadArchived: route.view === "archived",
     liveQuery: liveSessionsQuery,
+    socket: mainSocket,
   });
   const [launchComplete, setLaunchComplete] = useState(false);
   // Seeded from the repos this browser saw last (lib/repo-cache): PR-mention
@@ -428,16 +430,6 @@ export function App({
   const onboarding = useOnboarding();
   const auth = useAuthStatus();
   const githubConnectionState = useGithubConnectionState(route.view);
-  const mainSocket = useWebSocket();
-  const { connected, send, setTyping, addHandler } = mainSocket;
-  // A disconnected socket may miss list invalidations. The first connection
-  // races the initial list load and needs no extra fetch; later reconnects do.
-  const webSocketConnectedOnceRef = useRef(false);
-  useEffect(() => {
-    if (!connected) return;
-    if (webSocketConnectedOnceRef.current) refresh();
-    else webSocketConnectedOnceRef.current = true;
-  }, [connected, refresh]);
   const sessionsRef = useRef(sessions);
   useLayoutEffect(() => {
     sessionsRef.current = sessions;
@@ -1609,10 +1601,6 @@ export function App({
   const socketGetCurrentRoute = useEffectEvent(getCurrentRoute);
   useEffect(() => {
     return addHandler((msg) => {
-      if (msg.type === "sessions_invalidated") {
-        refreshInvalidated();
-        return;
-      }
       if (msg.type === "error") {
         const draft = pendingCreateDraftRef.current;
         const errorSessionId = "sessionId" in msg ? msg.sessionId : undefined;
@@ -1800,15 +1788,7 @@ export function App({
           socketNavigate({ view: "session", id: msg.id });
       }
     });
-  }, [
-    addHandler,
-    patch,
-    refresh,
-    refreshInvalidated,
-    refreshWorkspaces,
-    remove,
-    unstick,
-  ]);
+  }, [addHandler, patch, refresh, refreshWorkspaces, remove, unstick]);
 
   // Drop the pending flag once we've navigated away from the pending session (its
   // fallback timeout clears it otherwise). We deliberately DON'T clear it the
