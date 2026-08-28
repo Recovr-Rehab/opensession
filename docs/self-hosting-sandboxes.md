@@ -434,13 +434,8 @@ opensession sandbox enable microvm
 
 It downloads and verifies a matching release golden when available. If no
 matching release exists, it invokes
-`deploy/sandbox/microvm/refresh-sandbox-golden.sh`; that source-build path is
-currently blocked because the script's pin-computation snippet still imports
-the pre-package-move `./src/server/...` paths. Do not rely on the fallback or
-manual refresh until that script is corrected. A matching published golden is
-therefore required for the current enable workflow.
-
-The intended refresh builds `Dockerfile.workspace` and
+`deploy/sandbox/microvm/refresh-sandbox-golden.sh` to build the golden from the
+current checkout. The refresh builds `Dockerfile.workspace` and
 `deploy/sandbox/microvm/Dockerfile.runner`, then publishes a credential-free
 golden with the pinned runner and engines. Its publication transaction is
 locked against clone creation and rolls back disk, memory, vmstate and metadata

@@ -76,6 +76,10 @@ export interface SandboxSessionSpec {
   /** Force a credential-free HTTPS clone. Public untrusted-source jobs must
    * never receive the configured repository clone credential. */
   cloneCredential?: "configured" | "none";
+  /** Prepare only a credential-free source checkout for immutable verification.
+   * Skips private seed files and repository lifecycle hooks, and requires an
+   * already-matching credential-free runner golden. */
+  sourceVerification?: boolean;
 }
 
 export interface ExecOpts {

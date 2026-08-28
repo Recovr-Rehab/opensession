@@ -130,11 +130,20 @@ describe("public PR review policy", () => {
     const toolLess = source.indexOf("export async function runToollessPublicReview");
     const inference = source.indexOf("await oneShotDetailed", toolLess);
     const review = readFileSync(new URL("./review.ts", import.meta.url), "utf8");
+    const microvm = readFileSync(
+      new URL("../../server/sandbox/adapters/microvm.ts", import.meta.url),
+      "utf8",
+    );
     const publicBranch = review.indexOf("if (publicReview) {");
     const verifyCall = review.indexOf("await verifyPublicPrInMicrovm", publicBranch);
     const toolLessCall = review.indexOf("await runToollessPublicReview", publicBranch);
     expect(source.slice(verify, toolLess)).toContain("refs/pull/${input.prNumber}/head");
+    expect(source.slice(verify, toolLess)).toContain("+${input.baseSha}:${baseRef}");
+    expect(source.slice(verify, toolLess)).not.toContain("+refs/heads/${input.baseRef}:${baseRef}");
     expect(source.slice(verify, toolLess)).toContain('cloneCredential: "none"');
+    expect(source.slice(verify, toolLess)).toContain("sourceVerification: true");
+    expect(microvm).toContain("if (resumed && !spec.sourceVerification)");
+    expect(microvm).toContain("runLifecycleHooks: !spec.sourceVerification");
     expect(source.slice(verify)).not.toContain("launchRun(");
     expect(destroy).toBeGreaterThan(verify);
     expect(inference).toBeGreaterThan(toolLess);

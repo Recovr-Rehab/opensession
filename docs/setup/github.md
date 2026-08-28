@@ -150,6 +150,34 @@ workflows disabled or approval-gated while still receiving Open Session's
 isolated semantic review. Keep the team GitHub roster current; an empty roster
 still fails closed for every write-capable behavior.
 
+### Enabling public contributions
+
+Keep public PR creation restricted until every item below is complete:
+
+1. Configure and qualify the Firecracker MicroVM provider. Confirm it reports
+   **Ready** in Workspace → Sandboxes. Public review fails closed when it is
+   unavailable, but opening submissions before readiness leaves contributors
+   without the promised automatic review.
+2. Enable the `github-pr-review` automation. This is the budget switch for
+   automatic review events; it does not grant external contributors any
+   write-capable command.
+3. In GitHub repository settings, have a human repository administrator change
+   the pull-request creation policy from **Collaborators only** to **All**. The
+   GitHub App does not need Administration permission for normal operation, and
+   should not receive it just for this one-time setting.
+4. In **Settings → Actions → General**, keep workflows from fork PRs disabled or
+   require maintainer approval before they run. This is separate from Open
+   Session review. With the least-privilege App permission set above, GitHub's
+   Actions-policy API returns 403 by design, so a repository administrator must
+   verify this setting in GitHub.
+5. Open a disposable fork PR and confirm the review uses the isolated public
+   path, contains no private session URL, and leaves autofix, commands, pushes,
+   handoffs and GitHub Actions unavailable.
+
+Changing the PR creation policy is the only step above that requires repository
+Administration authority. Runtime checkout, review and result posting continue
+to use the narrower App permissions documented in this guide.
+
 **Multi-repo**: the App webhook covers every repository on which the App is
 installed. A repo joins the PR agent when it is also in the config registry
 (`repos` in `~/.opensession/config.json`, matched by `ghRepo`). Events for

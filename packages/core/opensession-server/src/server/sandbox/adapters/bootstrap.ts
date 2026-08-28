@@ -963,6 +963,7 @@ async function bootstrapRemoteBaseRuntime(
 export async function bootstrapRemoteSandbox(
   driver: RemoteDriver,
   label: string,
+  options: { requirePrebootstrapped?: boolean } = {},
 ): Promise<void> {
   const cfg = sandboxConfig();
   const signature = bootstrapSignature();
@@ -983,6 +984,11 @@ export async function bootstrapRemoteSandbox(
       "workload identity client repair",
     );
     return;
+  }
+  if (options.requirePrebootstrapped) {
+    throw new Error(
+      `${label} source verification requires a credential-free golden matching the current runner`,
+    );
   }
   const log = (msg: string) => console.log(`[sandbox:${label}] bootstrap: ${msg}`);
 
@@ -1379,6 +1385,7 @@ export async function setupRemoteWorkspace(
   defaultBranch: string,
   repoId?: string,
   identity?: Omit<WorkloadIdentityContext, "lifecycle">,
+  options: { seedPrivateFiles?: boolean; runLifecycleHooks?: boolean } = {},
 ): Promise<void> {
   const startedAt = Date.now();
   const mark = (stage: string) => console.log(`[sandbox-remote] workspace ${repoId || cwd}: ${stage} (+${Date.now() - startedAt}ms)`);
@@ -1496,11 +1503,16 @@ export async function setupRemoteWorkspace(
   }
   // Per-session only: warm/template preparation never calls this path, so
   // private files are injected after restore and can never land in a shared
-  // provider snapshot.
-  await materializeRemoteWorkspaceSeedFiles(driver, cwd, repoId);
-  mark("private files seeded");
-  await runRemoteLifecycleHook(driver, cwd, "setup", "fresh", repoId, identity);
-  mark("lifecycle ready");
+  // provider snapshot. Source-verification guests explicitly skip both seed
+  // files and repository-controlled lifecycle hooks.
+  if (options.seedPrivateFiles !== false) {
+    await materializeRemoteWorkspaceSeedFiles(driver, cwd, repoId);
+    mark("private files seeded");
+  }
+  if (options.runLifecycleHooks !== false) {
+    await runRemoteLifecycleHook(driver, cwd, "setup", "fresh", repoId, identity);
+    mark("lifecycle ready");
+  }
 }
 
 const REMOTE_LIFECYCLE_DIR = `${REMOTE_HOME}/.opensession/lifecycle`;

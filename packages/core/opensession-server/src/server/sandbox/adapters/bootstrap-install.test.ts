@@ -42,6 +42,24 @@ describe("remote runner bootstrap", () => {
     expect(commands[1]).toContain(REMOTE_RUNNER_BINARY);
   });
 
+  test("source verification refuses a stale golden before resolving credentials", async () => {
+    const commands: string[] = [];
+    const driver: RemoteDriver = {
+      async exec(command) {
+        commands.push(command);
+        return {exitCode: 0, stdout: "stale-signature\n", stderr: ""};
+      },
+      async execBackground() {},
+      async writeFile() {},
+      async ensureStarted() {},
+    };
+
+    await expect(
+      bootstrapRemoteSandbox(driver, "test", {requirePrebootstrapped: true}),
+    ).rejects.toThrow("requires a credential-free golden");
+    expect(commands).toHaveLength(1);
+  });
+
   test("prefers the compiled runner host with a source fallback", () => {
     const command = remoteRunnerHostCommand("/runs/rh-test/spec.json");
     expect(command).toContain(`${REMOTE_RUNNER_BINARY} runner-host /runs/rh-test/spec.json`);

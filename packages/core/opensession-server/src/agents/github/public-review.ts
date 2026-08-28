@@ -289,6 +289,7 @@ export async function verifyPublicPrInMicrovm(
       trustProfile: "automation",
       egressAllowlist: [],
       cloneCredential: "none",
+      sourceVerification: true,
     });
     try {
       const headRef = `refs/opensession/public-review/${input.prNumber}/head`;
@@ -305,7 +306,7 @@ export async function verifyPublicPrInMicrovm(
           "--no-tags",
           "origin",
           `+refs/pull/${input.prNumber}/head:${headRef}`,
-          `+refs/heads/${input.baseRef}:${baseRef}`,
+          `+${input.baseSha}:${baseRef}`,
         ],
         { timeoutMs: 180_000 },
       );

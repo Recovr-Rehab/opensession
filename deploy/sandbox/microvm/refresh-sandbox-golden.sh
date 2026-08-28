@@ -19,8 +19,8 @@
 # skips both builds.
 #
 # The resulting store contains golden.{ext4,mem,vmstate} plus golden.json
-# ({ signature, builtAt, runner, runnerSha } — the store's build metadata,
-# for staleness reporting; the in-VM marker stays the source of truth) and can
+# ({ signature, builtAt, runnerSha } — the store's build metadata, for
+# staleness reporting; the in-VM marker stays the source of truth) and can
 # be selected with:
 #   {"firecrackerMicrovm":{"enabled":true,"storeDir":"/opt/firecracker/sandbox-store"}}
 #
@@ -68,9 +68,9 @@ compute_pins() {
     set -a; . "$CFG_HOME/.opensession.env"; set +a
   fi
   HOME="$CFG_HOME" GOLDEN_WANT_CLONE_URL="${1:-}" "$BUN_BIN" -e '
-import { bootstrapSignature, injectCloneCredential, remoteCloneUrl } from "./src/server/sandbox/adapters/bootstrap.ts";
-import { sandboxConfig } from "./src/server/sandbox/config.ts";
-import { REPO_ROOT } from "./src/runner-host/protocol.ts";
+import { bootstrapSignature, injectCloneCredential, remoteCloneUrl } from "./packages/core/opensession-server/src/server/sandbox/adapters/bootstrap.ts";
+import { sandboxConfig } from "./packages/core/opensession-server/src/server/sandbox/config.ts";
+import { REPO_ROOT } from "./packages/core/opensession-server/src/runner-host/protocol.ts";
 const cfg = sandboxConfig();
 console.log(bootstrapSignature());
 console.log(cfg.runnerSha || "");
@@ -158,9 +158,9 @@ else
   SIGNATURE="$(sed -n 1p <<<"$PINS")"
 fi
 
-# Metadata for golden.json: the runner pin rides in the signature
-# ("<base>+runner@<ver>"); the runnerSha is whatever the exported image
-# actually has checked out (authoritative even for explicit images).
+# Metadata for golden.json: the signature carries the runner payload identity;
+# runnerSha is whatever the exported image actually has checked out
+# (authoritative even for explicit images).
 BAKED_SHA="$(docker run --rm "$IMAGE" git -C /home/ubuntu/projects/opensession rev-parse HEAD 2>/dev/null || true)"
 [ -n "$BAKED_SHA" ] || BAKED_SHA="unknown"
 
@@ -210,8 +210,8 @@ fc PUT /snapshot/create \
   >/dev/null
 mv -f "$STORE/golden.next.mem" "$STORE/golden.mem"
 mv -f "$STORE/golden.next.vmstate" "$STORE/golden.vmstate"
-printf '{\n  "signature": "%s",\n  "builtAt": "%s",\n  "runner": "%s",\n  "runnerSha": "%s"\n}\n' \
-  "$SIGNATURE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$RUNNER_PIN" "$BAKED_SHA" \
+printf '{\n  "signature": "%s",\n  "builtAt": "%s",\n  "runnerSha": "%s"\n}\n' \
+  "$SIGNATURE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$BAKED_SHA" \
   > "$STORE/golden.next.json"
 mv -f "$STORE/golden.next.json" "$STORE/golden.json"
 cat "$STORE/golden.mem" >/dev/null

@@ -628,12 +628,16 @@ export class MicrovmProvider implements SandboxProvider {
       // keep-alive socket when the guest clock jumps.
       const bootstrapDriver = microvmBootstrapDriver(driver);
       const callbackBaseUrl = sandboxCallbackBaseUrl();
-      await assertDialbackReachable(
-        bootstrapDriver,
-        "microvm",
-        callbackBaseUrl,
-      );
-      await bootstrapRemoteSandbox(bootstrapDriver, "microvm");
+      if (!spec.sourceVerification) {
+        await assertDialbackReachable(
+          bootstrapDriver,
+          "microvm",
+          callbackBaseUrl,
+        );
+      }
+      await bootstrapRemoteSandbox(bootstrapDriver, "microvm", {
+        requirePrebootstrapped: spec.sourceVerification,
+      });
       const cloneUrl = await remoteCloneUrl(repo, {
         credential: spec.cloneCredential,
       });
@@ -645,8 +649,12 @@ export class MicrovmProvider implements SandboxProvider {
         repo.defaultBranch,
         repo.id,
         { sandboxId: sandboxId(idx), provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile },
+        {
+          seedPrivateFiles: !spec.sourceVerification,
+          runLifecycleHooks: !spec.sourceVerification,
+        },
       );
-      if (resumed) {
+      if (resumed && !spec.sourceVerification) {
         await runRemoteLifecycleHook(driver, cwd, "resume", "resume", undefined, { sandboxId: sandboxId(idx), provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile });
         audit({
           kind: "sandbox_resume_metric",
@@ -658,12 +666,18 @@ export class MicrovmProvider implements SandboxProvider {
         });
       }
       if (trustProfile === "automation") {
-        const resolved = await restrictAutomationEgress(idx, cfg.storeDir, [
-          callbackBaseUrl,
-          cloneUrl,
-          ...AUTOMATION_BASELINE_EGRESS,
-          ...egressAllowlist,
-        ]);
+        const resolved = await restrictAutomationEgress(
+          idx,
+          cfg.storeDir,
+          spec.sourceVerification
+            ? [cloneUrl]
+            : [
+                callbackBaseUrl,
+                cloneUrl,
+                ...AUTOMATION_BASELINE_EGRESS,
+                ...egressAllowlist,
+              ],
+        );
         audit({
           kind: "sandbox_automation_egress",
           session_id: spec.sessionId,
