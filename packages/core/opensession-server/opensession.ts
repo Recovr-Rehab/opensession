@@ -52,8 +52,10 @@ import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
 import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-relay";
 import { handleWorkloadIdentityRequest } from "./src/server/workload-identity";
 import {
+	enrichSessionRuntime,
 	findSession,
 	findSessionAsync,
+	getCachedSessions,
 	invalidateSessionsCache,
 	reconcileRecoverableSafetyFences,
 	recordRunOutcome,
@@ -710,9 +712,10 @@ if (!g.__opensessionBooted) {
 	// (analytics.ts — gh fetches + composed summaries are disk-cached too)
 	startAnalyticsPrewarm();
 
-	// Remove worktrees whose work is merged / PR closed, sweep removal husks
-	// (worktree-reaper.ts — in-process port of the cleanup-closed-worktrees cron)
-	startWorktreeReaper(getAllSessions);
+	// Remove worktrees whose work is merged / PR closed, sweep removal husks.
+	// Re-enrich the cached rows on every pass: stored session rows do not carry
+	// live Pi/actor run state, and reaping an old-but-running session is destructive.
+	startWorktreeReaper(() => enrichSessionRuntime(getCachedSessions()));
 
 	// Portal processes survive a coordinator restart by design. Reconcile their
 	// durable owner records immediately and keep reaping deleted-session husks.
