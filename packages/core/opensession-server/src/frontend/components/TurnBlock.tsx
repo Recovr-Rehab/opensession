@@ -288,14 +288,16 @@ export const TurnBlock = function TurnBlock({
                 className="-ml-px desktop:ml-0"
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
-                {/* The outer Working row is already the tool-only run's
+                {/* The outer Working row is already a tool-only run's
                     summary. If someone opens it, reveal the calls directly
-                    instead of inserting a second, identical disclosure. */}
+                    instead of inserting a second, identical disclosure. A
+                    narrated turn still lets the Tool calls preference fold
+                    routine calls between its updates. */}
                 <ToolSection
                   items={sec.items}
                   toolResults={toolResults}
                   live={live}
-                  expandAll={pref.tools === "open"}
+                  expandAll={pref.tools === "open" || !hasNarration}
                   sessionId={sessionId}
                   onOpenSubagent={onOpenSubagent}
                 />

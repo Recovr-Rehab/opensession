@@ -245,6 +245,22 @@ describe("TranscriptBlocks compact tool runs", () => {
 		expect(html).not.toContain("package.json");
 	});
 
+	test("opens tool-only work directly without repeating its group", () => {
+		setTurnPrefs("open", "folded");
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks live entries={toolEntries} />,
+		);
+
+		expect(html).toContain('aria-expanded="true"');
+		expect(html).toContain(">Working</span>");
+		expect(html).toContain("2 steps</span>");
+		expect(html).not.toContain('data-tool-run="true"');
+		expect(html).not.toContain("Show 2 grouped steps");
+		expect(html).toContain("git status");
+		expect(html).toContain("package.json");
+		setTurnPrefs(null);
+	});
+
 	test("keeps a lone live call behind its Working row", () => {
 		setTurnPrefs(null);
 		const html = renderToStaticMarkup(
@@ -437,7 +453,11 @@ describe("TranscriptBlocks compact tool runs", () => {
 		);
 
 		expect(html).toContain("The repository is clean.");
-		expect(html.match(/data-tool-run="true"/g)).toHaveLength(2);
+		expect(html.match(/>Working<\/span>/g)).toHaveLength(2);
+		expect(html).not.toContain('data-tool-run="true"');
+		expect(html).toContain("git status");
+		expect(html).toContain("bun test");
+		expect(html).toContain("git diff");
 	});
 
 	test("keeps incidental media status without repeating failures on the compact row", () => {
@@ -502,14 +522,14 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 		{ id: "verify-result", type: "tool_result", toolUseId: "verify-call", content: "ok", timestamp: "2026-08-19T06:00:07Z" },
 	];
 
-	test("keeps grouped calls closed inside steps that stay open", () => {
+	test("does not double-group tool-only steps that stay open", () => {
 		setTurnPrefs("open", "folded");
 		const html = renderToStaticMarkup(<TranscriptBlocks entries={narratedTurn} />);
 
 		expect(html).toContain("The repository is clean.");
-		expect(html).toContain('data-tool-run="true"');
-		expect(html).not.toContain("git status");
-		expect(html).not.toContain("package.json");
+		expect(html).not.toContain('data-tool-run="true"');
+		expect(html).toContain("git status");
+		expect(html).toContain("package.json");
 		setTurnPrefs(null);
 	});
 
@@ -552,7 +572,9 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
 			<TranscriptBlocks live entries={liveNarratedTurn} />,
 		);
 		expect(running).toContain("The repository is clean.");
-		expect(running).toContain('data-tool-run="true"');
+		expect(running).not.toContain('data-tool-run="true"');
+		expect(running).toContain("git status");
+		expect(running).toContain("bun test");
 
 		const settled = renderToStaticMarkup(
 			<TranscriptBlocks entries={narratedTurn} />,
