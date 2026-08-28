@@ -65,10 +65,9 @@ export async function reconcileOpenPrs(): Promise<void> {
       const updatedAt = Date.parse(pr.updatedAt || "");
       if (!updatedAt || Date.now() - updatedAt > RECONCILE_WINDOW_MS) break;
       if (pr.draft) continue;
-      // Fork PRs can't be checked out by branch ref — the webhook path has the
-      // same limitation, so the sweep doesn't try either.
-      if (pr.headRepoFullName && pr.headRepoFullName.toLowerCase() !== repo.ghRepo.toLowerCase())
-        continue;
+      const externalFork =
+        !!pr.headRepoFullName &&
+        pr.headRepoFullName.toLowerCase() !== repo.ghRepo.toLowerCase();
 
       const key = prKey(pr.number, repo.ghRepo);
       const state = readPrState(pr.number, repo.ghRepo);
@@ -95,7 +94,7 @@ export async function reconcileOpenPrs(): Promise<void> {
       // resolves to this instance's team. A label with no trusted receipt is
       // not enough: on a public repo it may have been applied outside Open
       // Session's trust roster while this process was down.
-      if (pr.labels.some((l) => labelMatches(l, LABEL_AUTOFIX))) {
+      if (!externalFork && pr.labels.some((l) => labelMatches(l, LABEL_AUTOFIX))) {
         const requestedBy = state?.pendingAutoFix?.requestedBy || state?.autoFix?.requestedBy || "";
         if (!isTrustedGithubLogin(requestedBy)) continue;
         const attempts = state?.reconcile?.autofixSha === pr.headSha ? state.reconcile.autofixAttempts || 0 : 0;
@@ -120,10 +119,13 @@ export async function reconcileOpenPrs(): Promise<void> {
       }
 
       // ── Review reconcile: opted in, head SHA never successfully reviewed ──
-      // Opening or pushing a public PR is attacker-controlled. Only recover an
-      // automatic review for a rostered teammate or the configured bot. An
-      // explicit trusted label still runs through the live webhook path.
-      if (!isGithubBotLogin(pr.authorLogin) && !isTrustedGithubLogin(pr.authorLogin)) continue;
+      // Same-repository review recovery remains roster-gated. External forks
+      // are admitted only to runReview's isolated, read-only public path.
+      if (
+        !externalFork &&
+        !isGithubBotLogin(pr.authorLogin) &&
+        !isTrustedGithubLogin(pr.authorLogin)
+      ) continue;
       const optedIn = autoEnabled || pr.labels.some((l) => labelMatches(l, LABEL_REVIEW));
       if (!optedIn || !pr.headSha) continue;
       if (state?.reviewedShas?.includes(pr.headSha)) continue;

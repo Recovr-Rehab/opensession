@@ -27,6 +27,7 @@ import { clearHandoff, isHandoffActive, maybeHandoffFindings } from "./handoff";
 import { isLockHeld, updatePrState } from "./state";
 import { loadReviewOptions, titleHasSkipKeyword } from "./review-options";
 import { DEFAULT_REVIEW_PROMPT } from "./prompts";
+import { automaticReviewEventAllowed } from "./public-review";
 
 let onSessionInvalidate: (() => void) | undefined;
 export function setGithubSessionInvalidate(cb: () => void): void {
@@ -53,7 +54,7 @@ interface PrPayload {
   draft?: boolean;
   state?: string;
   title?: string;
-  head?: { ref?: string; sha?: string };
+  head?: { ref?: string; sha?: string; repo?: { full_name?: string } };
   user?: { login?: string };
   labels?: Array<{ name: string }>;
   merged?: boolean;
@@ -138,6 +139,9 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
     const ref = prRef(pr, ghRepo);
     if (!ref) return;
     const action: string = payload.action || "";
+    const baseRepoName = String(payload?.repository?.full_name || ghRepo || "").toLowerCase();
+    const headRepoName = String(pr.head?.repo?.full_name || "").toLowerCase();
+    const externalFork = !!headRepoName && !!baseRepoName && headRepoName !== baseRepoName;
 
     // ── Label actions ── (ignore labels we applied to ourselves)
     if (action === "labeled") {
@@ -152,6 +156,10 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
       const requestedBy: string = payload.sender?.login || "";
       if (labelMatches(label, LABEL_REVIEW)) {
         void fireReview(ref, true);
+      } else if (externalFork) {
+        console.warn(
+          `[github] Ignoring write-capable label ${label || "(unknown)"} on external PR #${pr.number}`,
+        );
       } else if (labelMatches(label, LABEL_AUTOFIX)) {
         // A human re-applying the label is a fresh mandate — reset the sweep's
         // per-SHA retry budget so it can babysit this new attempt too.
@@ -233,10 +241,9 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
 
     // ── Open / update actions → review when opted in and non-draft ──
     if (REVIEW_ACTIONS.has(action)) {
-      // A public-repo contributor controls opened/synchronize events for their
-      // own PR. Do not let that become an agent command or a spend/push surface.
-      // The explicitly configured machine account remains trusted separately.
-      if (!senderIsBot && !senderIsTrusted) {
+      // External fork updates may start only the isolated, read-only public
+      // review path. Same-repository events retain the trusted-sender gate.
+      if (!automaticReviewEventAllowed({ senderIsBot, senderIsTrusted, externalFork })) {
         console.warn(
           `[github] Ignoring ${action} on PR #${pr.number} from untrusted @${senderLogin || "unknown"}`,
         );
@@ -281,7 +288,7 @@ export async function fireReview(ref: PrRef, _byLabel: boolean): Promise<void> {
   });
   // Unsatisfied review → hand the findings to the session that owns the branch
   // (its push re-enters this cycle). Satisfied/skipped reviews no-op inside.
-  await maybeHandoffFindings(ref, result);
+  if (!result?.publicReview) await maybeHandoffFindings(ref, result);
 }
 
 // ── Push → review debounce ───────────────────────────────────────────────────

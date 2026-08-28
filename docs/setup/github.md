@@ -132,15 +132,23 @@ The webhook secret authenticates GitHub, not the person who caused an event.
 Before an event can command the agent, the actor's exact login must appear in
 `identity.team[].github`; the configured `policy.githubBotLogins` are trusted
 separately for machine-originated events. This gate covers PR comments and
-inline comments, labels, automatic review events, merge automations, workflow
-notifications, Slack review notifications, reconcile retries, and restart
-recovery. Unknown actors are ignored. GitHub's `author_association` field is
-not a trust source.
+inline comments, labels, same-repository automatic reviews, merge automations,
+workflow notifications, Slack review notifications, and restart recovery.
+GitHub's `author_association` field is not a trust source.
 
-This means a public contributor can still open a PR and receive ordinary
-credential-free GitHub Actions CI, but cannot wake the Open Session agent,
-spend its model budget, push code, steer a session, or trigger a privileged PR
-behavior. Keep the team GitHub roster current; an empty roster fails closed.
+An external fork is the narrow exception. When review automation is enabled,
+its open and update events may start an automatic isolated review. Open Session
+verifies the immutable PR refs in a disposable Firecracker MicroVM, destroys
+the guest, and gives a tool-less model only the bounded patch. No contributor
+code runs on the host, and no model or GitHub credential enters the guest.
+External PRs cannot trigger mentions, autofix, simplify, adversarial review,
+conversational work, pushes or handoffs. Public review comments do not contain
+the private Open Session URL. See [Security model](../security-model.md#isolated-public-pr-reviews).
+
+GitHub Actions policy is independent. A repository may keep outside-contributor
+workflows disabled or approval-gated while still receiving Open Session's
+isolated semantic review. Keep the team GitHub roster current; an empty roster
+still fails closed for every write-capable behavior.
 
 **Multi-repo**: the App webhook covers every repository on which the App is
 installed. A repo joins the PR agent when it is also in the config registry

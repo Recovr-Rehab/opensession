@@ -44,6 +44,8 @@ import {
 import { feedbackStats } from "./feedback";
 import type { PrRef } from "./review";
 import { isTrustedGithubLogin, isTrustedUser } from "../../server/shared/user-mappings";
+import { getPrAutomationDetails } from "../../server/pr-info";
+import { isExternalPullRequest } from "./public-review";
 
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
@@ -326,6 +328,16 @@ export class GithubAgent implements AgentModule {
       const manualGhRepo = typeof body?.ghRepo === "string" && body.ghRepo.trim() ? body.ghRepo.trim() : undefined;
       const ref: PrRef = { number: prNumber, headRef, headSha: String(body?.headSha || ""), title: `PR #${prNumber}`, ...(manualGhRepo ? { ghRepo: manualGhRepo } : {}) };
       const requestedBy = String(body?.requestedBy || "");
+      const details = await getPrAutomationDetails(String(prNumber), manualGhRepo);
+      const external = details
+        ? isExternalPullRequest(details, manualGhRepo || defaultRepo().ghRepo)
+        : false;
+      if (external && behavior !== "review") {
+        return Response.json(
+          { error: "External PRs support isolated review only" },
+          { status: 403 },
+        );
+      }
 
       if (behavior === "autofix") {
         const { runAutoFix } = await import("./autofix");
