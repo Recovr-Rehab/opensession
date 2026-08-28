@@ -598,9 +598,6 @@ export function ModelEffortSelect({
 		const selected = isSelected(option);
 		const optionLabel = standalone ? option.standaloneLabel : option.label;
 		const optionDescription = standalone ? undefined : option.description;
-		const inlineDescription =
-			!!optionDescription &&
-			(option.group === "dial" || option.group === "orchestrator");
 		const nextModelInfo = modelById.get(option.id);
 		const nextEfforts = nextModelInfo?.efforts ?? [];
 		const nextEffort =
@@ -661,21 +658,9 @@ export function ModelEffortSelect({
 						/>
 					</span>
 					{optionDescription ? (
-						<span
-							className={cn(
-								"flex min-w-0 flex-1",
-								inlineDescription ? "items-baseline gap-1.5" : "flex-col",
-							)}
-						>
-							<span className={inlineDescription ? "shrink-0" : "truncate"}>
-								{optionLabel}
-							</span>
-							<span
-								className={cn(
-									"truncate text-xs text-faint",
-									inlineDescription && "min-w-0 flex-1",
-								)}
-							>
+						<span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+							<span className="shrink-0">{optionLabel}</span>
+							<span className="min-w-0 flex-1 truncate text-xs text-faint">
 								{optionDescription}
 							</span>
 						</span>
