@@ -6241,6 +6241,7 @@ fetchFeedItems("plain")
 														}
 														mine={false}
 														showOwner={false}
+														alwaysShowAddToSidebar
 														onClick={() => onSelect(session)}
 														onArchive={(current) =>
 															archiveWithNext(session, current)

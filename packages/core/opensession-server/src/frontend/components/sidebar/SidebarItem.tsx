@@ -84,8 +84,8 @@ export const SIDEBAR_ROW =
    it, so the row reserves the space instead (`hover:pr-[68px]` below) and the
    buttons carry nothing but their own hover wash.
    The reveal is `group-hover`, which Tailwind gates to real hover devices for
-   us; on touch these actions live behind the swipe gesture and the long-press
-   sheet. */
+   us. Team's add action is the exception: it stays visible with a 44px touch
+   target because every row there is waiting to be added. */
 const ROW_ACTION = cn(
 	"absolute top-1/2 hidden size-[var(--sidebar-row-action,26px)] -translate-y-1/2 items-center justify-center rounded-md text-[15px] leading-none text-faint group-hover:flex hover:text-fg",
 	// Not a wash — a lid. See SIDEBAR_ROW_CHIP.
@@ -102,6 +102,7 @@ export function SidebarItem({
 	mention,
 	mine,
 	showOwner = !mine,
+	alwaysShowAddToSidebar = false,
 	onClick,
 	onArchive: onArchiveRequest,
 	pinned,
@@ -125,6 +126,8 @@ export function SidebarItem({
 	/** Show the starter below the title. Person-group rows set this false because
 	    their heading already names the starter without claiming the session as mine. */
 	showOwner?: boolean;
+	/** Team rows are all unkept work, so their add affordance stays visible. */
+	alwaysShowAddToSidebar?: boolean;
 	onClick: () => void;
 	onArchive: (current: HTMLButtonElement | null) => void;
 	pinned: boolean;
@@ -415,16 +418,18 @@ export function SidebarItem({
 						// replacing them (see SIDEBAR_HOVER_LAYER).
 						"z-1 mt-0 block touch-pan-y",
 						SIDEBAR_HOVER_LAYER,
-						// On hover the row gives up its right end to the pin plus one
-						// trailing action floating there, the same reserve workspace
-						// rows make (SIDEBAR_WS_ROW). It used to be the buttons'
-						// own opaque plate that kept a long title out of the way;
-						// a solid chip can't sit on a translucent row. `hover:`, not
+						// The row gives up its right end to the pin plus one trailing
+						// action, the same reserve workspace rows make (SIDEBAR_WS_ROW).
+						// Team's add action is standing, so its first chip is reserved
+						// even at rest. Other actions remain hover-only. `hover:`, not
 						// `group-hover:` — this element is the group itself.
-						// Two chips' worth while the pin is there to unpin; one
-						// chip less (26px + the 4px gap) on an unpinned row, which
-						// reveals Archive or Keep alone.
-						pinned ? "hover:pr-[68px]" : "hover:pr-[38px]",
+						alwaysShowAddToSidebar
+							? pinned
+								? "pr-[38px] hover:pr-[68px] phone:pr-[52px]"
+								: "pr-[38px] phone:pr-[52px]"
+							: pinned
+								? "hover:pr-[68px]"
+								: "hover:pr-[38px]",
 						// No trim here for other people's sessions, which stack a meta
 						// line under the title. That used to re-state `py-[7px]` against
 						// a 9px base; the base is now the shared `--sidebar-row-pad`, and
@@ -680,10 +685,14 @@ export function SidebarItem({
 				</span>
 			</Tooltip>
 			)}
-			{!isPhone && canKeepInSidebar && (
+			{(!isPhone || alwaysShowAddToSidebar) && canKeepInSidebar && (
 				<KeepInSidebarMark
 					label="Add to your sidebar"
-					className={cn(ROW_ACTION, "right-[7px]")}
+					className={cn(
+						ROW_ACTION,
+						"right-[7px]",
+						alwaysShowAddToSidebar && "flex phone:right-0 phone:size-11",
+					)}
 					onMouseEnter={closeHover}
 					onKeep={() => onSetStatus?.("mine")}
 				/>
