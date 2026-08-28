@@ -26,7 +26,7 @@ const PUBLIC_PORT = Number(process.env.PORT || 3850);
 const BACKEND_HOST = "127.0.0.1";
 let nextBackendPort = Number(process.env.OPENSESSION_GATEWAY_BACKEND_PORT_BASE || 0);
 const PRELOAD_TIMEOUT_MS = 30_000;
-const EXIT_TIMEOUT_MS = 90_000;
+const FAST_HANDOFF_EXIT_TIMEOUT_MS = 2_500;
 const READY_TIMEOUT_MS = 60_000;
 
 export function inheritedGatewaySocketFd(
@@ -295,7 +295,7 @@ export class GatewaySupervisor {
     try {
       await timeout(
         gateway.exited,
-        15_000,
+        FAST_HANDOFF_EXIT_TIMEOUT_MS,
         "active gateway did not complete its fast supervisor drain",
       );
     } catch {
@@ -354,7 +354,17 @@ export class GatewaySupervisor {
       });
       this.routeToActive = false;
       previous.kill(12);
-      await timeout(previous.exited, EXIT_TIMEOUT_MS, "active gateway did not exit in time");
+      try {
+        await timeout(
+          previous.exited,
+          FAST_HANDOFF_EXIT_TIMEOUT_MS,
+          "active gateway did not complete its fast coordinated drain",
+        );
+      } catch {
+        console.warn("[gateway-supervisor] fast coordinated drain expired; forcing the fenced gateway down");
+        previous.kill(9);
+        await timeout(previous.exited, 5_000, "active gateway survived SIGKILL");
+      }
       previousExited = true;
       this.dependencies.promoteCurrent(releaseRoot);
       this.selectActive(candidate);
@@ -437,8 +447,8 @@ export class GatewaySupervisor {
       try {
         await timeout(
           previous.exited,
-          EXIT_TIMEOUT_MS,
-          "active gateway did not exit before the handoff deadline",
+          FAST_HANDOFF_EXIT_TIMEOUT_MS,
+          "active gateway did not exit before the fast handoff deadline",
         );
       } catch {
         console.warn("[gateway-supervisor] active gateway missed its exit deadline; forcing the fenced process down");
