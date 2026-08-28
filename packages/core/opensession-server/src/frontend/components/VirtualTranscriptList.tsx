@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-virtual";
 import React from "react";
 import { flushSync } from "react-dom";
+import { PHONE_QUERY } from "../lib/breakpoints";
 import {
   loadTranscriptSizes,
   recordTranscriptSizes,
@@ -314,7 +315,12 @@ class TranscriptVirtualizer extends React.Component<
         );
       },
       getItemKey: (index) => props.items[index]?.key ?? index,
-      overscan: 8,
+      // Touch momentum can move a phone viewport farther between committed
+      // frames than wheel scrolling. Keep twice as much history mounted there
+      // so the leading edge cannot expose an unmounted row during a fast fling.
+      overscan: transcriptOverscan(
+        typeof window !== "undefined" && window.matchMedia(PHONE_QUERY).matches,
+      ),
       rangeExtractor: (range) =>
         virtualTranscriptRange(
           defaultRangeExtractor(range),
@@ -756,6 +762,10 @@ export function shouldAdjustTranscriptScroll(
 ): boolean {
   if (liveEdgeDelta !== undefined) return liveEdgeDelta > 0;
   return headGrowth || itemEnd <= scrollOffset + 1;
+}
+
+export function transcriptOverscan(phone: boolean): number {
+  return phone ? 16 : 8;
 }
 
 export function virtualTranscriptRange(

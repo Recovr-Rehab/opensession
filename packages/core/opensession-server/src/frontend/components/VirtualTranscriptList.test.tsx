@@ -7,6 +7,7 @@ import {
   VirtualTranscriptList,
   shouldAdjustTranscriptScroll,
   shouldTransitionTranscriptItemPosition,
+  transcriptOverscan,
   type VirtualTranscriptItem,
   virtualTranscriptRange,
 } from "./VirtualTranscriptList";
@@ -40,6 +41,11 @@ describe("VirtualTranscriptList", () => {
       10, 11, 37, 38, 39,
     ]);
     expect(virtualTranscriptRange([0, 1], 2, 24)).toEqual([0, 1]);
+  });
+
+  test("keeps a deeper virtual window for phone momentum", () => {
+    expect(transcriptOverscan(true)).toBe(16);
+    expect(transcriptOverscan(false)).toBe(8);
   });
 
   test("treats every upward scroll path as history intent", () => {
