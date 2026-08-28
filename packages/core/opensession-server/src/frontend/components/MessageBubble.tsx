@@ -47,6 +47,7 @@ import {
 } from "../lib/msg-classes";
 import { cn } from "../ui/cn";
 import { reasoningDisplay } from "../lib/reasoning-display";
+import { transcriptEnterClass } from "../lib/transcript-motion";
 
 // Only this much of a message is markdown-parsed eagerly. marked is
 // superlinear on input size (~25ms at 10KB, ~400ms at 80KB, seconds past
@@ -419,6 +420,8 @@ function BubbleMeta({ ts, onEdit }: { ts?: string; onEdit?: () => void }) {
 
 interface Props {
 	entry: TranscriptEntry;
+	/** This message was inserted at the live edge in the current build. */
+	enter?: boolean;
 	/** Provider reasoning summary, including legacy rows inferred by the turn
 	 * grouper before the durable `isReasoning` field existed. */
 	reasoning?: boolean;
@@ -575,6 +578,7 @@ function EntryFiles({
 // markdown/highlighting.
 export const MessageBubble = function MessageBubble({
 	entry,
+	enter = false,
 	reasoning = false,
 	pendingDelivery = false,
 	owner,
@@ -590,6 +594,7 @@ export const MessageBubble = function MessageBubble({
 	// predates the field, which is what a rolling deploy looks like.
 	const e = (classifyEntry(entry));
 	const displayContent = e.content;
+	const enterClass = transcriptEnterClass(enter);
 
 	// An answered question is a durable sent receipt. It keeps the question and
 	// exact answer visible without making the old choices look actionable.
@@ -616,6 +621,7 @@ export const MessageBubble = function MessageBubble({
 				className={cn(
 					msgRow,
 					msgOwnTurn,
+					enterClass,
 					pendingDelivery &&
 						"opacity-70 transition-opacity duration-200 motion-reduce:transition-none",
 				)}
@@ -670,6 +676,7 @@ export const MessageBubble = function MessageBubble({
 					msgRow,
 					"msg-user",
 					msgOwnTurn,
+					enterClass,
 					// Your own turns hang their quiet actions below the bubble. The
 					// edit button is always visible to touch pointers, while a row
 					// with only a timestamp needs the clearance on hover devices.
@@ -715,7 +722,11 @@ export const MessageBubble = function MessageBubble({
 	if (reasoning || e.isReasoning) {
 		const { title, body } = reasoningDisplay(displayContent);
 		return (
-			<div className={cn(msgRow, "mb-2")} data-eid={e.id} data-reasoning="">
+			<div
+				className={cn(msgRow, "mb-2", enterClass)}
+				data-eid={e.id}
+				data-reasoning=""
+			>
 				{title && <div className={msgReasoningTitle}>{title}</div>}
 				{body && (
 					<ClampedBody
@@ -732,7 +743,7 @@ export const MessageBubble = function MessageBubble({
 	// assistant — no speaker label: every left-aligned bubble is the agent, so
 	// the name row was pure noise above each answer.
 	return (
-		<div className={msgRow} data-eid={e.id}>
+		<div className={cn(msgRow, enterClass)} data-eid={e.id}>
 			<ClampedBody
 				className={cn(msgBody, "markdown text-fg")}
 				content={displayContent}

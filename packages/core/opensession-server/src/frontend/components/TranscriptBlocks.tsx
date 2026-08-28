@@ -508,6 +508,14 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 										reviewBlockRole(inner).kind !== "handoff" ? (
 										<MessageBubble
 											entry={inner.entry}
+											enter={
+												optimisticEntryIds.has(inner.entry.id) ||
+												Boolean(
+													isLive &&
+														innerIndex === block.blocks.length - 1 &&
+														inner.entry.type !== "user",
+												)
+											}
 											reasoning={inner.reasoning}
 											pendingDelivery={pendingDeliveryEntryIds.has(inner.entry.id)}
 											owner={owner}
@@ -559,6 +567,10 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 			) : (
 				<MessageBubble
 					entry={block.entry}
+					enter={
+						optimisticEntryIds.has(block.entry.id) ||
+						Boolean(isLiveTail && block.entry.type !== "user")
+					}
 					reasoning={block.reasoning}
 					pendingDelivery={pendingDeliveryEntryIds.has(block.entry.id)}
 					owner={owner}
@@ -1105,6 +1117,7 @@ function ReviewTurnSteps({
 			<MessageBubble
 				key={section.entry.id}
 				entry={section.entry}
+				enter={live && section.entry.type !== "user"}
 				reasoning={isLegacyReasoningHeading(section.entry.content)}
 				owner={owner}
 				sessionId={sessionId}

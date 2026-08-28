@@ -7380,7 +7380,11 @@ export function SessionViewer({
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
 						>
-							<AnimatePresence initial={false} mode="popLayout">
+							{/* The outgoing setup/loading canvas owns min-h-full. Waiting for its
+							    short fade before mounting transcript rows prevents both surfaces
+							    occupying the phone scroller for one frame and pushing a just-sent
+							    message from the composer edge to the top. */}
+							<AnimatePresence initial={false} mode="wait">
 							{settingUpWorkspace ? (
 								<WorkspaceSetup key="workspace-setup" />
 							) : loading ? (

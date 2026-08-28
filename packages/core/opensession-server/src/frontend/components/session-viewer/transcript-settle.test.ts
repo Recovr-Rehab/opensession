@@ -13,6 +13,11 @@ test("fresh transcript ranges reaffirm a cached reader's live edge", () => {
 	);
 });
 
+test("setup and loading surfaces leave before transcript rows mount", () => {
+	expect(viewer).toContain('<AnimatePresence initial={false} mode="wait">');
+	expect(viewer).not.toContain('<AnimatePresence initial={false} mode="popLayout">');
+});
+
 test("indexed transcripts stay hidden until the complete outline settles", () => {
 	expect(settledCallback).toContain("if (!transcriptOutlineReady) return");
 	expect(settledCallback).toContain("setOpenSettlePending(false)");
