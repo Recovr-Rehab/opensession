@@ -328,11 +328,13 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 			{hiddenCompactMembers > 0 && (
 				<button
 					type="button"
-					className="focus-ring flex size-8 min-h-8 items-center justify-center rounded-md bg-active text-supporting font-semibold text-dim hover:bg-hover"
+					className="focus-ring flex min-h-8 items-center justify-center rounded-md p-1 hover:bg-hover"
 					onClick={() => memberRowRef.current?.scrollIntoView({ block: "start" })}
 					aria-label={`Show ${hiddenCompactMembers} more people`}
 				>
-					+{hiddenCompactMembers}
+					<span className="flex size-6 items-center justify-center rounded-md bg-active text-supporting font-semibold text-dim">
+						+{hiddenCompactMembers}
+					</span>
 				</button>
 			)}
 		</div>
