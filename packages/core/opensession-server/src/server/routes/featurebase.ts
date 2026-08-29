@@ -74,9 +74,8 @@ export async function handleFeaturebaseRoutes(
 
   if (path === "/api/featurebase/statuses" && req.method === "GET") {
     try {
-      const { listTicketStatuses } = await import(
-        "../../agents/featurebase/api"
-      );
+      const { listTicketStatuses } =
+        await import("../../agents/featurebase/api");
       return Response.json({ statuses: await listTicketStatuses() });
     } catch (error: any) {
       return Response.json(
@@ -171,8 +170,6 @@ export async function handleFeaturebaseRoutes(
     } | null;
     const text = typeof body?.text === "string" ? body.text.trim() : "";
     const kind = body?.kind === "reply" ? "reply" : "note";
-    if (!text)
-      return Response.json({ error: "Empty message" }, { status: 400 });
     const senderName = requestUser(ctx, body?.user);
     const firstName = senderName.split(/\s+/)[0] || "";
     try {
@@ -181,18 +178,6 @@ export async function handleFeaturebaseRoutes(
       const ticket = await getTicket(id);
       if (!ticket)
         return Response.json({ error: "Ticket not found" }, { status: 404 });
-      const signed =
-        kind === "note"
-          ? firstName
-            ? `${senderName} (via Open Session):\n\n${text}`
-            : text
-          : firstName &&
-              !new RegExp(
-                `\\b${firstName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
-                "i",
-              ).test(text)
-            ? `${text}\n\n— ${firstName}`
-            : text;
       // URLs only, and only ones Featurebase can actually fetch: a relative
       // path or a javascript: string would be stored and rendered to the
       // customer as-is.
@@ -203,6 +188,26 @@ export async function handleFeaturebaseRoutes(
             .filter((u) => /^https?:\/\//i.test(u))
             .slice(0, FEATUREBASE_MAX_ATTACHMENTS)
         : [];
+      // An attachment on its own is a message; only nothing at all is empty.
+      if (!text && attachmentUrls.length === 0)
+        return Response.json({ error: "Empty message" }, { status: 400 });
+      // With no words there is nothing to sign: the attribution prefix would
+      // post a bare "Name (via Open Session):" over the attachment.
+      // Featurebase records the admin author regardless, and textToHtml("")
+      // gives "<p></p>", which its reply endpoint accepts.
+      const signed = !text
+        ? ""
+        : kind === "note"
+          ? firstName
+            ? `${senderName} (via Open Session):\n\n${text}`
+            : text
+          : firstName &&
+              !new RegExp(
+                `\\b${firstName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+                "i",
+              ).test(text)
+            ? `${text}\n\n— ${firstName}`
+            : text;
       await replyToTicket(ticket, signed, kind, attachmentUrls);
       const { invalidateFeedCache } = await import("../feeds");
       invalidateFeedCache("featurebase-tickets");
