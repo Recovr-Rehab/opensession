@@ -290,6 +290,7 @@ function FeaturebaseTicketActions({
       <div className="flex flex-wrap items-center gap-2">
         <Select
           size="sm"
+          className="w-auto min-w-[8.5rem] max-w-[13rem]"
           aria-label="Ticket status"
           disabled={busy || statuses.length === 0}
           value={ticket.status.id || ""}
@@ -305,6 +306,7 @@ function FeaturebaseTicketActions({
 
         <Select
           size="sm"
+          className="w-auto min-w-[8.5rem] max-w-[13rem]"
           aria-label="Assignee"
           disabled={busy || admins.length === 0}
           value={ticket.assigneeId || ""}
