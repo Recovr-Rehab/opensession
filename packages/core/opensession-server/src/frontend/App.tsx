@@ -77,14 +77,12 @@ import {
 } from "./components/NewSession";
 import { clearDraft, saveDraft, NEW_SESSION_DRAFT_KEY } from "./lib/drafts";
 import { dropStagingAttachments } from "./lib/attachments";
-import type { NewSessionPrefill } from "./lib/new-session-link";
 import {
   errorMatchesPendingCreate,
   shouldApplyCreatedSessionReply,
   shouldOpenCreatedSession,
 } from "./lib/new-session-navigation";
 import { consumeNewSessionWorkspaceDraft } from "./lib/new-session-workspace-draft";
-import { primeSoftKeyboard } from "./lib/soft-keyboard";
 import { trackKeyboardInset } from "./lib/keyboard-inset";
 import type { CommandPaletteAction } from "./components/SessionSearch";
 import {
@@ -123,6 +121,7 @@ import { useArchiveUndo } from "./hooks/useArchiveUndo";
 import { useRunningCloseConfirmation } from "./hooks/useRunningCloseConfirmation";
 import { useSubagentTabs } from "./hooks/useSubagentTabs";
 import { useOnDemandViewTabs } from "./hooks/useOnDemandViewTabs";
+import { useNewSessionPalette } from "./hooks/useNewSessionPalette";
 import { settingsPaletteActions } from "./lib/settings-sections";
 import {
   SessionTabs,
@@ -896,61 +895,30 @@ export function App({
   // The "new session" ⌘K palette. It's an overlay driven by its own state (not a
   // route), so it can open over any view; the <base>/new route still opens it
   // so old links keep working.
-  const [palette, setPaletteState] = useState<{
-    open: boolean;
-    prompt?: string;
-    // When starting a session inside a workspace, prefill it + its shared repo
-    // and worktree so the new session lands next to its siblings by default.
-    workspaceId?: string;
-    /** Workspace whose model combinations the picker displays. This does not
-     * join the created session to that workspace. */
-    modelWorkspaceId?: string;
-    repo?: string;
-    branch?: string;
-    mode?: "ask" | "code" | "scratch";
-    mcpServers?: string[];
-  }>(() =>
-    route.view === "new"
-      ? { open: true, prompt: route.prompt }
-      : { open: false },
-  );
-  // Every direct action that opens the palette goes through here, so the phone
-  // keyboard is raised from inside the tap rather than a frame later, when iOS
-  // no longer grants it (lib/soft-keyboard). The prompt takes the keyboard over
-  // as soon as it mounts.
-  const setPalette = (next: typeof palette) => {
-    if (next.open) primeSoftKeyboard();
-    setPaletteState(next);
-  };
+  const modelWorkspaceId =
+    route.view === "workspace"
+      ? route.id
+      : route.view === "session"
+        ? (sessions.find((session) => session.id === route.id)?.workspaceId ??
+          undefined)
+        : undefined;
+  const {
+    palette,
+    paletteOpenRef,
+    openPalette,
+    openPrefilledSession,
+    hidePalette,
+    restorePalette: restorePaletteState,
+  } = useNewSessionPalette({
+    initiallyOpen: route.view === "new",
+    initialPrompt: route.view === "new" ? route.prompt : undefined,
+    modelWorkspaceId,
+  });
+  const restorePalette = useEffectEvent(restorePaletteState);
   // Bumped by the sidebar's draft row to put the caret back in the empty
   // state's session input. The row and that card are the same unstarted
   // session seen from two places.
   const [draftFocusSeq, setDraftFocusSeq] = useState(0);
-  const paletteOpenRef = useRef(palette.open);
-  useLayoutEffect(() => {
-    paletteOpenRef.current = palette.open;
-  });
-  const openPalette = (prompt?: string, mcpServers?: string[]) => {
-    // This is the global new-session action. It must not inherit the workspace
-    // behind it: without workspaceId, NewSession creates a workspace with its
-    // first session. Its model combinations are safe to use as a picker source,
-    // but remain separate from the destination workspace.
-    const modelWorkspaceId =
-      route.view === "workspace"
-        ? route.id
-        : route.view === "session"
-          ? sessions.find((session) => session.id === route.id)?.workspaceId
-          : undefined;
-    setPalette({
-      open: true,
-      prompt,
-      ...(mcpServers?.length ? { mcpServers } : {}),
-      ...(modelWorkspaceId ? { modelWorkspaceId } : {}),
-    });
-  };
-  const openPrefilledSession = (prefill: NewSessionPrefill) => {
-    setPalette({ open: true, ...prefill });
-  };
 
   // A "new tab" while a session is open is a *new session in that same session*, not
   // a whole new session — so it must NOT pop the new-session palette. It's a
@@ -1170,7 +1138,7 @@ export function App({
     };
   }, [addHandler]);
   const closePalette = () => {
-    setPalette({ open: false });
+    hidePalette();
     // A deep link left the URL on <base>/new — return home on close.
     if (stripBasePath(location.pathname) === "/new") goBack();
   };
@@ -1215,7 +1183,7 @@ export function App({
       inject(shell, { sticky: true });
       if (started.openImmediately) {
         setOptimisticSession(shell);
-        setPalette({ open: false });
+        hidePalette();
       }
     });
     if (!started.openImmediately) return;
@@ -1329,7 +1297,7 @@ export function App({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [paletteOpenRef]);
 
   // The list is the live slice, and archived sessions arrive as summaries, so
   // the row it finds may be missing or partial. Hydrate the route directly,
@@ -1447,8 +1415,7 @@ export function App({
             const currentRoute = socketGetCurrentRoute();
             if (currentRoute.view === "session" && currentRoute.id === draft.id)
               socketNavigate(parseRoute(draft.originPath));
-            primeSoftKeyboard();
-            setPaletteState((current) => ({ ...current, open: true }));
+            restorePalette();
             toast(msg.message || "Couldn't create the session.");
           }
           return;
@@ -1602,7 +1569,15 @@ export function App({
           socketNavigate({ view: "session", id: msg.id });
       }
     });
-  }, [addHandler, patch, refresh, refreshWorkspaces, remove, unstick]);
+  }, [
+    addHandler,
+    paletteOpenRef,
+    patch,
+    refresh,
+    refreshWorkspaces,
+    remove,
+    unstick,
+  ]);
 
   // Drop the pending flag once we've navigated away from the pending session (its
   // fallback timeout clears it otherwise). We deliberately DON'T clear it the
@@ -2886,8 +2861,7 @@ export function App({
     const workspace = src.workspaceId
       ? workspaces.find((item) => item.id === src.workspaceId)
       : undefined;
-    setPalette({
-      open: true,
+    openPrefilledSession({
       ...(prompt ? { prompt } : {}),
       repo: src.repo || workspace?.repo,
       ...(src.workspaceId
@@ -2923,8 +2897,7 @@ export function App({
     const openSessionlessWorkspaceComposer = () => {
       if (route.view !== "workspace") return;
       const workspace = workspaces.find((item) => item.id === route.id);
-      setPalette({
-        open: true,
+      openPrefilledSession({
         workspaceId: route.id,
         repo: workspace?.repo,
         branch: workspace?.branch,
@@ -3788,8 +3761,7 @@ export function App({
         return;
       }
       // Default the new session onto the workspace's branch when it has one.
-      setPalette({
-        open: true,
+      openPrefilledSession({
         workspaceId: id,
         repo: workspace?.repo,
         branch: workspace?.branch,
@@ -3801,10 +3773,8 @@ export function App({
   };
   const openNewSessionInRepo = (repo: string) => {
     // The Ask band's "+" is not a repo: open Ask with the repo turned off.
-    setPalette(
-      repo === ASK_BAND
-        ? { open: true, repo: NO_REPO, mode: "ask" as const }
-        : { open: true, repo },
+    openPrefilledSession(
+      repo === ASK_BAND ? { repo: NO_REPO, mode: "ask" as const } : { repo },
     );
   };
   const openDraft = () => {
