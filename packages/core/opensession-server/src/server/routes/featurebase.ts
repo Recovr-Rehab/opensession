@@ -167,6 +167,7 @@ export async function handleFeaturebaseRoutes(
       text?: string;
       kind?: string;
       user?: string;
+      attachmentUrls?: unknown;
     } | null;
     const text = typeof body?.text === "string" ? body.text.trim() : "";
     const kind = body?.kind === "reply" ? "reply" : "note";
@@ -175,7 +176,7 @@ export async function handleFeaturebaseRoutes(
     const senderName = requestUser(ctx, body?.user);
     const firstName = senderName.split(/\s+/)[0] || "";
     try {
-      const { getTicket, replyToTicket } =
+      const { getTicket, replyToTicket, FEATUREBASE_MAX_ATTACHMENTS } =
         await import("../../agents/featurebase/api");
       const ticket = await getTicket(id);
       if (!ticket)
@@ -192,7 +193,17 @@ export async function handleFeaturebaseRoutes(
               ).test(text)
             ? `${text}\n\n— ${firstName}`
             : text;
-      await replyToTicket(ticket, signed, kind);
+      // URLs only, and only ones Featurebase can actually fetch: a relative
+      // path or a javascript: string would be stored and rendered to the
+      // customer as-is.
+      const attachmentUrls = Array.isArray(body?.attachmentUrls)
+        ? body.attachmentUrls
+            .filter((u): u is string => typeof u === "string")
+            .map((u) => u.trim())
+            .filter((u) => /^https?:\/\//i.test(u))
+            .slice(0, FEATUREBASE_MAX_ATTACHMENTS)
+        : [];
+      await replyToTicket(ticket, signed, kind, attachmentUrls);
       const { invalidateFeedCache } = await import("../feeds");
       invalidateFeedCache("featurebase-tickets");
       return Response.json({ ok: true });

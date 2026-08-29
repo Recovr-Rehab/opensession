@@ -28,7 +28,12 @@ import {
   composerTextareaPadding,
 } from "../lib/composer-classes";
 import { noAutofill } from "../lib/composer-autofill";
-import { IconArrowUp, IconPencil, IconSparkle } from "./icons";
+import {
+  IconArrowUp,
+  IconPaperclip,
+  IconPencil,
+  IconSparkle,
+} from "./icons";
 import { useCurrentUser } from "./UserPicker";
 import {
   fetchFeaturebasePost,
@@ -36,6 +41,7 @@ import {
   fetchFeaturebaseStatuses,
   fetchFeaturebaseTicket,
   updateFeaturebaseTicket,
+  FEATUREBASE_MAX_ATTACHMENTS,
   sendFeaturebasePostComment,
   sendFeaturebaseTicketMessage,
   startFeaturebasePostTriage,
@@ -108,21 +114,44 @@ function Composer({
 }: {
   placeholder: string;
   sending: boolean;
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, attachmentUrls: string[]) => Promise<void>;
   isNote: boolean;
   onToggleMode: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const [sent, setSent] = useState(false);
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const currentUser = useCurrentUser();
 
   async function submit() {
     const text = draft.trim();
     if (!text || sending) return;
-    await onSend(text);
+    await onSend(text, attachments);
     setDraft("");
+    setAttachments([]);
     setSent(true);
     setTimeout(() => setSent(false), 2500);
+  }
+
+  // Featurebase takes attachment URLs, not bytes: its reply endpoint has an
+  // `attachmentUrls` array and the API offers no upload of its own, so a file
+  // has to already be somewhere it and the customer can fetch.
+  function addAttachment() {
+    if (attachments.length >= FEATUREBASE_MAX_ATTACHMENTS) return;
+    const raw = window.prompt(
+      "Attachment URL (Featurebase fetches this, so it must be publicly reachable):",
+    );
+    const url = raw?.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      setAttachError("Attachments must be an http(s) URL");
+      return;
+    }
+    setAttachError(null);
+    setAttachments((current) =>
+      current.includes(url) ? current : [...current, url],
+    );
   }
 
   return (
@@ -155,7 +184,46 @@ function Composer({
           "min-h-[4.5rem]",
         )}
       />
+      {attachments.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {attachments.map((url) => (
+            <span
+              key={url}
+              className="inline-flex max-w-[16rem] items-center gap-1 rounded-full bg-panel px-2.5 py-1 text-meta text-dim"
+            >
+              <span className="truncate" title={url}>
+                {url.split("/").pop() || url}
+              </span>
+              <button
+                type="button"
+                className="shrink-0 text-faint hover:text-fg"
+                aria-label={`Remove ${url}`}
+                onClick={() =>
+                  setAttachments((current) => current.filter((u) => u !== url))
+                }
+              >
+                &times;
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {attachError && (
+        <div className="mt-1 truncate text-label text-red">{attachError}</div>
+      )}
       <div className="mt-2 flex items-center gap-2">
+        <Tooltip label="Attach a file by URL (Featurebase has no upload API)">
+          <button
+            type="button"
+            className={cn(palettePill, "shrink-0")}
+            disabled={sending || attachments.length >= FEATUREBASE_MAX_ATTACHMENTS}
+            onClick={addAttachment}
+            aria-label="Attach a file by URL"
+          >
+            <IconPaperclip size={14} />
+            Attach
+          </button>
+        </Tooltip>
         <Tooltip
           label={
             isNote
@@ -522,7 +590,7 @@ export function FeaturebaseTicketPane({
           sending={sending}
           isNote={kind === "note"}
           onToggleMode={() => setKind((k) => (k === "note" ? "reply" : "note"))}
-          onSend={async (text) => {
+          onSend={async (text, attachmentUrls) => {
             setSending(true);
             try {
               await sendFeaturebaseTicketMessage(
@@ -530,6 +598,7 @@ export function FeaturebaseTicketPane({
                 text,
                 kind,
                 user,
+                attachmentUrls,
               );
               load();
               setSending(false);

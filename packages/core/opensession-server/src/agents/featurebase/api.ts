@@ -629,10 +629,22 @@ export async function updateTicket(
   return getTicket(id);
 }
 
+/** Featurebase caps a reply at 10 attachments. */
+export const FEATUREBASE_MAX_ATTACHMENTS = 10;
+
+/**
+ * Reply to a ticket, optionally with attachments.
+ *
+ * Attachments are URLs, not bytes: the reply endpoint takes `attachmentUrls`
+ * (max 10) and Featurebase has no upload endpoint of its own, so whatever is
+ * listed here must already be somewhere Featurebase and the customer can
+ * fetch. That is the whole mechanism the API offers.
+ */
 export async function replyToTicket(
   ticket: FeaturebaseTicket,
   text: string,
   kind: "reply" | "note",
+  attachmentUrls: string[] = [],
 ): Promise<void> {
   const adminId = featurebaseAdminId();
   if (!adminId) {
@@ -649,6 +661,9 @@ export async function replyToTicket(
       adminId,
       body: textToHtml(text),
       messageType: kind === "note" ? "note" : "comment",
+      ...(attachmentUrls.length
+        ? { attachmentUrls: attachmentUrls.slice(0, FEATUREBASE_MAX_ATTACHMENTS) }
+        : {}),
     }),
   });
 }

@@ -133,15 +133,19 @@ export async function fetchFeaturebaseStatuses(): Promise<FeaturebaseStatus[]> {
   return body?.statuses || [];
 }
 
+/** Featurebase caps a reply at 10 attachments. */
+export const FEATUREBASE_MAX_ATTACHMENTS = 10;
+
 export async function sendFeaturebaseTicketMessage(
   id: string,
   text: string,
   kind: "reply" | "note",
   user: string,
+  attachmentUrls: string[] = [],
 ): Promise<void> {
   await request(`/featurebase/tickets/${encodeURIComponent(id)}/reply`, {
     method: "POST",
-    body: { text, kind, user },
+    body: { text, kind, user, attachmentUrls },
     label: "Failed to send",
   });
 }
