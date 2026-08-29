@@ -37,6 +37,7 @@ export interface Props {
   selectedWorkspaceId?: string | null;
   /** True while the Support queue (the Plain tool) is open. */
   plainActive: boolean;
+  featurebaseActive: boolean;
   /** True while the Support Tinder deck is open — highlights its entry. */
   supportTinderActive: boolean;
   /** True while the recurring Reports surface is open. */

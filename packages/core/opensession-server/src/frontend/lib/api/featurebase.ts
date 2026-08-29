@@ -88,6 +88,16 @@ export interface FeaturebasePost {
   comments: FeaturebaseComment[];
 }
 
+/** The open queue, newest activity first. The Support surfaces poll this; a
+ *  single ticket comes from fetchFeaturebaseTicket below. */
+export async function fetchFeaturebaseTickets(): Promise<FeaturebaseTicket[]> {
+  const body = await request<{ tickets?: FeaturebaseTicket[] }>(
+    "/featurebase/tickets",
+    { label: "Failed to fetch Featurebase tickets" },
+  );
+  return body?.tickets || [];
+}
+
 export async function fetchFeaturebaseTicket(
   id: string,
 ): Promise<FeaturebaseTicket | null> {

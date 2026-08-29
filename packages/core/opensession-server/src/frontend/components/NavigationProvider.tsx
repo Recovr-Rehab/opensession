@@ -23,6 +23,7 @@ export function NavigationProvider({
     openAutomation: (...args) => actionsRef.current.openAutomation(...args),
     openPrItem: (...args) => actionsRef.current.openPrItem(...args),
     openPlain: () => actionsRef.current.openPlain(),
+    openFeaturebase: () => actionsRef.current.openFeaturebase(),
     openSupportTinder: () => actionsRef.current.openSupportTinder(),
     openReports: (...args) => actionsRef.current.openReports(...args),
     openAnalytics: () => actionsRef.current.openAnalytics(),

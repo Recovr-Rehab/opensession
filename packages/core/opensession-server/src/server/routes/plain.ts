@@ -6,6 +6,7 @@
  * next handler (see routes/index.ts for the dispatch order).
  */
 
+import { integrationEnabled } from "../integrations/load";
 import { requestUser, type RouteContext } from "./context";
 import { listAutomations, runAutomation } from "../automations";
 import {
@@ -241,6 +242,10 @@ export async function handlePlainRoutes(
   // The Support sidebar's ticket queue: every TODO Plain thread, newest
   // status change first (Plain's own Todo-inbox ordering). Cached ~30s.
   if (path === "/api/plain/threads" && req.method === "GET") {
+    // With Plain off there is no queue to return, and calling its API would
+    // log an auth failure every time a client polls. An empty list is the
+    // truthful answer and lets the caller render its empty state.
+    if (!integrationEnabled("plain")) return Response.json({ threads: [] });
     if (plainTodoCache && Date.now() - plainTodoCache.ts < PLAIN_TODO_TTL)
       return Response.json({ threads: plainTodoCache.data });
     try {

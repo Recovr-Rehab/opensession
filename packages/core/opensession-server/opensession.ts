@@ -57,6 +57,7 @@ import {
 } from "./src/server/paths";
 import { shouldRedirectLegacyPublicPath } from "./src/server/legacy-public-prefix";
 import { startPlainArchiveSweep } from "./src/server/plain-archive";
+import { integrationEnabled } from "./src/server/integrations/load";
 import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
 import { startPrReviewNotificationTicker } from "./src/server/pr-review-notifications";
 import { startPublicIngress } from "./src/server/public-ingress";
@@ -776,10 +777,14 @@ if (!g.__opensessionBooted) {
     // after run recovery below; hydrate their rows before that gate opens.
     hydrateScheduledPromptTimers();
 
-    // Archive triage sessions when their Plain ticket is done.
-    startPlainArchiveSweep(() => {
-      invalidateSessionsCache();
-    });
+    // Archive triage sessions when their Plain ticket is done. Gated: the
+    // sweep calls Plain's API, so with the integration off it would poll a
+    // provider nobody configured and log a credential failure every 15m.
+    if (integrationEnabled("plain")) {
+      startPlainArchiveSweep(() => {
+        invalidateSessionsCache();
+      });
+    }
 
     // Unattended installs stage a Claude token in the env or a file; import it
     // into the pool before anything can ask for an account.

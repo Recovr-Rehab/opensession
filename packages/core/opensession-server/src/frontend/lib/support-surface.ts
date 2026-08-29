@@ -1,5 +1,5 @@
 /**
- * Where the Plain queue lives: the band at the bottom of the sidebar, the
+ * Where the Featurebase queue lives: the band at the bottom of the sidebar, the
  * Support tool's own page, or nowhere.
  *
  * The two surfaces answer the same question differently. The band opens a
@@ -22,9 +22,16 @@
 import { setSidebarFeedVisible } from "./sidebar-feeds";
 import { setSidebarToolVisible } from "./sidebar-tools";
 
-/** The Plain feed's id, which is also the Support tool's id: one queue, and
- *  the two surfaces are keyed to it on either side. */
-export const PLAIN_ID = "plain";
+/** The Featurebase ticket feed's id, which is also the Support tool's id: one
+ *  queue, and the two surfaces are keyed to it on either side.
+ *
+ *  This was Plain until 2026-08-29. Support means Featurebase now; Plain is a
+ *  tool of its own, off by default, and no longer the thing this file governs. */
+export const SUPPORT_ID = "featurebase-tickets";
+
+/** @deprecated Read SUPPORT_ID. Kept so a stale import fails loudly at the
+ *  call site rather than silently governing the wrong queue. */
+export const PLAIN_ID = SUPPORT_ID;
 
 export type SupportSurface = "sidebar" | "page" | "off";
 
@@ -74,6 +81,6 @@ export function supportToolShown(
 }
 
 export function setSupportSurface(surface: SupportSurface) {
-  setSidebarToolVisible(PLAIN_ID, surface === "page");
-  setSidebarFeedVisible(PLAIN_ID, surface === "sidebar");
+  setSidebarToolVisible(SUPPORT_ID, surface === "page");
+  setSidebarFeedVisible(SUPPORT_ID, surface === "sidebar");
 }

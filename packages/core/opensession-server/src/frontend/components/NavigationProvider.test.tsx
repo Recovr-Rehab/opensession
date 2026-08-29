@@ -15,6 +15,7 @@ function navigationFixture(openPrs: () => void): NavigationActions {
     openAutomation() {},
     async openPrItem() {},
     openPlain() {},
+    openFeaturebase() {},
     openSupportTinder() {},
     openReports() {},
     openAnalytics() {},

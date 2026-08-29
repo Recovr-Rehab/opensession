@@ -36,6 +36,15 @@ export function isEnabled(spec: IntegrationSpec): boolean {
     : env === "true";
 }
 
+/** Is one integration on, by id? The same question `isEnabled` answers, for
+ *  callers outside the loader that must not run when it is off — a background
+ *  sweep, or a route that would otherwise call a disabled provider's API and
+ *  log a credential error on a timer. Unknown ids are off. */
+export function integrationEnabled(id: string): boolean {
+  const spec = INTEGRATIONS.find((candidate) => candidate.id === id);
+  return spec ? isEnabled(spec) : false;
+}
+
 /** Which integrations would load right now, without importing anything. */
 export function activeIntegrations(): IntegrationSpec[] {
   return INTEGRATIONS.filter((spec) => {

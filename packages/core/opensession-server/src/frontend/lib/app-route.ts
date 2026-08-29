@@ -16,6 +16,7 @@ export type Route =
   | { view: "pr"; repo: string; branch?: undefined; number: number }
   | { view: "support"; threadId: string }
   | { view: "plain"; threadId?: string }
+  | { view: "featurebase"; ticketId?: string }
   | { view: "reports"; automationId?: string; reportId?: string }
   | { view: "analytics" }
   | { view: "tasks" }
@@ -130,6 +131,15 @@ export function parseRoute(pathname: string): Route {
   if (support) {
     return { view: "support", threadId: decodeURIComponent(support[1]!) };
   }
+  const featurebase = path.match(/^\/featurebase(?:\/(.+))?$/);
+  if (featurebase) {
+    return {
+      view: "featurebase",
+      ...(featurebase[1]
+        ? { ticketId: decodeURIComponent(featurebase[1]) }
+        : {}),
+    };
+  }
   const plain = path.match(/^\/plain(?:\/(.+))?$/);
   if (plain) {
     return {
@@ -210,6 +220,10 @@ export function routePath(route: Route): string {
       }`;
     case "support":
       return `${BASE_PATH}/support/${encodeURIComponent(route.threadId)}`;
+    case "featurebase":
+      return route.ticketId
+        ? `${BASE_PATH}/featurebase/${encodeURIComponent(route.ticketId)}`
+        : `${BASE_PATH}/featurebase`;
     case "plain":
       return route.threadId
         ? `${BASE_PATH}/plain/${encodeURIComponent(route.threadId)}`

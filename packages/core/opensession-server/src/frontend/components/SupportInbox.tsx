@@ -116,7 +116,13 @@ export function SupportInbox({
           setError(null);
         })
         .catch((e) => {
-          if (alive) setError(e?.message || "Failed to load the queue");
+          if (!alive) return;
+          setError(e?.message || "Failed to load the queue");
+          // First load only: with threads still null the render sits on
+          // "Loading tickets…" and never reaches the error branch, so a dead
+          // credential looks like a hang. Settling to empty lets the alert
+          // render; a later failure still keeps the tickets already on screen.
+          setThreads((prev) => prev ?? []);
         });
     void load();
     const timer = setInterval(() => {

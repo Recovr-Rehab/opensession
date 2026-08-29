@@ -108,6 +108,7 @@ import { Goals } from "./components/Goals";
 import { Archived } from "./components/Archived";
 import { Reviews } from "./components/Reviews";
 import { PrQueuePreview } from "./components/PrQueuePreview";
+import { FeaturebaseInbox } from "./components/FeaturebaseInbox";
 import { SupportInbox } from "./components/SupportInbox";
 import { SupportPreview } from "./components/SupportPreview";
 import { WorkspacePane } from "./components/WorkspacePane";
@@ -4053,6 +4054,15 @@ export function App({
     {
       id: "support",
       label: "Support",
+      description: "Read and answer Featurebase tickets",
+      category: "Navigate",
+      keywords: ["tickets", "featurebase", "support", "inbox"],
+      icon: <IconMail size={18} />,
+      run: () => navigate({ view: "featurebase" }),
+    },
+    {
+      id: "plain",
+      label: "Plain",
       description: "Read and answer Plain tickets",
       category: "Navigate",
       keywords: ["tickets", "plain", "inbox"],
@@ -4489,6 +4499,7 @@ export function App({
     openTasks: () => navigate({ view: "tasks" }),
     openAutomation: (name) => navigate({ view: "automations", id: name }),
     openPrItem: openPrWorkspace,
+    openFeaturebase: () => navigate({ view: "featurebase" }),
     openPlain: () => navigate({ view: "plain" }),
     openSupportTinder: () => navigate({ view: "supporttinder" }),
     openReports: (target) => navigate({ view: "reports", ...target }),
@@ -4901,6 +4912,7 @@ export function App({
                     taskCount={taskCount}
                     selectedWorkspaceId={activeWorkspaceId}
                     plainActive={route.view === "plain"}
+                    featurebaseActive={route.view === "featurebase"}
                     supportTinderActive={route.view === "supporttinder"}
                     reportsActive={route.view === "reports"}
                     analyticsActive={route.view === "analytics"}
@@ -5233,6 +5245,15 @@ export function App({
                   ) : route.view === "tasks" ? (
                     <Tasks
                       addHandler={addHandler}
+                      onOpenSession={(id) => navigate({ view: "session", id })}
+                    />
+                  ) : route.view === "featurebase" ? (
+                    <FeaturebaseInbox
+                      ticketId={route.ticketId ?? null}
+                      sessions={sessions}
+                      onSelectTicket={(ticketId) =>
+                        navigate({ view: "featurebase", ticketId })
+                      }
                       onOpenSession={(id) => navigate({ view: "session", id })}
                     />
                   ) : route.view === "plain" ? (

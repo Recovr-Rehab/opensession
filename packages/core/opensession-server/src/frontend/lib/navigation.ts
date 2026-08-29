@@ -33,6 +33,7 @@ export interface NavigationActions {
   openTasks(): void;
   openAutomation(name: string): void;
   openPrItem(item: ReviewQueueItem): Promise<void>;
+  openFeaturebase(): void;
   openPlain(): void;
   openSupportTinder(): void;
   openReports(target?: NavigationReportTarget): void;

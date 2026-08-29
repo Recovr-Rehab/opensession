@@ -16,6 +16,7 @@ export const SIDEBAR_TOOL_IDS = [
   "feed",
   "prs",
   "tasks",
+  "featurebase-tickets",
   "plain",
   "catchup",
   "supporttinder",
@@ -29,9 +30,13 @@ export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
   feed: "Feed",
   prs: "Pull requests",
   tasks: "Tasks",
-  // The Plain queue as a destination. The alternate sidebar band opens a
+  // The Featurebase queue as a destination. The alternate sidebar band opens a
   // ticket's workspace; this tool opens the ticket directly.
-  plain: "Support",
+  "featurebase-tickets": "Support",
+  // Plain was Support until 2026-08-29. It is off by default now and keeps its
+  // own name: two rows both called Support would be unreadable for anyone who
+  // still has the old one switched on.
+  plain: "Plain",
   catchup: "Catch up",
   supporttinder: "Support Tinder",
   reports: "Reports",
@@ -90,7 +95,7 @@ const USER_CHANGE_EVENT = "opensession-user-changed";
 const DEFAULT_VISIBLE_TOOLS: SidebarToolId[] = [
   "feed",
   "prs",
-  "plain",
+  "featurebase-tickets",
   "catchup",
 ];
 // Derived from the visible list so a tool added later defaults to hidden

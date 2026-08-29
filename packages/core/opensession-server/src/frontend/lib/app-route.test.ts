@@ -67,6 +67,7 @@ describe("routePath", () => {
     { view: "pr", repo: "tellahq/opensession", number: 42 },
     { view: "support", threadId: "thread/1" },
     { view: "plain", threadId: "thread/1" },
+    { view: "featurebase", ticketId: "TK-1/2" },
     { view: "reports", automationId: "daily check", reportId: "report/1" },
     { view: "automations", id: "daily check" },
     { view: "goals", id: "goal/1" },

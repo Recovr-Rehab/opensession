@@ -365,6 +365,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     taskCount = 0,
     selectedWorkspaceId = null,
     plainActive,
+    featurebaseActive,
     supportTinderActive,
     reportsActive,
     analyticsActive,
@@ -2215,6 +2216,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
       onClick: navigation.openTasks,
       title: "Your open tasks",
       count: taskCount,
+    },
+    {
+      id: "featurebase-tickets",
+      label: SIDEBAR_TOOL_LABELS["featurebase-tickets"],
+      icon: <IconMail />,
+      active: featurebaseActive,
+      onClick: navigation.openFeaturebase,
+      title: "Support tickets waiting in Featurebase",
     },
     {
       id: "plain",

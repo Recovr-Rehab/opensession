@@ -84,6 +84,22 @@ export async function handleFeaturebaseRoutes(
     }
   }
 
+  // The queue as a list. Support (the tool and the sidebar band) reads this;
+  // the per-ticket routes below serve the pane once one is open. Kept above the
+  // /tickets/:id match so the bare collection path is not read as an id.
+  if (path === "/api/featurebase/tickets" && req.method === "GET") {
+    try {
+      const { listOpenTickets } = await import("../../agents/featurebase/api");
+      return Response.json({ tickets: await listOpenTickets(100) });
+    } catch (error: any) {
+      console.error("[featurebase] Ticket list failed:", error);
+      return Response.json(
+        { error: error?.message || "Featurebase lookup failed" },
+        { status: error?.status && error.status < 500 ? error.status : 502 },
+      );
+    }
+  }
+
   const ticketMatch = path.match(
     /^\/api\/featurebase\/tickets\/([^/]+)(?:\/([^/]+))?$/,
   );
