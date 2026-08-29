@@ -71,7 +71,6 @@ import {
 import { OverflowFadeText } from "./ui/overflow-fade-text";
 import { SessionViewer } from "./components/SessionViewer";
 import { AgentationFeedback } from "./components/AgentationFeedback";
-import type { PortalTarget } from "./lib/portals";
 import {
   NewSession,
   type NewSessionCreateDraft,
@@ -123,6 +122,7 @@ import { useAppShell } from "./hooks/useAppShell";
 import { useArchiveUndo } from "./hooks/useArchiveUndo";
 import { useRunningCloseConfirmation } from "./hooks/useRunningCloseConfirmation";
 import { useSubagentTabs } from "./hooks/useSubagentTabs";
+import { useOnDemandViewTabs } from "./hooks/useOnDemandViewTabs";
 import { settingsPaletteActions } from "./lib/settings-sections";
 import {
   SessionTabs,
@@ -996,27 +996,6 @@ export function App({
   // The Video (feed web-panel) tab is likewise default-PRESENT on workspaces
   // carrying a web-panel ExternalRef (a linked video, dashboard, …): track explicit closes.
   const [videoClosed, setVideoClosed] = useState<Set<string>>(() => new Set());
-  const [stagingOpen, setStagingOpen] = useState<Set<string>>(
-    () => new Set(getActiveViewTabKeys("staging")),
-  );
-  // Sessions whose local-dev Preview view-tab is open (full-width iframe of
-  // the running dev server — sibling of Staging, which shows the PR deploy).
-  const [previewTabOpen, setPreviewTabOpen] = useState<Set<string>>(
-    () => new Set(getActiveViewTabKeys("preview")),
-  );
-  // One transient browser target per workspace. Selecting another service
-  // reuses the same center pane instead of filling the tab strip with ports.
-  const [portalTargets, setPortalTargets] = useState<
-    Record<string, PortalTarget>
-  >({});
-  const [assetsOpen, setAssetsOpen] = useState<Set<string>>(
-    () => new Set(getActiveViewTabKeys("assets")),
-  );
-  // Workspaces with a Terminal view-tab open. Starts empty every load: the
-  // tab owns live PTYs, so it is never restored (see active-view-tab.ts).
-  const [terminalOpen, setTerminalOpen] = useState<Set<string>>(
-    () => new Set(),
-  );
   const {
     routeSubagentStack,
     openSubagentPath,
@@ -1687,6 +1666,27 @@ export function App({
     },
     [wsKey],
   );
+  const {
+    stagingOpen,
+    previewTabOpen,
+    assetsOpen,
+    terminalOpen,
+    currentPortalTarget,
+    openStaging,
+    closeStagingTab,
+    openPreviewTab,
+    closePreviewTab,
+    openAssets,
+    closeAssetsTab,
+    openTerminal,
+    closeTerminalTab,
+    openPortal,
+    closePortalTab,
+  } = useOnDemandViewTabs({
+    workspaceKey: wsKey,
+    activeViewTab,
+    setActiveViewTab,
+  });
   // Return each workspace to its last foregrounded tab. A workspace without a
   // saved selection still starts on its normal default surface. Switching sessions
   // within a workspace records session as the selection via the tab-strip handler.
@@ -2002,7 +2002,6 @@ export function App({
     []
   ).find((ref) => refWebPanel(ref));
   const videoPanel = videoRef ? refWebPanel(videoRef) : null;
-  const currentPortalTarget = wsKey ? (portalTargets[wsKey] ?? null) : null;
   const subagentStack = stackFor(currentSession?.id);
   const subagentActive = subagentSelected && subagentStack.length > 0;
   const reviewDotClass = currentSession?.prState
@@ -2132,112 +2131,6 @@ export function App({
       });
     }
     if (videoActive) setActiveViewTab(null);
-  }
-  // Open/foreground this workspace's Preview environment view-tab (the Info
-  // panel button). Adds the tab to the strip if absent.
-  function openStaging() {
-    if (!wsKey) return;
-    const key = wsKey;
-    setStagingOpen((prev) => {
-      if (prev.has(key)) return prev;
-      return new Set(prev).add(key);
-    });
-    setActiveViewTab("staging");
-  }
-  // Open/foreground this workspace's local-dev Preview view-tab (the header
-  // Preview button routes here instead of window.open — the Mac shell was
-  // turning those into stray Electron windows).
-  function openPreviewTab() {
-    if (!wsKey) return;
-    const key = wsKey;
-    setPreviewTabOpen((prev) => {
-      if (prev.has(key)) return prev;
-      return new Set(prev).add(key);
-    });
-    setActiveViewTab("preview");
-  }
-  function closePreviewTab() {
-    if (wsKey) {
-      const key = wsKey;
-      setPreviewTabOpen((prev) => {
-        if (!prev.has(key)) return prev;
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    }
-    if (previewLiveActive) setActiveViewTab(null);
-  }
-  function openPortal(target: PortalTarget) {
-    if (!wsKey) return;
-    setPortalTargets((prev) => ({ ...prev, [wsKey]: target }));
-    setActiveViewTab("portal");
-  }
-  function closePortalTab() {
-    if (wsKey) {
-      setPortalTargets((prev) => {
-        if (!prev[wsKey]) return prev;
-        const next = { ...prev };
-        delete next[wsKey];
-        return next;
-      });
-    }
-    if (portalActive) setActiveViewTab(null);
-  }
-  function closeStagingTab() {
-    if (wsKey) {
-      const key = wsKey;
-      setStagingOpen((prev) => {
-        if (!prev.has(key)) return prev;
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    }
-    if (stagingActive) setActiveViewTab(null);
-  }
-  // Open/foreground this workspace's Assets view-tab (the Info panel's Assets
-  // button). Adds the tab to the strip if absent.
-  function openAssets() {
-    if (!wsKey) return;
-    const key = wsKey;
-    setAssetsOpen((prev) => {
-      if (prev.has(key)) return prev;
-      return new Set(prev).add(key);
-    });
-    setActiveViewTab("assets");
-  }
-  function closeAssetsTab() {
-    if (wsKey) {
-      const key = wsKey;
-      setAssetsOpen((prev) => {
-        if (!prev.has(key)) return prev;
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    }
-    if (assetsActive) setActiveViewTab(null);
-  }
-  // Open/foreground this workspace's Terminal view-tab (the Info panel's
-  // Terminal row). Closing it is what tears the shells down.
-  function openTerminal() {
-    if (!wsKey) return;
-    const key = wsKey;
-    setTerminalOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
-    setActiveViewTab("terminal");
-  }
-  function closeTerminalTab() {
-    if (wsKey) {
-      const key = wsKey;
-      setTerminalOpen((prev) => {
-        if (!prev.has(key)) return prev;
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    }
-    if (terminalActive) setActiveViewTab(null);
   }
   // Sidebar PR row → the PR's ONE workspace (resolve-or-create server-side,
   // adopt-don't-duplicate), landing on THAT PR's Review tab: the row is a pull
