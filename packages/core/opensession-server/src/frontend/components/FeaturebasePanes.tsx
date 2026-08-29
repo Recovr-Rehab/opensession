@@ -111,12 +111,20 @@ function Composer({
   onSend,
   isNote,
   onToggleMode,
+  allowAttachments = false,
 }: {
   placeholder: string;
   sending: boolean;
   onSend: (text: string, attachmentUrls: string[]) => Promise<void>;
   isNote: boolean;
   onToggleMode: () => void;
+  /**
+   * Whether this surface can carry attachments. Tickets can: their reply
+   * endpoint takes attachmentUrls. Feedback comments cannot - POST /v2/comments
+   * has no attachment field at all - so the control is not offered there rather
+   * than accepting a file and dropping it on send.
+   */
+  allowAttachments?: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const [sent, setSent] = useState(false);
@@ -129,8 +137,9 @@ function Composer({
     // An attachment on its own is a message, the same as it is in Plain.
     // Featurebase still wants a body (min 1 character), and textToHtml("")
     // yields "<p></p>", which it accepts.
-    if ((!text && attachments.length === 0) || sending) return;
-    await onSend(text, attachments);
+    const files = allowAttachments ? attachments : [];
+    if ((!text && files.length === 0) || sending) return;
+    await onSend(text, files);
     setDraft("");
     setAttachments([]);
     setSent(true);
@@ -187,7 +196,7 @@ function Composer({
           "min-h-[4.5rem]",
         )}
       />
-      {attachments.length > 0 && (
+      {allowAttachments && attachments.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {attachments.map((url) => (
             <span
@@ -215,18 +224,22 @@ function Composer({
         <div className="mt-1 truncate text-label text-red">{attachError}</div>
       )}
       <div className="mt-2 flex items-center gap-2">
-        <Tooltip label="Attach a file by URL (Featurebase has no upload API)">
-          <button
-            type="button"
-            className={cn(palettePill, "shrink-0")}
-            disabled={sending || attachments.length >= FEATUREBASE_MAX_ATTACHMENTS}
-            onClick={addAttachment}
-            aria-label="Attach a file by URL"
-          >
-            <IconPaperclip size={14} />
-            Attach
-          </button>
-        </Tooltip>
+        {allowAttachments && (
+          <Tooltip label="Attach a file by URL (Featurebase has no upload API)">
+            <button
+              type="button"
+              className={cn(palettePill, "shrink-0")}
+              disabled={
+                sending || attachments.length >= FEATUREBASE_MAX_ATTACHMENTS
+              }
+              onClick={addAttachment}
+              aria-label="Attach a file by URL"
+            >
+              <IconPaperclip size={14} />
+              Attach
+            </button>
+          </Tooltip>
+        )}
         <Tooltip
           label={
             isNote
@@ -263,7 +276,10 @@ function Composer({
         <button
           type="button"
           className={cn("ml-auto", composerSend, composerSendDefault)}
-          disabled={(!draft.trim() && attachments.length === 0) || sending}
+          disabled={
+            (!draft.trim() && !(allowAttachments && attachments.length > 0)) ||
+            sending
+          }
           onClick={() => void submit()}
           title="Send (\u2318\u21B5)"
           aria-label={isNote ? "Add internal note" : "Send reply"}
@@ -592,6 +608,7 @@ export function FeaturebaseTicketPane({
           placeholder={kind === "note" ? "Internal note" : "Reply to customer"}
           sending={sending}
           isNote={kind === "note"}
+          allowAttachments
           onToggleMode={() => setKind((k) => (k === "note" ? "reply" : "note"))}
           onSend={async (text, attachmentUrls) => {
             setSending(true);
