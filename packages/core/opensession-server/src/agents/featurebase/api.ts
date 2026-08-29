@@ -10,7 +10,7 @@ import {
   featurebaseApiKey,
   featurebaseApiVersion,
 } from "./config";
-import { htmlToText, textToHtml } from "./html";
+import { htmlToText, textToHtml, withHtmlImages } from "./html";
 
 export { htmlToText, textToHtml } from "./html";
 
@@ -260,8 +260,11 @@ export function normalizeConversationPart(
   const author = person(rec.author);
   const html = asString(rec.bodyHtml) || asString(rec.body);
   const markdown = asString(rec.bodyMarkdown);
-  const text =
+  const body =
     markdown || (html ? htmlToText(html) : "") || asString(rec.content) || "";
+  // Same attachment repair as the source body: a part's markdown can carry an
+  // empty-URL image too, and the HTML beside it holds the filename.
+  const text = html ? withHtmlImages(body, html) : body;
   const actorType = partActorType(asString(rec.partType), author.type);
   if (!text && actorType === "system") return null;
   return {
@@ -405,6 +408,40 @@ export async function listAdmins(): Promise<FeaturebasePerson[]> {
   return raw.map(person).filter((admin) => admin.id);
 }
 
+/**
+ * A message's identity by content, for de-duplicating across conversations.
+ *
+ * A ticket links a `customer` conversation and one or more `tracker`
+ * conversations, and the trackers MIRROR the customer thread — so merging all
+ * of them naively shows the same message twice. Ids differ per conversation,
+ * so only the body can tell them apart.
+ *
+ * Attachment links are collapsed to their filename because the same image
+ * arrives presigned in one conversation (`![shot.png](https://...?X-Amz-...)`)
+ * and unsigned in another (`📎 shot.png`) — different text, same message.
+ * Short bodies are not keyed: "ok" recurring is a real second message, not a
+ * mirror, and dropping it would lose the thread.
+ */
+function contentKey(text: string): string | null {
+  const hasAttachment = /!\[[^\]]*\]\([^)]*\)|📎/.test(text);
+  const collapsed = text
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/📎\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!collapsed) return null;
+  // A filename is short ("image.png") but still uniquely identifies the
+  // message, so attachments skip the length floor that protects real repeats
+  // of a short reply.
+  return hasAttachment || collapsed.length >= 15 ? collapsed : null;
+}
+
+/** Does this body carry an attachment we can actually display? */
+function hasViewableImage(text: string): boolean {
+  return /!\[[^\]]*\]\(\s*https?:/i.test(text);
+}
+
 async function mergeLinkedConversationParts(
   ticket: FeaturebaseTicket,
   raw: unknown,
@@ -414,6 +451,25 @@ async function mergeLinkedConversationParts(
     ? rec.linkedConversations
     : [];
   const seen = new Set(ticket.parts.map((part) => part.id));
+  // key -> index in ticket.parts, so a later copy of the same message can
+  // REPLACE an earlier one rather than only being skipped.
+  const keys = new Map<string, number>();
+  ticket.parts.forEach((part, index) => {
+    const key = contentKey(part.text);
+    if (key && !keys.has(key)) keys.set(key, index);
+  });
+  /** Keep the copy we can actually show. The same attachment arrives unsigned
+   *  on a conversation's `source` and presigned on a part; whichever lands
+   *  second wins only if it is the viewable one. */
+  const admit = (key: string | null, text: string): boolean => {
+    if (!key) return true;
+    const at = keys.get(key);
+    if (at === undefined) return true;
+    const existing = ticket.parts[at];
+    if (existing && !hasViewableImage(existing.text) && hasViewableImage(text))
+      return true;
+    return false;
+  };
   for (const link of links) {
     const convId = asString(asRecord(link).id);
     if (!convId) continue;
@@ -421,17 +477,84 @@ async function mergeLinkedConversationParts(
       const conv = asRecord(
         await fbFetch(`/v2/conversations/${encodeURIComponent(convId)}`),
       );
+      // A conversation's OPENING message is not a conversationPart: it lives
+      // on `source`, and conversationParts holds only what came after it
+      // (replies, notes, and body-less events like `assign`). Reading parts
+      // alone dropped the first message of every thread — and on a ticket
+      // whose only part was an assignment that left the pane reading
+      // "No conversation yet" over a conversation that plainly had one.
+      const source = asRecord(conv.source);
+      const sourceHtml = asString(source.bodyHtml) || asString(source.body);
+      const sourceMarkdown =
+        asString(source.bodyMarkdown) ||
+        (sourceHtml ? htmlToText(sourceHtml) : "");
+      // Featurebase writes attachments into the source markdown as `![Image]()`
+      // with no URL; the filename (and sometimes a usable src) is only in the
+      // HTML, so fill them in from there.
+      const sourceText = sourceHtml
+        ? withHtmlImages(sourceMarkdown, sourceHtml)
+        : sourceMarkdown;
+      if (sourceText || sourceHtml) {
+        // Featurebase gives the source no id of its own; key it to the
+        // conversation so re-fetching the ticket cannot duplicate it.
+        const sourceId = `${convId}:source`;
+        const sourceKey = contentKey(sourceText);
+        if (!seen.has(sourceId) && admit(sourceKey, sourceText)) {
+          seen.add(sourceId);
+          const author = person(source.author);
+          // A source author is only {type, id} - no name. The ticket's own
+          // author is the same person on a customer-initiated thread, so
+          // borrow that rather than render an anonymous row.
+          const actorName =
+            author.name ||
+            (author.id && author.id === ticket.author.id
+              ? ticket.author.name || ticket.author.email
+              : null) ||
+            (author.type === "customer"
+              ? ticket.author.name || ticket.author.email
+              : null);
+          const sourcePart = {
+            id: sourceId,
+            timestamp: asString(conv.createdAt) || asString(conv.updatedAt),
+            actorName,
+            actorType: partActorType(null, author.type),
+            text: sourceText,
+            html: sourceHtml,
+          };
+          const replaceAt = sourceKey ? keys.get(sourceKey) : undefined;
+          if (replaceAt !== undefined) {
+            ticket.parts[replaceAt] = sourcePart;
+          } else {
+            if (sourceKey) keys.set(sourceKey, ticket.parts.length);
+            ticket.parts.push(sourcePart);
+          }
+        }
+      }
       const extra = Array.isArray(conv.conversationParts)
         ? conv.conversationParts
         : [];
       for (const partRaw of extra) {
         const part = normalizeConversationPart(partRaw);
         if (!part || seen.has(part.id)) continue;
+        const key = contentKey(part.text);
+        if (!admit(key, part.text)) continue;
         seen.add(part.id);
+        const replaceAt = key ? keys.get(key) : undefined;
+        if (replaceAt !== undefined) {
+          ticket.parts[replaceAt] = part;
+          continue;
+        }
+        if (key) keys.set(key, ticket.parts.length);
         ticket.parts.push(part);
       }
-    } catch {
-      // Ticket still renders with the parts Featurebase already attached.
+    } catch (error) {
+      // The ticket still renders with the parts Featurebase already attached,
+      // but say so: a silent catch here is indistinguishable from a thread
+      // that genuinely has no messages.
+      console.warn(
+        `[featurebase] Linked conversation ${convId} could not be read:`,
+        error,
+      );
     }
   }
   ticket.parts.sort((a, b) =>

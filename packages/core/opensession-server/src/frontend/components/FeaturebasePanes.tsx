@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { InlineAlert, LoadingState } from "../ui/state";
+import { renderMarkdown } from "../lib/markdown";
+import { MarkdownBody } from "./MarkdownBody";
 import { cn } from "../ui/cn";
 import {
   composerBox,
@@ -154,14 +156,19 @@ function MessageRow({
           </span>
         )}
       </div>
-      <p
-        className={cn(
-          "mt-1 whitespace-pre-wrap text-sm text-fg",
-          isCustomer && "text-fg",
-        )}
-      >
-        {text || "(empty)"}
-      </p>
+      {/* Featurebase message bodies are markdown: attachments arrive as
+          ![name](url) and links as [text](url). Rendered as plain text they
+          read as raw source — a screenshot became a wall of signed S3 URL.
+          renderMarkdown sanitizes (lib/html-sanitize.ts), which matters here
+          because this body is customer-supplied. */}
+      {text ? (
+        <MarkdownBody
+          className={cn("mt-1 text-sm text-fg", isCustomer && "text-fg")}
+          html={renderMarkdown(text)}
+        />
+      ) : (
+        <p className="mt-1 text-sm text-faint">(empty)</p>
+      )}
     </div>
   );
 }
