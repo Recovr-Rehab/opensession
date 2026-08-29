@@ -27,6 +27,7 @@ import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
 import { AppShell } from "./components/AppShell";
 import { NavigationProvider } from "./components/NavigationProvider";
+import { RunningCloseDialog } from "./components/RunningCloseDialog";
 import { SessionPaneProviders } from "./components/SessionPaneProviders";
 import { Sidebar, type SidebarHandle } from "./components/Sidebar";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
@@ -59,7 +60,6 @@ import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
 import { PR_PAGE_COLUMN } from "./lib/pr-list-classes";
 import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
 import { ToastHost, toast } from "./ui/toast";
-import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import {
   TopBar,
@@ -120,6 +120,7 @@ import { FirstMile } from "./components/FirstMile";
 import { useOnboarding } from "./hooks/useOnboarding";
 import { useAppRoute } from "./hooks/useAppRoute";
 import { useAppShell } from "./hooks/useAppShell";
+import { useRunningCloseConfirmation } from "./hooks/useRunningCloseConfirmation";
 import { useSubagentTabs } from "./hooks/useSubagentTabs";
 import { settingsPaletteActions } from "./lib/settings-sections";
 import {
@@ -3126,22 +3127,11 @@ export function App({
   // the whole row back. Ids only — the session objects go stale on the next
   // refresh, so entries resolve against the live list when they're restored.
   const [archiveUndo, setArchiveUndo] = useState<string[][]>([]);
-  const [runningCloseConfirmation, setRunningCloseConfirmation] = useState<{
-    runningCount: number;
-    onConfirm: () => void;
-  } | null>(null);
-  useEffect(() => {
-    if (!runningCloseConfirmation) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
-      event.preventDefault();
-      const confirmation = runningCloseConfirmation;
-      setRunningCloseConfirmation(null);
-      confirmation.onConfirm();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [runningCloseConfirmation]);
+  const {
+    confirmRunningClose,
+    confirmRunningCloses,
+    dialog: runningCloseDialog,
+  } = useRunningCloseConfirmation();
   const rememberArchived = (ids: string[]) => {
     if (!ids.length) return;
     // Do not let a successful archive remain the PWA's cold-launch target if
@@ -3248,23 +3238,6 @@ export function App({
     }
     refresh();
   };
-  const confirmRunningCloses = (
-    sessionsToClose: UnifiedSession[],
-    onConfirm: () => void,
-  ) => {
-    const runningCount = sessionsToClose.filter(
-      (session) => session.isRunning,
-    ).length;
-    if (!runningCount) {
-      onConfirm();
-      return;
-    }
-    setRunningCloseConfirmation({ runningCount, onConfirm });
-  };
-  const confirmRunningClose = (
-    session: UnifiedSession,
-    onConfirm: () => void,
-  ) => confirmRunningCloses([session], onConfirm);
   const archiveWorkspaceFromHeader = (members: UnifiedSession[]) => {
     if (!members.length) return;
     confirmRunningCloses(members, () => {
@@ -4294,40 +4267,7 @@ export function App({
       <RestartOverlay connected={connected} addHandler={addHandler} />
       <MediaLightboxHost />
       <ToastHost container={settingsActive ? null : detailPaneEl} />
-      <Modal.Root
-        open={runningCloseConfirmation !== null}
-        onOpenChange={(open) => {
-          if (!open) setRunningCloseConfirmation(null);
-        }}
-        disablePointerDismissal
-      >
-        <Modal.Content widthClassName="max-w-[34rem]" className="gap-5">
-          <Modal.Title className="m-0 text-dialog-title font-semibold tracking-[-0.01em] text-fg">
-            Close running session
-            {runningCloseConfirmation?.runningCount === 1 ? "" : "s"}?
-          </Modal.Title>
-          <Modal.Description className="m-0 text-body leading-relaxed text-dim">
-            {runningCloseConfirmation?.runningCount === 1
-              ? "This session is currently running. Closing it will cancel its current run."
-              : `These ${runningCloseConfirmation?.runningCount ?? 0} sessions are currently running. Closing them will cancel their current runs.`}
-          </Modal.Description>
-          <Modal.Footer className="mt-3 justify-end gap-3">
-            <Modal.Close render={<Button size="lg">Cancel</Button>} />
-            <Button
-              variant="danger-strong"
-              size="lg"
-              onClick={() => {
-                const confirmation = runningCloseConfirmation;
-                setRunningCloseConfirmation(null);
-                confirmation?.onConfirm();
-              }}
-            >
-              <span>Close anyway</span>
-              <span className="ml-5 text-label font-medium opacity-70">⌘↵</span>
-            </Button>
-          </Modal.Footer>
-        </Modal.Content>
-      </Modal.Root>
+      <RunningCloseDialog {...runningCloseDialog} />
       <div className="app">
         {!forceFirstMile && onboarding.state === "loading" ? (
           <div className="flex h-[100dvh] items-center justify-center bg-bg">
