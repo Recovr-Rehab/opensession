@@ -302,11 +302,11 @@ export function FeaturebaseTicketPane({
                 user,
               );
               load();
+              setSending(false);
             } catch (e: any) {
               setError(e.message);
-              throw e;
-            } finally {
               setSending(false);
+              throw e;
             }
           }}
         />
@@ -445,11 +445,11 @@ export function FeaturebasePostPane({
             try {
               await sendFeaturebasePostComment(post.id, text, asPrivate, user);
               load();
+              setSending(false);
             } catch (e: any) {
               setError(e.message);
-              throw e;
-            } finally {
               setSending(false);
+              throw e;
             }
           }}
         />

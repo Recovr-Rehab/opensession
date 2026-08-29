@@ -4,6 +4,7 @@ export const GATEWAY_COMMAND_OPERATIONS = [
   "session_file_updated",
   "plain_archive_clear",
   "plain_archive_set",
+  "featurebase_archive_set",
   "archive_override",
   "title_override",
   "status_override",

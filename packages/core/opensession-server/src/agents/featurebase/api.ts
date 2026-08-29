@@ -297,7 +297,8 @@ export function normalizeTicket(raw: unknown): FeaturebaseTicket | null {
     status: status(rec.status),
     author: person(rec.author),
     assignee: personIfPresent(rec.assignee),
-    assigneeId: asString(rec.assigneeId) || personIfPresent(rec.assignee)?.id,
+    assigneeId:
+      asString(rec.assigneeId) || personIfPresent(rec.assignee)?.id || null,
     teamAssigneeId: asString(rec.teamAssigneeId),
     createdAt: asString(rec.createdAt),
     updatedAt: asString(rec.updatedAt),

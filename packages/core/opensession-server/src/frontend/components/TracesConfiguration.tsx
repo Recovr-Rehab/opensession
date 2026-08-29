@@ -61,14 +61,19 @@ export function TracesConfiguration({ enabled }: { enabled: boolean }) {
         if (!aliveRef.current) return;
         const poll = await pollTracesConnect(start.state);
         if (poll.status === "pending") continue;
-        if (poll.status === "error") throw new Error(poll.error);
+        if (poll.status === "error") {
+          setError(poll.error);
+          setConnecting(false);
+          return;
+        }
         if (!aliveRef.current) return;
         setMe(poll.account);
         setVerificationUrl(null);
         setConnecting(false);
         return;
       }
-      throw new Error("Traces login timed out");
+      setError("Traces login timed out");
+      setConnecting(false);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Traces connect failed",
