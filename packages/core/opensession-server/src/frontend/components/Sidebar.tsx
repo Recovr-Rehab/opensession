@@ -2301,6 +2301,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         (tool) =>
           !hiddenTools.has(tool.id) &&
           !(productEmpty && tool.id === "prs") &&
+          // A tool for an integration that is switched off is a dead end: the
+          // page it opens can only ever be empty. Plain is the one that can be
+          // off while its tool still exists, because Support moved to
+          // Featurebase and left it behind.
+          !(tool.id === "plain" && !feeds.some((feed) => feed.id === "plain")) &&
           !(tool.id === PLAIN_ID && supportSurface !== "page"),
       );
 
@@ -2313,9 +2318,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // the others tick on or off, it names which of two surfaces its queue lives
   // on, so it is a submenu of three states rather than a tick. No Plain feed
   // means no queue to place, so the row drops out entirely.
-  const plainQueueExists = feeds.some((feed) => feed.id === PLAIN_ID);
+  const supportQueueExists = feeds.some((feed) => feed.id === PLAIN_ID);
+  // PLAIN_ID means the SUPPORT queue now (Featurebase). Plain keeps a tool of
+  // its own, and it has to follow Plain's own feed: keyed off PLAIN_ID it
+  // showed even with the integration off, which is how a queue nobody uses
+  // stayed in the sidebar with nothing behind it.
+  const plainQueueExists = feeds.some((feed) => feed.id === "plain");
   const sidebarMenuTools = fittingTools
-    .filter((tool) => tool.id !== PLAIN_ID || plainQueueExists)
+    .filter((tool) => tool.id !== PLAIN_ID || supportQueueExists)
+    .filter((tool) => tool.id !== "plain" || plainQueueExists)
     .map((tool) => ({
       id: tool.id,
       label: tool.label,

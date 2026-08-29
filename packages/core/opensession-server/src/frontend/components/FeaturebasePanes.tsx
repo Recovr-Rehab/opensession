@@ -126,7 +126,10 @@ function Composer({
 
   async function submit() {
     const text = draft.trim();
-    if (!text || sending) return;
+    // An attachment on its own is a message, the same as it is in Plain.
+    // Featurebase still wants a body (min 1 character), and textToHtml("")
+    // yields "<p></p>", which it accepts.
+    if ((!text && attachments.length === 0) || sending) return;
     await onSend(text, attachments);
     setDraft("");
     setAttachments([]);
@@ -260,7 +263,7 @@ function Composer({
         <button
           type="button"
           className={cn("ml-auto", composerSend, composerSendDefault)}
-          disabled={!draft.trim() || sending}
+          disabled={(!draft.trim() && attachments.length === 0) || sending}
           onClick={() => void submit()}
           title="Send (\u2318\u21B5)"
           aria-label={isNote ? "Add internal note" : "Send reply"}
