@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Select } from "../ui/input";
 import { InlineAlert, LoadingState } from "../ui/state";
-import { noteSurface } from "../lib/tinted-surface";
 import {
   plainEntryBody,
   plainEntryHead,
@@ -13,6 +12,10 @@ import {
   plainEntryOut,
   plainEntryRow,
 } from "../lib/plain-classes";
+import { noteSurface } from "../lib/tinted-surface";
+import { palettePill } from "../lib/palette-classes";
+import { Tooltip } from "../ui/tooltip";
+import { PRODUCT_NAME } from "../lib/brand";
 import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody } from "./MarkdownBody";
 import { cn } from "../ui/cn";
@@ -25,7 +28,7 @@ import {
   composerTextareaPadding,
 } from "../lib/composer-classes";
 import { noAutofill } from "../lib/composer-autofill";
-import { IconArrowUp, IconSparkle } from "./icons";
+import { IconArrowUp, IconPencil, IconSparkle } from "./icons";
 import { useCurrentUser } from "./UserPicker";
 import {
   fetchFeaturebasePost,
@@ -84,34 +87,62 @@ function OpenLink({ href }: { href: string | null }) {
   );
 }
 
+/**
+ * The reply box, in the same shape as Plain's (PlainThreadPanel's composer).
+ *
+ * The mode is the one thing you must never have to guess — this box either
+ * answers the customer or writes an aside only the team sees — so it is a
+ * labelled pill with its own icon rather than a line of text, it says which
+ * state it is in through `aria-pressed`, and in note mode the whole box takes
+ * the yellow wash a note takes everywhere else (lib/tinted-surface.ts). The
+ * line beside it names who the message will be posted as, because a reply sent
+ * from here arrives under the workspace's admin rather than under your own
+ * Featurebase account.
+ */
 function Composer({
   placeholder,
   sending,
   onSend,
-  modeLabel,
+  isNote,
   onToggleMode,
 }: {
   placeholder: string;
   sending: boolean;
   onSend: (text: string) => Promise<void>;
-  modeLabel: string;
+  isNote: boolean;
   onToggleMode: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [sent, setSent] = useState(false);
+  const currentUser = useCurrentUser();
+
   async function submit() {
     const text = draft.trim();
     if (!text || sending) return;
     await onSend(text);
     setDraft("");
+    setSent(true);
+    setTimeout(() => setSent(false), 2500);
   }
+
   return (
-    <div className={cn(composerBox, composerBoxExpanded, "mt-3")}>
+    <div
+      className={cn(composerBox, composerBoxExpanded, "mt-3")}
+      style={
+        isNote
+          ? { backgroundColor: noteSurface("var(--composer-surface)") }
+          : undefined
+      }
+    >
       <textarea
         {...noAutofill}
         value={draft}
+        disabled={sending}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
+          // Cmd/Ctrl+Enter, matching Plain. Plain Enter used to send, which
+          // makes a half-written reply to a customer one keystroke away.
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
             e.preventDefault();
             void submit();
           }
@@ -124,41 +155,55 @@ function Composer({
           "min-h-[4.5rem]",
         )}
       />
-      <div className="mt-2 flex items-center justify-between gap-2">
+      <div className="mt-2 flex items-center gap-2">
+        <Tooltip
+          label={
+            isNote
+              ? "Switch to a customer reply"
+              : "Write a note only the team sees"
+          }
+        >
+          <button
+            type="button"
+            aria-pressed={isNote}
+            disabled={sending}
+            className={cn(
+              palettePill,
+              "shrink-0",
+              isNote &&
+                "bg-[color-mix(in_srgb,var(--yellow-tint)_22%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow-tint)_32%,transparent)] hover:text-yellow",
+            )}
+            onClick={onToggleMode}
+          >
+            <IconPencil size={14} />
+            Internal note
+          </button>
+        </Tooltip>
+        <span className="min-w-0 truncate text-meta text-faint phone:hidden">
+          {isNote
+            ? `Posted as ${currentUser} (via ${PRODUCT_NAME})`
+            : `Sent to the customer, signed \u201C${currentUser.split(/\s+/)[0]}\u201D`}
+        </span>
+        {sent && (
+          <span className="shrink-0 text-meta font-semibold text-green">
+            Sent \u2713
+          </span>
+        )}
         <button
           type="button"
-          onClick={onToggleMode}
-          className="text-xs font-medium text-dim hover:text-fg"
-        >
-          {modeLabel}
-        </button>
-        <Button
-          size="sm"
-          className={cn(composerSend, composerSendDefault)}
-          icon={<IconArrowUp size={16} />}
+          className={cn("ml-auto", composerSend, composerSendDefault)}
           disabled={!draft.trim() || sending}
           onClick={() => void submit()}
-          aria-label="Send"
-        />
+          title="Send (\u2318\u21B5)"
+          aria-label={isNote ? "Add internal note" : "Send reply"}
+        >
+          <IconArrowUp size={24} />
+        </button>
       </div>
     </div>
   );
 }
 
-/**
- * One message in a Featurebase thread, in the same grammar as a Plain one
- * (PlainEntryRow / lib/plain-classes.ts) so the two support surfaces read
- * identically: the head above the message, the customer's words carrying no
- * surface because they are the page's content, our own half as a bubble on the
- * right, and a team note as a full-width yellow wash rather than a third
- * message style.
- *
- * The body is rendered markdown, which is load-bearing here and not
- * decoration: Featurebase sends attachments as `![name](url)` and links as
- * `[text](url)`, so as plain text a screenshot reads as a wall of signed URL.
- * renderMarkdown sanitizes (lib/html-sanitize.ts) — these bodies are
- * customer-supplied.
- */
 function MessageRow({
   name,
   kind,
@@ -475,9 +520,7 @@ export function FeaturebaseTicketPane({
         <Composer
           placeholder={kind === "note" ? "Internal note" : "Reply to customer"}
           sending={sending}
-          modeLabel={
-            kind === "note" ? "Mode: internal note" : "Mode: customer reply"
-          }
+          isNote={kind === "note"}
           onToggleMode={() => setKind((k) => (k === "note" ? "reply" : "note"))}
           onSend={async (text) => {
             setSending(true);
@@ -625,9 +668,7 @@ export function FeaturebasePostPane({
         <Composer
           placeholder={asPrivate ? "Internal comment" : "Public comment"}
           sending={sending}
-          modeLabel={
-            asPrivate ? "Mode: internal comment" : "Mode: public comment"
-          }
+          isNote={asPrivate}
           onToggleMode={() => setAsPrivate((value) => !value)}
           onSend={async (text) => {
             setSending(true);
