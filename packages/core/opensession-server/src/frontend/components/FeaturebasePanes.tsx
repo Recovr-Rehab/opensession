@@ -1,6 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { InlineAlert, LoadingState } from "../ui/state";
+import { noteSurface } from "../lib/tinted-surface";
+import {
+  plainEntryBody,
+  plainEntryHead,
+  plainEntryIn,
+  plainEntryMeta,
+  plainEntryName,
+  plainEntryNote,
+  plainEntryOut,
+  plainEntryRow,
+} from "../lib/plain-classes";
 import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody } from "./MarkdownBody";
 import { cn } from "../ui/cn";
@@ -129,6 +140,20 @@ function Composer({
   );
 }
 
+/**
+ * One message in a Featurebase thread, in the same grammar as a Plain one
+ * (PlainEntryRow / lib/plain-classes.ts) so the two support surfaces read
+ * identically: the head above the message, the customer's words carrying no
+ * surface because they are the page's content, our own half as a bubble on the
+ * right, and a team note as a full-width yellow wash rather than a third
+ * message style.
+ *
+ * The body is rendered markdown, which is load-bearing here and not
+ * decoration: Featurebase sends attachments as `![name](url)` and links as
+ * `[text](url)`, so as plain text a screenshot reads as a wall of signed URL.
+ * renderMarkdown sanitizes (lib/html-sanitize.ts) — these bodies are
+ * customer-supplied.
+ */
 function MessageRow({
   name,
   kind,
@@ -141,34 +166,55 @@ function MessageRow({
   timestamp: string | null;
 }) {
   const isNote = kind === "note";
-  const isCustomer = kind === "customer";
-  return (
-    <div className={cn("px-4 py-3", isNote && "bg-accent-soft/40")}>
-      <div className="flex items-baseline gap-2 text-xs text-dim">
-        <span className="font-medium text-fg">{name || kind}</span>
-        <span>{kind}</span>
-        {timestamp && (
-          <span>
-            {new Date(timestamp).toLocaleString(undefined, {
-              dateStyle: "medium",
-              timeStyle: "short",
-            })}
+  // Anything not from the customer is our side of the conversation: a
+  // teammate's reply, the autoresponder, an agent.
+  const ours = kind !== "customer";
+  const when = timestamp
+    ? new Date(timestamp).toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : null;
+  const body = text ? (
+    <MarkdownBody className={plainEntryBody} html={renderMarkdown(text)} />
+  ) : (
+    <p className="m-0 text-meta text-faint">(empty)</p>
+  );
+
+  if (isNote) {
+    return (
+      <div
+        className={plainEntryNote}
+        style={{ background: noteSurface("transparent") }}
+      >
+        <div className={plainEntryHead}>
+          <span className={plainEntryName}>{name || "Note"}</span>
+          <span
+            className="text-meta font-semibold text-yellow"
+            title="Only the team sees this note"
+          >
+            Note
           </span>
-        )}
+          {when && <span className={plainEntryMeta}>{when}</span>}
+        </div>
+        {body}
       </div>
-      {/* Featurebase message bodies are markdown: attachments arrive as
-          ![name](url) and links as [text](url). Rendered as plain text they
-          read as raw source — a screenshot became a wall of signed S3 URL.
-          renderMarkdown sanitizes (lib/html-sanitize.ts), which matters here
-          because this body is customer-supplied. */}
-      {text ? (
-        <MarkdownBody
-          className={cn("mt-1 text-sm text-fg", isCustomer && "text-fg")}
-          html={renderMarkdown(text)}
-        />
-      ) : (
-        <p className="mt-1 text-sm text-faint">(empty)</p>
-      )}
+    );
+  }
+
+  return (
+    <div className={plainEntryRow}>
+      {/* The head sits above the message rather than inside it, so our own
+			    bubble holds nothing but the words, and the customer's side can lose
+			    its plate without losing who wrote it. */}
+      <div className={cn(plainEntryHead, ours && "flex-row-reverse")}>
+        <span className={plainEntryName}>{name || kind}</span>
+        <span className={plainEntryMeta}>
+          {kind}
+          {when ? ` \u00B7 ${when}` : ""}
+        </span>
+      </div>
+      <div className={ours ? plainEntryOut : plainEntryIn}>{body}</div>
     </div>
   );
 }
@@ -279,15 +325,17 @@ export function FeaturebaseTicketPane({
         {ticket.parts.length === 0 ? (
           <p className="px-4 py-6 text-sm text-dim">No conversation yet.</p>
         ) : (
-          ticket.parts.map((part) => (
-            <MessageRow
-              key={part.id}
-              name={part.actorName}
-              kind={part.actorType}
-              text={part.text}
-              timestamp={part.timestamp}
-            />
-          ))
+          <div className="flex flex-col gap-4 px-4 py-3">
+            {ticket.parts.map((part) => (
+              <MessageRow
+                key={part.id}
+                name={part.actorName}
+                kind={part.actorType}
+                text={part.text}
+                timestamp={part.timestamp}
+              />
+            ))}
+          </div>
         )}
       </div>
       <div className="border-t border-divider px-3 py-2">
@@ -427,15 +475,17 @@ export function FeaturebasePostPane({
         {post.comments.length === 0 ? (
           <p className="px-4 py-6 text-sm text-dim">No comments yet.</p>
         ) : (
-          post.comments.map((comment) => (
-            <MessageRow
-              key={comment.id}
-              name={comment.authorName}
-              kind={comment.private ? "note" : "customer"}
-              text={comment.text}
-              timestamp={comment.createdAt}
-            />
-          ))
+          <div className="flex flex-col gap-4 px-4 py-3">
+            {post.comments.map((comment) => (
+              <MessageRow
+                key={comment.id}
+                name={comment.authorName}
+                kind={comment.private ? "note" : "customer"}
+                text={comment.text}
+                timestamp={comment.createdAt}
+              />
+            ))}
+          </div>
         )}
       </div>
       <div className="border-t border-divider px-3 py-2">
