@@ -594,6 +594,41 @@ export async function getTicket(id: string): Promise<FeaturebaseTicket | null> {
   return mergeLinkedConversationParts(ticket, raw);
 }
 
+/**
+ * Ticket admin: status, assignment, and open/closed.
+ *
+ * `PATCH /v2/tickets/{id}` also takes title, content, companyId, customFields
+ * and snoozedUntil; only the three the pane offers are exposed, because those
+ * are the ones with somewhere to put them. Featurebase tickets have no
+ * priority, spam or label concept, so the Plain pane's controls for those have
+ * no counterpart here rather than a stubbed one.
+ *
+ * `assigneeId: null` unassigns - deliberately distinct from omitting the key,
+ * which leaves the assignment alone.
+ */
+export async function updateTicket(
+  id: string,
+  patch: {
+    statusId?: string;
+    assigneeId?: string | null;
+    open?: boolean;
+  },
+): Promise<FeaturebaseTicket | null> {
+  const body: Record<string, unknown> = {};
+  if (patch.statusId !== undefined) body.statusId = patch.statusId;
+  if (patch.assigneeId !== undefined) body.assigneeId = patch.assigneeId;
+  if (patch.open !== undefined) body.open = patch.open;
+  if (Object.keys(body).length === 0)
+    throw new FeaturebaseApiError("Nothing to update", 400);
+  await fbFetch(`/v2/tickets/${encodeURIComponent(ticketPathId(id))}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  // Re-read rather than trust the PATCH response: the pane wants the ticket
+  // with its conversation merged in, which only getTicket assembles.
+  return getTicket(id);
+}
+
 export async function replyToTicket(
   ticket: FeaturebaseTicket,
   text: string,

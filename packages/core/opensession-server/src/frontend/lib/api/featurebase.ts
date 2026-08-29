@@ -108,6 +108,31 @@ export async function fetchFeaturebaseTicket(
   return body?.ticket || null;
 }
 
+/** Status, assignee, open/closed. Returns the ticket as it now stands. */
+export async function updateFeaturebaseTicket(
+  id: string,
+  patch: { statusId?: string; assigneeId?: string | null; open?: boolean },
+): Promise<FeaturebaseTicket | null> {
+  const body = await request<{ ticket?: FeaturebaseTicket }>(
+    `/featurebase/tickets/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: patch,
+      label: "Failed to update the ticket",
+    },
+  );
+  return body?.ticket || null;
+}
+
+/** The ticket statuses this workspace defines, for the status picker. */
+export async function fetchFeaturebaseStatuses(): Promise<FeaturebaseStatus[]> {
+  const body = await request<{ statuses?: FeaturebaseStatus[] }>(
+    "/featurebase/statuses",
+    { label: "Failed to fetch ticket statuses" },
+  );
+  return body?.statuses || [];
+}
+
 export async function sendFeaturebaseTicketMessage(
   id: string,
   text: string,

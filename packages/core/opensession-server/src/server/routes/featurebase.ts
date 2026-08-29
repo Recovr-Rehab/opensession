@@ -72,6 +72,20 @@ export async function handleFeaturebaseRoutes(
     }
   }
 
+  if (path === "/api/featurebase/statuses" && req.method === "GET") {
+    try {
+      const { listTicketStatuses } = await import(
+        "../../agents/featurebase/api"
+      );
+      return Response.json({ statuses: await listTicketStatuses() });
+    } catch (error: any) {
+      return Response.json(
+        { error: error?.message || "Featurebase lookup failed" },
+        { status: error?.status && error.status < 500 ? error.status : 502 },
+      );
+    }
+  }
+
   if (path === "/api/featurebase/admins" && req.method === "GET") {
     try {
       const { listAdmins } = await import("../../agents/featurebase/api");
@@ -95,6 +109,33 @@ export async function handleFeaturebaseRoutes(
       console.error("[featurebase] Ticket list failed:", error);
       return Response.json(
         { error: error?.message || "Featurebase lookup failed" },
+        { status: error?.status && error.status < 500 ? error.status : 502 },
+      );
+    }
+  }
+
+  // Ticket admin from the pane: status, assignee, open/closed. Human-gated
+  // like the rest of this file - an agent run never sees it as a tool.
+  const ticketPatch = path.match(/^\/api\/featurebase\/tickets\/([^/]+)$/);
+  if (ticketPatch && req.method === "PATCH") {
+    const id = decodeURIComponent(ticketPatch[1]!);
+    try {
+      const body = (await req.json()) as {
+        statusId?: string;
+        assigneeId?: string | null;
+        open?: boolean;
+      };
+      const { updateTicket } = await import("../../agents/featurebase/api");
+      const ticket = await updateTicket(id, body);
+      if (!ticket)
+        return Response.json({ error: "Ticket not found" }, { status: 404 });
+      const { invalidateFeedCache } = await import("../feeds");
+      invalidateFeedCache("featurebase-tickets");
+      return Response.json({ ticket });
+    } catch (error: any) {
+      console.error(`[featurebase] Ticket update failed for ${id}:`, error);
+      return Response.json(
+        { error: error?.message || "Featurebase update failed" },
         { status: error?.status && error.status < 500 ? error.status : 502 },
       );
     }

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
+import { Select } from "../ui/input";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { noteSurface } from "../lib/tinted-surface";
 import {
@@ -28,11 +29,15 @@ import { IconArrowUp, IconSparkle } from "./icons";
 import { useCurrentUser } from "./UserPicker";
 import {
   fetchFeaturebasePost,
+  fetchFeaturebaseStatus,
+  fetchFeaturebaseStatuses,
   fetchFeaturebaseTicket,
+  updateFeaturebaseTicket,
   sendFeaturebasePostComment,
   sendFeaturebaseTicketMessage,
   startFeaturebasePostTriage,
   startFeaturebaseTicketTriage,
+  type FeaturebaseAdmin,
   type FeaturebasePost,
   type FeaturebaseStatus,
   type FeaturebaseTicket,
@@ -219,6 +224,121 @@ function MessageRow({
   );
 }
 
+/**
+ * Ticket admin from the pane - status, assignee, open/closed - so an answer
+ * does not need a round trip to Featurebase, the same way PlainThreadActions
+ * works for a Plain thread.
+ *
+ * The set stops where Featurebase's ticket API stops. `PATCH /v2/tickets/{id}`
+ * takes statusId, assigneeId and open (plus title/content/company/custom
+ * fields/snooze, which have nowhere to go here). It has no priority, spam or
+ * label concept, so Plain's controls for those have no counterpart rather than
+ * a button that cannot work.
+ */
+function FeaturebaseTicketActions({
+  ticket,
+  apiId,
+  onChanged,
+  className,
+}: {
+  ticket: FeaturebaseTicket;
+  /** The path id the routes expect (ticket number when there is one). */
+  apiId: string;
+  onChanged: (next: FeaturebaseTicket | null) => void;
+  className?: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<FeaturebaseStatus[]>([]);
+  const [admins, setAdmins] = useState<FeaturebaseAdmin[]>([]);
+
+  // Both lists are workspace-level and server-cached, so a fetch per mount is
+  // cheap. A failure leaves the picker empty rather than breaking the pane.
+  useEffect(() => {
+    let alive = true;
+    void fetchFeaturebaseStatuses()
+      .then((rows) => {
+        if (alive) setStatuses(rows);
+      })
+      .catch(() => {});
+    void fetchFeaturebaseStatus()
+      .then((s) => {
+        if (alive && s.admins) setAdmins(s.admins);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const apply = (patch: {
+    statusId?: string;
+    assigneeId?: string | null;
+    open?: boolean;
+  }) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    void updateFeaturebaseTicket(apiId, patch)
+      .then(onChanged)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <div className={cn("flex flex-col gap-2", className)}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          size="sm"
+          aria-label="Ticket status"
+          disabled={busy || statuses.length === 0}
+          value={ticket.status.id || ""}
+          onChange={(e) => apply({ statusId: e.target.value })}
+        >
+          {statuses.length === 0 && <option value="">Status</option>}
+          {statuses.map((row) => (
+            <option key={row.id || row.name || ""} value={row.id || ""}>
+              {row.name || row.type || "Status"}
+            </option>
+          ))}
+        </Select>
+
+        <Select
+          size="sm"
+          aria-label="Assignee"
+          disabled={busy || admins.length === 0}
+          value={ticket.assigneeId || ""}
+          onChange={(e) =>
+            apply({ assigneeId: e.target.value ? e.target.value : null })
+          }
+        >
+          <option value="">Unassigned</option>
+          {admins.map((admin) => (
+            <option key={admin.id || ""} value={admin.id || ""}>
+              {admin.name || admin.email || "Admin"}
+            </option>
+          ))}
+        </Select>
+
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => apply({ open: !ticket.open })}
+          title={
+            ticket.open
+              ? "Close this ticket in Featurebase"
+              : "Reopen this ticket in Featurebase"
+          }
+        >
+          {ticket.open ? "Close" : "Reopen"}
+        </Button>
+      </div>
+      {error && <InlineAlert>{error}</InlineAlert>}
+    </div>
+  );
+}
+
 export function FeaturebaseTicketPane({
   ticketId,
   className,
@@ -313,6 +433,16 @@ export function FeaturebaseTicketPane({
             </Button>
           )}
         </div>
+      </div>
+      <div className="border-b border-divider px-4 py-2">
+        <FeaturebaseTicketActions
+          ticket={ticket}
+          apiId={ticketApiId(ticket, ticketId)}
+          onChanged={(next) => {
+            if (next) setTicket(next);
+            else load();
+          }}
+        />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {ticket.content && (
