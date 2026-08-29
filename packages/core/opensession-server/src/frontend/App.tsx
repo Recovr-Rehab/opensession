@@ -120,13 +120,13 @@ import { FirstMile } from "./components/FirstMile";
 import { useOnboarding } from "./hooks/useOnboarding";
 import { useAppRoute } from "./hooks/useAppRoute";
 import { useAppShell } from "./hooks/useAppShell";
+import { useSubagentTabs } from "./hooks/useSubagentTabs";
 import { settingsPaletteActions } from "./lib/settings-sections";
 import {
   SessionTabs,
   type NewTabMorphOrigin,
   type ViewTab,
 } from "./components/SessionTabs";
-import type { SubagentRef } from "./components/SubagentPane";
 import { SessionSplit, type SplitSide } from "./components/SessionSplit";
 import { RestartOverlay } from "./components/RestartOverlay";
 import { MediaLightboxHost } from "./components/MediaLightbox";
@@ -233,7 +233,6 @@ import {
   prPath,
   absoluteLink,
   copyToClipboard,
-  subagentSuffix,
   workspacePanePath,
 } from "./lib/share-link";
 import {
@@ -300,7 +299,6 @@ import {
   isToolView,
   parseRoute,
   routePath,
-  type Route,
 } from "./lib/app-route";
 import {
   buildWorkspacePaneTabs,
@@ -330,26 +328,6 @@ const Settings = deferred<SettingsProps>(async () => {
   const { Settings: SettingsComponent } = await import("./components/Settings");
   return { default: SettingsComponent };
 });
-
-// Stable empty stack, so a session with no sub-agent open hands the same array
-// identity down every render (the transcript memo compares props by identity).
-const NO_SUBAGENTS: SubagentRef[] = [];
-
-// A link into a sub-agent carries agent ids, never their labels. The pane reads
-// the real one off the sub-agent's own transcript and reports it back, so the
-// tab only wears this until that lands.
-const SUBAGENT_LINK_LABEL = "Sub-agent";
-
-/** The sub-agent breadcrumb a URL opens with, as the tab state keyed by session. */
-function routeSubagentTabs(route: Route): Record<string, SubagentRef[]> {
-  if (route.view !== "session" || !route.subagent?.length) return {};
-  return {
-    [route.id]: route.subagent.map((agentId) => ({
-      agentId,
-      label: SUBAGENT_LINK_LABEL,
-    })),
-  };
-}
 
 // How long the launch splash may hold the screen while the first session list
 // is still in flight. Past this the app takes over and reports for itself.
@@ -1037,28 +1015,19 @@ export function App({
   const [terminalOpen, setTerminalOpen] = useState<Set<string>>(
     () => new Set(),
   );
-  // Sub-agent drill-ins, keyed by the session they were opened from (a sub-agent
-  // belongs to one session's run). The value is a breadcrumb stack — a Task call
-  // inside a sub-agent pushes another entry. In-memory only, like the tab
-  // itself: the transcript is re-fetched whenever it's reopened. A link that
-  // names a sub-agent seeds the stack here, so the pane is open before the
-  // session has even finished loading.
-  const [subagentTabs, setSubagentTabs] = useState<
-    Record<string, SubagentRef[]>
-  >(() => routeSubagentTabs(route));
-  // The stack the ROUTE's session has drilled into — which is the same as
-  // `subagentStack` below once that session hydrates, but is already there
-  // while a linked session is still loading. It decides both what the URL says
-  // and whether a workspace-level tab restore may take the pane away.
-  const routeSubagentStack =
-    route.view === "session"
-      ? (subagentTabs[route.id] ?? NO_SUBAGENTS)
-      : NO_SUBAGENTS;
-  const openSubagentPath = subagentSuffix(
-    activeViewTab === "subagent"
-      ? routeSubagentStack.map((s) => s.agentId)
-      : [],
-  );
+  const {
+    routeSubagentStack,
+    openSubagentPath,
+    stackFor,
+    openSubagent,
+    popSubagent,
+    closeSubagentTab,
+    nameSubagent,
+  } = useSubagentTabs({
+    route,
+    subagentSelected,
+    setActiveViewTab: setActiveViewTabState,
+  });
   // Bumped when the per-workspace tab order changes (a drag-drop commit, or a
   // storage push from another tab) so the strip re-derives `workspaceSessions` in
   // the new order. The order itself lives in localStorage (lib/tab-order).
@@ -2032,9 +2001,7 @@ export function App({
   ).find((ref) => refWebPanel(ref));
   const videoPanel = videoRef ? refWebPanel(videoRef) : null;
   const currentPortalTarget = wsKey ? (portalTargets[wsKey] ?? null) : null;
-  const subagentStack = currentSession
-    ? (subagentTabs[currentSession.id] ?? NO_SUBAGENTS)
-    : NO_SUBAGENTS;
+  const subagentStack = stackFor(currentSession?.id);
   const subagentActive = subagentSelected && subagentStack.length > 0;
   const reviewDotClass = currentSession?.prState
     ? currentSession.prState === "OPEN" &&
@@ -2270,101 +2237,6 @@ export function App({
     }
     if (terminalActive) setActiveViewTab(null);
   }
-  // Open (or foreground) a session's sub-agent tab — the transcript's "Watch"
-  // drill-in on a Task call. A Task call inside the sub-agent pushes onto the
-  // same tab's breadcrumb instead of opening a second one. Stable identity:
-  // it reaches the memoized transcript as a prop, and the tab is never
-  // persisted, so it needs nothing from the render scope.
-  const openSubagent = (sessionId: string, agentId: string, label: string) => {
-    setSubagentTabs((prev) => {
-      const stack = prev[sessionId] ?? NO_SUBAGENTS;
-      if (stack.some((s) => s.agentId === agentId)) return prev;
-      return { ...prev, [sessionId]: [...stack, { agentId, label }] };
-    });
-    setActiveViewTabState("subagent");
-  };
-  const popSubagent = (sessionId: string) => {
-    setSubagentTabs((prev) => {
-      const stack = prev[sessionId];
-      if (!stack?.length) return prev;
-      const next = { ...prev };
-      if (stack.length === 1) delete next[sessionId];
-      else next[sessionId] = stack.slice(0, -1);
-      return next;
-    });
-  };
-  const closeSubagentTab = (sessionId: string) => {
-    setSubagentTabs((prev) => {
-      if (!prev[sessionId]) return prev;
-      const next = { ...prev };
-      delete next[sessionId];
-      return next;
-    });
-    // Same commit as the close, like every other closeXTab — the effect
-    // below only has to catch the session-switch case.
-    setActiveViewTabState((cur) => (cur === "subagent" ? null : cur));
-  };
-  // The pane read the sub-agent's own name off its transcript — a link carries
-  // ids only, so this is what turns "Sub-agent" into a real label. It fills in
-  // the placeholder and nothing else: a drill-in arrives already named by the
-  // Task call it came from, and that name shouldn't change under the reader a
-  // second after they opened it.
-  const nameSubagent = (sessionId: string, agentId: string, label: string) => {
-    setSubagentTabs((prev) => {
-      const stack = prev[sessionId];
-      const at = stack?.findIndex((s) => s.agentId === agentId) ?? -1;
-      if (!stack || at === -1 || stack[at].label !== SUBAGENT_LINK_LABEL)
-        return prev;
-      const next = stack.slice();
-      next[at] = { agentId, label };
-      return { ...prev, [sessionId]: next };
-    });
-  };
-  // A sub-agent named in the URL after the first load — a Back/Forward across a
-  // drill-in, or an in-app link into one. The initial load is seeded with the
-  // state itself, so this only has to catch the later arrivals.
-  const routeSubagentKey =
-    route.view === "session" && route.subagent?.length
-      ? `${route.id}${subagentSuffix(route.subagent)}`
-      : null;
-  // The sync reads the live route through an effect event, so the trigger
-  // stays the derived sub-agent key rather than every route field.
-  const syncRouteSubagents = useEffectEvent(() => {
-    if (route.view !== "session" || !route.subagent?.length) return;
-    const ids = route.subagent;
-    setSubagentTabs((prev) => {
-      const stack = prev[route.id] ?? NO_SUBAGENTS;
-      if (
-        stack.length === ids.length &&
-        stack.every((s, i) => s.agentId === ids[i])
-      )
-        return prev;
-      // Keep the labels of any level the reader already had open; the pane
-      // names the rest once it has read them.
-      return {
-        ...prev,
-        [route.id]: ids.map((agentId, i) =>
-          stack[i]?.agentId === agentId
-            ? stack[i]
-            : { agentId, label: SUBAGENT_LINK_LABEL },
-        ),
-      };
-    });
-    setActiveViewTabState("subagent");
-  });
-  useEffect(() => {
-    if (!routeSubagentKey) return;
-    syncRouteSubagents();
-  }, [routeSubagentKey]);
-  // Dropping the last breadcrumb (or switching to a session with no sub-agent
-  // open) leaves nothing to show — fall back to the session itself. Read from
-  // the route's own stack, not the open session's: a linked sub-agent is chosen
-  // before its session has loaded, and measuring the hydrated session here
-  // threw that selection away in the first commit after landing.
-  useEffect(() => {
-    if (subagentSelected && routeSubagentStack.length === 0)
-      setActiveViewTabState(null);
-  }, [subagentSelected, routeSubagentStack.length]);
   // Sidebar PR row → the PR's ONE workspace (resolve-or-create server-side,
   // adopt-don't-duplicate), landing on THAT PR's Review tab: the row is a pull
   // request, so its diff is what you clicked for. The focus pulse matters when
@@ -4290,7 +4162,7 @@ export function App({
               ? viewTabKind(surfaceId) === "subagent"
               : focused && subagentActive
           }
-          subagentStack={subagentTabs[viewerSession.id] ?? NO_SUBAGENTS}
+          subagentStack={stackFor(viewerSession.id)}
           onOpenSubagent={openSubagent}
           onSubagentBack={popSubagent}
           onSubagentLabel={nameSubagent}
