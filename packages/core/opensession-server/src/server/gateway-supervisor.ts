@@ -808,6 +808,17 @@ export async function discoverRuntimePeerGenerations(
   throw new Error("runtime peer generations are unavailable");
 }
 
+export async function resolveInitialPeerGenerations(
+  releaseRoot: string,
+  discover: () => Promise<PeerGenerations> = discoverRuntimePeerGenerations,
+): Promise<PeerGenerations> {
+  const generation = releaseGeneration(releaseRoot);
+  if (generation === "development") {
+    return { kernel: generation, executor: generation };
+  }
+  return discover();
+}
+
 export function spawnGateway(
   releaseRoot: string,
   role: "active" | "standby",
@@ -1137,8 +1148,10 @@ async function runSupervisor(): Promise<void> {
   }
   // Peer generations can intentionally differ after a selective rollout. Never
   // guess from `current`: a guessed generation caused a two-minute crash loop
-  // after an executor was correctly retained on its previous release.
-  const peerGenerations = await discoverRuntimePeerGenerations();
+  // after an executor was correctly retained on its previous release. Source
+  // installs have no immutable marker or separate executor, so both peers use
+  // the development generation instead.
+  const peerGenerations = await resolveInitialPeerGenerations(releaseRoot);
   const active = spawnGateway(
     releaseRoot,
     "active",

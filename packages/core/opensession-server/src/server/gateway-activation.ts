@@ -107,21 +107,10 @@ export async function acquireGatewayActivationLease(
         stdout: "pipe",
         stderr: "pipe",
       }) as GatewayLeaseProcess);
-  const holdCommand = [
-    "/bin/sh",
-    "-c",
-    "printf 'LOCKED\\n'; cat >/dev/null",
-  ];
+  const holdCommand = ["/bin/sh", "-c", "printf 'LOCKED\\n'; cat >/dev/null"];
   const leaseCommand =
     (options.platform ?? process.platform) === "darwin"
-      ? [
-          "/usr/bin/lockf",
-          "-k",
-          "-t",
-          waitSeconds,
-          lockPath,
-          ...holdCommand,
-        ]
+      ? ["/usr/bin/lockf", "-k", "-t", waitSeconds, lockPath, ...holdCommand]
       : ["flock", "-w", waitSeconds, lockPath, ...holdCommand];
   const lease = spawn(leaseCommand);
   const first = await readBoundedLine(lease.stdout);
