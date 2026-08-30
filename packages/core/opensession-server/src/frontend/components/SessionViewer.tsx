@@ -1605,6 +1605,8 @@ export function SessionViewer({
   const {
     open: panelOpen,
     setOpen: setPanelOpen,
+    page: desktopPanelPage,
+    setPage: setDesktopPanelPage,
     style: panelStyle,
     resizeHandle: panelResizeHandle,
   } = useSidePanel();
@@ -1614,24 +1616,17 @@ export function SessionViewer({
   const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
   const activePanelOpen = showReview ? reviewPanelOpen : panelOpen;
   const setActivePanelOpen = showReview ? setReviewPanelOpen : setPanelOpen;
-  // The desktop panel starts on Changes, then keeps the selected tool when it
-  // closes so reopening returns to the person's last place. Phones still use
-  // null for their Workspace details overview and push Changes from that page.
+  // Phones use null for their Workspace details overview and push tools from
+  // that page. The desktop selection comes from useSidePanel so the open panel
+  // stays on the same tool while its session changes.
   const [panelPage, setPanelPage] = useState<
     null | "changes" | "portals" | "agents" | "terminal"
   >(null);
   // Start a panel terminal only after its tab is opened. Keep it mounted while
   // switching tabs, then drop it when the panel closes.
-  const [panelTerminalMounted, setPanelTerminalMounted] = useState(false);
-  useEffect(() => {
-    if (!activePanelOpen) setPanelTerminalMounted(false);
-  }, [activePanelOpen]);
-  // Closing the host that shows pages returns to the overview; that effect
-  // needs `isPhone` to know which host to watch, so it lives beside the
-  // viewport state further down.
-  useEffect(() => {
-    setPanelPage(null);
-  }, [session.id]);
+  const [panelTerminalMounted, setPanelTerminalMounted] = useState(
+    () => activePanelOpen && desktopPanelPage === "terminal",
+  );
   // Session scratch assets (Assets tab): fetched once per session + on
   // assets_changed broadcasts; the tab only appears once files exist.
   const { files: assetFiles, refresh: refreshAssets } = useSessionAssets(
@@ -4828,6 +4823,15 @@ export function SessionViewer({
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
+  useEffect(() => {
+    if (!activePanelOpen) {
+      setPanelTerminalMounted(false);
+    } else if (!isPhone && desktopPanelPage === "terminal") {
+      // A newly mounted session inherits the selected tab and starts its own
+      // terminal, just as selecting Terminal in-place would.
+      setPanelTerminalMounted(true);
+    }
+  }, [activePanelOpen, desktopPanelPage, isPhone]);
   // Whether the pane can hold the card beside the reading column instead of
   // over it. Unmeasured counts as room: the width lands in a layout effect
   // before the first paint, and assuming the common case keeps a pinned card
@@ -5677,11 +5681,12 @@ export function SessionViewer({
             <Menu.Item
               onClick={() => {
                 setOverflowOpen(false);
-                setPanelPage("portals");
                 if (isPhone) {
+                  setPanelPage("portals");
                   setInfoPageScrolled(false);
                   setInfoPageOpen(true);
                 } else {
+                  setDesktopPanelPage("portals");
                   setActivePanelOpen(true);
                 }
               }}
@@ -6418,7 +6423,7 @@ export function SessionViewer({
                     // canvas now that the side panel contains tools only.
                     onOpenPanelTab={(tab) => {
                       if (tab === "changes") {
-                        setPanelPage("changes");
+                        setDesktopPanelPage("changes");
                         setActivePanelOpen(true);
                       } else {
                         openReview?.();
@@ -7850,7 +7855,6 @@ export function SessionViewer({
             it opens as a full-height column beside the left sidebar (not just
             below the session header). */}
         {(() => {
-          const desktopPanelPage = panelPage ?? "changes";
           const rightRegion = (
             <>
               {!isPhone && panelAvailable && activePanelOpen && (
@@ -7871,7 +7875,7 @@ export function SessionViewer({
                           PANEL_TAB,
                           desktopPanelPage === "changes" && "bg-hover text-fg",
                         )}
-                        onClick={() => setPanelPage("changes")}
+                        onClick={() => setDesktopPanelPage("changes")}
                       >
                         <IconFile size={15} className="shrink-0" />
                         <span className="@max-[380px]:hidden">Changes</span>
@@ -7883,7 +7887,7 @@ export function SessionViewer({
                           PANEL_TAB,
                           desktopPanelPage === "portals" && "bg-hover text-fg",
                         )}
-                        onClick={() => setPanelPage("portals")}
+                        onClick={() => setDesktopPanelPage("portals")}
                       >
                         <IconGlobe size={15} className="shrink-0" />
                         <span className="@max-[380px]:hidden">Portals</span>
@@ -7900,7 +7904,7 @@ export function SessionViewer({
                           PANEL_TAB,
                           desktopPanelPage === "agents" && "bg-hover text-fg",
                         )}
-                        onClick={() => setPanelPage("agents")}
+                        onClick={() => setDesktopPanelPage("agents")}
                       >
                         <IconStack size={15} className="shrink-0" />
                         <span className="@max-[380px]:hidden">Agents</span>
@@ -7919,7 +7923,7 @@ export function SessionViewer({
                         )}
                         onClick={() => {
                           setPanelTerminalMounted(true);
-                          setPanelPage("terminal");
+                          setDesktopPanelPage("terminal");
                         }}
                       >
                         <IconTerminal size={15} className="shrink-0" />
