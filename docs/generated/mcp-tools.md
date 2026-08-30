@@ -51,7 +51,7 @@ touches an in-process tool:
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
 | [`opensession-repos`](#opensession-repos) | 4 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
-| [`opensession-web`](#opensession-web) | 3 | interactive | Needs a session id. |
+| [`opensession-web`](#opensession-web) | 3 | interactive, goal wake | Needs a session id. |
 | [`opensession-portals`](#opensession-portals) | 6 | interactive | Needs a session id. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
@@ -580,8 +580,8 @@ Permanently delete one memory. Prefer archive_memory because deletion cannot be 
 Read a URL as text, search what was fetched, clone a GitHub repo. No web search.
 
 - **Source** `packages/core/opensession-server/src/server/web-mcp.ts`
-- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
-- **Runs** interactive
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`, `packages/core/opensession-server/src/server/goal-runner.ts`
+- **Runs** interactive, goal wake
 - **Condition** Needs a session id.
 
 ### `fetch_url`
