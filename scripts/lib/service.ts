@@ -164,6 +164,49 @@ function domain(): string {
   return `gui/${process.getuid?.() ?? 501}`;
 }
 
+type CommandResult = Awaited<ReturnType<typeof run>>;
+
+/**
+ * launchd can return EIO briefly after bootout while it finishes unregistering
+ * the old job. A deploy must not leave both services unloaded in that window.
+ */
+export async function bootstrapLaunchAgent(
+  label: string,
+  plist: string,
+  options: {
+    domain?: string;
+    attempts?: number;
+    retryDelayMs?: number;
+    runCommand?: typeof run;
+    pause?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<CommandResult> {
+  const launchdDomain = options.domain ?? domain();
+  const attempts = options.attempts ?? 40;
+  const retryDelayMs = options.retryDelayMs ?? 250;
+  const runCommand = options.runCommand ?? run;
+  const pause = options.pause ?? Bun.sleep;
+  let result: CommandResult = { code: 1, stdout: "", stderr: "" };
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    result = await runCommand(["launchctl", "bootstrap", launchdDomain, plist]);
+    if (result.code === 0) return result;
+    if (!/Bootstrap failed:\s*5:\s*Input\/output error/i.test(result.stderr))
+      return result;
+
+    // EIO can race with successful registration, so verify before retrying.
+    const registered = await runCommand(
+      ["launchctl", "print", `${launchdDomain}/${label}`],
+      { quiet: true },
+    );
+    if (registered.code === 0)
+      return { code: 0, stdout: registered.stdout, stderr: "" };
+    if (attempt + 1 < attempts) await pause(retryDelayMs);
+  }
+
+  return result;
+}
+
 /**
  * `systemctl --user` needs to find the user manager's socket. A login shell
  * has XDG_RUNTIME_DIR set by pam_systemd; a plain `ssh host cmd`, cron, or the
@@ -1111,22 +1154,18 @@ export async function install(
         "bootout",
         `${domain()}/${LAUNCHD_SESSION_KERNEL_LABEL}`,
       ]);
-      const kernel = await run([
-        "launchctl",
-        "bootstrap",
-        domain(),
+      const kernel = await bootstrapLaunchAgent(
+        LAUNCHD_SESSION_KERNEL_LABEL,
         LAUNCHD_SESSION_KERNEL_PLIST,
-      ]);
+      );
       if (kernel.code !== 0) {
         warn(`launchctl actor bootstrap failed: ${kernel.stderr}`);
         return false;
       }
-      const { code, stderr } = await run([
-        "launchctl",
-        "bootstrap",
-        domain(),
+      const { code, stderr } = await bootstrapLaunchAgent(
+        LAUNCHD_LABEL,
         LAUNCHD_PLIST,
-      ]);
+      );
       if (code !== 0) {
         warn(`launchctl bootstrap failed: ${stderr}`);
         return false;
