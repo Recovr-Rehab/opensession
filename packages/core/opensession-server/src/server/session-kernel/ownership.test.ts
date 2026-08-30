@@ -237,7 +237,7 @@ describe("single session ownership", () => {
     const run = read("run-session.ts");
     const queue = read("queue-state.ts");
     const actor = read("session-kernel/actor-worker.ts");
-    expect(run).toContain("beginNextPromptDispatch(sessionId");
+    expect(run).toMatch(/beginNextPromptDispatch\(\s*sessionId/);
     expect(run).not.toContain("selectQueueBatch(queue");
     expect(run).not.toContain("interruptMarks");
     expect(actor).toContain('delivery.op === "prepare_interrupt"');
@@ -245,8 +245,8 @@ describe("single session ownership", () => {
     expect(actor).toContain('delivery.op === "settle_interrupt"');
     expect(actor).toContain('delivery.op === "claim_next_dispatch"');
     expect(actor).toContain("store.claimNextDeliveryDispatch(delivery)");
-    expect(queue).toContain(
-      "failPromptDispatch(sessionId, dispatch.promptEntryId, false)",
+    expect(queue).toMatch(
+      /failPromptDispatch\(\s*sessionId,\s*dispatch\.promptEntryId,\s*false\s*\)/,
     );
     expect(run).toContain(
       'registerSessionEffectExecutor("delivery_interrupt_cancel"',
@@ -689,8 +689,8 @@ describe("single session ownership", () => {
     expect(cache).toContain('op: "prepare_outcome_projection"');
     expect(cache).toContain("projectionId: opts.projectionId");
     expect(runSession).toContain("creationOwnsPrompt(record.osSessionId");
-    expect(boot).toContain(
-      "creationOwnsPrompt(run.osSessionId, run.promptEntryId)",
+    expect(boot).toMatch(
+      /creationOwnsPrompt\(\s*run\.osSessionId,\s*run\.promptEntryId\s*\)/,
     );
     expect(boot).toContain("!!(run.runnerId || run.sandboxId)");
     expect(boot).toContain("settleRecoveredCreationOpening(");

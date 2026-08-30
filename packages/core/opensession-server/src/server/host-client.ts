@@ -220,6 +220,7 @@ export interface HostedRunOpts {
   proxyMcpServers?: string[];
   reposNote?: string;
   deniedTools?: Record<string, string>;
+  publicationPolicy?: { repo: string; branch: string; headBranch: string };
   confirmTools?: Record<string, string>;
   aws?: boolean;
   /** Pool credentials for trusted run-spawned CLI tools (deepsec scans). */
@@ -417,6 +418,7 @@ async function* runAgentInProcess(
     inProcessMcp: opts.fallbackInProcessMcp?.(),
     reposNote: opts.reposNote,
     deniedTools: opts.deniedTools,
+    publicationPolicy: opts.publicationPolicy,
     confirmTools: opts.confirmTools,
     aws: opts.aws,
     claudeCliEnv: opts.claudeCliEnv,
@@ -545,6 +547,7 @@ function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
     mcpServers: spec.mcpServers,
     user: spec.user,
     deniedTools: spec.deniedTools,
+    publicationPolicy: spec.publicationPolicy,
     confirmTools: spec.confirmTools,
     aws: spec.aws,
     claudeCliEnv: spec.claudeCliEnv,
@@ -602,6 +605,7 @@ async function spawnHostRun(
     rpcToken,
     reposNote: opts.reposNote,
     deniedTools: opts.deniedTools,
+    publicationPolicy: opts.publicationPolicy,
     confirmTools: opts.confirmTools,
     aws: opts.aws,
     claudeCliEnv: opts.claudeCliEnv,
