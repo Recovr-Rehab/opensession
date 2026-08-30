@@ -639,6 +639,8 @@ registerSessionControl({
     const {
       prompt,
       branch,
+      baseRef,
+      stackedOnBranch,
       repo: repoInput,
       repoLess,
       mode,
@@ -651,6 +653,7 @@ registerSessionControl({
       workspaceId,
       isolatedWorktree,
       parentSessionId,
+      spawnDepth,
       agentStarted,
       spawnedBy: spawnedByInput,
       reportBack,
@@ -827,6 +830,7 @@ registerSessionControl({
     let materializeWorktree: (() => Promise<string>) | undefined;
     let sessionBranch = branch || "";
     const sharedParentContext =
+      !isolatedWorktree &&
       parentSession &&
       parentSession.mode !== "ask" &&
       parentSession.mode !== "scratch" &&
@@ -863,24 +867,27 @@ registerSessionControl({
       // parent's, or one it named) shares that worktree/branch instead of
       // creating a fresh one. Only when the repo matches — a session explicitly
       // targeting another repo still gets its own isolated worktree there.
-      const shared = sharedParentContext
-        ? {
-            dir: sharedParentContext.dir,
-            branch: sharedParentContext.branch,
-          }
-        : contextWorkspace?.worktreeDir &&
-            repoForPath(contextWorkspace.worktreeDir).id === repo.id &&
-            existsSync(contextWorkspace.worktreeDir)
+      const shared =
+        !isolatedWorktree && sharedParentContext
           ? {
-              dir: contextWorkspace.worktreeDir,
-              branch: contextWorkspace.branch,
+              dir: sharedParentContext.dir,
+              branch: sharedParentContext.branch,
             }
-          : parentSession?.worktreeDir &&
-              parentSession.mode !== "ask" &&
-              repoForPath(parentSession.worktreeDir).id === repo.id &&
-              existsSync(parentSession.worktreeDir)
-            ? { dir: parentSession.worktreeDir, branch: parentSession.branch }
-            : null;
+          : !isolatedWorktree &&
+              contextWorkspace?.worktreeDir &&
+              repoForPath(contextWorkspace.worktreeDir).id === repo.id &&
+              existsSync(contextWorkspace.worktreeDir)
+            ? {
+                dir: contextWorkspace.worktreeDir,
+                branch: contextWorkspace.branch,
+              }
+            : !isolatedWorktree &&
+                parentSession?.worktreeDir &&
+                parentSession.mode !== "ask" &&
+                repoForPath(parentSession.worktreeDir).id === repo.id &&
+                existsSync(parentSession.worktreeDir)
+              ? { dir: parentSession.worktreeDir, branch: parentSession.branch }
+              : null;
       if (shared) {
         wtPath = shared.dir;
         sessionBranch = shared.branch || sessionBranch;
@@ -923,7 +930,7 @@ registerSessionControl({
               project: repo.id,
               branch: plannedBranch,
               worktreePath: plannedWorktreePath,
-              baseBranch: repo.defaultBranch,
+              baseBranch: baseRef || repo.defaultBranch,
               isolated: isolatedWorktree === true,
               credentialPrincipal,
             });
@@ -1174,6 +1181,7 @@ ${createMentionsNote}`;
       announceWorkspaceId: resolvedWorkspaceId || undefined,
       autoNameWorkspace: autoNamedWorkspace,
       parentSessionId,
+      spawnDepth,
       agentStarted,
       spawnedBy,
       reportBack,
@@ -1203,6 +1211,10 @@ ${createMentionsNote}`;
       // setup materializes this deterministic path after announcement.
       gitPrincipal: githubCredential?.principal,
       gitEnv: githubGitEnv,
+      worktreeBaseRef: baseRef,
+      stackedOn: stackedOnBranch
+        ? { repo: repo.id, branch: stackedOnBranch }
+        : undefined,
       needsWorktree: !!materializeWorktree,
       worktreeKind: "new",
       worktreeIsolated: isolatedWorktree === true,
@@ -1254,7 +1266,10 @@ ${createMentionsNote}`;
               project: restoredSpec.repoId!,
               branch: restoredSpec.branch!,
               worktreePath: restoredSpec.wtPath!,
-              baseBranch: getRepo(restoredSpec.repoId!).defaultBranch,
+              baseBranch:
+                restoredSpec.worktreeBaseRef ||
+                restoredSpec.stackedOn?.branch ||
+                getRepo(restoredSpec.repoId!).defaultBranch,
               isolated: restoredSpec.worktreeIsolated === true,
               credentialPrincipal,
             });

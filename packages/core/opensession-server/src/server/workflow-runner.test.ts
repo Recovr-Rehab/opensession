@@ -19,6 +19,9 @@ import {
   type WorkflowExecutor,
   type WorkflowJournalEntry,
   type WorkflowRunSnapshot,
+  type WorkflowSessionController,
+  type WorkflowSessionStatus,
+  type WorkflowSpawnedSession,
 } from "./workflow-types";
 import type { WorkflowMcpHost } from "./workflow-mcp";
 
@@ -1078,5 +1081,239 @@ describe("workflow mcp.*", () => {
     const snap = await waitForFinished(runId);
     expect(snap.status).toBe("cancelled");
     gate.resolve();
+  });
+});
+
+type FakeSessionController = WorkflowSessionController & {
+  spawnCalls: number;
+  sendCalls: Array<{ id: string; message: string }>;
+  cancelCalls: string[];
+  cancelActiveCalls: string[];
+};
+
+function fakeSessionController(): FakeSessionController {
+  const statuses = new Map<string, WorkflowSessionStatus>();
+  const owned = new Set<string>();
+  const api: FakeSessionController = {
+    spawnCalls: 0,
+    sendCalls: [],
+    cancelCalls: [],
+    cancelActiveCalls: [],
+    adopt(session) {
+      owned.add(session.id);
+      statuses.set(session.id, {
+        ...session,
+        status: "done",
+        worktreeDir: `/worktrees/${session.branch}`,
+        branchPushed: true,
+      });
+    },
+    async spawn(opts) {
+      api.spawnCalls++;
+      const session: WorkflowSpawnedSession = {
+        id: `child-${api.spawnCalls}`,
+        url: `https://os.example.test/session/child-${api.spawnCalls}`,
+        repo: opts.repo,
+        branch: opts.branch || `branch-${api.spawnCalls}`,
+        parentSessionId: "bks-wf-test",
+      };
+      owned.add(session.id);
+      statuses.set(session.id, {
+        ...session,
+        status: "running",
+        worktreeDir: `/worktrees/${session.branch}`,
+        branchPushed: false,
+      });
+      return session;
+    },
+    async status(id) {
+      if (!owned.has(id)) throw new Error("not owned");
+      return statuses.get(id)!;
+    },
+    async wait(id, opts) {
+      if (!owned.has(id)) throw new Error("not owned");
+      const current = statuses.get(id)!;
+      const status: WorkflowSessionStatus = {
+        ...current,
+        status: opts.until,
+        branchPushed:
+          current.branchPushed ||
+          opts.until === "branch_pushed" ||
+          opts.until === "pr_opened",
+        ...(opts.until === "pr_opened"
+          ? { prUrl: "https://github.com/tellahq/repo/pull/1" }
+          : {}),
+      };
+      statuses.set(id, status);
+      return status;
+    },
+    async send(id, message) {
+      if (!owned.has(id)) throw new Error("not owned");
+      api.sendCalls.push({ id, message });
+      return { status: "steered" };
+    },
+    async cancel(id) {
+      if (!owned.has(id)) throw new Error("not owned");
+      api.cancelCalls.push(id);
+      const status = { ...statuses.get(id)!, status: "cancelled" as const };
+      statuses.set(id, status);
+      return status;
+    },
+    async cancelActive(requestId) {
+      api.cancelActiveCalls.push(requestId);
+    },
+  };
+  return api;
+}
+
+describe("workflow durable session API", () => {
+  const script = [
+    'export const meta = { name: "sessions" };',
+    'const child = await spawnSession({ prompt: "Implement it", repo: "renderer", mode: "code", workspace: { type: "isolated-worktree", baseRef: "main" }, branch: "compat/layout" });',
+    "const first = await sessionStatus(child.id);",
+    'await sendToSession(child.id, "Please push");',
+    'const pushed = await waitSession(child.id, { until: "branch_pushed", timeout: 1000 });',
+    "const cancelled = await cancelSession(child.id);",
+    "return { child, first: first.status, pushed: pushed.status, cancelled: cancelled.status };",
+  ].join("\n");
+
+  test("spawns, supervises, messages, waits and cancels a real-session adapter", async () => {
+    const sessions = fakeSessionController();
+    const { runId } = start({
+      executor: echoExecutor(),
+      sessionController: sessions,
+      script,
+    });
+    const snap = await waitForFinished(runId);
+    expect(snap.status).toBe("done");
+    expect(snap.result).toMatchObject({
+      child: { id: "child-1", branch: "compat/layout" },
+      first: "running",
+      pushed: "branch_pushed",
+      cancelled: "cancelled",
+    });
+    expect(snap.sessions).toHaveLength(1);
+    expect(snap.sessions?.[0]).toMatchObject({
+      id: "child-1",
+      parentSessionId: "bks-wf-test",
+      worktreeDir: "/worktrees/compat/layout",
+      status: "cancelled",
+    });
+    expect(sessions.sendCalls).toEqual([
+      { id: "child-1", message: "Please push" },
+    ]);
+    expect(sessions.cancelCalls).toEqual(["child-1"]);
+    expect(
+      readWorkflowJournal(runId).filter((entry) => entry.kind === "session"),
+    ).toHaveLength(5);
+  });
+
+  test("resume replays completed calls and adopts the original child", async () => {
+    const original = fakeSessionController();
+    const first = start({
+      executor: echoExecutor(),
+      sessionController: original,
+      script,
+    });
+    await waitForFinished(first.runId);
+
+    const resumed = fakeSessionController();
+    const second = start({
+      executor: echoExecutor(),
+      sessionController: resumed,
+      script,
+      resumeFromRunId: first.runId,
+    });
+    const snap = await waitForFinished(second.runId);
+    expect(snap.result).toMatchObject({ child: { id: "child-1" } });
+    expect(resumed.spawnCalls).toBe(0);
+    expect(snap.replayRootRunId).toBe(first.runId);
+    expect(snap.sessions?.map((session) => session.id)).toEqual(["child-1"]);
+  });
+
+  test("explicit workflow cancellation propagates to active children", async () => {
+    const sessions = fakeSessionController();
+    const gate = deferred<WorkflowAgentOutcome>();
+    const { runId } = start({
+      executor: fakeExecutor(() => gate.promise),
+      sessionController: sessions,
+      script: [
+        'export const meta = { name: "cancel-children" };',
+        'await spawnSession({ prompt: "one", repo: "renderer", branch: "one" });',
+        'await agent("hold");',
+      ].join("\n"),
+    });
+    await waitUntil(() => sessions.spawnCalls === 1);
+    expect(cancelWorkflow(runId)).toBe(true);
+    await waitForFinished(runId);
+    await waitUntil(() => sessions.cancelActiveCalls.length === 1);
+    expect(sessions.cancelActiveCalls[0]).toContain(`workflow:${runId}:cancel`);
+    gate.resolve({ ok: false, error: "cancelled" });
+  });
+
+  test("active-session and lifetime limits reject excess spawns", async () => {
+    const active = fakeSessionController();
+    const activeRun = start({
+      executor: echoExecutor(),
+      sessionController: active,
+      sessionLimits: { maxConcurrent: 1, maxSessions: 2 },
+      script: [
+        'export const meta = { name: "limit" };',
+        "const results = await Promise.allSettled([",
+        '  spawnSession({ prompt: "one", repo: "renderer", branch: "one" }),',
+        '  spawnSession({ prompt: "two", repo: "renderer", branch: "two" }),',
+        "]);",
+        'const failed = results.find((result) => result.status === "rejected");',
+        "if (failed) throw failed.reason;",
+      ].join("\n"),
+    });
+    expect((await waitForFinished(activeRun.runId)).error).toContain(
+      "Active nested session cap reached",
+    );
+    expect(active.spawnCalls).toBe(1);
+
+    const lifetime = fakeSessionController();
+    const lifetimeRun = start({
+      executor: echoExecutor(),
+      sessionController: lifetime,
+      sessionLimits: { maxConcurrent: 3, maxSessions: 1 },
+      script: [
+        'export const meta = { name: "limit" };',
+        'const one = await spawnSession({ prompt: "one", repo: "renderer", branch: "one" });',
+        'await waitSession(one.id, { until: "done" });',
+        'await spawnSession({ prompt: "two", repo: "renderer", branch: "two" });',
+      ].join("\n"),
+    });
+    expect((await waitForFinished(lifetimeRun.runId)).error).toContain(
+      "Nested session cap reached",
+    );
+    expect(lifetime.spawnCalls).toBe(1);
+
+    const budgeted = fakeSessionController();
+    const status = budgeted.status.bind(budgeted);
+    budgeted.status = async (id) => ({
+      ...(await status(id)),
+      tokens: 101,
+      costUsd: 1,
+    });
+    const budgetRun = start({
+      executor: echoExecutor(),
+      sessionController: budgeted,
+      sessionLimits: {
+        maxConcurrent: 3,
+        maxSessions: 3,
+        maxTokens: 100,
+      },
+      script: [
+        'export const meta = { name: "budget" };',
+        'const one = await spawnSession({ prompt: "one", repo: "renderer", branch: "one" });',
+        'await waitSession(one.id, { until: "done" });',
+        'await spawnSession({ prompt: "two", repo: "renderer", branch: "two" });',
+      ].join("\n"),
+    });
+    expect((await waitForFinished(budgetRun.runId)).error).toContain(
+      "token budget exceeded",
+    );
+    expect(budgeted.spawnCalls).toBe(1);
   });
 });

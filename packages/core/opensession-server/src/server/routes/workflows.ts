@@ -8,6 +8,7 @@
 import type { RouteContext } from "./context";
 import {
   isMcpJournalEntry,
+  isSessionJournalEntry,
   type WorkflowJournalEntry,
 } from "../workflow-types";
 import {
@@ -41,7 +42,8 @@ if (!(globalThis as any).__opensessionWorkflowsBootMarked) {
  *  here — a raw find() can otherwise match an unrelated tool call. */
 function agentJournalEntries(runId: string): WorkflowJournalEntry[] {
   return readWorkflowJournal(runId).filter(
-    (e): e is WorkflowJournalEntry => !isMcpJournalEntry(e),
+    (e): e is WorkflowJournalEntry =>
+      !isMcpJournalEntry(e) && !isSessionJournalEntry(e),
   );
 }
 

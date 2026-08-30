@@ -4,6 +4,7 @@ import type {
   WorkflowAgentSnapshot,
   WorkflowJournalEntry,
   WorkflowRunSnapshot,
+  WorkflowSessionSnapshot,
 } from "../../server/workflow-types";
 import type { SessionSubagentSnapshot } from "../lib/api";
 import { cn } from "../ui/cn";
@@ -238,6 +239,51 @@ function AgentRail({
         {duration}
       </span>
     </>
+  );
+}
+
+function NestedSessionRow({ session }: { session: WorkflowSessionSnapshot }) {
+  const markStatus =
+    session.status === "error"
+      ? "error"
+      : session.status === "running" || session.status === "waiting"
+        ? "running"
+        : session.status === "cancelled"
+          ? "cancelled"
+          : "done";
+  const details = [
+    session.branch,
+    session.worktreeDir?.split("/").filter(Boolean).at(-1),
+  ].filter(Boolean);
+  return (
+    <a
+      href={session.url}
+      className={cn(
+        ROW_CLASS,
+        "min-h-11 flex-col items-stretch gap-0.5 hover:bg-hover desktop:min-h-0",
+      )}
+      title={`Open ${session.id}`}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <StatusMark status={markStatus} />
+        <span className="min-w-0 flex-1 truncate text-label text-fg">
+          {session.label}
+        </span>
+        <span className="shrink-0 text-meta text-faint">
+          {session.status.replace("_", " ")}
+        </span>
+      </span>
+      <span className="flex min-w-0 items-center gap-1.5 pl-5 text-meta text-faint">
+        <span className="min-w-0 truncate" title={details.join(" · ")}>
+          {details.join(" · ")}
+        </span>
+        {session.prUrl && (
+          <Badge tone="success" variant="soft" className="ml-auto shrink-0">
+            PR
+          </Badge>
+        )}
+      </span>
+    </a>
   );
 }
 
@@ -599,6 +645,10 @@ function RunCard({
   ];
   if (runningN) meta.push(`${runningN} running`);
   if (errorN) meta.push(`${errorN} failed`);
+  if (run.sessions?.length)
+    meta.push(
+      `${run.sessions.length} session${run.sessions.length === 1 ? "" : "s"}`,
+    );
   // Direct mcp.* calls the script made — cheap work that never became an
   // agent row, so without this the panel understates what the run did.
   if (run.totals.mcpCalls) {
@@ -676,6 +726,21 @@ function RunCard({
           </Button>
         )}
       </div>
+      {!!run.sessions?.length && (
+        <div className="flex flex-col">
+          <div className="flex items-baseline gap-2 px-2 pb-px pt-0.5">
+            <span className="min-w-0 flex-1 truncate text-meta font-medium text-faint">
+              Sessions
+            </span>
+            <span className="shrink-0 text-meta text-faint tabular-nums">
+              {run.sessions.length}
+            </span>
+          </div>
+          {run.sessions.map((session) => (
+            <NestedSessionRow key={session.id} session={session} />
+          ))}
+        </div>
+      )}
       {(run.agents.length > 0 ||
         (run.status === "running" && groups.order.length > 0)) && (
         <div className="flex flex-col">

@@ -15,8 +15,8 @@
  * processes).
  *
  * Resume: startWorkflow({resumeFromRunId}) re-runs the script and answers any
- * agent_call or mcp_call whose hash matches the old run's journal instantly
- * from the journal — the script replays deterministically up to the first
+ * agent, durable-session or MCP call whose hash matches the old run's journal
+ * instantly — the script replays deterministically up to the first
  * changed/missing call (which is why the worker poisons Date.now &co), and a
  * tool call that already landed is never re-fired.
  *
@@ -30,6 +30,7 @@ import {
   appendWorkflowJournal,
   cancelLiveWorkflow,
   createWorkflowRun,
+  getWorkflowRun,
   readWorkflowJournal,
   registerLiveWorkflow,
   unregisterLiveWorkflow,
@@ -41,6 +42,7 @@ import { tryGetSessionControl } from "./session-control";
 import {
   WORKFLOW_LIMITS,
   isMcpJournalEntry,
+  isSessionJournalEntry,
   normalizeWorkflowOutcome,
   type WorkerToParent,
   type WorkflowAgentOpts,
@@ -53,6 +55,14 @@ import {
   type WorkflowMergeResult,
   type WorkflowMeta,
   type WorkflowRunSnapshot,
+  type WorkflowSessionController,
+  type WorkflowSessionJournalEntry,
+  type WorkflowSessionOperation,
+  type WorkflowSessionSnapshot,
+  type WorkflowSessionState,
+  type WorkflowSessionStatus,
+  type WorkflowSpawnedSession,
+  type WorkflowSpawnSessionOpts,
 } from "./workflow-types";
 import type { WorkflowMcpHost } from "./workflow-mcp";
 
@@ -389,6 +399,15 @@ function hashMcpCall(server: string, tool: string, args: unknown): string {
     .digest("hex");
 }
 
+function hashSessionCall(
+  operation: WorkflowSessionOperation,
+  args: unknown,
+): string {
+  return new Bun.CryptoHasher("sha256")
+    .update(`session\u0000${operation}\u0000${stableStringify(args)}`)
+    .digest("hex");
+}
+
 // ── Start / cancel ───────────────────────────────────────────────────────────
 
 export interface StartWorkflowOpts {
@@ -419,6 +438,19 @@ export interface StartWorkflowOpts {
    *  Interactive sessions only; workflow-mcp.ts intersects it with its own
    *  allowlist. Must return FRESH instances (one transport per McpServer). */
   inProcessMcp?: () => Record<string, unknown>;
+  /** Injected by tests; defaults to the SessionControl-backed supervisor. */
+  sessionController?: WorkflowSessionController;
+  /** Per-run overrides for nested-session depth/concurrency/lifetime limits. */
+  sessionLimits?: {
+    maxDepth?: number;
+    maxConcurrent?: number;
+    maxSessions?: number;
+    maxTokens?: number;
+    maxCostUsd?: number;
+  };
+  /** Explicit cancellation propagates to active children by default. A server
+   * crash never does, so children remain durable across workflow restarts. */
+  cancelChildSessions?: boolean;
   /** Injected by tests; defaults to the real MCP host. */
   mcpHost?: WorkflowMcpHost;
 }
@@ -458,8 +490,15 @@ export function startWorkflow(opts: StartWorkflowOpts): { runId: string } {
   // script that created a Linear issue safe).
   const replay = new Map<string, WorkflowJournalEntry[]>();
   const mcpReplay = new Map<string, WorkflowMcpJournalEntry[]>();
+  const sessionReplay = new Map<string, WorkflowSessionJournalEntry[]>();
   if (opts.resumeFromRunId) {
     for (const entry of readWorkflowJournal(opts.resumeFromRunId)) {
+      if (isSessionJournalEntry(entry)) {
+        const queue = sessionReplay.get(entry.hash);
+        if (queue) queue.push(entry);
+        else sessionReplay.set(entry.hash, [entry]);
+        continue;
+      }
       if (isMcpJournalEntry(entry)) {
         if (!entry.ok) continue;
         const queue = mcpReplay.get(entry.hash);
@@ -485,10 +524,19 @@ export function startWorkflow(opts: StartWorkflowOpts): { runId: string } {
     for (const queue of mcpReplay.values()) {
       queue.sort((a, b) => a.seq - b.seq);
     }
+    for (const queue of sessionReplay.values()) {
+      queue.sort((a, b) => a.seq - b.seq);
+    }
   }
 
+  const resumed = opts.resumeFromRunId
+    ? getWorkflowRun(opts.resumeFromRunId)
+    : undefined;
+  const replayRootRunId =
+    resumed?.replayRootRunId || opts.resumeFromRunId || runId;
   createWorkflowRun({
     runId,
+    replayRootRunId,
     sessionId: opts.sessionId,
     name: meta.name,
     description: meta.description,
@@ -497,7 +545,15 @@ export function startWorkflow(opts: StartWorkflowOpts): { runId: string } {
     cwd: opts.cwd,
     script,
   });
-  runWorkflow(runId, opts, body, replay, mcpReplay);
+  runWorkflow(
+    runId,
+    replayRootRunId,
+    opts,
+    body,
+    replay,
+    mcpReplay,
+    sessionReplay,
+  );
   return { runId };
 }
 
@@ -510,10 +566,12 @@ export function cancelWorkflow(runId: string): boolean {
 
 function runWorkflow(
   runId: string,
+  replayRootRunId: string,
   opts: StartWorkflowOpts,
   body: string,
   replay: Map<string, WorkflowJournalEntry[]>,
   mcpReplay: Map<string, WorkflowMcpJournalEntry[]>,
+  sessionReplay: Map<string, WorkflowSessionJournalEntry[]>,
 ): void {
   const controller = new AbortController();
   // Lazy-import the real executor so test paths (which always inject) never
@@ -542,16 +600,44 @@ function runWorkflow(
     return mcpHostPromise;
   }
 
+  let sessionControllerPromise: Promise<WorkflowSessionController> | undefined;
+  function sessionController(): Promise<WorkflowSessionController> {
+    if (!sessionControllerPromise) {
+      sessionControllerPromise = opts.sessionController
+        ? Promise.resolve(opts.sessionController)
+        : import("./workflow-sessions").then((m) => {
+            const parent = findSession(opts.sessionId);
+            return m.createWorkflowSessionController({
+              parentSessionId: opts.sessionId,
+              user: opts.user,
+              // Automation workflows retain their lightweight agent/MCP
+              // surface. Turning one into an interactive code session would
+              // lose denied-tool policy, so fail closed until that policy can
+              // be persisted on ordinary sessions.
+              allowSpawning: !parent?.automation && !opts.deniedTools,
+              mcpAllowlist: opts.mcpAllowlist,
+              maxDepth:
+                opts.sessionLimits?.maxDepth ?? WORKFLOW_LIMITS.maxSessionDepth,
+            });
+          });
+    }
+    return sessionControllerPromise;
+  }
+
   let worker: Worker | undefined;
   let finished = false;
   let totalCalls = 0;
   let totalWriteCalls = 0;
   let totalMcpCalls = 0;
+  let totalSessionSpawns = 0;
+  let sessionSpawnsInFlight = 0;
+  let sessionBudgetCancelled = false;
   // Calls the worker is still awaiting an agent_result for.
   const openCalls = new Set<number>();
   // …and the mcp_result equivalents (settled on cancel so the script's
   // awaited tool calls reject rather than hanging until termination).
   const openMcpCalls = new Set<number>();
+  const openSessionCalls = new Set<number>();
 
   // The session's repo + branch, resolved once per run (write agents branch
   // off it; merge() merges back into it). Explicit opts win — tests pass them.
@@ -651,10 +737,13 @@ function runWorkflow(
     } catch {}
   }
 
+  let sessionRefresh: ReturnType<typeof setInterval> | undefined;
+
   function finish(mutate: (s: WorkflowRunSnapshot) => void): void {
     if (finished) return;
     finished = true;
     clearTimeout(deadline);
+    if (sessionRefresh) clearInterval(sessionRefresh);
     controller.abort();
     let snap: WorkflowRunSnapshot | undefined;
     try {
@@ -712,11 +801,34 @@ function runWorkflow(
         error: "workflow cancelled",
       });
     }
+    for (const callId of [...openSessionCalls]) {
+      postSessionResult(callId, {
+        ok: false,
+        value: null,
+        error: "workflow cancelled",
+      });
+    }
+    if (opts.cancelChildSessions !== false && sessionControllerPromise) {
+      void sessionControllerPromise
+        .then((controller) =>
+          controller.cancelActive?.(`workflow:${runId}:cancel`),
+        )
+        .catch((e) =>
+          console.warn(`[workflow] ${runId} child cancellation failed:`, e),
+        );
+    }
     finish((s) => {
       s.status = "cancelled";
       s.endedAt = new Date().toISOString();
       if (reason) s.error = reason;
       markUnfinishedAgents(s, s.endedAt);
+      if (opts.cancelChildSessions !== false)
+        for (const session of s.sessions || []) {
+          if (["running", "waiting"].includes(session.status)) {
+            session.status = "cancelled";
+            session.endedAt = s.endedAt;
+          }
+        }
     });
   }
 
@@ -1018,6 +1130,317 @@ function runWorkflow(
     postMergeResult(msg.callId, result);
   }
 
+  // ── durable child-session bridge ──────────────────────────────────────────
+
+  function postSessionResult(
+    callId: number,
+    result: { ok: boolean; value: unknown; error?: string },
+  ): void {
+    if (!openSessionCalls.has(callId)) return;
+    openSessionCalls.delete(callId);
+    try {
+      worker?.postMessage({ type: "session_result", callId, ...result });
+    } catch {}
+  }
+
+  function sessionRequestId(seq: number, hash: string): string {
+    const digest = new Bun.CryptoHasher("sha256")
+      .update(`${replayRootRunId}\u0000${seq}\u0000${hash}`)
+      .digest("hex");
+    return `workflow-session-${digest}`;
+  }
+
+  function sessionLabel(args: unknown): string {
+    const prompt = (args as { prompt?: unknown } | null)?.prompt;
+    return typeof prompt === "string"
+      ? prompt.replace(/\s+/g, " ").trim().slice(0, 80) || "Code session"
+      : "Code session";
+  }
+
+  function applySessionStatus(
+    seq: number,
+    status: WorkflowSessionStatus,
+  ): void {
+    if (finished) return;
+    updateWorkflowRun(runId, (s) => {
+      const row = s.sessions?.find((item) => item.id === status.id);
+      if (!row) return;
+      row.status = status.status;
+      row.branch = status.branch;
+      row.repo = status.repo;
+      row.branchPushed = status.branchPushed;
+      if (status.worktreeDir) row.worktreeDir = status.worktreeDir;
+      if (status.prUrl) row.prUrl = status.prUrl;
+      if (status.error) row.error = status.error;
+      if (status.tokens !== undefined) row.tokens = status.tokens;
+      if (status.costUsd !== undefined) row.costUsd = status.costUsd;
+      if (["done", "error", "cancelled"].includes(status.status))
+        row.endedAt ||= new Date().toISOString();
+      // A replay can carry a different display seq while retaining the same id.
+      row.seq = seq;
+    });
+  }
+
+  async function refreshSessionRows(): Promise<void> {
+    const rows = (getWorkflowRun(runId)?.sessions || []).filter((row) =>
+      ["running", "waiting"].includes(row.status),
+    );
+    if (!rows.length || finished) return;
+    const controller = await sessionController();
+    await Promise.all(
+      rows.map(async (row) => {
+        try {
+          applySessionStatus(row.seq, await controller.status(row.id));
+        } catch (e) {
+          if (!finished)
+            updateWorkflowRun(runId, (s) => {
+              const current = s.sessions?.find((item) => item.id === row.id);
+              if (current)
+                current.error = e instanceof Error ? e.message : String(e);
+            });
+        }
+      }),
+    );
+    const budgetError = sessionBudgetError();
+    if (budgetError && !sessionBudgetCancelled) {
+      sessionBudgetCancelled = true;
+      await controller.cancelActive?.(`workflow:${runId}:budget`);
+      updateWorkflowRun(runId, (s) => {
+        s.logs.push({ ts: new Date().toISOString(), message: budgetError });
+      });
+    }
+  }
+
+  function sessionBudgetError(): string | undefined {
+    const rows = getWorkflowRun(runId)?.sessions || [];
+    const tokens = rows.reduce((sum, row) => sum + (row.tokens || 0), 0);
+    const cost = rows.reduce((sum, row) => sum + (row.costUsd || 0), 0);
+    const maxTokens =
+      opts.sessionLimits?.maxTokens ?? WORKFLOW_LIMITS.maxSessionTokens;
+    const maxCost =
+      opts.sessionLimits?.maxCostUsd ?? WORKFLOW_LIMITS.maxSessionCostUsd;
+    if (tokens > maxTokens)
+      return `Nested session token budget exceeded (${tokens} > ${maxTokens})`;
+    if (cost > maxCost)
+      return `Nested session cost budget exceeded ($${cost.toFixed(2)} > $${maxCost.toFixed(2)})`;
+    return undefined;
+  }
+
+  function assertSessionBudget(): void {
+    const error = sessionBudgetError();
+    if (error) throw new Error(error);
+  }
+
+  function ensureSessionRefresh(): void {
+    if (sessionRefresh) return;
+    sessionRefresh = setInterval(() => {
+      void refreshSessionRows().catch((e) =>
+        console.warn(`[workflow] ${runId} child refresh failed:`, e),
+      );
+    }, 3_000);
+    (sessionRefresh as { unref?: () => void }).unref?.();
+  }
+
+  function addSessionRow(
+    seq: number,
+    spawned: WorkflowSpawnedSession,
+    args: unknown,
+    status?: WorkflowSessionStatus,
+  ): void {
+    updateWorkflowRun(runId, (s) => {
+      const sessions = (s.sessions ||= []);
+      if (sessions.some((item) => item.id === spawned.id)) return;
+      const row: WorkflowSessionSnapshot = {
+        ...spawned,
+        seq,
+        label: sessionLabel(args),
+        status: status?.status || "running",
+        startedAt: new Date().toISOString(),
+        ...(status?.worktreeDir ? { worktreeDir: status.worktreeDir } : {}),
+        ...(status?.prUrl ? { prUrl: status.prUrl } : {}),
+        ...(status?.error ? { error: status.error } : {}),
+        ...(status ? { branchPushed: status.branchPushed } : {}),
+        ...(status?.tokens !== undefined ? { tokens: status.tokens } : {}),
+        ...(status?.costUsd !== undefined ? { costUsd: status.costUsd } : {}),
+      };
+      sessions.push(row);
+    });
+    ensureSessionRefresh();
+  }
+
+  async function executeSessionOperation(
+    operation: WorkflowSessionOperation,
+    args: unknown,
+    seq: number,
+    hash: string,
+  ): Promise<unknown> {
+    const supervisor = await sessionController();
+    const requestId = sessionRequestId(seq, hash);
+    if (operation === "spawn") {
+      const maxSessions =
+        opts.sessionLimits?.maxSessions ?? WORKFLOW_LIMITS.maxSessions;
+      if (++totalSessionSpawns > maxSessions)
+        throw new Error(
+          `Nested session cap reached (${maxSessions} per workflow)`,
+        );
+      await refreshSessionRows();
+      assertSessionBudget();
+      const maxConcurrent =
+        opts.sessionLimits?.maxConcurrent ??
+        WORKFLOW_LIMITS.maxConcurrentSessions;
+      const active = (getWorkflowRun(runId)?.sessions || []).filter((row) =>
+        ["running", "waiting"].includes(row.status),
+      ).length;
+      if (active + sessionSpawnsInFlight >= maxConcurrent)
+        throw new Error(
+          `Active nested session cap reached (${maxConcurrent} per workflow)`,
+        );
+      sessionSpawnsInFlight++;
+      try {
+        const spawned = await supervisor.spawn(
+          args as WorkflowSpawnSessionOpts,
+          requestId,
+        );
+        const current = await supervisor
+          .status(spawned.id)
+          .catch(() => undefined);
+        addSessionRow(seq, spawned, args, current);
+        return spawned;
+      } finally {
+        sessionSpawnsInFlight--;
+      }
+    }
+    const input = args as {
+      id?: unknown;
+      message?: unknown;
+      until?: unknown;
+      timeout?: unknown;
+    };
+    if (typeof input?.id !== "string" || !input.id)
+      throw new Error(`${operation}Session() needs a child session id`);
+    if (operation === "status") {
+      const current = await supervisor.status(input.id);
+      applySessionStatus(seq, current);
+      return current;
+    }
+    if (operation === "wait") {
+      const allowed: WorkflowSessionState[] = [
+        "running",
+        "waiting",
+        "branch_pushed",
+        "pr_opened",
+        "done",
+        "error",
+        "cancelled",
+      ];
+      if (!allowed.includes(input.until as WorkflowSessionState))
+        throw new Error(
+          `waitSession() until must be one of: ${allowed.join(", ")}`,
+        );
+      const current = await supervisor.wait(
+        input.id,
+        {
+          until: input.until as WorkflowSessionState,
+          ...(typeof input.timeout === "number"
+            ? { timeout: input.timeout }
+            : {}),
+        },
+        controller.signal,
+      );
+      applySessionStatus(seq, current);
+      return current;
+    }
+    if (operation === "send") {
+      assertSessionBudget();
+      if (typeof input.message !== "string" || !input.message.trim())
+        throw new Error("sendToSession() needs a message");
+      return await supervisor.send(input.id, input.message, requestId);
+    }
+    const current = await supervisor.cancel(input.id, requestId);
+    applySessionStatus(seq, current);
+    return current;
+  }
+
+  async function handleSessionCall(
+    msg: Extract<WorkerToParent, { type: "session_call" }>,
+  ): Promise<void> {
+    openSessionCalls.add(msg.callId);
+    const hash = hashSessionCall(msg.operation, msg.args);
+    const queue = sessionReplay.get(hash);
+    const journaled = queue?.length ? queue.shift() : undefined;
+    if (journaled) {
+      try {
+        if (msg.operation === "spawn" && journaled.ok && journaled.value) {
+          const spawned = journaled.value as WorkflowSpawnedSession;
+          const controller = await sessionController();
+          controller.adopt(spawned);
+          const current = await controller
+            .status(spawned.id)
+            .catch(() => undefined);
+          addSessionRow(msg.seq, spawned, msg.args, current);
+          totalSessionSpawns++;
+        } else if (
+          journaled.ok &&
+          ["status", "wait", "cancel"].includes(msg.operation)
+        ) {
+          const id = (msg.args as { id?: unknown } | null)?.id;
+          if (typeof id === "string") {
+            const current = await (
+              await sessionController()
+            )
+              .status(id)
+              .catch(() => undefined);
+            if (current) applySessionStatus(msg.seq, current);
+          }
+        }
+        appendWorkflowJournal(runId, { ...journaled, seq: msg.seq });
+      } catch (e) {
+        console.warn(`[workflow] ${runId} session replay failed:`, e);
+      }
+      postSessionResult(msg.callId, {
+        ok: journaled.ok,
+        value: journaled.value ?? null,
+        error: journaled.error,
+      });
+      return;
+    }
+
+    const startedAt = new Date().toISOString();
+    let ok = false;
+    let value: unknown = null;
+    let error: string | undefined;
+    try {
+      value = await executeSessionOperation(
+        msg.operation,
+        msg.args,
+        msg.seq,
+        hash,
+      );
+      ok = true;
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+    if (finished) return;
+    const endedAt = new Date().toISOString();
+    try {
+      appendWorkflowJournal(runId, {
+        kind: "session",
+        seq: msg.seq,
+        hash,
+        operation: msg.operation,
+        args: msg.args,
+        ok,
+        ...(ok ? { value } : {}),
+        ...(error ? { error } : {}),
+        startedAt,
+        endedAt,
+      });
+    } catch (e) {
+      console.warn(`[workflow] ${runId} session journal append failed:`, e);
+    }
+    postSessionResult(msg.callId, { ok, value: ok ? value : null, error });
+  }
+
   // ── mcp.* bridge ───────────────────────────────────────────────────────────
 
   function postMcpResult(
@@ -1205,6 +1628,16 @@ function runWorkflow(
             merged: [],
             conflicts: [],
             skipped: [],
+            error: e instanceof Error ? e.message : String(e),
+          });
+        });
+        return;
+      case "session_call":
+        handleSessionCall(msg).catch((e) => {
+          console.warn(`[workflow] ${runId} session call failed:`, e);
+          postSessionResult(msg.callId, {
+            ok: false,
+            value: null,
             error: e instanceof Error ? e.message : String(e),
           });
         });

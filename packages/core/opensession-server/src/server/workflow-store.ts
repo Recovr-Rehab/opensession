@@ -3,9 +3,9 @@
  *
  * Disk layout: ~/.opensession-workflows/<runId>/ with
  *   run.json      — WorkflowRunSnapshot (the UI payload)
- *   journal.jsonl — one record per completed agent() call (WorkflowJournalEntry)
- *                   or mcp.* call (WorkflowMcpJournalEntry, kind:"mcp") — the
- *                   resume-replay unit and the UI drill-in detail
+ *   journal.jsonl — one record per completed agent(), mcp.* or durable-session
+ *                   API call. This is the resume-replay unit and the UI's
+ *                   agent drill-in detail.
  *   script.mjs    — the workflow script source, verbatim
  * Tests point OPENSESSION_WORKFLOWS_DIR at a tmp dir.
  *
@@ -115,6 +115,16 @@ function truncate(text: string, max: number): string {
  *  mutation, so every string a script can influence (labels, log lines,
  *  errors, phase titles) gets capped here, not just the previews. */
 function enforceSnapshotLimits(snapshot: WorkflowRunSnapshot): void {
+  for (const session of snapshot.sessions || []) {
+    session.label = truncate(session.label || "", 200);
+    session.repo = truncate(session.repo || "", 200);
+    session.branch = truncate(session.branch || "", 500);
+    session.worktreeDir = session.worktreeDir
+      ? truncate(session.worktreeDir, 1_000)
+      : undefined;
+    session.prUrl = session.prUrl ? truncate(session.prUrl, 1_000) : undefined;
+    session.error = session.error ? truncate(session.error, 1_000) : undefined;
+  }
   for (const agent of snapshot.agents) {
     agent.label = truncate(agent.label || "", 200);
     agent.promptPreview = truncate(
@@ -141,6 +151,7 @@ function enforceSnapshotLimits(snapshot: WorkflowRunSnapshot): void {
 
 export function createWorkflowRun(init: {
   runId: string;
+  replayRootRunId?: string;
   sessionId: string;
   name: string;
   description?: string;
@@ -151,6 +162,7 @@ export function createWorkflowRun(init: {
 }): WorkflowRunSnapshot {
   const snapshot: WorkflowRunSnapshot = {
     runId: init.runId,
+    ...(init.replayRootRunId ? { replayRootRunId: init.replayRootRunId } : {}),
     sessionId: init.sessionId,
     name: init.name,
     ...(init.description !== undefined
@@ -159,6 +171,7 @@ export function createWorkflowRun(init: {
     status: "running",
     phases: [...init.phases],
     agents: [],
+    sessions: [],
     logs: [],
     startedAt: new Date().toISOString(),
     totals: { agents: 0, tokensIn: 0, tokensOut: 0 },

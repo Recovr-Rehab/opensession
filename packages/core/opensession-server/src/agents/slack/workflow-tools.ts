@@ -120,7 +120,12 @@ export const meta = {
 Injected globals:
 - agent(prompt, opts?) → Promise — run one focused agent (ask mode: reads files / runs read-only commands in this session's worktree; its final message is the return value). Resolves to the final text; with opts.schema (a JSON Schema) resolves to the parsed, validated object instead; resolves to null when the agent errored — filter with .filter(Boolean). opts: { label, phase, schema, model, effort, write }.
 - parallel([...thunks]) → Promise — run zero-arg thunks concurrently and wait for all; a thrown thunk becomes null, never rejects the batch. E.g. await parallel(files.map(f => () => agent("Audit " + f)))
-- pipeline(items, ...stages) → Promise — per-item stage chain with NO barrier between stages (item B can run stage 1 while item A is in stage 2). Each stage gets (prevResult, originalItem, index); a throwing stage drops that item to null and skips its remaining stages.
+- pipeline(items, ...stages) → Promise — per-item stage chain with NO barrier between stages (item B can be in stage 1 while item A is in stage 2). Each stage gets (prevResult, originalItem, index); a throwing stage drops that item to null and skips its remaining stages.
+- spawnSession({ prompt, repo, mode?, workspace?, branch? }) → Promise<{ id, url, repo, branch, parentSessionId }> — launch a REAL durable child session through Open Session's normal session/PR infrastructure. It returns as soon as the visible session exists. For an isolated code branch use workspace: { type: "isolated-worktree", baseRef: "main" }; use baseSessionId instead of baseRef to branch from another child after waitSession(base.id, { until: "branch_pushed" }).
+- sessionStatus(id) → Promise — current child status, branch/worktree and PR.
+- waitSession(id, { until, timeout? }) → Promise — wait for running, waiting, branch_pushed, pr_opened, done, error or cancelled. timeout is milliseconds.
+- sendToSession(id, message) → Promise — steer/message a child this workflow spawned.
+- cancelSession(id) → Promise — cancel a child this workflow spawned.
 - mcp.<server>.<tool>(args) → Promise — call an MCP tool DIRECTLY from the script (no model turn: one round trip). Resolves to the tool's structured result, or its text auto-parsed as JSON when it parses. REJECTS on failure (unlike agent(), which resolves null) — try/catch it, or let parallel() degrade the throw to null. Also: mcp.call(server, tool, args) (same thing, dynamic names), mcp.servers() → string[], mcp.tools(server) → [{name, description, inputSchema}].
 - phase(title) — set the current progress group for subsequent agent calls.
 - log(message) — narrator line in the progress feed.
@@ -136,9 +141,10 @@ EFFORT: pass opts.effort to set one agent's reasoning level. The values are low,
 Rules:
 - Date.now(), argless new Date(), and Math.random() THROW inside scripts (they break resume replay determinism) — pass timestamps/seeds via args.
 - Agents start fresh with ZERO context from this session — make every prompt self-contained (paths, constraints, what to return).
-- Agents are read-only by default (ask mode). Pass opts.write to let one edit code (see below).
+- Agents are read-only by default (ask mode). Pass opts.write to let one edit code (see below). Existing agent() behavior is unchanged; use spawnSession() only when work needs a durable, inspectable code session and PR.
+- Nested sessions inherit this session's user, repos, model/account and MCP scope. They cannot merge. A workflow may supervise ${WORKFLOW_LIMITS.maxConcurrentSessions} active sessions, create ${WORKFLOW_LIMITS.maxSessions} total, nest ${WORKFLOW_LIMITS.maxSessionDepth} levels deep, and spend at most ${WORKFLOW_LIMITS.maxSessionTokens} completed tokens / $${WORKFLOW_LIMITS.maxSessionCostUsd} in provider-reported cost across its children.
 - Limits: ${WORKFLOW_LIMITS.maxConcurrentAgents} agents run concurrently (extras queue), ${WORKFLOW_LIMITS.maxAgents} agent() calls per run lifetime, ${Math.round(WORKFLOW_LIMITS.agentTimeoutMs / 60_000)}min per agent, ${Math.round(WORKFLOW_LIMITS.workflowTimeoutMs / 60_000)}min per workflow. mcp.* is cheaper and its own lane: ${WORKFLOW_LIMITS.maxConcurrentMcp} concurrent, ${WORKFLOW_LIMITS.maxMcpCalls} per run, ${Math.round(WORKFLOW_LIMITS.mcpCallTimeoutMs / 1000)}s per call.
-- Both agent() and mcp.* calls are journaled, so resume_workflow REPLAYS them instead of re-firing — a resumed script won't create the same Linear issue twice.
+- agent(), mcp.* and session API calls are journaled, so resume_workflow REPLAYS completed calls instead of re-firing them. spawnSession() also uses a stable durable create identity, so a crash between creation and journaling still cannot duplicate its branch, worktree or session.
 
 Example (no opts.model set → agents run on the default):
 
@@ -297,6 +303,14 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
             `  ${title}: ${countByStatus(agents)}${running.length ? ` — running: ${running.join(", ")}` : ""}`,
           );
         }
+        if (run.sessions?.length) {
+          lines.push("  sessions:");
+          for (const session of run.sessions) {
+            lines.push(
+              `    - ${session.id} — ${session.status} · ${session.repo}:${session.branch}${session.prUrl ? ` · PR ${session.prUrl}` : ""}${session.error ? ` · ${session.error}` : ""}`,
+            );
+          }
+        }
         if (run.totals.mcpCalls) {
           const errs = run.totals.mcpErrors || 0;
           // Which servers the script actually hit — cheap signal that it's
@@ -373,14 +387,14 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
         if (!runs.length) return text("No workflow runs in this session yet.");
         const lines = runs.map(
           (r: WorkflowRunSnapshot) =>
-            `- ${r.runId} ${r.name} — ${r.status}, ${r.agents.length} agents, ${elapsed(r)}, started ${r.startedAt.slice(0, 16).replace("T", " ")}`,
+            `- ${r.runId} ${r.name} — ${r.status}, ${r.agents.length} agents, ${r.sessions?.length || 0} sessions, ${elapsed(r)}, started ${r.startedAt.slice(0, 16).replace("T", " ")}`,
         );
         return text(lines.join("\n"));
       },
     ),
     tool(
       "cancel_workflow",
-      "Cancel a running workflow: aborts in-flight agents, terminates the script, marks the run cancelled.",
+      "Cancel a running workflow: aborts in-flight agents, terminates the script, marks the run cancelled, and applies its configured active-child cancellation policy.",
       {
         run_id: z.string().describe("The wf-… run id to cancel."),
       },
@@ -395,7 +409,7 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
     ),
     tool(
       "resume_workflow",
-      "Re-launch a done/error/interrupted/cancelled workflow run as a NEW run that replays completed agent() calls from the old run's journal (identical prompt+opts resolve instantly as cached) and only re-executes what changed or never finished. Optionally pass a fixed script — unchanged calls still replay from the journal.",
+      "Re-launch a done/error/interrupted/cancelled workflow run as a NEW run that replays completed agent(), mcp.* and session API calls from the old run's journal and only re-executes what changed or never finished. Existing child sessions are re-adopted, never duplicated. Optionally pass a fixed script.",
       {
         run_id: z.string().describe("The finished wf-… run id to resume from."),
         script: z
