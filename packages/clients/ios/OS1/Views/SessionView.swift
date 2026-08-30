@@ -235,6 +235,7 @@ struct SessionView: View {
         if let sent = viewModel.sentAskAnswer { return "ask-sent-\(sent.id)" }
         // While work is in flight the run clock IS the last row.
         if viewModel.isRunning { return "run-status" }
+        if viewModel.inlineRunFailureMessage != nil { return "run-failure" }
         if !viewModel.liveText.isEmpty { return "live-stream" }
         return viewModel.displayBlocks.last?.id
     }
@@ -255,6 +256,7 @@ struct SessionView: View {
         emptyContent != nil
             && viewModel.displayBlocks.isEmpty
             && viewModel.liveText.isEmpty
+            && viewModel.inlineRunFailureMessage == nil
     }
 
     init(
@@ -1361,9 +1363,7 @@ struct SessionView: View {
         // Nothing on screen: the caller may own this space (the Desk puts its
         // board here). Keep it inside the transcript so composer and scrolling
         // behavior remain the session's own.
-        if let emptyContent,
-           viewModel.displayBlocks.isEmpty,
-           viewModel.liveText.isEmpty {
+        if showingEmptyContent, let emptyContent {
             emptyContent()
                 .id("empty-content")
         }
@@ -1374,6 +1374,11 @@ struct SessionView: View {
             StreamingBubble(text: viewModel.liveText)
                 .id("live-stream")
                 .transcriptTail(tailId == "live-stream")
+        }
+        if let message = viewModel.inlineRunFailureMessage {
+            runFailureAlert(message)
+                .id("run-failure")
+                .transcriptTail(tailId == "run-failure")
         }
         // The run clock closes the transcript while work is in flight, under
         // the durable answer, live stream, or working fold.
@@ -1409,6 +1414,25 @@ struct SessionView: View {
         Color.clear
             .frame(height: 1)
             .id("transcript-end")
+    }
+
+    private func runFailureAlert(_ message: String) -> some View {
+        VStack(spacing: 4) {
+            Label("Run failed", systemImage: "exclamationmark.triangle.fill")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(OS1VisualStyle.redInk)
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .multilineTextAlignment(.center)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(
+            OS1VisualStyle.red.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 12)
+        )
+        .accessibilityElement(children: .combine)
     }
 
     private var transcriptScrollBase: some View {
