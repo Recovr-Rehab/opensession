@@ -535,11 +535,17 @@ function publishStableShell(): void {
   const store = frontendStore();
   if (!store.indexHtml || !store.version) return;
   try {
-    publishStableFrontendSnapshot(frontendDeployStateDir(), {
+    const published = publishStableFrontendSnapshot(frontendDeployStateDir(), {
       releaseRoot: activeFrontendReleaseRoot(),
+      fallbackRoots:
+        (g.__opensessionFrontendFallbackRoots as string[] | undefined) ?? [],
       version: store.version,
       indexHtml: store.indexHtml,
     });
+    // Full backend deploys start a fresh process, so their in-memory fallback
+    // list is empty. The stable snapshot carries the preceding release chain
+    // across that restart and keeps old content-hashed chunks lazy-loadable.
+    g.__opensessionFrontendFallbackRoots = published.fallbackRoots;
   } catch (error) {
     console.error("[frontend] could not publish stable ingress shell", error);
   }

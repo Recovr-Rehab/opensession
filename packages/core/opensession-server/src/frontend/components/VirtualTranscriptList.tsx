@@ -113,8 +113,8 @@ class TranscriptVirtualizer extends React.Component<
   private root: HTMLDivElement | null = null;
   private mounted = false;
   private rendering = false;
-  private measuringCommittedRows = false;
-  private renderAfterCommitMeasure = false;
+  private committing = false;
+  private renderAfterCommit = false;
   private mountCleanup: (() => void) | undefined;
   private navigationCleanup: (() => void) | undefined;
   private navigationContainer: HTMLDivElement | null = null;
@@ -160,11 +160,13 @@ class TranscriptVirtualizer extends React.Component<
 
   componentDidMount() {
     this.mounted = true;
-    this.mountCleanup = this.virtualizer._didMount();
-    this.virtualizer._willUpdate();
-    this.syncTopApproach();
-    this.syncNavigation();
-    this.scheduleVisibleItems();
+    this.runCommitLifecycle(() => {
+      this.mountCleanup = this.virtualizer._didMount();
+      this.virtualizer._willUpdate();
+      this.syncTopApproach();
+      this.syncNavigation();
+      this.scheduleVisibleItems();
+    });
   }
 
   /** Pre-mutation scroller height, captured only for commits that prepend
@@ -193,21 +195,23 @@ class TranscriptVirtualizer extends React.Component<
     _prevState: AdapterState,
     snapshot: number | null,
   ) {
-    this.measureCommittedRows(prevProps);
-    this.virtualizer._willUpdate();
-    this.scheduleHeadGrowthClear();
-    if (snapshot !== null) {
-      // Height gained by this commit's own mutation goes back on scrollTop
-      // before paint, holding the reader's place while history grows above.
-      const container = this.scrollContainer();
-      if (container) {
-        const delta = container.scrollHeight - snapshot;
-        if (delta > 0) container.scrollTop += delta;
+    this.runCommitLifecycle(() => {
+      this.measureCommittedRows(prevProps);
+      this.virtualizer._willUpdate();
+      this.scheduleHeadGrowthClear();
+      if (snapshot !== null) {
+        // Height gained by this commit's own mutation goes back on scrollTop
+        // before paint, holding the reader's place while history grows above.
+        const container = this.scrollContainer();
+        if (container) {
+          const delta = container.scrollHeight - snapshot;
+          if (delta > 0) container.scrollTop += delta;
+        }
       }
-    }
-    this.syncTopApproach();
-    this.syncNavigation();
-    this.scheduleVisibleItems();
+      this.syncTopApproach();
+      this.syncNavigation();
+      this.scheduleVisibleItems();
+    });
   }
 
   componentWillUnmount() {
@@ -281,11 +285,11 @@ class TranscriptVirtualizer extends React.Component<
     sync: boolean,
   ) => {
     if (!this.mounted) return;
-    if (this.measuringCommittedRows) {
-      // componentDidUpdate is already before paint. Batch every changed row
-      // into one nested render rather than asking flushSync to interrupt a
-      // React lifecycle for each measurement.
-      this.renderAfterCommitMeasure = true;
+    if (this.committing) {
+      // Mount/update lifecycles already run before paint. Batch virtualizer
+      // notifications into one nested update after the lifecycle returns
+      // instead of asking flushSync to interrupt React's active commit.
+      this.renderAfterCommit = true;
       return;
     }
     const update = () => {
@@ -298,6 +302,19 @@ class TranscriptVirtualizer extends React.Component<
     else if (sync) flushSync(update);
     else update();
   };
+
+  private runCommitLifecycle(work: () => void) {
+    this.committing = true;
+    this.renderAfterCommit = false;
+    try {
+      work();
+    } finally {
+      this.committing = false;
+    }
+    if (!this.renderAfterCommit) return;
+    this.renderAfterCommit = false;
+    this.setState(({ revision }) => ({ revision: revision + 1 }));
+  }
 
   private options(
     props: Omit<Props, "enabled">,
@@ -350,25 +367,17 @@ class TranscriptVirtualizer extends React.Component<
       this.props.items,
     );
     if (!this.root || keys.size === 0) return;
-    this.measuringCommittedRows = true;
-    this.renderAfterCommitMeasure = false;
-    try {
-      for (const node of this.root.querySelectorAll<HTMLDivElement>(
-        "[data-transcript-key]",
-      )) {
-        if (!keys.has(node.dataset.transcriptKey ?? "")) continue;
-        const index = Number(node.dataset.index);
-        if (!Number.isInteger(index)) continue;
-        // ResizeObserver reports after the commit. Measuring semantic
-        // transcript changes here lets the virtualizer update its root height
-        // and bottom compensation in the same pre-paint layout phase.
-        this.virtualizer.resizeItem(index, node.getBoundingClientRect().height);
-      }
-    } finally {
-      this.measuringCommittedRows = false;
+    for (const node of this.root.querySelectorAll<HTMLDivElement>(
+      "[data-transcript-key]",
+    )) {
+      if (!keys.has(node.dataset.transcriptKey ?? "")) continue;
+      const index = Number(node.dataset.index);
+      if (!Number.isInteger(index)) continue;
+      // ResizeObserver reports after the commit. Measuring semantic transcript
+      // changes here lets the virtualizer update its root height and bottom
+      // compensation in the same pre-paint layout phase.
+      this.virtualizer.resizeItem(index, node.getBoundingClientRect().height);
     }
-    if (this.renderAfterCommitMeasure)
-      this.setState(({ revision }) => ({ revision: revision + 1 }));
   }
 
   /** The nearest message scroller, cached per root node: `closest` walks the

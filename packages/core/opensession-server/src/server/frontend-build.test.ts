@@ -14,12 +14,14 @@ import {
   activeFrontendReleaseRoot,
   bundleVersion,
   editorName,
+  frontendDistFile,
   frontendInputsHash,
   isPrebuiltFrontend,
   renderIndexHtml,
   SPA_HEADERS,
 } from "./frontend-build";
 import { __setIdentitiesForTest } from "./shared/user-mappings";
+import { publishStableFrontendSnapshot } from "./stable-frontend";
 
 let restore: (() => void) | null = null;
 let scratch: string | null = null;
@@ -185,7 +187,24 @@ describe("activateFrontendRelease", () => {
         assets: ["App-new.js", "global-new.css"],
       }),
     );
-    const restoreRoot = __setFrontendReleaseRootForTest(process.cwd());
+    const previousSha = "c".repeat(40);
+    const previousRoot = join(scratch, "releases", previousSha);
+    mkdirSync(join(previousRoot, ".frontend-dist"), { recursive: true });
+    writeFileSync(
+      join(previousRoot, ".opensession-release"),
+      `${previousSha}\n`,
+    );
+    writeFileSync(
+      join(previousRoot, ".frontend-dist", "Settings-old.js"),
+      "old settings",
+    );
+    publishStableFrontendSnapshot(scratch, {
+      releaseRoot: previousRoot,
+      version: "App-old.js|global-old.css|no-tw",
+      indexHtml: '<script src="/App-old.js"></script>',
+    });
+
+    const restoreRoot = __setFrontendReleaseRootForTest(previousRoot);
     const version = activateFrontendRelease({
       sha,
       baseSha,
@@ -202,7 +221,9 @@ describe("activateFrontendRelease", () => {
       JSON.parse(readFileSync(join(scratch, "stable-frontend.json"), "utf8")),
     ).toMatchObject({
       releaseRoot,
+      fallbackRoots: [previousRoot],
       version,
     });
+    expect(await frontendDistFile("Settings-old.js")?.exists()).toBe(true);
   });
 });

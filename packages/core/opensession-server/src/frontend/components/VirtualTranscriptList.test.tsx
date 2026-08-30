@@ -32,6 +32,13 @@ describe("VirtualTranscriptList", () => {
     expect(source).toContain("this.measureCommittedRows(prevProps)");
   });
 
+  test("does not flush virtualizer notifications from a React lifecycle", () => {
+    expect(source).toContain("this.runCommitLifecycle(() =>");
+    expect(source).toMatch(
+      /if \(this\.committing\) \{[\s\S]*this\.renderAfterCommit = true;/,
+    );
+  });
+
   test("captures history intent before scroll-driven rerenders", () => {
     expect(source).toContain("capture: true");
     expect(source).toMatch(/removeEventListener\(\s*"scroll"/);
