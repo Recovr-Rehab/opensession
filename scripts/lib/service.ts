@@ -137,6 +137,13 @@ function runHostsRoot(): string {
  *  Prefer the symlink when it exists (release install); fall back to REPO_ROOT
  *  for a source checkout that has no such symlink. */
 export function serviceWorkdir(): string {
+  if (process.platform === "darwin") {
+    const current = join(
+      process.env.OPENSESSION_DEPLOY_STATE || defaultStatePath("deploy"),
+      "current",
+    );
+    if (existsSync(current)) return current;
+  }
   const link = join(OPENSESSION_HOME, "src");
   return existsSync(link) ? link : REPO_ROOT;
 }

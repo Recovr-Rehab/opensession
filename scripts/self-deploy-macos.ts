@@ -199,7 +199,10 @@ function rollbackIsCompatible(state: string, releaseRoot: string): boolean {
   return schemaVersion(releaseRoot) >= required;
 }
 
-async function pollHealth(url: string): Promise<boolean> {
+async function pollHealth(
+  url: string,
+  expectedGeneration: string,
+): Promise<boolean> {
   let successes = 0;
   let bootId = "";
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -208,6 +211,9 @@ async function pollHealth(url: string): Promise<boolean> {
       const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const body = await response.text();
+      const generation = body.match(/"generation":"([^"]+)"/)?.[1] || "";
+      if (generation !== expectedGeneration)
+        throw new Error(`expected generation ${expectedGeneration}`);
       const nextBootId = body.match(/"bootId":"([^"]+)"/)?.[1] || "";
       if (bootId && nextBootId !== bootId) successes = 0;
       bootId = nextBootId;
@@ -221,15 +227,31 @@ async function pollHealth(url: string): Promise<boolean> {
   return false;
 }
 
-async function sessionKernelReady(): Promise<boolean> {
+async function sessionKernelReady(
+  expectedGeneration?: string,
+): Promise<boolean> {
   try {
     const response = await fetch("http://127.0.0.1:3849/ready", {
       signal: AbortSignal.timeout(4000),
     });
-    return response.ok && (await response.text()).includes('"ready":true');
+    if (!response.ok) return false;
+    const body = await response.text();
+    return (
+      body.includes('"ready":true') &&
+      (!expectedGeneration ||
+        body.includes(`"generation":"${expectedGeneration}"`))
+    );
   } catch {
     return false;
   }
+}
+
+async function waitForSessionKernel(generation: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (await sessionKernelReady(generation)) return true;
+    await Bun.sleep(500);
+  }
+  return false;
 }
 
 function writeResult(
@@ -258,23 +280,58 @@ function writeResult(
   );
 }
 
-async function installRelease(
+function requireStableLaunchAgents(options: Options): void {
+  const current = join(options.state, "current");
+  for (const path of [
+    join(options.home, "Library/LaunchAgents/dev.opensession.server.plist"),
+    join(
+      options.home,
+      "Library/LaunchAgents/dev.opensession.session-kernel.plist",
+    ),
+    join(options.home, ".opensession/OpenSession"),
+    join(options.home, ".opensession/OpenSessionKernel"),
+  ]) {
+    if (!readFileSync(path, "utf8").includes(current))
+      throw new Error(
+        `macOS service at ${path} is not pinned through ${current}; run opensession service install once`,
+      );
+  }
+}
+
+async function reloadLaunchAgents(
   options: Options,
-  releaseRoot: string,
+  generation: string,
+  log: (message: string) => void,
 ): Promise<void> {
-  await capture(
-    [options.bun, join(releaseRoot, "scripts", "cli.ts"), "service", "install"],
-    {
-      cwd: releaseRoot,
-      env: {
-        ...process.env,
-        HOME: options.home,
-        OPENSESSION_DEPLOY_CHECKOUT: options.checkout,
-        OPENSESSION_DEPLOY_STATE: options.state,
-        OPENSESSION_HEALTH_URL: options.healthUrl,
-      } as Record<string, string>,
-    },
-  );
+  const domain = `gui/${process.getuid?.() ?? 501}`;
+  try {
+    await capture([
+      "launchctl",
+      "kickstart",
+      "-k",
+      `${domain}/dev.opensession.session-kernel`,
+    ]);
+  } catch (error) {
+    log(
+      `SessionKernel kickstart reported an error; checking readiness: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!(await waitForSessionKernel(generation)))
+    throw new Error(
+      `SessionKernel did not become ready on generation ${generation.slice(0, 10)}`,
+    );
+  try {
+    await capture([
+      "launchctl",
+      "kickstart",
+      "-k",
+      `${domain}/dev.opensession.server`,
+    ]);
+  } catch (error) {
+    log(
+      `gateway kickstart reported an error; checking health: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 export async function runMacSelfDeploy(options: Options): Promise<void> {
@@ -326,7 +383,10 @@ export async function runMacSelfDeploy(options: Options): Promise<void> {
         (await isAncestor(options.checkout, options.target, current)))
     ) {
       rmSync(join(options.state, "requests", options.target), { force: true });
-      if (current === options.target && (await pollHealth(options.healthUrl))) {
+      if (
+        current === options.target &&
+        (await pollHealth(options.healthUrl, current))
+      ) {
         writeResult(options, startedAt, startedMs, options.target, {
           ok: true,
           action: "deploy",
@@ -360,6 +420,7 @@ export async function runMacSelfDeploy(options: Options): Promise<void> {
       );
     const target = selectedTarget;
     const targetRoot = await release(["prepare-frontend", target]);
+    requireStableLaunchAgents(options);
     if (!(await sessionKernelReady()))
       throw new Error(
         "SessionKernel is not healthy; refusing to restart the LaunchAgents",
@@ -378,14 +439,14 @@ export async function runMacSelfDeploy(options: Options): Promise<void> {
     recordSchemaFloor(options.state, targetRoot);
     log(`reloading LaunchAgents on ${target.slice(0, 10)}`);
     try {
-      await installRelease(options, targetRoot);
+      await reloadLaunchAgents(options, target, log);
     } catch (error) {
       log(
-        `LaunchAgent reload command reported an error; checking service health before rollback: ${error instanceof Error ? error.message : String(error)}`,
+        `LaunchAgent reload did not complete; checking service health before rollback: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
-    if (await pollHealth(options.healthUrl)) {
+    if (await pollHealth(options.healthUrl, target)) {
       for (const request of readdirSync(join(options.state, "requests"))) {
         if (
           SHA_RE.test(request) &&
@@ -435,8 +496,14 @@ export async function runMacSelfDeploy(options: Options): Promise<void> {
 
     log(`target unhealthy; rolling back to ${current.slice(0, 10)}`);
     await release(["switch", current]);
-    await installRelease(options, previousRoot);
-    if (await pollHealth(options.healthUrl)) {
+    try {
+      await reloadLaunchAgents(options, current, log);
+    } catch (error) {
+      log(
+        `rollback LaunchAgent reload did not complete; checking health: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (await pollHealth(options.healthUrl, current)) {
       writeResult(options, startedAt, startedMs, selectedTarget, {
         ok: false,
         action: "deploy",
