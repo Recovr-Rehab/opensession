@@ -1673,7 +1673,7 @@ export function SessionViewer({
   const sessionReports = useSessionReports(session.id, addHandler);
   // Team notes — human-to-human messages on this session, interleaved into
   // the transcript as NoteBubbles. The agent never sees them; they're posted
-  // from the composer's note mode (⌘N).
+  // from the composer's note mode.
   const [notes, setNotes] = useState<SessionNote[]>([]);
   const [noteMode, setNoteMode] = useState(false);
   async function addSessionAttachments(picked: FileList | File[]) {
@@ -2662,8 +2662,7 @@ export function SessionViewer({
     });
   }, [isBusy, loading, entries, session.runStartedAt]);
 
-  // Session-wide composer shortcuts. ⌘/Ctrl+N toggles team-note mode even when
-  // the composer is not focused; Ctrl+R focuses it directly.
+  // Ctrl+R focuses the session composer directly.
   const archiveShortcutLabel = useShortcutLabel("session-archive");
   const copyTranscriptLabel = useShortcutLabel("session-copy-transcript");
   const nextChatKeys = useShortcutKeys("workspace-next-unread");
@@ -2673,17 +2672,6 @@ export function SessionViewer({
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (!focused) return;
-      if (
-        !e.defaultPrevented &&
-        !e.repeat &&
-        matchesShortcut(e, "composer-note") &&
-        !blockingOverlayOpen()
-      ) {
-        e.preventDefault();
-        setNoteMode((on) => !on);
-        queueMicrotask(() => composerRef.current?.focus());
-        return;
-      }
       if (matchesShortcut(e, "composer-focus")) {
         e.preventDefault();
         composerRef.current?.focus();
@@ -7731,7 +7719,7 @@ export function SessionViewer({
                       }
                       askExitPending={promoting}
                       // Team notes: the send posts to the transcript for the
-                      // humans reading it, never to the agent (⌘N, or the "+").
+                      // humans reading it, never to the agent.
                       noteMode={noteMode}
                       onNoteModeChange={setNoteMode}
                       busy={isBusy && !forkFrom}
