@@ -84,6 +84,7 @@ async function readBoundedLine(
 export async function acquireGatewayActivationLease(
   options: {
     env?: GatewayEnvironment;
+    platform?: NodeJS.Platform;
     spawn?: (command: string[]) => GatewayLeaseProcess;
     exit?: (code: number) => never;
   } = {},
@@ -106,15 +107,23 @@ export async function acquireGatewayActivationLease(
         stdout: "pipe",
         stderr: "pipe",
       }) as GatewayLeaseProcess);
-  const lease = spawn([
-    "flock",
-    "-w",
-    waitSeconds,
-    lockPath,
+  const holdCommand = [
     "/bin/sh",
     "-c",
     "printf 'LOCKED\\n'; cat >/dev/null",
-  ]);
+  ];
+  const leaseCommand =
+    (options.platform ?? process.platform) === "darwin"
+      ? [
+          "/usr/bin/lockf",
+          "-k",
+          "-t",
+          waitSeconds,
+          lockPath,
+          ...holdCommand,
+        ]
+      : ["flock", "-w", waitSeconds, lockPath, ...holdCommand];
+  const lease = spawn(leaseCommand);
   const first = await readBoundedLine(lease.stdout);
   if (first !== "LOCKED\n") {
     const error = await new Response(lease.stderr).text();
