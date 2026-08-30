@@ -205,7 +205,7 @@ describe("requiresRootDeploy", () => {
       "packages/core/opensession-server/src/server/gateway-tcp-proxy.ts",
       "packages/core/opensession-server/src/server/stable-frontend.ts",
     ]) {
-      expect(requiresRootDeploy([path])).toBe(true);
+      expect(requiresRootDeploy([path], "linux")).toBe(true);
     }
   });
 
@@ -216,6 +216,19 @@ describe("requiresRootDeploy", () => {
         "packages/core/opensession-server/src/frontend/App.tsx",
         "docs/self-development.md",
       ]),
+    ).toBe(false);
+  });
+
+  test("does not require Linux root artifacts on macOS", () => {
+    expect(
+      requiresRootDeploy(
+        [
+          "opensession.service",
+          "deploy/systemd/opensession-watchdog.service",
+          "packages/core/opensession-server/src/server/gateway-tcp-proxy.ts",
+        ],
+        "darwin",
+      ),
     ).toBe(false);
   });
 });

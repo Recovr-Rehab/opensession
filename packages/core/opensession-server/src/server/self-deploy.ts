@@ -253,7 +253,11 @@ const ROOT_DEPLOY_PATHS = new Set([
 /** Files the unprivileged self-deploy path cannot install. Letting one of these
  * fall through to an ordinary source restart reports a healthy deployment while
  * the root-owned live artifact remains on the previous release. */
-export function requiresRootDeploy(paths: string[]): boolean {
+export function requiresRootDeploy(
+  paths: string[],
+  hostPlatform: NodeJS.Platform = process.platform,
+): boolean {
+  if (hostPlatform === "darwin") return false;
   return paths.some(
     (path) => ROOT_DEPLOY_PATHS.has(path) || path.startsWith("deploy/systemd/"),
   );
