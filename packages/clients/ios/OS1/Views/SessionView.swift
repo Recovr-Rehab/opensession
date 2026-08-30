@@ -1489,6 +1489,8 @@ struct SessionView: View {
                 viewModel.expansionState(id: $0, defaultExpanded: $1)
             },
             activity: turnActivity,
+            isActiveReasoning: viewModel.isRunning
+                && block.id == viewModel.displayBlocks.last?.id,
             // An automation's turns are not a person's words, so they get no
             // author fallback. The web makes the same exception.
             owner: viewModel.session.transcriptOwner,
