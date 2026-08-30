@@ -4613,6 +4613,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                 "flex w-full min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
                 SIDEBAR_DENSITY_VARS,
                 SIDEBAR_NAV_X,
+                // Keyboard navigation calls scrollIntoView on the next row. Teach
+                // that native scroll where the pinned lane caption ends, otherwise
+                // it aligns the row with the scrollport and parks it underneath
+                // Active, making a two-row lane look as though it contains one.
+                "desktop:scroll-pt-[var(--sidebar-cap-h)]",
                 // The whole sidebar scrolls as one on phones, so the tools (and the
                 // Workspaces header) scroll away with the list instead of staying
                 // pinned above a separately-scrolling list. The top bar floats over

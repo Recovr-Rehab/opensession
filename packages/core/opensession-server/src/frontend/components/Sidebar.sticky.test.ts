@@ -23,4 +23,8 @@ describe("sidebar sticky headings", () => {
       "is-stuck",
     );
   });
+
+  test("reveals keyboard-selected rows below the sticky caption", () => {
+    expect(source).toContain('"desktop:scroll-pt-[var(--sidebar-cap-h)]"');
+  });
 });
