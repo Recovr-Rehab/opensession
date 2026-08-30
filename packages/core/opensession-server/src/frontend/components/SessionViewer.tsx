@@ -2411,9 +2411,19 @@ export function SessionViewer({
       stale = true;
     };
   }, [session.id]);
-  function cancelWorkflowRun(runId: string) {
-    // Fire-and-forget: the workflow_update echo flips the card to cancelled.
-    fetch(`${BASE_PATH}/api/workflows/${encodeURIComponent(runId)}/cancel`, {
+  function workflowAction(
+    runId: string,
+    action: "cancel" | "pause" | "resume" | "skip" | "retry",
+    seq?: number,
+  ) {
+    // Fire-and-forget: workflow_update echoes every state transition. Resume
+    // after a process restart may create a new run, which arrives as another
+    // workflow_update on the same session.
+    const suffix =
+      action === "skip" || action === "retry"
+        ? `/agents/${seq}/${action}`
+        : `/${action}`;
+    fetch(`${BASE_PATH}/api/workflows/${encodeURIComponent(runId)}${suffix}`, {
       method: "POST",
     }).catch(() => {});
   }
@@ -4871,7 +4881,7 @@ export function SessionViewer({
   // dot) is always visible; on a phone the right panel overlays the session and
   // is closed by default, so a running workflow fan-out has no glance.
   const runningWorkflowRuns = workflowRuns.filter(
-    (r) => r.status === "running",
+    (r) => r.status === "running" || r.status === "paused",
   );
   // Sub-agents ride along only while one is live, so a finished batch doesn't
   // pad a later workflow's tallies (their statuses clamp to done once the
@@ -6714,7 +6724,7 @@ export function SessionViewer({
                               <WorkflowPanel
                                 sessionId={session.id}
                                 runs={workflowRuns}
-                                onCancel={cancelWorkflowRun}
+                                onAction={workflowAction}
                                 subagents={subagents}
                                 onOpenSubagent={(agentId, label) => {
                                   setInfoPageOpen(false);
@@ -7966,7 +7976,7 @@ export function SessionViewer({
                       <WorkflowPanel
                         sessionId={session.id}
                         runs={workflowRuns}
-                        onCancel={cancelWorkflowRun}
+                        onAction={workflowAction}
                         subagents={subagents}
                         onOpenSubagent={openSubagent}
                         onBack={() => setActivePanelOpen(false)}

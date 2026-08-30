@@ -21,6 +21,7 @@ import {
 import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
 import { WorkflowAgentTranscript } from "./WorkflowAgentTranscript";
 import { Badge } from "../ui/badge";
+import { workflowPhaseStats } from "../../shared/workflow-observability";
 
 /**
  * Agents tab: live view of a session's dynamic workflow runs (the
@@ -45,7 +46,11 @@ import { Badge } from "../ui/badge";
 interface Props {
   sessionId: string;
   runs: WorkflowRunSnapshot[];
-  onCancel: (runId: string) => void;
+  onAction: (
+    runId: string,
+    action: "cancel" | "pause" | "resume" | "skip" | "retry",
+    seq?: number,
+  ) => void;
   /** Sub-agents the session spawned directly (task tool) — rendered as their
    *  own card above the workflow runs. */
   subagents?: SessionSubagentSnapshot[];
@@ -70,6 +75,7 @@ const RUN_TONE: Record<
   done: null,
   error: "danger",
   cancelled: "neutral",
+  paused: "warning",
   interrupted: "warning",
 };
 
@@ -298,7 +304,7 @@ function DetailPre({ text }: { text: string }) {
 export function WorkflowPanel({
   sessionId: _sessionId,
   runs,
-  onCancel,
+  onAction,
   subagents,
   onOpenSubagent,
   onBack,
@@ -357,7 +363,7 @@ export function WorkflowPanel({
           key={run.runId}
           run={run}
           now={now}
-          onCancel={onCancel}
+          onAction={onAction}
           onOpenAgent={onOpenAgent}
         />
       ))}
@@ -554,12 +560,12 @@ function WorkflowsEmptyState() {
 function RunCard({
   run,
   now,
-  onCancel,
+  onAction,
   onOpenAgent,
 }: {
   run: WorkflowRunSnapshot;
   now: number;
-  onCancel: (runId: string) => void;
+  onAction: Props["onAction"];
   onOpenAgent: (runId: string, seq: number) => void;
 }) {
   // Expanded agent rows (by seq) + their lazily-fetched journal entries.
@@ -587,6 +593,11 @@ function RunCard({
       if (a.phase && !seen.has(a.phase)) {
         seen.add(a.phase);
         order.push(a.phase);
+      }
+    for (const title of Object.keys(run.phaseToolTotals || {}))
+      if (!seen.has(title)) {
+        seen.add(title);
+        order.push(title);
       }
     const byPhase = new Map<string, WorkflowAgentSnapshot[]>();
     for (const t of order) byPhase.set(t, []);
@@ -632,12 +643,26 @@ function RunCard({
   };
 
   const startMs = new Date(run.startedAt).getTime();
-  const elapsedMs =
+  const currentPauseMs = run.pausedAt
+    ? Math.max(0, now - new Date(run.pausedAt).getTime())
+    : 0;
+  const elapsedMs = Math.max(
+    0,
     (run.endedAt
       ? new Date(run.endedAt).getTime()
-      : run.status === "running"
+      : run.status === "running" || run.status === "paused"
         ? now
-        : startMs) - startMs;
+        : startMs) -
+      startMs -
+      (run.totalPausedMs || 0) -
+      currentPauseMs,
+  );
+  const phaseStats = new Map(
+    workflowPhaseStats(run, now).map((stats) => [stats.title, stats]),
+  );
+  const hasPhaseActivity = [...phaseStats.values()].some(
+    (stats) => stats.agents > 0 || stats.toolCalls > 0,
+  );
   const runningN = run.agents.filter((a) => a.status === "running").length;
   const errorN = run.agents.filter((a) => a.status === "error").length;
   const meta: string[] = [
@@ -660,7 +685,7 @@ function RunCard({
     );
   }
   if (run.totals.tokensOut) meta.push(`${fmtTokens(run.totals.tokensOut)} tok`);
-  if (elapsedMs > 0 || run.status === "running")
+  if (elapsedMs > 0 || run.status === "running" || run.status === "paused")
     meta.push(fmtDuration(elapsedMs));
 
   const openConversation = (seq: number) => onOpenAgent(run.runId, seq);
@@ -678,6 +703,7 @@ function RunCard({
         onToggle={toggleAgent}
         onLoadDetail={loadDetail}
         onOpenConversation={openConversation}
+        onAction={(seq, action) => onAction(run.runId, action, seq)}
       />
     );
   }
@@ -685,11 +711,6 @@ function RunCard({
   const tone = RUN_TONE[run.status];
   return (
     <div className={CARD_CLASS}>
-      {/* The Stop button centres on the whole name + totals block rather
-			    than aligning to the title, and the header keeps real air above
-			    it: aligned to the first line it sat hard against the card's top
-			    edge with the second line hanging below it, which read as
-			    unbalanced. */}
       <div className="flex items-center justify-between gap-2 px-2 pb-2.5 pt-1">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
@@ -710,22 +731,47 @@ function RunCard({
             {meta.join(" · ")}
           </div>
         </div>
-        {run.status === "running" && (
-          // The app's raised control, not the outlined red one: at this size
-          // an outline chip is the same shape as the "running" badge beside
-          // it, so the one thing on the card you can press read as another
-          // state readout. Stopping a run is recoverable, so it does not
-          // take the destructive weight either.
-          <Button
-            variant="default"
-            size="sm"
-            className="shrink-0"
-            onClick={() => onCancel(run.runId)}
-          >
-            Stop
-          </Button>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {run.status === "running" && (
+            <Button
+              variant="soft"
+              size="sm"
+              className="phone:min-h-11"
+              onClick={() => onAction(run.runId, "pause")}
+            >
+              Pause
+            </Button>
+          )}
+          {(run.status === "paused" || run.status === "interrupted") && (
+            <Button
+              variant="default"
+              size="sm"
+              className="phone:min-h-11"
+              onClick={() => onAction(run.runId, "resume")}
+            >
+              Resume
+            </Button>
+          )}
+          {(run.status === "running" || run.status === "paused") && (
+            <Button
+              variant="default"
+              size="sm"
+              className="phone:min-h-11"
+              onClick={() => onAction(run.runId, "cancel")}
+            >
+              Stop
+            </Button>
+          )}
+        </div>
       </div>
+      {run.warnings?.map((warning) => (
+        <div
+          key={warning.kind}
+          className="px-2 pb-2 text-meta leading-snug text-yellow"
+        >
+          {warning.message}
+        </div>
+      ))}
       {!!run.sessions?.length && (
         <div className="flex flex-col">
           <div className="flex items-baseline gap-2 px-2 pb-px pt-0.5">
@@ -741,21 +787,39 @@ function RunCard({
           ))}
         </div>
       )}
-      {(run.agents.length > 0 ||
-        (run.status === "running" && groups.order.length > 0)) && (
+      {(hasPhaseActivity ||
+        ((run.status === "running" || run.status === "paused") &&
+          groups.order.length > 0)) && (
         <div className="flex flex-col">
           {groups.loose.map(agentRow)}
           {groups.order.map((title) => {
             const agents = groups.byPhase.get(title)!;
-            // Empty phases only preview upcoming work on a live run.
-            if (agents.length === 0 && run.status !== "running") return null;
-            const doneN = agents.filter((a) => a.status === "done").length;
+            const stats = phaseStats.get(title);
+            // Empty phases only preview upcoming work on a live run. A phase
+            // with direct tool calls is real work even when it has no agents.
+            if (
+              agents.length === 0 &&
+              !stats?.toolCalls &&
+              run.status !== "running" &&
+              run.status !== "paused"
+            )
+              return null;
+            const phaseMeta = [
+              agents.length
+                ? `${(stats?.done || 0) + (stats?.error || 0) + (stats?.cancelled || 0)}/${agents.length}`
+                : "queued",
+              stats && stats.tokensIn + stats.tokensOut
+                ? `${fmtTokens(stats.tokensIn + stats.tokensOut)} tok`
+                : "",
+              stats?.toolCalls ? `${stats.toolCalls} tools` : "",
+              stats?.durationMs ? fmtDuration(stats.durationMs) : "",
+            ].filter(Boolean);
             return (
               <div key={title}>
                 {/* The phase label sits quieter than the agent names under
 								    it, and its count holds the rail's right edge, so a
 								    group reads as a heading over rows. */}
-                <div className="flex items-baseline gap-2 px-2 pb-px pt-2 first:pt-0.5">
+                <div className="flex items-baseline gap-2 px-2 pb-px pt-2 first:pt-0.5 phone:flex-col phone:items-stretch phone:gap-0">
                   <span
                     className={cn(
                       "min-w-0 flex-1 truncate text-meta font-medium",
@@ -766,8 +830,8 @@ function RunCard({
                   >
                     {title}
                   </span>
-                  <span className="shrink-0 text-meta text-faint tabular-nums">
-                    {agents.length ? `${doneN}/${agents.length}` : "queued"}
+                  <span className="shrink-0 text-meta text-faint tabular-nums phone:truncate">
+                    {phaseMeta.join(" · ")}
                   </span>
                 </div>
                 {agents.map(agentRow)}
@@ -884,6 +948,7 @@ const AgentRow = function AgentRow({
   onToggle,
   onLoadDetail,
   onOpenConversation,
+  onAction,
 }: {
   a: WorkflowAgentSnapshot;
   open: boolean;
@@ -892,6 +957,7 @@ const AgentRow = function AgentRow({
   onToggle: (seq: number) => void;
   onLoadDetail: (seq: number) => void;
   onOpenConversation: (seq: number) => void;
+  onAction: (seq: number, action: "skip" | "retry") => void;
 }) {
   const full = typeof detail === "object" ? detail : undefined;
   const promptText = full?.prompt ?? a.promptPreview;
@@ -922,6 +988,11 @@ const AgentRow = function AgentRow({
             {a.label}
           </span>
           {a.cached && <Chip>cached</Chip>}
+          {a.modelSubstitutedFrom && (
+            <Chip title={`Requested ${shortModel(a.modelSubstitutedFrom)}`}>
+              switched
+            </Chip>
+          )}
           <AgentRail
             model={a.model}
             tokens={a.tokens?.output}
@@ -942,16 +1013,38 @@ const AgentRow = function AgentRow({
               {/* The headline affordance: what the agent actually DID, not
 							    just what it said at the end. Available even while it runs
 							    (the transcript view polls). */}
-              {a.status !== "pending" && (
-                <Button
-                  size="sm"
-                  className="self-start"
-                  onClick={() => onOpenConversation(a.seq)}
-                >
-                  View conversation
-                  <span className="text-faint">→</span>
-                </Button>
-              )}
+              <div className="flex flex-wrap items-center gap-1">
+                {a.status !== "pending" && (
+                  <Button
+                    size="sm"
+                    className="phone:min-h-11"
+                    onClick={() => onOpenConversation(a.seq)}
+                  >
+                    View conversation
+                    <span className="text-faint">→</span>
+                  </Button>
+                )}
+                {a.status === "running" && (
+                  <Button
+                    variant="soft"
+                    size="sm"
+                    className="phone:min-h-11"
+                    onClick={() => onAction(a.seq, "retry")}
+                  >
+                    Retry
+                  </Button>
+                )}
+                {(a.status === "running" || a.status === "pending") && (
+                  <Button
+                    variant="soft"
+                    size="sm"
+                    className="phone:min-h-11"
+                    onClick={() => onAction(a.seq, "skip")}
+                  >
+                    Stop agent
+                  </Button>
+                )}
+              </div>
               <div className="text-meta font-medium text-faint">Prompt</div>
               <DetailPre text={promptText} />
               {(resultText || a.status === "error") && (

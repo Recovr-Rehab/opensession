@@ -56,7 +56,7 @@ touches an in-process tool:
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
-| [`opensession-workflows`](#opensession-workflows) | 5 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
+| [`opensession-workflows`](#opensession-workflows) | 7 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
 | [`opensession-assets`](#opensession-assets) | 4 | interactive | Needs a session id. Works in read-only Ask mode — assets land outside the checkout. |
 | [`opensession-todos`](#opensession-todos) | 5 | interactive | Needs a session id. |
 | [`opensession-papercuts`](#opensession-papercuts) | 2 | interactive, automation | Dropped when the session's repo opted out (Settings → Papercuts). |
@@ -68,7 +68,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-27 servers, 113 tools.
+27 servers, 115 tools.
 
 ## opensession-sessions
 
@@ -383,7 +383,7 @@ Promote frontend-only releases without restart, or standard-deploy other source 
 
 `mcp__opensession-self-deploy__deploy_self` · input: `sha` (string), `confirm` (boolean, required)
 
-Deploy THIS Open Session instance to an immutable git release. Deployment may be autonomous and is shared across sessions. Concurrent standard deploy requests queue and coalesce to the newest fast-forward target; requests already covered by that release become successful no-ops. A strictly frontend-only diff is bundled in the prepared target release, atomically promoted, and announced to clients without restarting any service. Any server, protocol, dependency, or other runtime change automatically uses the standard health-gated gateway/kernel/executor restart path. /api/rebuild-frontend only rebuilds the already pinned source and is not a promotion path. This tool DOES NOT install changed root-owned artifacts. If the target changes the live deploy controllers, opensession*.service, credential installers, the fixed run-host helper/installer, or root-deploy-managed systemd units/drop-ins, use the documented full root deploy instead. Diverged targets are refused; the shared WIP checkout is only a git object source and is never changed.
+Deploy THIS Open Session instance to an immutable git release. Deployment may be autonomous and is shared across sessions. Concurrent standard deploy requests queue and coalesce to the newest fast-forward target; requests already covered by that release become successful no-ops. A strictly frontend-only diff is bundled in the prepared target release, atomically promoted, and announced to clients without restarting any service. A strictly gateway-only source diff uses the single-active preload handoff; protocol peers, dependencies, and other runtime changes use the coordinated health-gated gateway/kernel/executor restart path. /api/rebuild-frontend only rebuilds the already pinned source and is not a promotion path. This tool DOES NOT install changed root-owned artifacts. If the target changes the live deploy controllers, opensession*.service, credential installers, the fixed run-host helper/installer, or root-deploy-managed systemd units/drop-ins, use the documented full root deploy instead. Diverged targets are refused; the shared WIP checkout is only a git object source and is never changed.
 
 ### `deploy_status`
 
@@ -732,11 +732,23 @@ List this session's workflow runs, newest first — one line each with run id, n
 
 Cancel a running workflow: aborts in-flight agents, terminates the script, marks the run cancelled, and applies its configured active-child cancellation policy.
 
+### `pause_workflow`
+
+`mcp__opensession-workflows__pause_workflow` · input: `run_id` (string, required)
+
+Pause a running workflow. Active agents stop cleanly and restart in place when the workflow resumes; completed journal entries are preserved.
+
+### `control_workflow_agent`
+
+`mcp__opensession-workflows__control_workflow_agent` · input: `run_id` (string, required), `seq` (integer, required), `action` ("skip" | "retry", required)
+
+Skip or retry one pending/running workflow agent without cancelling its siblings. Retry is available only while the agent is running.
+
 ### `resume_workflow`
 
 `mcp__opensession-workflows__resume_workflow` · input: `run_id` (string, required), `script` (string), `args_json` (string), `repo` (string)
 
-Re-launch a done/error/interrupted/cancelled workflow run as a NEW run that replays completed agent(), mcp.* and session API calls from the old run's journal and only re-executes what changed or never finished. Existing child sessions are re-adopted, never duplicated. Optionally pass a fixed script.
+Resume a paused workflow in place, or re-launch a done/error/interrupted/cancelled workflow as a NEW run that replays completed agent(), mcp.* and session API calls from the old run's journal. Existing child sessions are re-adopted, never duplicated. Optionally pass a fixed script.
 
 ## opensession-assets
 

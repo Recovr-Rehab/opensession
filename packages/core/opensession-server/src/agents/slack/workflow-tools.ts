@@ -23,7 +23,13 @@
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { z } from "zod";
-import { startWorkflow, cancelWorkflow } from "../../server/workflow-runner";
+import {
+  cancelWorkflow,
+  controlWorkflowAgent,
+  pauseWorkflow,
+  resumeWorkflow,
+  startWorkflow,
+} from "../../server/workflow-runner";
 import {
   getWorkflowRun,
   listWorkflowRunsForSession,
@@ -31,6 +37,7 @@ import {
 } from "../../server/workflow-store";
 import { WORKFLOW_LIMITS } from "../../server/workflow-types";
 import { selectableModels } from "../../server/models";
+import { workflowPhaseStats } from "../../shared/workflow-observability";
 import type {
   WorkflowAgentSnapshot,
   WorkflowRunSnapshot,
@@ -78,8 +85,15 @@ function text(s: string) {
 
 function elapsed(run: WorkflowRunSnapshot): string {
   const start = Date.parse(run.startedAt);
-  const end = run.endedAt ? Date.parse(run.endedAt) : Date.now();
-  const s = Math.max(0, Math.round((end - start) / 1000));
+  const now = Date.now();
+  const end = run.endedAt ? Date.parse(run.endedAt) : now;
+  const currentPause = run.pausedAt
+    ? Math.max(0, now - Date.parse(run.pausedAt))
+    : 0;
+  const s = Math.max(
+    0,
+    Math.round((end - start - (run.totalPausedMs || 0) - currentPause) / 1000),
+  );
   if (s < 60) return `${s}s`;
   return `${Math.floor(s / 60)}m${s % 60 ? ` ${s % 60}s` : ""}`;
 }
@@ -275,32 +289,24 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
         const run = getWorkflowRun(args.run_id);
         if (!run) return text(`No workflow run ${args.run_id}.`);
         const lines: string[] = [];
+        const livePhaseStats = workflowPhaseStats(run);
         const totals = countByStatus(run.agents);
         lines.push(
           `${run.name} (${run.runId}): ${run.status} · ${elapsed(run)} · ${run.agents.length} agents${totals ? ` (${totals})` : ""}`,
         );
-        // Per-phase counts, in first-seen order (+ any agents without a phase).
-        const phases = [...run.phases];
-        for (const a of run.agents)
-          if (a.phase && !phases.includes(a.phase)) phases.push(a.phase);
-        const groups: Array<[string, WorkflowAgentSnapshot[]]> = phases.map(
-          (p) => [
-            p,
-            run.agents.filter((a: WorkflowAgentSnapshot) => a.phase === p),
-          ],
-        );
-        const unphased = run.agents.filter(
-          (a: WorkflowAgentSnapshot) => !a.phase,
-        );
-        if (unphased.length) groups.push(["(no phase)", unphased]);
-        for (const [title, agents] of groups) {
-          if (!agents.length) continue;
+        for (const stats of livePhaseStats) {
+          const agents = run.agents.filter(
+            (agent) => (agent.phase || "Other") === stats.title,
+          );
+          if (!agents.length && !stats.toolCalls) continue;
           const running = agents
-            .filter((a) => a.status === "running")
-            .map((a) => a.label)
+            .filter((agent) => agent.status === "running")
+            .map((agent) => agent.label)
             .slice(0, 5);
+          const counts = countByStatus(agents) || "0 agents";
+          const details = ` · ${stats.tokensIn + stats.tokensOut} tokens · ${stats.toolCalls} tool calls · ${Math.round(stats.durationMs / 1000)}s work time`;
           lines.push(
-            `  ${title}: ${countByStatus(agents)}${running.length ? ` — running: ${running.join(", ")}` : ""}`,
+            `  ${stats.title}: ${counts}${details}${running.length ? ` — running: ${running.join(", ")}` : ""}`,
           );
         }
         if (run.sessions?.length) {
@@ -330,6 +336,8 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
           for (const f of failures)
             lines.push(`    ✗ ${f.server}.${f.tool}: ${f.error || "failed"}`);
         }
+        for (const warning of run.warnings || [])
+          lines.push(`Warning: ${warning.message}`);
         if (run.error) lines.push(`Error: ${run.error}`);
         if (run.logs.length) {
           lines.push("Recent logs:");
@@ -408,8 +416,36 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
       },
     ),
     tool(
+      "pause_workflow",
+      "Pause a running workflow. Active agents stop cleanly and restart in place when the workflow resumes; completed journal entries are preserved.",
+      {
+        run_id: z.string().describe("The live wf-… run id to pause."),
+      },
+      async (args: { run_id: string }) =>
+        text(
+          pauseWorkflow(args.run_id, "paused by agent")
+            ? `Paused ${args.run_id}.`
+            : `Could not pause ${args.run_id}; it may not be running.`,
+        ),
+    ),
+    tool(
+      "control_workflow_agent",
+      "Skip or retry one pending/running workflow agent without cancelling its siblings. Retry is available only while the agent is running.",
+      {
+        run_id: z.string().describe("The live wf-… run id."),
+        seq: z.number().int().nonnegative().describe("Agent sequence number."),
+        action: z.enum(["skip", "retry"]),
+      },
+      async (args: { run_id: string; seq: number; action: "skip" | "retry" }) =>
+        text(
+          controlWorkflowAgent(args.run_id, args.seq, args.action)
+            ? `${args.action === "retry" ? "Retrying" : "Skipping"} agent ${args.seq} in ${args.run_id}.`
+            : `Could not ${args.action} agent ${args.seq}; it may already be finished.`,
+        ),
+    ),
+    tool(
       "resume_workflow",
-      "Re-launch a done/error/interrupted/cancelled workflow run as a NEW run that replays completed agent(), mcp.* and session API calls from the old run's journal and only re-executes what changed or never finished. Existing child sessions are re-adopted, never duplicated. Optionally pass a fixed script.",
+      "Resume a paused workflow in place, or re-launch a done/error/interrupted/cancelled workflow as a NEW run that replays completed agent(), mcp.* and session API calls from the old run's journal. Existing child sessions are re-adopted, never duplicated. Optionally pass a fixed script.",
       {
         run_id: z.string().describe("The finished wf-… run id to resume from."),
         script: z
@@ -443,12 +479,24 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
           return text(
             `${args.run_id} is still running — cancel_workflow it first, or wait for it to finish.`,
           );
+        if (
+          old.status === "paused" &&
+          args.script === undefined &&
+          args.args_json === undefined &&
+          args.repo === undefined &&
+          resumeWorkflow(args.run_id)
+        )
+          return text(`Resumed ${args.run_id} in place.`);
+        if (old.status === "paused")
+          return text(
+            `${args.run_id} is paused — resume it unchanged, or cancel it before relaunching with edits.`,
+          );
         const script = args.script ?? readWorkflowScript(args.run_id);
         if (!script)
           return text(
             `Couldn't read the original script for ${args.run_id} — pass one explicitly via the script param.`,
           );
-        let parsedArgs: unknown;
+        let parsedArgs: unknown = old.recovery?.args;
         if (args.args_json !== undefined) {
           try {
             parsedArgs = JSON.parse(args.args_json);

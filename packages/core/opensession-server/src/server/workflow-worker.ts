@@ -204,6 +204,7 @@ function mcpCall(
       server: String(server),
       tool: String(tool),
       args: callArgs ?? {},
+      ...(currentPhase ? { phase: currentPhase } : {}),
     });
   });
 }

@@ -29,10 +29,15 @@ import { workerEntry } from "../runner-host/exe";
 import {
   appendWorkflowJournal,
   cancelLiveWorkflow,
+  controlLiveWorkflowAgent,
   createWorkflowRun,
   getWorkflowRun,
+  pauseLiveWorkflow,
   readWorkflowJournal,
+  readWorkflowScript,
+  recoverableWorkflowRunIds,
   registerLiveWorkflow,
+  resumeLiveWorkflow,
   unregisterLiveWorkflow,
   updateWorkflowRun,
 } from "./workflow-store";
@@ -65,6 +70,7 @@ import {
   type WorkflowSpawnSessionOpts,
 } from "./workflow-types";
 import type { WorkflowMcpHost } from "./workflow-mcp";
+import { emitWorkflowTelemetry } from "./workflow-telemetry";
 
 /**
  * When a workflow reaches a terminal state, nudge the session that launched it
@@ -458,6 +464,8 @@ export interface StartWorkflowOpts {
   /** Explicit cancellation propagates to active children by default. A server
    * crash never does, so children remain durable across workflow restarts. */
   cancelChildSessions?: boolean;
+  /** Active runs replay their completed journal after a gateway restart. */
+  autoRecover?: boolean;
   /** Injected by tests; defaults to the real MCP host. */
   mcpHost?: WorkflowMcpHost;
 }
@@ -551,6 +559,22 @@ export function startWorkflow(opts: StartWorkflowOpts): { runId: string } {
     user: opts.user,
     cwd: opts.cwd,
     script,
+    recovery: {
+      autoResume: opts.autoRecover !== false,
+      ...(opts.args !== undefined ? { args: opts.args } : {}),
+      ...(opts.defaultModel ? { defaultModel: opts.defaultModel } : {}),
+      ...(opts.budgetTotal !== undefined
+        ? { budgetTotal: opts.budgetTotal }
+        : {}),
+      ...(opts.repo ? { repo: opts.repo } : {}),
+      ...(opts.baseBranch ? { baseBranch: opts.baseBranch } : {}),
+      ...(opts.mcpAllowlist ? { mcpAllowlist: opts.mcpAllowlist } : {}),
+      ...(opts.deniedTools ? { deniedTools: opts.deniedTools } : {}),
+      ...(opts.sessionLimits ? { sessionLimits: opts.sessionLimits } : {}),
+      ...(opts.cancelChildSessions !== undefined
+        ? { cancelChildSessions: opts.cancelChildSessions }
+        : {}),
+    },
   });
   runWorkflow(
     runId,
@@ -567,6 +591,95 @@ export function startWorkflow(opts: StartWorkflowOpts): { runId: string } {
 /** Cancel a live workflow. False when the run isn't live in this process. */
 export function cancelWorkflow(runId: string): boolean {
   return cancelLiveWorkflow(runId);
+}
+
+export function pauseWorkflow(runId: string, reason?: string): boolean {
+  return pauseLiveWorkflow(runId, reason);
+}
+
+export function resumeWorkflow(runId: string): boolean {
+  return resumeLiveWorkflow(runId);
+}
+
+export function controlWorkflowAgent(
+  runId: string,
+  seq: number,
+  action: "skip" | "retry",
+): boolean {
+  return controlLiveWorkflowAgent(runId, seq, action);
+}
+
+/** Replay an interrupted coordinator from its durable journal. Completed calls
+ * return immediately; unfinished calls start again. A new run id keeps the old
+ * attempt immutable and gives every recovery an explicit lineage. */
+export async function recoverWorkflow(
+  runId: string,
+  overrides: Partial<StartWorkflowOpts> = {},
+): Promise<string | undefined> {
+  const old = getWorkflowRun(runId);
+  if (
+    !old ||
+    old.status !== "interrupted" ||
+    old.recoveredAsRunId ||
+    !old.recovery
+  )
+    return undefined;
+  const script = readWorkflowScript(runId);
+  if (!script) {
+    updateWorkflowRun(runId, (snapshot) => {
+      snapshot.recoveryError = "original workflow script is missing";
+    });
+    return undefined;
+  }
+
+  const recovery = old.recovery;
+  let inProcessMcp = overrides.inProcessMcp;
+  const parent = findSession(old.sessionId);
+  if (!inProcessMcp && !parent?.automation && !recovery.deniedTools) {
+    const { interactiveMcpServers } = await import("./interactive-mcp");
+    inProcessMcp = () => interactiveMcpServers(old.user, old.sessionId);
+  }
+  try {
+    const recovered = startWorkflow({
+      script,
+      args: recovery.args,
+      sessionId: old.sessionId,
+      user: old.user,
+      cwd: old.cwd,
+      defaultModel: recovery.defaultModel,
+      budgetTotal: recovery.budgetTotal,
+      repo: recovery.repo,
+      baseBranch: recovery.baseBranch,
+      resumeFromRunId: runId,
+      mcpAllowlist: recovery.mcpAllowlist,
+      deniedTools: recovery.deniedTools,
+      inProcessMcp,
+      sessionLimits: recovery.sessionLimits,
+      cancelChildSessions: recovery.cancelChildSessions,
+      autoRecover: true,
+      ...overrides,
+    });
+    updateWorkflowRun(runId, (snapshot) => {
+      snapshot.recoveredAsRunId = recovered.runId;
+      snapshot.recoveryError = undefined;
+    });
+    return recovered.runId;
+  } catch (error) {
+    updateWorkflowRun(runId, (snapshot) => {
+      snapshot.recoveryError =
+        error instanceof Error ? error.message : String(error);
+    });
+    return undefined;
+  }
+}
+
+export async function recoverInterruptedWorkflows(): Promise<string[]> {
+  const recovered: string[] = [];
+  for (const runId of recoverableWorkflowRunIds()) {
+    const next = await recoverWorkflow(runId);
+    if (next) recovered.push(next);
+  }
+  return recovered;
 }
 
 // ── Message loop ─────────────────────────────────────────────────────────────
@@ -649,6 +762,23 @@ function runWorkflow(
   // awaited tool calls reject rather than hanging until termination).
   const openMcpCalls = new Set<number>();
   const openSessionCalls = new Set<number>();
+  let paused = false;
+  let pauseEpoch = 0;
+  let pauseStartedAt = 0;
+  let resumeWaiters: Array<() => void> = [];
+  const activeAgentControllers = new Map<number, AbortController>();
+  const agentActions = new Map<number, "skip" | "retry">();
+
+  async function waitWhilePaused(): Promise<void> {
+    if (!paused || finished) return;
+    await new Promise<void>((resolve) => resumeWaiters.push(resolve));
+  }
+
+  function releasePauseWaiters(): void {
+    const waiters = resumeWaiters;
+    resumeWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
 
   // The session's repo + branch, resolved once per run (write agents branch
   // off it; merge() merges back into it). Explicit opts win — tests pass them.
@@ -749,13 +879,37 @@ function runWorkflow(
   }
 
   let sessionRefresh: ReturnType<typeof setInterval> | undefined;
+  let workflowTimeRemaining = WORKFLOW_LIMITS.workflowTimeoutMs;
+  let deadlineStartedAt = Date.now();
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+
+  function clearDeadline(consume: boolean): void {
+    if (deadline) clearTimeout(deadline);
+    deadline = undefined;
+    if (consume) {
+      workflowTimeRemaining = Math.max(
+        0,
+        workflowTimeRemaining - (Date.now() - deadlineStartedAt),
+      );
+    }
+  }
+
+  function armDeadline(): void {
+    deadlineStartedAt = Date.now();
+    deadline = setTimeout(
+      () => cancel("workflow timed out"),
+      workflowTimeRemaining,
+    );
+    (deadline as { unref?: () => void }).unref?.();
+  }
 
   function finish(mutate: (s: WorkflowRunSnapshot) => void): void {
     if (finished) return;
     finished = true;
-    clearTimeout(deadline);
+    clearDeadline(false);
     if (sessionRefresh) clearInterval(sessionRefresh);
     controller.abort();
+    releasePauseWaiters();
     let snap: WorkflowRunSnapshot | undefined;
     try {
       snap = updateWorkflowRun(runId, mutate);
@@ -782,7 +936,10 @@ function runWorkflow(
     // done. Steered agent-to-agent (see wakeOwningSession): folds into an
     // in-flight turn, starts one on an idle session — never parked waiting
     // on a human.
-    if (snap) wakeOwningSession(snap);
+    if (snap) {
+      emitWorkflowTelemetry(snap);
+      wakeOwningSession(snap);
+    }
   }
 
   function markUnfinishedAgents(s: WorkflowRunSnapshot, endedAt: string): void {
@@ -792,6 +949,57 @@ function runWorkflow(
         agent.endedAt = endedAt;
       }
     }
+  }
+
+  function pause(reason?: string): boolean {
+    if (finished || paused) return false;
+    paused = true;
+    pauseEpoch++;
+    pauseStartedAt = Date.now();
+    clearDeadline(true);
+    updateWorkflowRun(runId, (snapshot) => {
+      snapshot.status = "paused";
+      snapshot.pausedAt = new Date(pauseStartedAt).toISOString();
+      snapshot.pauseReason = reason;
+      if (reason)
+        snapshot.logs.push({
+          ts: snapshot.pausedAt,
+          message: `Paused: ${reason}`,
+        });
+    });
+    for (const active of activeAgentControllers.values()) {
+      active.abort(new Error("workflow paused"));
+    }
+    return true;
+  }
+
+  function resume(): boolean {
+    if (finished || !paused) return false;
+    const pausedFor = Math.max(0, Date.now() - pauseStartedAt);
+    paused = false;
+    updateWorkflowRun(runId, (snapshot) => {
+      snapshot.status = "running";
+      snapshot.totalPausedMs = (snapshot.totalPausedMs || 0) + pausedFor;
+      snapshot.pausedAt = undefined;
+      snapshot.pauseReason = undefined;
+    });
+    armDeadline();
+    releasePauseWaiters();
+    return true;
+  }
+
+  function controlAgent(seq: number, action: "skip" | "retry"): boolean {
+    if (finished) return false;
+    const agent = getWorkflowRun(runId)?.agents.find((row) => row.seq === seq);
+    if (
+      !agent ||
+      (agent.status !== "pending" && agent.status !== "running") ||
+      (action === "retry" && agent.status !== "running")
+    )
+      return false;
+    agentActions.set(seq, action);
+    activeAgentControllers.get(seq)?.abort(new Error(`agent ${action}`));
+    return true;
   }
 
   function cancel(reason?: string): void {
@@ -843,11 +1051,7 @@ function runWorkflow(
     });
   }
 
-  const deadline = setTimeout(
-    () => cancel("workflow timed out"),
-    WORKFLOW_LIMITS.workflowTimeoutMs,
-  );
-  (deadline as { unref?: () => void }).unref?.();
+  armDeadline();
 
   function agentLabel(prompt: string, agentOpts: WorkflowAgentOpts): string {
     if (agentOpts.label) return agentOpts.label;
@@ -920,6 +1124,7 @@ function runWorkflow(
     msg: Extract<WorkerToParent, { type: "agent_call" }>,
   ): Promise<void> {
     openCalls.add(msg.callId);
+    await waitWhilePaused();
     totalCalls++;
     if (totalCalls > WORKFLOW_LIMITS.maxAgents) {
       postResult(msg.callId, {
@@ -956,13 +1161,20 @@ function runWorkflow(
           seq: msg.seq,
           label,
           phase: msg.opts.phase,
+          requestedModel: outcome.requestedModel,
           model: outcome.model,
+          ...(outcome.requestedModel &&
+          outcome.model &&
+          outcome.requestedModel !== outcome.model
+            ? { modelSubstitutedFrom: outcome.requestedModel }
+            : {}),
           status: "done",
           promptPreview: msg.prompt,
           resultPreview: outcomePreview(outcome),
           // Shown on the row (marked cached) but excluded from run totals —
           // totals are THIS run's real spend.
           tokens: outcome.tokens,
+          toolCalls: outcome.toolCalls,
           startedAt: now,
           endedAt: now,
           cached: true,
@@ -996,7 +1208,8 @@ function runWorkflow(
         seq: msg.seq,
         label,
         phase: msg.opts.phase,
-        model: msg.opts.model,
+        requestedModel: msg.opts.model || opts.defaultModel,
+        model: msg.opts.model || opts.defaultModel,
         status: "pending",
         promptPreview: msg.prompt,
         structured,
@@ -1006,45 +1219,93 @@ function runWorkflow(
     });
 
     await acquire(write ? "write" : "read");
-    // Everything after acquire() runs under one finally — a throw anywhere
-    // (even the snapshot write) must not leak the semaphore slot.
+    // Everything after acquire() runs under one finally — retries and pauses
+    // retain this slot, so queued siblings cannot jump ahead of an agent that
+    // is being resumed in place.
     const startedAt = new Date().toISOString();
-    let outcome: WorkflowAgentOutcome;
+    let outcome: WorkflowAgentOutcome = {
+      ok: false,
+      error: "workflow cancelled",
+    };
     try {
-      if (finished || controller.signal.aborted) {
-        postResult(msg.callId, {
-          ok: false,
-          value: null,
-          error: "workflow cancelled",
-        });
-        return;
-      }
-      updateWorkflowRun(runId, (s) => {
-        const agent = s.agents.find((a) => a.seq === msg.seq);
-        if (agent) {
-          agent.status = "running";
-          agent.startedAt = startedAt;
+      for (;;) {
+        await waitWhilePaused();
+        if (finished || controller.signal.aborted) {
+          postResult(msg.callId, {
+            ok: false,
+            value: null,
+            error: "workflow cancelled",
+          });
+          return;
         }
-      });
-      const executor = await executorPromise;
-      outcome = await executor.execute(
-        { prompt: msg.prompt, opts: msg.opts, seq: msg.seq },
-        execCtx({
-          // The engine session id lands on the row as soon as it exists, so
-          // the UI can drill into a RUNNING agent's conversation.
-          onEngineSession: (engineSessionId) => {
-            updateWorkflowRun(runId, (s) => {
-              const agent = s.agents.find((a) => a.seq === msg.seq);
-              if (agent) agent.engineSessionId = engineSessionId;
-            });
-          },
-        }),
-      );
-    } catch (e) {
-      outcome = {
-        ok: false,
-        error: e instanceof Error ? e.message : String(e),
-      };
+        if (agentActions.get(msg.seq) === "skip") {
+          agentActions.delete(msg.seq);
+          outcome = { ok: false, error: "skipped by user" };
+          break;
+        }
+        updateWorkflowRun(runId, (s) => {
+          const agent = s.agents.find((a) => a.seq === msg.seq);
+          if (agent) {
+            agent.status = "running";
+            agent.startedAt ||= startedAt;
+            agent.error = undefined;
+          }
+        });
+
+        const attemptPauseEpoch = pauseEpoch;
+        const attemptController = new AbortController();
+        const abortAttempt = () =>
+          attemptController.abort(controller.signal.reason);
+        if (controller.signal.aborted) abortAttempt();
+        else
+          controller.signal.addEventListener("abort", abortAttempt, {
+            once: true,
+          });
+        activeAgentControllers.set(msg.seq, attemptController);
+        try {
+          const executor = await executorPromise;
+          outcome = await executor.execute(
+            { prompt: msg.prompt, opts: msg.opts, seq: msg.seq },
+            execCtx({
+              signal: attemptController.signal,
+              // The engine session id lands on the row as soon as it exists,
+              // so the UI can drill into a RUNNING agent's conversation.
+              onEngineSession: (engineSessionId) => {
+                updateWorkflowRun(runId, (s) => {
+                  const agent = s.agents.find((a) => a.seq === msg.seq);
+                  if (agent) agent.engineSessionId = engineSessionId;
+                });
+              },
+            }),
+          );
+        } catch (e) {
+          outcome = {
+            ok: false,
+            error: e instanceof Error ? e.message : String(e),
+          };
+        } finally {
+          controller.signal.removeEventListener("abort", abortAttempt);
+          if (activeAgentControllers.get(msg.seq) === attemptController)
+            activeAgentControllers.delete(msg.seq);
+        }
+
+        const action = agentActions.get(msg.seq);
+        agentActions.delete(msg.seq);
+        if (action === "skip") {
+          outcome = { ok: false, error: "skipped by user" };
+          break;
+        }
+        if (action === "retry" || paused || attemptPauseEpoch !== pauseEpoch) {
+          updateWorkflowRun(runId, (s) => {
+            const agent = s.agents.find((a) => a.seq === msg.seq);
+            if (!agent) return;
+            agent.status = "pending";
+            if (action === "retry") agent.retries = (agent.retries || 0) + 1;
+          });
+          continue;
+        }
+        break;
+      }
     } finally {
       release(write ? "write" : "read");
     }
@@ -1056,10 +1317,24 @@ function runWorkflow(
     updateWorkflowRun(runId, (s) => {
       const agent = s.agents.find((a) => a.seq === msg.seq);
       if (agent) {
-        agent.status = outcome.ok ? "done" : "error";
+        agent.status = outcome.ok
+          ? "done"
+          : outcome.error === "skipped by user"
+            ? "cancelled"
+            : "error";
         agent.endedAt = endedAt;
+        if (outcome.requestedModel)
+          agent.requestedModel = outcome.requestedModel;
         if (outcome.model) agent.model = outcome.model;
+        if (
+          outcome.requestedModel &&
+          outcome.model &&
+          outcome.requestedModel !== outcome.model
+        )
+          agent.modelSubstitutedFrom = outcome.requestedModel;
         if (outcome.tokens) agent.tokens = outcome.tokens;
+        if (outcome.toolCalls !== undefined)
+          agent.toolCalls = outcome.toolCalls;
         agent.resultPreview = outcomePreview(outcome);
         if (!outcome.ok) agent.error = outcome.error || "agent failed";
         applyOutcome(agent, outcome);
@@ -1068,6 +1343,9 @@ function runWorkflow(
         s.totals.tokensIn += outcome.tokens.input || 0;
         s.totals.tokensOut += outcome.tokens.output || 0;
       }
+      if (outcome.toolCalls)
+        s.totals.agentToolCalls =
+          (s.totals.agentToolCalls || 0) + outcome.toolCalls;
     });
     try {
       appendWorkflowJournal(runId, {
@@ -1104,6 +1382,7 @@ function runWorkflow(
   async function handleMergeCall(
     msg: Extract<WorkerToParent, { type: "merge_call" }>,
   ): Promise<void> {
+    await waitWhilePaused();
     const items = (msg.items || []).filter(
       (i) => i && typeof i.branch === "string" && i.branch,
     );
@@ -1391,6 +1670,7 @@ function runWorkflow(
     msg: Extract<WorkerToParent, { type: "session_call" }>,
   ): Promise<void> {
     openSessionCalls.add(msg.callId);
+    await waitWhilePaused();
     const hash = hashSessionCall(msg.operation, msg.args);
     const queue = sessionReplay.get(hash);
     const journaled = queue?.length ? queue.shift() : undefined;
@@ -1487,6 +1767,7 @@ function runWorkflow(
     seq: number;
     server: string;
     tool: string;
+    phase?: string;
     ok: boolean;
     ms: number;
     error?: string;
@@ -1496,11 +1777,22 @@ function runWorkflow(
     updateWorkflowRun(runId, (s) => {
       s.totals.mcpCalls = (s.totals.mcpCalls || 0) + 1;
       if (!entry.ok) s.totals.mcpErrors = (s.totals.mcpErrors || 0) + 1;
+      const phase = entry.phase || "Other";
+      const phaseTotals = (s.phaseToolTotals ||= {});
+      const phaseTotal = (phaseTotals[phase] ||= {
+        calls: 0,
+        errors: 0,
+        durationMs: 0,
+      });
+      phaseTotal.calls++;
+      if (!entry.ok) phaseTotal.errors++;
+      phaseTotal.durationMs += entry.ms;
       const calls = (s.mcpCalls ||= []);
       calls.push({
         seq: entry.seq,
         server: entry.server,
         tool: entry.tool,
+        ...(entry.phase ? { phase: entry.phase } : {}),
         ok: entry.ok,
         ms: entry.ms,
         ...(entry.error ? { error: entry.error.slice(0, 500) } : {}),
@@ -1519,6 +1811,7 @@ function runWorkflow(
     msg: Extract<WorkerToParent, { type: "mcp_call" }>,
   ): Promise<void> {
     openMcpCalls.add(msg.callId);
+    await waitWhilePaused();
     if (++totalMcpCalls > WORKFLOW_LIMITS.maxMcpCalls) {
       postMcpResult(msg.callId, {
         ok: false,
@@ -1538,12 +1831,17 @@ function runWorkflow(
         seq: msg.seq,
         server: msg.server,
         tool: msg.tool,
+        phase: msg.phase || journaled.phase,
         ok: true,
         ms: 0,
         cached: true,
       });
       try {
-        appendWorkflowJournal(runId, { ...journaled, seq: msg.seq });
+        appendWorkflowJournal(runId, {
+          ...journaled,
+          seq: msg.seq,
+          ...(msg.phase ? { phase: msg.phase } : {}),
+        });
       } catch (e) {
         console.warn(`[workflow] ${runId} journal append failed:`, e);
       }
@@ -1580,6 +1878,7 @@ function runWorkflow(
       seq: msg.seq,
       server: msg.server,
       tool: msg.tool,
+      phase: msg.phase,
       ok,
       ms: Date.now() - startedMs,
       error,
@@ -1592,6 +1891,7 @@ function runWorkflow(
         server: msg.server,
         tool: msg.tool,
         args: msg.args,
+        ...(msg.phase ? { phase: msg.phase } : {}),
         ok,
         ...(ok ? { value } : {}),
         ...(error ? { error } : {}),
@@ -1610,6 +1910,7 @@ function runWorkflow(
     msg: Extract<WorkerToParent, { type: "mcp_meta" }>,
   ): Promise<void> {
     openMcpCalls.add(msg.callId);
+    await waitWhilePaused();
     try {
       const host = await mcpHost();
       const value = msg.server ? await host.tools(msg.server) : host.servers();
@@ -1700,11 +2001,14 @@ function runWorkflow(
         });
         return;
       case "done":
-        finish((s) => {
-          s.status = "done";
-          s.result = capResult(msg.result);
-          s.endedAt = new Date().toISOString();
-          markUnfinishedAgents(s, s.endedAt);
+        void waitWhilePaused().then(() => {
+          if (finished) return;
+          finish((s) => {
+            s.status = "done";
+            s.result = capResult(msg.result);
+            s.endedAt = new Date().toISOString();
+            markUnfinishedAgents(s, s.endedAt);
+          });
         });
         return;
       case "error":
@@ -1718,7 +2022,7 @@ function runWorkflow(
     }
   }
 
-  registerLiveWorkflow(runId, cancel);
+  registerLiveWorkflow(runId, { cancel, pause, resume, controlAgent });
   try {
     // Minimal env (belt) on top of the worker-side scrub (braces) — a Bun
     // Worker is a same-process thread and would otherwise inherit the

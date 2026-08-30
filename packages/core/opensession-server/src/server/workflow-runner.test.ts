@@ -5,11 +5,20 @@ import { join } from "path";
 import {
   cancelWorkflow,
   checkScriptSyntax,
+  controlWorkflowAgent,
   parseWorkflowMeta,
+  pauseWorkflow,
+  recoverWorkflow,
+  resumeWorkflow,
   startWorkflow,
   type StartWorkflowOpts,
 } from "./workflow-runner";
-import { getWorkflowRun, readWorkflowJournal } from "./workflow-store";
+import {
+  getWorkflowRun,
+  readWorkflowJournal,
+  unregisterLiveWorkflow,
+  updateWorkflowRun,
+} from "./workflow-store";
 import {
   WORKFLOW_LIMITS,
   isMcpJournalEntry,
@@ -885,19 +894,22 @@ describe("workflow mcp.*", () => {
       executor: echoExecutor(),
       mcpHost,
       script: [
-        'export const meta = { name: "mcp-journal" };',
+        'export const meta = { name: "mcp-journal", phases: [{ title: "Fetch" }] };',
+        'phase("Fetch");',
         'return await mcp.linear.list_issues({ team: "ENG" });',
       ].join("\n"),
     });
-    await waitForFinished(runId);
+    const snapshot = await waitForFinished(runId);
     const entries = readWorkflowJournal(runId).filter(isMcpJournalEntry);
     expect(entries.length).toBe(1);
     expect(entries[0].server).toBe("linear");
     expect(entries[0].tool).toBe("list_issues");
     expect(entries[0].args).toEqual({ team: "ENG" });
+    expect(entries[0].phase).toBe("Fetch");
     expect(entries[0].ok).toBe(true);
     expect(entries[0].value).toEqual({ status: "ok" });
     expect(entries[0].hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(snapshot.phaseStats?.[0].toolCalls).toBe(1);
   });
 
   test("resume REPLAYS a tool call from the journal instead of re-firing it", async () => {
@@ -1081,6 +1093,112 @@ describe("workflow mcp.*", () => {
     const snap = await waitForFinished(runId);
     expect(snap.status).toBe("cancelled");
     gate.resolve();
+  });
+});
+
+describe("workflow live control and recovery", () => {
+  test("pause aborts active agents and resume restarts them in place", async () => {
+    let attempts = 0;
+    const executor = fakeExecutor(async (_req, ctx) => {
+      attempts++;
+      if (attempts > 1) return { ok: true, text: "resumed" };
+      await new Promise<void>((resolve) => {
+        if (ctx.signal.aborted) resolve();
+        else
+          ctx.signal.addEventListener("abort", () => resolve(), {
+            once: true,
+          });
+      });
+      return { ok: false, error: "cancelled" };
+    });
+    const { runId } = start({
+      executor,
+      script:
+        'export const meta = { name: "pause" }; return await agent("hold");',
+    });
+    await waitUntil(
+      () => getWorkflowRun(runId)?.agents[0]?.status === "running",
+    );
+    expect(pauseWorkflow(runId, "test pause")).toBe(true);
+    await waitUntil(() => getWorkflowRun(runId)?.status === "paused");
+    expect(getWorkflowRun(runId)?.pauseReason).toBe("test pause");
+    expect(resumeWorkflow(runId)).toBe(true);
+    const done = await waitForFinished(runId);
+    expect(done.status).toBe("done");
+    expect(done.result).toBe("resumed");
+    expect(done.totalPausedMs).toBeGreaterThanOrEqual(0);
+    expect(attempts).toBe(2);
+  });
+
+  test("retry restarts one running agent and skip resolves it to null", async () => {
+    let attempts = 0;
+    const retrying = fakeExecutor(async (_req, ctx) => {
+      attempts++;
+      if (attempts > 1) return { ok: true, text: "retried" };
+      await new Promise<void>((resolve) =>
+        ctx.signal.addEventListener("abort", () => resolve(), { once: true }),
+      );
+      return { ok: false, error: "cancelled" };
+    });
+    const retryRun = start({
+      executor: retrying,
+      script:
+        'export const meta = { name: "retry" }; return await agent("retry me");',
+    });
+    await waitUntil(
+      () => getWorkflowRun(retryRun.runId)?.agents[0]?.status === "running",
+    );
+    expect(controlWorkflowAgent(retryRun.runId, 0, "retry")).toBe(true);
+    const retried = await waitForFinished(retryRun.runId);
+    expect(retried.result).toBe("retried");
+    expect(retried.agents[0].retries).toBe(1);
+
+    const skipping = fakeExecutor(async (_req, ctx) => {
+      await new Promise<void>((resolve) =>
+        ctx.signal.addEventListener("abort", () => resolve(), { once: true }),
+      );
+      return { ok: false, error: "cancelled" };
+    });
+    const skipRun = start({
+      executor: skipping,
+      script:
+        'export const meta = { name: "skip" }; return await agent("skip me");',
+    });
+    await waitUntil(
+      () => getWorkflowRun(skipRun.runId)?.agents[0]?.status === "running",
+    );
+    expect(controlWorkflowAgent(skipRun.runId, 0, "skip")).toBe(true);
+    const skipped = await waitForFinished(skipRun.runId);
+    expect(skipped.result).toBeNull();
+    expect(skipped.agents[0].status).toBe("cancelled");
+  });
+
+  test("restart recovery creates a journal-replaying lineage", async () => {
+    const original = start({
+      executor: echoExecutor(),
+      script:
+        'export const meta = { name: "recover" }; return await agent("once");',
+      args: { stable: true },
+      defaultModel: "pi/anthropic/claude-opus-5",
+    });
+    await waitForFinished(original.runId);
+    unregisterLiveWorkflow(original.runId);
+    updateWorkflowRun(original.runId, (snapshot) => {
+      snapshot.status = "interrupted";
+      snapshot.endedAt = new Date().toISOString();
+    });
+
+    const executor = echoExecutor();
+    const recoveredId = await recoverWorkflow(original.runId, {
+      executor,
+      inProcessMcp: () => ({}),
+    });
+    expect(recoveredId).toBeTruthy();
+    const recovered = await waitForFinished(recoveredId!);
+    expect(recovered.replayRootRunId).toBe(original.runId);
+    expect(recovered.agents[0].cached).toBe(true);
+    expect(executor.calls).toHaveLength(0);
+    expect(getWorkflowRun(original.runId)?.recoveredAsRunId).toBe(recoveredId);
   });
 });
 

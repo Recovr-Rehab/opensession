@@ -39,8 +39,13 @@ export const WORKFLOW_LIMITS = {
   maxWriteAgents: 40,
   /** Per-agent wall clock before the run is failed. */
   agentTimeoutMs: 15 * 60_000,
-  /** Whole-workflow wall clock before the worker is terminated. */
+  /** Whole-workflow active wall clock before the worker is terminated. Time
+   * spent paused does not consume this allowance. */
   workflowTimeoutMs: 60 * 60_000,
+  /** Advisory threshold surfaced in the UI and telemetry. */
+  largeWorkflowAgents: 25,
+  /** Advisory combined input/output-token threshold. */
+  largeWorkflowTokens: 1_500_000,
   /** Schema-validation attempts per agent() call (1 initial + retries). */
   schemaAttempts: 3,
   /** Cap on stored/returned agent result text. */
@@ -264,8 +269,12 @@ export interface WorkflowAgentOutcome {
   /** Parsed schema-validated value when the call carried a schema. */
   structured?: unknown;
   error?: string;
+  /** Resolved model selected before runtime fallback. */
+  requestedModel?: string;
+  /** Effective terminal model after any fallback. */
   model?: string;
   tokens?: { input: number; output: number };
+  toolCalls?: number;
   /** The pi session this agent ran in — the transcript drill-in pointer. */
   engineSessionId?: string;
   /** Where it ran (the session's worktree, or a write agent's own one). */
@@ -365,7 +374,12 @@ export interface WorkflowAgentSnapshot {
   seq: number;
   label: string;
   phase?: string;
+  /** Resolved model selected before runtime fallback. */
+  requestedModel?: string;
+  /** Effective model, updated when the run reports a fallback. */
   model?: string;
+  /** Set only when the effective model differs from the resolved request. */
+  modelSubstitutedFrom?: string;
   status: WorkflowAgentStatus;
   /** Truncated to previewChars for snapshot payloads. */
   promptPreview: string;
@@ -374,6 +388,9 @@ export interface WorkflowAgentSnapshot {
   startedAt?: string;
   endedAt?: string;
   tokens?: { input: number; output: number };
+  toolCalls?: number;
+  /** Number of times this live call was restarted from the UI. */
+  retries?: number;
   /** True when the result came from the journal (resume replay). */
   cached?: boolean;
   /** True when the call carried a schema. */
@@ -394,11 +411,57 @@ export interface WorkflowAgentSnapshot {
 
 export type WorkflowRunStatus =
   | "running"
+  | "paused"
   | "done"
   | "error"
   | "cancelled"
   /** Marked on boot for runs that were live when the process died. */
   | "interrupted";
+
+export interface WorkflowRecoverySnapshot {
+  /** Only active runs carrying this descriptor are replayed after restart. */
+  autoResume: boolean;
+  args?: unknown;
+  defaultModel?: string;
+  budgetTotal?: number;
+  repo?: string;
+  baseBranch?: string;
+  mcpAllowlist?: string[];
+  deniedTools?: Record<string, string>;
+  sessionLimits?: {
+    maxDepth?: number;
+    maxConcurrent?: number;
+    maxSessions?: number;
+    maxTokens?: number;
+    maxCostUsd?: number;
+  };
+  cancelChildSessions?: boolean;
+}
+
+export interface WorkflowPhaseSnapshot {
+  title: string;
+  agents: number;
+  pending: number;
+  running: number;
+  done: number;
+  error: number;
+  cancelled: number;
+  tokensIn: number;
+  tokensOut: number;
+  toolCalls: number;
+  durationMs: number;
+}
+
+export interface WorkflowWarning {
+  kind: "large_workflow";
+  message: string;
+}
+
+export interface WorkflowPhaseToolTotal {
+  calls: number;
+  errors: number;
+  durationMs: number;
+}
 
 export interface WorkflowRunSnapshot {
   runId: string;
@@ -408,10 +471,23 @@ export interface WorkflowRunSnapshot {
   name: string;
   description?: string;
   status: WorkflowRunStatus;
+  /** Serializable launch policy used for restart recovery. */
+  recovery?: WorkflowRecoverySnapshot;
+  /** New run that replayed this interrupted run after a process restart. */
+  recoveredAsRunId?: string;
+  recoveryError?: string;
+  pausedAt?: string;
+  pauseReason?: string;
+  totalPausedMs?: number;
   /** Phase titles in first-seen order (meta.phases pre-seed it). */
   phases: string[];
   currentPhase?: string;
   agents: WorkflowAgentSnapshot[];
+  /** Recomputed from agent and direct-tool snapshots on every update. */
+  phaseStats?: WorkflowPhaseSnapshot[];
+  /** Cumulative direct mcp.* totals by phase; unlike mcpCalls, never tail-capped. */
+  phaseToolTotals?: Record<string, WorkflowPhaseToolTotal>;
+  warnings?: WorkflowWarning[];
   /** Real durable child sessions spawned by this workflow. */
   sessions?: WorkflowSessionSnapshot[];
   logs: Array<{ ts: string; message: string }>;
@@ -424,6 +500,8 @@ export interface WorkflowRunSnapshot {
     agents: number;
     tokensIn: number;
     tokensOut: number;
+    /** Tool calls made inside workflow agents. */
+    agentToolCalls?: number;
     /** mcp.* calls made by the script (absent on pre-mcp runs). */
     mcpCalls?: number;
     mcpErrors?: number;
@@ -460,6 +538,7 @@ export interface WorkflowMcpJournalEntry {
   server: string;
   tool: string;
   args: unknown;
+  phase?: string;
   ok: boolean;
   /** The normalized value the script received (capped). */
   value?: unknown;
@@ -505,6 +584,7 @@ export function isSessionJournalEntry(
 export interface WorkflowMcpCallSnapshot {
   seq: number;
   server: string;
+  phase?: string;
   tool: string;
   ok: boolean;
   /** Wall-clock duration in ms. */
@@ -536,6 +616,7 @@ export type WorkerToParent =
       server: string;
       tool: string;
       args: unknown;
+      phase?: string;
     }
   | {
       type: "session_call";
