@@ -37,6 +37,8 @@ describe("VirtualTranscriptList", () => {
     expect(source).toMatch(
       /if \(this\.committing\) \{[\s\S]*this\.renderAfterCommit = true;/,
     );
+    expect(source).toContain("if (this.rendering || sync) this.queueRender()");
+    expect(source).not.toContain("flushSync");
   });
 
   test("captures history intent before scroll-driven rerenders", () => {

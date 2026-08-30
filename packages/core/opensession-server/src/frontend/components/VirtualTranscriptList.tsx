@@ -8,7 +8,6 @@ import {
   type VirtualizerOptions,
 } from "@tanstack/react-virtual";
 import React from "react";
-import { flushSync } from "react-dom";
 import { PHONE_QUERY } from "../lib/breakpoints";
 import {
   loadTranscriptSizes,
@@ -115,6 +114,7 @@ class TranscriptVirtualizer extends React.Component<
   private rendering = false;
   private committing = false;
   private renderAfterCommit = false;
+  private renderQueued = false;
   private mountCleanup: (() => void) | undefined;
   private navigationCleanup: (() => void) | undefined;
   private navigationContainer: HTMLDivElement | null = null;
@@ -280,6 +280,16 @@ class TranscriptVirtualizer extends React.Component<
     };
   }
 
+  private queueRender() {
+    if (this.renderQueued) return;
+    this.renderQueued = true;
+    queueMicrotask(() => {
+      this.renderQueued = false;
+      if (this.mounted)
+        this.setState(({ revision }) => ({ revision: revision + 1 }));
+    });
+  }
+
   private requestRender = (
     _instance: Virtualizer<HTMLDivElement, HTMLDivElement>,
     sync: boolean,
@@ -287,20 +297,17 @@ class TranscriptVirtualizer extends React.Component<
     if (!this.mounted) return;
     if (this.committing) {
       // Mount/update lifecycles already run before paint. Batch virtualizer
-      // notifications into one nested update after the lifecycle returns
-      // instead of asking flushSync to interrupt React's active commit.
+      // notifications into one nested update after the lifecycle returns.
       this.renderAfterCommit = true;
       return;
     }
-    const update = () => {
-      if (this.mounted)
-        this.setState(({ revision }) => ({ revision: revision + 1 }));
-    };
-    // setOptions can notify while render is deriving the next range. Hooks can
-    // queue a render-phase update; classes cannot, so finish this render first.
-    if (this.rendering) queueMicrotask(update);
-    else if (sync) flushSync(update);
-    else update();
+    // setOptions can notify while render is deriving the next range, and DOM
+    // observers can notify while React is committing a different subtree.
+    // A microtask still lands before the next paint without forcing React to
+    // flush from inside a lifecycle. Coalesce same-turn geometry notifications
+    // so a theme-wide style change costs one render rather than one per row.
+    if (this.rendering || sync) this.queueRender();
+    else this.setState(({ revision }) => ({ revision: revision + 1 }));
   };
 
   private runCommitLifecycle(work: () => void) {
