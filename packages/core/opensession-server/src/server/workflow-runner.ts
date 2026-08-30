@@ -408,6 +408,13 @@ function hashSessionCall(
     .digest("hex");
 }
 
+function configuredSessionLimit(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 // ── Start / cancel ───────────────────────────────────────────────────────────
 
 export interface StartWorkflowOpts {
@@ -617,7 +624,11 @@ function runWorkflow(
               allowSpawning: !parent?.automation && !opts.deniedTools,
               mcpAllowlist: opts.mcpAllowlist,
               maxDepth:
-                opts.sessionLimits?.maxDepth ?? WORKFLOW_LIMITS.maxSessionDepth,
+                opts.sessionLimits?.maxDepth ??
+                configuredSessionLimit(
+                  "OPENSESSION_WORKFLOW_MAX_SESSION_DEPTH",
+                  WORKFLOW_LIMITS.maxSessionDepth,
+                ),
             });
           });
     }
@@ -1216,9 +1227,17 @@ function runWorkflow(
     const tokens = rows.reduce((sum, row) => sum + (row.tokens || 0), 0);
     const cost = rows.reduce((sum, row) => sum + (row.costUsd || 0), 0);
     const maxTokens =
-      opts.sessionLimits?.maxTokens ?? WORKFLOW_LIMITS.maxSessionTokens;
+      opts.sessionLimits?.maxTokens ??
+      configuredSessionLimit(
+        "OPENSESSION_WORKFLOW_MAX_SESSION_TOKENS",
+        WORKFLOW_LIMITS.maxSessionTokens,
+      );
     const maxCost =
-      opts.sessionLimits?.maxCostUsd ?? WORKFLOW_LIMITS.maxSessionCostUsd;
+      opts.sessionLimits?.maxCostUsd ??
+      configuredSessionLimit(
+        "OPENSESSION_WORKFLOW_MAX_SESSION_COST_USD",
+        WORKFLOW_LIMITS.maxSessionCostUsd,
+      );
     if (tokens > maxTokens)
       return `Nested session token budget exceeded (${tokens} > ${maxTokens})`;
     if (cost > maxCost)
@@ -1278,7 +1297,11 @@ function runWorkflow(
     const requestId = sessionRequestId(seq, hash);
     if (operation === "spawn") {
       const maxSessions =
-        opts.sessionLimits?.maxSessions ?? WORKFLOW_LIMITS.maxSessions;
+        opts.sessionLimits?.maxSessions ??
+        configuredSessionLimit(
+          "OPENSESSION_WORKFLOW_MAX_SESSIONS",
+          WORKFLOW_LIMITS.maxSessions,
+        );
       if (++totalSessionSpawns > maxSessions)
         throw new Error(
           `Nested session cap reached (${maxSessions} per workflow)`,
@@ -1287,7 +1310,10 @@ function runWorkflow(
       assertSessionBudget();
       const maxConcurrent =
         opts.sessionLimits?.maxConcurrent ??
-        WORKFLOW_LIMITS.maxConcurrentSessions;
+        configuredSessionLimit(
+          "OPENSESSION_WORKFLOW_MAX_ACTIVE_SESSIONS",
+          WORKFLOW_LIMITS.maxConcurrentSessions,
+        );
       const active = (getWorkflowRun(runId)?.sessions || []).filter((row) =>
         ["running", "waiting"].includes(row.status),
       ).length;

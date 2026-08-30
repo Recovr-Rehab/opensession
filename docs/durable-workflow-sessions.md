@@ -56,4 +56,6 @@ Both sessions appear beneath the workflow's parent session and in its Agents pan
 
 Completed calls are journaled. Resuming a workflow replays them, while a stable create identity also covers a crash after session creation but before the journal append. Child sessions are normal durable Open Session sessions and outlive the workflow worker or gateway process that launched them.
 
-Nested sessions inherit the parent's identity, registered repository scope, MCP allowlist, model, provider-account pin, and credential policy. Automation workflows cannot turn their restricted tool surface into an interactive code session. Depth, concurrent active sessions, and lifetime session creation are bounded. Children may push and open PRs, but they are explicitly prohibited from merging.
+Nested sessions inherit the parent's identity, registered repository scope, MCP allowlist, model, provider-account pin, and credential policy. Automation workflows cannot turn their restricted tool surface into an interactive code session. Children may push and open PRs, but they are explicitly prohibited from merging.
+
+The defaults can be tightened per instance with `OPENSESSION_WORKFLOW_MAX_SESSION_DEPTH`, `OPENSESSION_WORKFLOW_MAX_ACTIVE_SESSIONS`, `OPENSESSION_WORKFLOW_MAX_SESSIONS`, `OPENSESSION_WORKFLOW_MAX_SESSION_TOKENS`, and `OPENSESSION_WORKFLOW_MAX_SESSION_COST_USD`.
