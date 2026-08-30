@@ -450,6 +450,8 @@ export function macDeployLaunchArgs(options: MacDeployLaunchOptions): string[] {
     "--",
     options.bun,
     controller,
+    "--unit",
+    options.unit,
     "--sha",
     options.targetSha,
     "--checkout",

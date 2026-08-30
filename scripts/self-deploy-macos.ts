@@ -22,6 +22,7 @@ import { dirname, join, resolve } from "path";
 import { acquireMacDeployLock } from "../packages/core/opensession-server/src/server/macos-deploy-lock";
 
 interface Options {
+  unit: string;
   target: string;
   checkout: string;
   state: string;
@@ -62,6 +63,9 @@ export function parseMacSelfDeployArgs(argv: string[]): Options {
     if (!value) throw new Error(`${name} is required`);
     return value;
   };
+  const unit = required("--unit");
+  if (!/^opensession-self-deploy-[0-9]{13}$/.test(unit))
+    throw new Error("--unit is not a self-deploy launchd label");
   const target = required("--sha");
   if (!SHA_RE.test(target)) throw new Error("--sha must be an exact commit");
   const absolute = (name: string): string => {
@@ -70,6 +74,7 @@ export function parseMacSelfDeployArgs(argv: string[]): Options {
     return resolve(value);
   };
   return {
+    unit,
     target,
     checkout: absolute("--checkout"),
     state: absolute("--state"),
@@ -321,6 +326,15 @@ export async function runMacSelfDeploy(options: Options): Promise<void> {
         (await isAncestor(options.checkout, options.target, current)))
     ) {
       rmSync(join(options.state, "requests", options.target), { force: true });
+      if (current === options.target && (await pollHealth(options.healthUrl))) {
+        writeResult(options, startedAt, startedMs, options.target, {
+          ok: true,
+          action: "deploy",
+          sha: current,
+          previousSha: current,
+          message: "release was already selected and is healthy",
+        });
+      }
       log(
         `request ${options.target.slice(0, 10)} already deployed or superseded`,
       );
@@ -363,7 +377,13 @@ export async function runMacSelfDeploy(options: Options): Promise<void> {
     await release(["switch", target]);
     recordSchemaFloor(options.state, targetRoot);
     log(`reloading LaunchAgents on ${target.slice(0, 10)}`);
-    await installRelease(options, targetRoot);
+    try {
+      await installRelease(options, targetRoot);
+    } catch (error) {
+      log(
+        `LaunchAgent reload command reported an error; checking service health before rollback: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
 
     if (await pollHealth(options.healthUrl)) {
       for (const request of readdirSync(join(options.state, "requests"))) {
@@ -456,6 +476,13 @@ export async function runMacSelfDeploy(options: Options): Promise<void> {
     throw error;
   } finally {
     releaseLock?.();
+    // launchctl submit keeps short-lived jobs registered and respawns them.
+    // Removing our own label terminates this process after durable result/log
+    // writes, preventing an already-covered deploy from restarting forever.
+    Bun.spawnSync(["launchctl", "remove", options.unit], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
   }
 }
 

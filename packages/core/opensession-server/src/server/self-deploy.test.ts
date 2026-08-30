@@ -297,6 +297,9 @@ describe("macOS self-deploy launcher", () => {
       "opensession-self-deploy-1700000000000",
     ]);
     expect(args).toContain("/Users/test/Open Session");
+    expect(
+      args.slice(args.indexOf("--unit"), args.indexOf("--unit") + 2),
+    ).toEqual(["--unit", "opensession-self-deploy-1700000000000"]);
     expect(args).not.toContain("sudo");
     expect(args).not.toContain("/bin/sh");
     expect(args.at(-1)).toBe("http://127.0.0.1:3850/ready");
@@ -304,6 +307,8 @@ describe("macOS self-deploy launcher", () => {
 
   test("requires an exact SHA and absolute trusted paths", () => {
     const valid = [
+      "--unit",
+      "opensession-self-deploy-1700000000000",
       "--sha",
       "b".repeat(40),
       "--checkout",
@@ -330,6 +335,15 @@ describe("macOS self-deploy launcher", () => {
         ),
       ),
     ).toThrow("--sha must be an exact commit");
+    expect(() =>
+      parseMacSelfDeployArgs(
+        valid.map((value) =>
+          value === "opensession-self-deploy-1700000000000"
+            ? "other-job"
+            : value,
+        ),
+      ),
+    ).toThrow("--unit is not a self-deploy launchd label");
   });
 });
 
