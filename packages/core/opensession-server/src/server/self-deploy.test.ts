@@ -15,12 +15,16 @@ import {
   deployStateDir,
   formatDeployStatus,
   isFrontendOnlyRelease,
+  macDeployLaunchArgs,
   markerAgeMs,
   requiresRootDeploy,
   parseDeployResult,
   readDeployState,
+  selfDeployHealthUrl,
   WATCHDOG_WINDOW_MS,
 } from "./self-deploy";
+import { parseMacSelfDeployArgs } from "../../../../../scripts/self-deploy-macos";
+import { acquireMacDeployLock } from "./macos-deploy-lock";
 
 const savedState = process.env.OPENSESSION_DEPLOY_STATE;
 const savedCheckout = process.env.OPENSESSION_DEPLOY_CHECKOUT;
@@ -250,6 +254,85 @@ describe("isFrontendOnlyRelease", () => {
   });
 });
 
+describe("macOS self-deploy launcher", () => {
+  test("targets the configured server address for health checks", () => {
+    expect(selfDeployHealthUrl({ HOST: "100.81.254.102", PORT: "4850" })).toBe(
+      "http://100.81.254.102:4850/ready",
+    );
+    expect(selfDeployHealthUrl({ HOST: "::1" })).toBe(
+      "http://[::1]:3850/ready",
+    );
+    expect(
+      selfDeployHealthUrl({
+        OPENSESSION_HEALTH_URL: "http://localhost:9999/health",
+      }),
+    ).toBe("http://localhost:9999/health");
+  });
+
+  test("serializes launchd deploys and frontend promotions without flock", async () => {
+    const release = await acquireMacDeployLock(dir, 20, 1);
+    await expect(acquireMacDeployLock(dir, 5, 1)).rejects.toThrow(
+      "timed out waiting for the active macOS deploy",
+    );
+    release();
+    const nextRelease = await acquireMacDeployLock(dir, 20, 1);
+    nextRelease();
+  });
+
+  test("submits a detached launchd job without sudo or shell interpolation", () => {
+    const args = macDeployLaunchArgs({
+      unit: "opensession-self-deploy-1700000000000",
+      targetSha: "a".repeat(40),
+      checkout: "/Users/test/Open Session",
+      stateDir: "/Users/test/.opensession/deploy",
+      bun: "/Users/test/.bun/bin/bun",
+      home: "/Users/test",
+      healthUrl: "http://127.0.0.1:3850/ready",
+      controller: "/Users/test/Open Session/scripts/self-deploy-macos.ts",
+    });
+    expect(args.slice(0, 4)).toEqual([
+      "launchctl",
+      "submit",
+      "-l",
+      "opensession-self-deploy-1700000000000",
+    ]);
+    expect(args).toContain("/Users/test/Open Session");
+    expect(args).not.toContain("sudo");
+    expect(args).not.toContain("/bin/sh");
+    expect(args.at(-1)).toBe("http://127.0.0.1:3850/ready");
+  });
+
+  test("requires an exact SHA and absolute trusted paths", () => {
+    const valid = [
+      "--sha",
+      "b".repeat(40),
+      "--checkout",
+      "/repo",
+      "--state",
+      "/state",
+      "--bun",
+      "/bin/bun",
+      "--home",
+      "/Users/test",
+      "--health-url",
+      "http://127.0.0.1:3850/ready",
+    ];
+    expect(parseMacSelfDeployArgs(valid).target).toBe("b".repeat(40));
+    expect(() =>
+      parseMacSelfDeployArgs(
+        valid.map((value) => (value === "/repo" ? "relative/repo" : value)),
+      ),
+    ).toThrow("--checkout must be absolute");
+    expect(() =>
+      parseMacSelfDeployArgs(
+        valid.map((value) =>
+          value === "b".repeat(40) ? "origin/main" : value,
+        ),
+      ),
+    ).toThrow("--sha must be an exact commit");
+  });
+});
+
 describe("deploy/self-deploy.sh", () => {
   test("passes bash -n (syntax)", () => {
     const script = resolve(
@@ -319,6 +402,8 @@ describe("deploy/self-deploy.sh", () => {
     expect(source).toContain("No separate human approval is required");
     expect(source).toContain("nextDeployUnitName()");
     expect(source).toContain("Migration path for instances upgrading");
+    expect(source).toContain('platform() === "darwin"');
+    expect(source).toContain("macDeployLaunchArgs");
     expect(source).toContain(
       "Environment=OPENSESSION_BUN_BIN=${process.execPath}",
     );
