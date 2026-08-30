@@ -1,6 +1,8 @@
 import SwiftUI
 #if os(macOS)
 import AppKit
+#else
+import UIKit
 #endif
 
 /// Owns session start/stop and foreground presence without putting lifecycle
@@ -852,6 +854,35 @@ struct SessionView: View {
                 }
                 if ProcessInfo.processInfo.environment["OS1_SHOW_STEERED_MESSAGE"] == "1" {
                     viewModel.showSteeredMessageForScreenshot()
+                }
+                if ProcessInfo.processInfo.environment["OS1_SHOW_ATTACHMENT_ANNOTATION"] == "1",
+                   viewModel.attachedImages.isEmpty {
+                    let renderer = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600))
+                    let image = renderer.image { context in
+                        UIColor.systemGroupedBackground.setFill()
+                        context.cgContext.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
+                        UIColor.secondarySystemGroupedBackground.setFill()
+                        context.cgContext.fill(CGRect(x: 70, y: 70, width: 760, height: 460))
+                        let title = "Review settings"
+                        title.draw(
+                            at: CGPoint(x: 120, y: 120),
+                            withAttributes: [.font: UIFont.boldSystemFont(ofSize: 42)]
+                        )
+                        UIColor.systemBlue.setFill()
+                        context.cgContext.fillEllipse(in: CGRect(x: 620, y: 365, width: 150, height: 68))
+                        "Save".draw(
+                            at: CGPoint(x: 650, y: 379),
+                            withAttributes: [
+                                .font: UIFont.boldSystemFont(ofSize: 28),
+                                .foregroundColor: UIColor.white,
+                            ]
+                        )
+                    }
+                    if let data = image.jpegData(compressionQuality: 0.9) {
+                        viewModel.attachedImages = [
+                            AttachedImage(id: "annotation-fixture", jpegData: data)
+                        ]
+                    }
                 }
                 #endif
                 catalog = try? await OS1API.models(workspaceId: viewModel.session.workspaceId)
@@ -2957,9 +2988,25 @@ private struct SessionInputBar: View {
             }
 
             if !viewModel.attachedImages.isEmpty {
-                AttachedImagesRow(images: viewModel.attachedImages) { image in
-                    viewModel.attachedImages.removeAll { $0.id == image.id }
-                }
+                AttachedImagesRow(
+                    images: viewModel.attachedImages,
+                    onRemove: { image in
+                        guard let index = viewModel.attachedImages.firstIndex(of: image)
+                        else { return }
+                        viewModel.draft = ImageAttachmentComments.rebasing(
+                            viewModel.draft, removingImageAt: index
+                        )
+                        viewModel.attachedImages.remove(at: index)
+                    },
+                    onComment: { index, region, text in
+                        viewModel.draft = ImageAttachmentComments.appending(
+                            to: viewModel.draft,
+                            imageIndex: index,
+                            region: region,
+                            comment: text
+                        )
+                    }
+                )
             }
 
             if let typingLabel {
