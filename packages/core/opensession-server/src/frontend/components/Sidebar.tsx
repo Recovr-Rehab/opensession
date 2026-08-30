@@ -632,7 +632,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     // it pins at. A scroll frame cannot change either, and reading them is a
     // style recalc per header, so they are cached here and re-read only when
     // the list, the rail or the density actually changes. `stuck` is the
-    // class as last applied, so an unchanged header costs no write.
+    // attribute as last applied, so an unchanged header costs no write.
     type StickyHead = {
       el: HTMLElement;
       parent: HTMLElement;
@@ -654,7 +654,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           parent: parent ?? el,
           sticky: style.position === "sticky" && !!parent,
           top: Number.parseFloat(style.top) || 0,
-          stuck: applied.get(el) ?? el.classList.contains("is-stuck"),
+          // React owns className and rewrites it on rerender. The dedicated
+          // data attribute is not part of that managed value, so it preserves
+          // the backing while the scroll position remains unchanged.
+          stuck: applied.get(el) ?? el.hasAttribute("data-stuck"),
         });
       }
     };
@@ -692,7 +695,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         const stuck = next[i]!;
         if (head.stuck === stuck) continue;
         head.stuck = stuck;
-        head.el.classList.toggle("is-stuck", stuck);
+        head.el.toggleAttribute("data-stuck", stuck);
       }
     };
     const schedule = () => {
