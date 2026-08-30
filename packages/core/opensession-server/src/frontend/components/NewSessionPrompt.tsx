@@ -351,9 +351,7 @@ export function NewSessionPrompt({
       }),
     );
   const removeImage = (imageIndex: number) => {
-    commitText(
-      rebaseImageAttachmentReferences(draft.current.text, imageIndex),
-    );
+    commitText(rebaseImageAttachmentReferences(draft.current.text, imageIndex));
     onRemoveImage(imageIndex);
   };
 
