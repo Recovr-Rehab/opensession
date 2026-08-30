@@ -3107,7 +3107,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // The Snoozed group — the quiet zone, shared by the status lanes (slotted
   // just above Backlog) and the inbox bands (appended last, after Earlier).
   // `ns` keeps each repo's copy collapsible on its own.
-  function renderSnoozedGroup(rows: WsRow[], ns = "") {
+  function renderSnoozedGroup(rows: WsRow[], ns = "", nested = false) {
     const gkey = `${ns}status:snoozed`;
     const open = isOpen(gkey);
     return (
@@ -3119,7 +3119,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
             SIDEBAR_LANE_HEADER,
             "transition-colors",
             SIDEBAR_STICKY_LANE,
-            ns && SIDEBAR_STICKY_LANE_NESTED,
+            nested && SIDEBAR_STICKY_LANE_NESTED,
             SIDEBAR_STUCK_BACKING,
           )}
           data-sticky-head
@@ -3264,7 +3264,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
               SIDEBAR_LANE_HEADER,
               "transition-colors",
               SIDEBAR_STICKY_LANE,
-              ns && SIDEBAR_STICKY_LANE_NESTED,
+              !!laneRepo && SIDEBAR_STICKY_LANE_NESTED,
               SIDEBAR_STUCK_BACKING,
             )}
             data-sticky-head
@@ -3298,7 +3298,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
       lanes.splice(
         MINE_STATUS_META.findIndex((m) => m.key === "pending") + 1,
         0,
-        renderSnoozedGroup(snoozedRows, ns),
+        renderSnoozedGroup(snoozedRows, ns, !!laneRepo),
       );
     }
     return lanes;
@@ -3311,6 +3311,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     ns = "",
     snoozedRows: WsRow[] = [],
     prItems: ReviewQueueItem[] = [],
+    nested = false,
   ) {
     const sorted = [...rows].sort((a, b) =>
       (b.lastActivity || "").localeCompare(a.lastActivity || ""),
@@ -3360,7 +3361,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                 SIDEBAR_LANE_HEADER,
                 "transition-colors",
                 SIDEBAR_STICKY_LANE,
-                ns && SIDEBAR_STICKY_LANE_NESTED,
+                nested && SIDEBAR_STICKY_LANE_NESTED,
                 SIDEBAR_STUCK_BACKING,
               )}
               data-sticky-head
@@ -3390,14 +3391,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           </div>
         );
       });
-    if (snoozedRows.length > 0) nodes.push(renderSnoozedGroup(snoozedRows, ns));
+    if (snoozedRows.length > 0)
+      nodes.push(renderSnoozedGroup(snoozedRows, ns, nested));
     return nodes;
   }
 
   // ── Inbox Active section ───────────────────────────────────────────────
   // Snoozed uses the shared section below; Active keeps its stable creation
   // order and the same compact row density.
-  function renderActiveSection(rows: WsRow[], ns = "") {
+  function renderActiveSection(rows: WsRow[], ns = "", nested = false) {
     const label = "Active";
     if (rows.length === 0) return null;
     const gkey = `${ns}inbox:${label.toLowerCase()}`;
@@ -3411,7 +3413,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
             SIDEBAR_LANE_HEADER,
             "transition-colors",
             SIDEBAR_STICKY_LANE,
-            ns && SIDEBAR_STICKY_LANE_NESTED,
+            nested && SIDEBAR_STICKY_LANE_NESTED,
             SIDEBAR_STUCK_BACKING,
           )}
           data-sticky-head
@@ -3444,15 +3446,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     laneRepo?: string,
     prItems: ReviewQueueItem[] = [],
   ) {
+    const nested = !!laneRepo;
     if (filter.groupBy === "activity")
-      return renderInboxBands(rows, ns, snoozedRows, prItems);
+      return renderInboxBands(rows, ns, snoozedRows, prItems, nested);
     if (filter.groupBy === "status")
       return renderStatusLanes(rows, ns, snoozedRows, laneRepo, prItems);
     const active = sortInboxByCreation(rows);
     return [
-      renderActiveSection(active, ns),
+      renderActiveSection(active, ns, nested),
       ...prItems.map(renderPrRow),
-      ...(snoozedRows.length > 0 ? [renderSnoozedGroup(snoozedRows, ns)] : []),
+      ...(snoozedRows.length > 0
+        ? [renderSnoozedGroup(snoozedRows, ns, nested)]
+        : []),
     ];
   }
 
