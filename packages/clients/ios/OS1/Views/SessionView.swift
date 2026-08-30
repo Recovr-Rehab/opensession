@@ -764,6 +764,9 @@ struct SessionView: View {
                 }
             }
             ToolbarItem(placement: .principal) { macSessionTitle }
+            ToolbarItem(placement: .topTrailingCompat) {
+                AddToSidebarButton(session: viewModel.session, siblings: tabs)
+            }
             if !workspaceHistoryRows.isEmpty, onRestoreArchivedSession != nil {
                 ToolbarItem(placement: .topTrailingCompat) {
                     SessionHistoryMenu(
@@ -1653,6 +1656,24 @@ private struct SlackComposeReceiptRow: View {
     }
 }
 
+/// Isolated from `SessionView.body` so lane and hide updates do not invalidate
+/// the transcript. On Mac this is the open session's direct toolbar action.
+private struct AddToSidebarButton: View {
+    let session: Session
+    let siblings: [Session]
+
+    var body: some View {
+        if SidebarAddition.currentIntent(for: session, siblings: siblings) != nil {
+            Button {
+                SidebarAddition.add(session: session, siblings: siblings)
+            } label: {
+                Label("Add to sidebar", systemImage: "sidebar.left")
+            }
+            .help("Add to sidebar")
+        }
+    }
+}
+
 #if os(iOS)
 /// The session's overflow menu — the trailing nav-bar control, a native `Menu` so
 /// iOS renders (and animates) it as a real UIMenu.
@@ -1697,6 +1718,13 @@ private struct SessionActionsMenu: View {
 
     var body: some View {
         Menu {
+            if addIntent != nil {
+                Button {
+                    SidebarAddition.add(session: viewModel.session, siblings: tabs)
+                } label: {
+                    Label("Add to sidebar", systemImage: "sidebar.left")
+                }
+            }
             if let onNewSession {
                 Button(action: onNewSession) {
                     // Two words, because the workspace it lands in is the one
@@ -1858,7 +1886,7 @@ private struct SessionActionsMenu: View {
                     // Hiding is the personal counterpart to archiving: the row
                     // leaves YOUR sidebar while the session keeps running for
                     // everyone else — so it isn't destructive-styled.
-                    if HideStore.shared.isHidden(workspace) {
+                    if HideStore.shared.isHidden(workspace), addIntent == nil {
                         Button {
                             // `unhide` rather than clearing this row's key:
                             // it drops every key the session could sit under,
@@ -1869,7 +1897,7 @@ private struct SessionActionsMenu: View {
                         } label: {
                             Label("Restore to sidebar", systemImage: "eye")
                         }
-                    } else {
+                    } else if !HideStore.shared.isHidden(workspace) {
                         Button {
                             HideStore.shared.hide(workspace)
                         } label: {
@@ -1921,6 +1949,10 @@ private struct SessionActionsMenu: View {
         } message: {
             Text(mergeError ?? "Please try again.")
         }
+    }
+
+    private var addIntent: SidebarAddition.Intent? {
+        SidebarAddition.currentIntent(for: viewModel.session, siblings: tabs)
     }
 
     private var mergeConfirmationTitle: String {
