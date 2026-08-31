@@ -7,8 +7,6 @@ import {
   VirtualTranscriptList,
   shouldAdjustTranscriptScroll,
   shouldTransitionTranscriptItemPosition,
-  transcriptBottomAnchor,
-  transcriptScrollTopForBottomAnchor,
   transcriptOverscan,
   transcriptViewportNeedsHistory,
   type VirtualTranscriptItem,
@@ -95,10 +93,10 @@ describe("VirtualTranscriptList", () => {
     expect(shouldAdjustTranscriptScroll(1_200, 600, true)).toBe(true);
   });
 
-  test("keeps the reader's bottom distance when history grows above", () => {
-    const anchor = transcriptBottomAnchor(4_000, 2_900, 700);
-    expect(anchor.distanceFromBottom).toBe(400);
-    expect(transcriptScrollTopForBottomAnchor(5_250, 700, anchor)).toBe(4_150);
+  test("uses TanStack's native end anchor for prepended history", () => {
+    expect(source).toContain('anchorTo: "end"');
+    expect(source).toContain("scrollEndThreshold: 120");
+    expect(source).not.toContain("getSnapshotBeforeUpdate");
   });
 
   test("keeps positive live-edge growth pinned in the measurement frame", () => {
