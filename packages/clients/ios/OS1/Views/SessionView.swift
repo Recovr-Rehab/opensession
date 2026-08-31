@@ -390,9 +390,14 @@ struct SessionView: View {
                         // `liveText` changes. Follow its measured height, not
                         // the pre-layout text update, so the run footer stays
                         // planted instead of stepping around while words land.
-                        if new.contentHeight > old.contentHeight,
-                           !follow.readerMovedTowardHistory,
-                           wasFollowing || (holdingAtLatest && !readerScrollActive) {
+                        if TranscriptScroll.shouldFollowContentGrowth(
+                            previousContentHeight: old.contentHeight,
+                            contentHeight: new.contentHeight,
+                            readerMovedTowardHistory: follow.readerMovedTowardHistory,
+                            wasFollowing: wasFollowing,
+                            holdingAtLatest: holdingAtLatest,
+                            readerScrollActive: readerScrollActive
+                        ) {
                             nextPinned = true
                             scrollToBottom(proxy, animated: false, repin: false)
                         }
@@ -538,6 +543,11 @@ struct SessionView: View {
                         }
                         .onChange(of: viewModel.sentAskAnswer) {
                             scrollToBottom(proxy, animated: true)
+                            // The answer receipt is optimistic. Its durable
+                            // replacement and the resumed run can change the
+                            // tail while this animation still targets the old
+                            // row, so follow until those rows settle.
+                            beginHold(proxy, after: .milliseconds(450))
                         }
 
                     let deliveryScroll = receivedScroll
