@@ -34,6 +34,8 @@ test("index replacement preserves the bounded tail's scroll mapping", () => {
     "container.scrollHeight - container.clientHeight - pending.bottomGap",
   );
   expect(restore).toContain("holdTranscriptAnchor(");
+  expect(transcriptHook).toContain("const INDEX_ANCHOR_BRIDGE_MS = 0");
+  expect(transcriptHook).not.toContain("INDEX_ANCHOR_SETTLE_MS");
   expect(viewer).toContain("useTranscriptIndexAnchor({");
 });
 

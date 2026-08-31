@@ -1980,52 +1980,6 @@ export function SessionViewer({
     };
   }, [session.id]);
 
-  // Immersive reading on phones: scrolling down through the transcript hides
-  // secondary chat chrome such as docked tabs, while the navigation bar stays
-  // fixed so Back and its actions remain reachable. Scrolling back up, or
-  // reaching the top or live edge, restores the secondary chrome. Toggles
-  // body.chrome-collapsed, which mobile CSS reads (inert on desktop).
-  useEffect(() => {
-    const el = messagesRef.current;
-    if (!el) return;
-    const mq = window.matchMedia("(max-width: 720px)");
-    let lastY = el.scrollTop;
-    let collapsed = false;
-    let ticking = false;
-    const set = (v: boolean) => {
-      if (v === collapsed) return;
-      collapsed = v;
-      document.body.classList.toggle("chrome-collapsed", v);
-    };
-    const onDir = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        ticking = false;
-        if (!mq.matches) {
-          set(false);
-          lastY = el.scrollTop;
-          return;
-        }
-        const y = el.scrollTop;
-        const max = el.scrollHeight - el.clientHeight;
-        const dy = y - lastY;
-        lastY = y;
-        // Keep the chrome up near the top and the live edge so the controls
-        // stay reachable; otherwise follow the scroll direction (with a small
-        // dead-zone so tiny jitters don't flip it).
-        if (y < 48 || max - y < 64) set(false);
-        else if (dy > 6) set(true);
-        else if (dy < -6) set(false);
-      });
-    };
-    el.addEventListener("scroll", onDir, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", onDir);
-      document.body.classList.remove("chrome-collapsed");
-    };
-  }, [messagesRef, session.id]);
-
   // Per-session model (switchable from the composer; "" = default)
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");

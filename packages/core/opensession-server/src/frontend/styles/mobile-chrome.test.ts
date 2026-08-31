@@ -13,15 +13,25 @@ import {
 } from "../lib/app-header-classes";
 import { TAB_ITEM, TAB_STRIP, tabClass } from "../lib/session-tab-classes";
 import { REPORTS_COLUMN_HEADER } from "../lib/reports-classes";
-import { infoTopbarClass } from "../lib/session-viewer-classes";
+import {
+  infoTopbarClass,
+  TRANSCRIPT_PILL_TOP,
+} from "../lib/session-viewer-classes";
+
+const sessionViewer = await Bun.file(
+  new URL("../components/SessionViewer.tsx", import.meta.url),
+).text();
 
 const CSS = new URL("./base.css", import.meta.url);
 
-test("floating phone navigation stays pinned while chat chrome collapses", () => {
+test("phone transcript chrome never changes the scroll viewport", () => {
   const floatingHeader = appHeader({ detail: true, floating: true });
 
   expect(floatingHeader).toContain("phone:fixed");
   expect(floatingHeader).not.toContain("chrome-collapsed");
+  expect(TAB_STRIP).not.toContain("chrome-collapsed");
+  expect(TRANSCRIPT_PILL_TOP).not.toContain("chrome-collapsed");
+  expect(sessionViewer).not.toContain("chrome-collapsed");
 });
 
 test("phone top-bar actions use neutral ink", () => {
