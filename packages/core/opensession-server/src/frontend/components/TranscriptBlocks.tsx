@@ -775,11 +775,13 @@ function IndexedTranscriptBlocks(props: Props) {
   // every height on screen is a real measurement.
   const renderedTimeline = timeline
     .map((item, index) => ({ item, index }))
-    .filter(
-      ({ item }) =>
-        indexedItemRanges(item).length === 0 ||
-        indexedItemEntryIds(item).some((id) => payloadById.has(id)),
-    );
+    .filter(({ item }) => {
+      const itemRanges = indexedItemRanges(item);
+      return (
+        itemRanges.length === 0 ||
+        transcriptRangesContainPayload(itemRanges, (id) => payloadById.has(id))
+      );
+    });
   // Nothing to window (an empty or fully-absent outline): the curtain lifts
   // instead of waiting for a demand pass that will never run. Recheck when the
   // full outline replaces the bounded init even if both happen to be empty: the
