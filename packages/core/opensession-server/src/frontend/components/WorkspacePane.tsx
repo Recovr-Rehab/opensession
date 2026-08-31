@@ -614,6 +614,7 @@ export function WorkspacePane({
   const reviewSummaryHasRoom = headerW === 0 || headerW >= WS_SUMMARY_ROOM_W;
   const reviewSummaryVisible =
     tab === "review" &&
+    !!presentationSession &&
     reviewSummaryOpen &&
     reviewSummaryHasRoom &&
     !panelOpen &&

@@ -61,6 +61,9 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
   expect(source).toContain("session={presentationSession}");
   expect(source).toContain("onOpenChange={setReviewSummaryOpen}");
   expect(source).toContain("compactToolbar={reviewSummaryVisible}");
+  expect(source).toMatch(
+    /const reviewSummaryVisible =\s*tab === "review" &&\s*!!presentationSession &&/,
+  );
   expect(viewerSource).toContain("compactToolbar={summaryVisible}");
   expect(viewerSource).not.toContain("WS_SUMMARY_REVIEW_CLEARANCE");
   expect(source).toContain("walkthrough={presentationSession?.walkthrough}");
