@@ -15,7 +15,11 @@
  * getSessionControl() surface directly, no MCP involved.
  */
 import type { ImageInput } from "./run-events";
-import type { UnifiedSession, TranscriptEntry } from "./types";
+import type {
+  AutomationDescendantPolicy,
+  UnifiedSession,
+  TranscriptEntry,
+} from "./types";
 
 /**
  * Derived, at-a-glance status for a session. `waiting_question` is the one the
@@ -54,6 +58,15 @@ export interface DeliverResult {
   duplicate?: boolean;
 }
 
+export type ReparentSessionResult =
+  | {
+      ok: true;
+      previousParentSessionId?: string;
+      parentSessionId?: string;
+      changed: boolean;
+    }
+  | { ok: false; error: string };
+
 /**
  * Where a new session runs, as a caller may ask for it. `true` takes the
  * instance's configured default; `"local"` is the host, named explicitly.
@@ -82,6 +95,12 @@ export interface CreateSessionOpts {
   requestScope?: string;
   /** Branch for a code-mode worktree session. Ignored for ask mode. */
   branch?: string;
+  /** Committed ref the new isolated branch starts from. Internal callers must
+   * validate access and existence before passing it. */
+  baseRef?: string;
+  /** Expected PR base when baseRef came from another session. Persisted as the
+   * existing stackedOn relationship so Review/stack support remains unchanged. */
+  stackedOnBranch?: string;
   /** Registered repo id to run in. Defaults to the instance default repo. */
   repo?: string;
   /** Explicitly run an Ask session without a repository checkout. */
@@ -100,6 +119,10 @@ export interface CreateSessionOpts {
   files?: unknown;
   /** Optional MCP allowlist for the opening run. Empty array means no MCP servers. */
   mcpServers?: string[];
+  /** Authorized persistent Runner id for a new code workspace. */
+  runner?: string;
+  /** Server-authored immutable policy for an automation workflow descendant. */
+  automationDescendantPolicy?: AutomationDescendantPolicy;
   /**
    * Join an existing workspace as a sibling session — a new tab, the create path's
    * equivalent of the web tab strip's "+". The session takes the workspace's
@@ -121,6 +144,8 @@ export interface CreateSessionOpts {
   isolatedWorktree?: boolean;
   /** Parent/orchestrator session id when this is a worker sub-session. */
   parentSessionId?: string;
+  /** Persisted nesting depth for server-supervised child sessions. */
+  spawnDepth?: number;
   /** Started by a server-side agent action rather than a person typing in a composer. */
   agentStarted?: boolean;
   /**
@@ -233,6 +258,11 @@ export interface SessionControl {
     id: string,
     opts?: { requestId?: string },
   ): boolean | Promise<boolean>;
+  /** Change a native session's parent link, or remove it when omitted. */
+  reparentSession(
+    id: string,
+    parentSessionId?: string,
+  ): Promise<ReparentSessionResult>;
   /** Create a new session and start its first turn in the background. */
   createSession(opts: CreateSessionOpts): Promise<{
     id: string;

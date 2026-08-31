@@ -7,6 +7,14 @@ const SHIPPED = new URL(
   import.meta.url,
 );
 const COMPOSER = new URL("../components/Composer.tsx", import.meta.url);
+const MODEL_ROW = new URL(
+  "../components/composer/ModelRow.tsx",
+  import.meta.url,
+);
+const VOICE_CONTROL = new URL(
+  "../components/composer/VoiceControl.tsx",
+  import.meta.url,
+);
 
 test("phone composers use the same quiet edge as the desktop ring", () => {
   expect(composerBox).toContain(
@@ -34,6 +42,8 @@ test("the installed phone composer restores model selection when expanded", asyn
   const css = await Bun.file(CSS).text();
   const shipped = await Bun.file(SHIPPED).text();
   const composer = await Bun.file(COMPOSER).text();
+  const modelRow = await Bun.file(MODEL_ROW).text();
+  const voiceControl = await Bun.file(VOICE_CONTROL).text();
   const mediaStart = css.indexOf(
     "@media (display-mode: standalone) and (max-width: 720px)",
   );
@@ -49,11 +59,11 @@ test("the installed phone composer restores model selection when expanded", asyn
   );
   expect(standalonePhone).toContain(".app .pwa-composer-dictation");
   expect(standalonePhone).toContain("display: none");
-  expect(composer.match(/pwa-composer-dictation/g)).toHaveLength(1);
+  expect(voiceControl.match(/pwa-composer-dictation/g)).toHaveLength(1);
   expect(composer).not.toContain("pwa-composer-auxiliary");
   expect(composer).not.toContain("pwa-note-option");
-  expect(composer).toContain("className={composerToolbarSelect}");
-  expect(composer).toContain("{!minimized && (");
+  expect(modelRow).toContain("className={composerToolbarSelect}");
+  expect(modelRow).toContain("{!minimized && (");
   expect(composer).toContain(
     '"composer-pop-wrap relative inline-flex shrink-0"',
   );

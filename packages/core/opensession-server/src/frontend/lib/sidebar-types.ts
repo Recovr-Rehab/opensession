@@ -104,11 +104,23 @@ export interface SidebarHandle {
   archiveSelected: () => void;
 }
 
+export interface PersonalBandPinnedEntry {
+  key: string;
+  /** Every pin key represented by this row. Legacy session pins move with the
+   * workspace pin so one visible entry always reorders as one unit. */
+  pinKeys: string[];
+  /** Lane-drop payload. Empty sessions make non-work entries such as tickets
+   * ineligible; repo limits nested lane targets to the matching project. */
+  repo: string | null;
+  sessions: UnifiedSession[];
+  node: React.ReactNode;
+}
+
 // Groups are rendered in three visually separated bands (spacing between each):
 //   "personal"    — My sessions (split by status), Pinned
 //   "people"      — one group per other teammate (+ ownerless source groups)
 //   "automations" — one group per automation
-// Distinct from the *project* bands below (renderRepoGroups + the feed bands):
+// Distinct from the *project* bands below (ProjectBands + the feed bands):
 // a project is a source of work — a repo or a feed like Plain — and the rows
 // inside it are workspaces. See CONCEPTS.md.
 export type GroupBand = "personal" | "people" | "automations";
@@ -179,6 +191,10 @@ export interface WsRow {
   unread: boolean;
   /** Who tagged you in one of this row's sessions, if anyone. */
   mention?: string;
+  /** The member session that mention lives on. The badge is a jump target:
+      opening that exact session is what clears the mention (lib/mentions.ts),
+      and the row's own click may open a different sibling. */
+  mentionSessionId?: string;
   running: boolean;
   /** Lowercased owner (workspace creator, else the first session's starter). */
   owner: string;

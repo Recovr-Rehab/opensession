@@ -10,6 +10,7 @@ import {
   type TranscriptIndexedRange,
 } from "../lib/transcript-index";
 import {
+  shouldAnimateTranscriptEntryPosition,
   transcriptArrivalAliases,
   transcriptEntryMountKey,
   turnMountKey,
@@ -45,7 +46,11 @@ import {
   type ShippedChangeComposerProps,
 } from "./ShippedChangeComposer";
 import { SessionContextMessage } from "./SessionContextMessage";
-import { visibleTranscriptHydrationDemand } from "./session-viewer/transcript-hydration";
+import {
+  transcriptRangeHasLoadedSuffix,
+  transcriptRangesContainPayload,
+  visibleTranscriptHydrationDemand,
+} from "./session-viewer/transcript-hydration";
 import { isLegacyReasoningHeading } from "../lib/reasoning-display";
 
 type RenderBlock =
@@ -111,8 +116,16 @@ interface Props {
   onLoadTranscriptRanges?: (ranges: TranscriptIndexedRange[]) => void;
   /** Fired once the opening viewport renders from real payload. */
   onVisibleRangesSettled?: () => void;
+  /** Explicit scroll root for transcript surfaces outside SessionViewer. */
+  scrollElement?: HTMLDivElement | null;
+  /** Whether measurement may maintain the live edge in this frame. */
+  shouldMaintainEnd?: () => boolean;
+  /** Reaffirm live-edge following after virtual measurements commit. */
+  onLayout?: () => void;
   /** Indexed range rows reuse this renderer without nesting a virtualizer. */
   virtualize?: boolean;
+  /** Stable outer range identity for the one work turn rendered inside it. */
+  turnMountScope?: string;
 }
 
 type ReviewBlockRole =
@@ -229,8 +242,12 @@ function renderBlockEntries(block: RenderBlock): TranscriptEntry[] {
   return [];
 }
 
-function renderBlockKey(block: RenderBlock, index: number): string {
-  if (block.kind === "turn") return turnMountKey(block.items);
+function renderBlockKey(
+  block: RenderBlock,
+  index: number,
+  turnMountScope?: string,
+): string {
+  if (block.kind === "turn") return turnMountKey(block.items, turnMountScope);
   if (block.kind === "walkthrough") return "walkthrough";
   if (block.kind === "note") return `note:${block.note.id}`;
   if (block.kind === "footer") return `${block.entry.id}:footer`;
@@ -314,7 +331,11 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   optimisticEntries,
   pendingDeliveryIds,
   virtualize = true,
+  turnMountScope,
   onVisibleRangesSettled,
+  scrollElement,
+  shouldMaintainEnd,
+  onLayout,
 }: Props) {
   // Top level only (nested per-range instances pass virtualize={false} and are
   // suppressed): without an outline every block renders real content, so the
@@ -459,7 +480,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 
   const virtualItems: VirtualTranscriptItem[] = groupedBlocks.map(
     (block, i) => {
-      const key = renderBlockKey(block, i);
+      const key = renderBlockKey(block, i, turnMountScope);
       const entriesInBlock = renderBlockEntries(block);
       if (block.kind === "review-loop") {
         // Final assistant output deliberately sits outside the review disclosure.
@@ -493,7 +514,11 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
               onOpenChange={onReviewLoopOpenChange}
             >
               {block.blocks.map((inner, innerIndex) => {
-                const innerKey = renderBlockKey(inner, innerIndex);
+                const innerKey = renderBlockKey(
+                  inner,
+                  innerIndex,
+                  turnMountScope,
+                );
                 return (
                   <React.Fragment key={innerKey}>
                     {inner.kind === "turn" ? (
@@ -625,6 +650,9 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       trailingMounted={TRAILING_MOUNTED_BLOCKS}
       enabled={virtualize}
       sizeCacheKey={sessionId}
+      scrollElement={scrollElement}
+      shouldMaintainEnd={shouldMaintainEnd}
+      onLayout={onLayout}
     />
   );
 };
@@ -772,11 +800,13 @@ function IndexedTranscriptBlocks(props: Props) {
   // every height on screen is a real measurement.
   const renderedTimeline = timeline
     .map((item, index) => ({ item, index }))
-    .filter(
-      ({ item }) =>
-        indexedItemRanges(item).length === 0 ||
-        indexedItemEntryIds(item).some((id) => payloadById.has(id)),
-    );
+    .filter(({ item }) => {
+      const itemRanges = indexedItemRanges(item);
+      return (
+        itemRanges.length === 0 ||
+        transcriptRangesContainPayload(itemRanges, (id) => payloadById.has(id))
+      );
+    });
   // Nothing to window (an empty or fully-absent outline): the curtain lifts
   // instead of waiting for a demand pass that will never run. Recheck when the
   // full outline replaces the bounded init even if both happen to be empty: the
@@ -792,8 +822,10 @@ function IndexedTranscriptBlocks(props: Props) {
   // switch placed before the loaded tail by timestamp) must not become the
   // demand head or they strand every indexed range after them. A content-free
   // opening has no range head yet, so demand starts from the outline tail.
-  const firstRenderedRange = renderedTimeline.find(
-    ({ item }) => indexedItemRanges(item).length > 0,
+  const firstRenderedRange = renderedTimeline.find(({ item }) =>
+    transcriptRangesContainPayload(indexedItemRanges(item), (id) =>
+      payloadById.has(id),
+    ),
   );
   const firstRenderedRangeKey = firstRenderedRange
     ? indexedItemKey(firstRenderedRange.item, firstRenderedRange.index)
@@ -804,9 +836,10 @@ function IndexedTranscriptBlocks(props: Props) {
   const firstRenderedRangeLoaded = firstRenderedRangeIds.filter((id) =>
     payloadById.has(id),
   ).length;
-  const firstRenderedRangePartial =
-    firstRenderedRangeLoaded > 0 &&
-    firstRenderedRangeLoaded < firstRenderedRangeIds.length;
+  const firstRenderedRangeIsPartialSuffix = transcriptRangeHasLoadedSuffix(
+    firstRenderedRangeIds,
+    (id) => payloadById.has(id),
+  );
   // Fired when the reader nears the top of the mounted window: collect the
   // next batch of missing ranges walking backwards from the window's head.
   // Start AT the head because the bounded opening payload can begin partway
@@ -816,7 +849,7 @@ function IndexedTranscriptBlocks(props: Props) {
   // timed-out request remains retryable here.
   const handleTopApproach = () => {
     const onLoad = props.onLoadTranscriptRanges;
-    if (!onLoad) return;
+    if (!onLoad) return false;
     let head = firstRenderedRangeKey
       ? timeline.findIndex(
           (item, index) =>
@@ -842,12 +875,13 @@ function IndexedTranscriptBlocks(props: Props) {
         }
       }
     }
-    if (wanted.length) onLoad(wanted.reverse());
+    if (!wanted.length) return false;
+    onLoad(wanted.reverse());
+    return true;
   };
   // VirtualTranscriptList re-evaluates generation changes through its own
-  // viewport-proximity gate. Calling handleTopApproach directly here chained
-  // every completed response into another request even after the reader left
-  // the top, eventually hydrating most of a large transcript in the background.
+  // viewport-proximity gate. It chains responses only while the rendered
+  // transcript is too short to scroll, then returns to explicit reader intent.
   const hydrationOutline = timeline.map((item, index) => ({
     key: indexedItemKey(item, index),
     ranges: indexedItemRanges(item),
@@ -884,6 +918,14 @@ function IndexedTranscriptBlocks(props: Props) {
         measureVersion: transcriptMeasureVersion(
           item.kind === "entry" ? [item.entry] : itemEntries,
         ),
+        // A transcript_range may add several payload slices to this existing
+        // outline row. That is history becoming available, not a live arrival:
+        // it must not slide settled work or runner notices below it. Loose
+        // entries are the live/optimistic atoms outside those durable ranges.
+        animateArrival: item.kind === "entry",
+        animatePositionChanges:
+          item.kind === "entry" &&
+          shouldAnimateTranscriptEntryPosition(item.entry),
         estimateSize,
         measure: true,
         content:
@@ -914,6 +956,7 @@ function IndexedTranscriptBlocks(props: Props) {
               notes={indexedItemNotes(item)}
               walkthrough={indexedItemWalkthrough(item)}
               virtualize={false}
+              turnMountScope={item.kind === "range" ? key : undefined}
               live={Boolean(props.live && isLast)}
               reviewLoopsOpen={
                 item.kind === "review" && openedReviewKeys.has(key)
@@ -937,11 +980,14 @@ function IndexedTranscriptBlocks(props: Props) {
       items={items}
       trailingMounted={TRAILING_MOUNTED_BLOCKS}
       sizeCacheKey={props.sessionId}
+      scrollElement={props.scrollElement}
+      shouldMaintainEnd={props.shouldMaintainEnd}
+      onLayout={props.onLayout}
       onTopApproach={handleTopApproach}
       topApproachGeneration={props.transcriptRangeRetryGeneration}
       topGrowthKey={firstRenderedRangeKey}
       topGrowthVersion={
-        firstRenderedRangePartial ? firstRenderedRangeLoaded : undefined
+        firstRenderedRangeIsPartialSuffix ? firstRenderedRangeLoaded : undefined
       }
       onVisibleItems={(visible) => {
         const wanted = visibleTranscriptHydrationDemand(

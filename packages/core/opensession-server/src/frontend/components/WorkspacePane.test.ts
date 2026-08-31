@@ -29,13 +29,19 @@ test("workspace draft composers accept and persist attachments", () => {
   const composerStart = source.lastIndexOf("<Composer");
   const composerEnd = source.indexOf("/>", composerStart);
   const composer = source.slice(composerStart, composerEnd);
+  const configStart = composer.indexOf("config={{");
+  const configEnd = composer.indexOf("actions={{", configStart);
+  const config = composer.slice(configStart, configEnd);
 
   expect(composerStart).toBeGreaterThan(-1);
-  expect(composer).toContain("images={images}");
-  expect(composer).toContain("onImagesChange={setImages}");
-  expect(composer).toContain("files={files}");
-  expect(composer).toContain("onFilesChange={setFiles}");
-  expect(composer).toContain("onAddAttachments={addWorkspaceAttachments}");
+  expect(configStart).toBeGreaterThan(-1);
+  expect(configEnd).toBeGreaterThan(configStart);
+  expect(config).toContain("images,");
+  expect(config).toContain("files,");
+  expect(composer).toContain("actions={{");
+  expect(composer).toContain("onImagesChange: setImages,");
+  expect(composer).toContain("onFilesChange: setFiles,");
+  expect(composer).toContain("onAddAttachments: addWorkspaceAttachments,");
   expect(source).toContain('window.addEventListener("drop", handleDrop, true)');
   expect(source).toContain(
     "saveDraft(draftKey, { text: prompt, images, files })",
@@ -61,6 +67,9 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
   expect(source).toContain("session={presentationSession}");
   expect(source).toContain("onOpenChange={setReviewSummaryOpen}");
   expect(source).toContain("compactToolbar={reviewSummaryVisible}");
+  expect(source).toMatch(
+    /const reviewSummaryVisible =\s*tab === "review" &&\s*!!presentationSession &&/,
+  );
   expect(viewerSource).toContain("compactToolbar={summaryVisible}");
   expect(viewerSource).not.toContain("WS_SUMMARY_REVIEW_CLEARANCE");
   expect(source).toContain("walkthrough={presentationSession?.walkthrough}");
@@ -140,9 +149,7 @@ test("sidebar Changes shares Review's code display options", () => {
   expect(codeDisplaySource).toContain("{showFileListSetting && (");
   expect(prPanelSource).toContain("<DiffSourceSetting");
   expect(diffPanelSource).toContain("<DiffSourceSetting");
-  expect(viewerSource).toContain(
-    'if (next === "pull-request") openReview?.()',
-  );
+  expect(viewerSource).toContain('if (next === "pull-request") openReview?.()');
   expect(diffPanelSource).toContain("showGroupsStatus={false}");
   expect(diffPanelSource).toContain('aria-label="Organizing files"');
   expect(diffPanelSource).toContain(
@@ -206,8 +213,10 @@ test("wide Review keeps its controls stable while page navigation moves", () => 
     "desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]",
   );
   expect(prPanelSource).toContain(
-    'compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:61px]" : "overflow-y-auto"',
+    'compactToolbar ? "overflow-y-visible" : "overflow-y-auto"',
   );
+  expect(prPanelSource).toContain("stickyFileHeaders: false");
+  expect(prPanelSource).not.toContain("--review-file-header-top");
   expect(prPanelSource).toContain('${compactToolbar ? "pt-0" : "pt-2"}');
 });
 

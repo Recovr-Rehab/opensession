@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { fetchSubagent, type SubagentTranscript } from "../lib/api";
 import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { PANEL_BODY } from "../lib/session-panel-classes";
 import { Badge } from "../ui/badge";
+import { errorMessage } from "../lib/error-message";
 
 export interface SubagentRef {
   agentId: string;
@@ -54,9 +55,15 @@ export function SubagentPane({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [bodyElement, setBodyElement] = useState<HTMLDivElement | null>(null);
+  const setBodyRef = useCallback((node: HTMLDivElement | null) => {
+    bodyRef.current = node;
+    setBodyElement(node);
+  }, []);
   // Stick to the bottom only while the reader is already there, so polling a
   // live sub-agent doesn't yank them up from scrollback.
   const followRef = useRef(true);
+  const shouldMaintainEnd = () => followRef.current;
 
   useEffect(() => {
     let cancelled = false;
@@ -77,9 +84,9 @@ export function SubagentPane({
         // Keep polling only while the parent session is live (the sub-agent may
         // still be streaming); once idle the transcript is final.
         if (next.sessionRunning) timer = setTimeout(() => load(false), 1500);
-      })().catch(async (e: any) => {
+      })().catch(async (error) => {
         if (cancelled) return;
-        setError(e?.message || "Failed to load sub-agent");
+        setError(errorMessage(error, "Failed to load sub-agent"));
         setLoading(false);
       });
     }
@@ -156,7 +163,7 @@ export function SubagentPane({
 
       <div
         className={`${PANEL_BODY} px-3.5 py-3`}
-        ref={bodyRef}
+        ref={setBodyRef}
         onScroll={onScroll}
       >
         {loading ? (
@@ -167,6 +174,8 @@ export function SubagentPane({
           <div className="min-w-0">
             <TranscriptBlocks
               entries={data.entries}
+              scrollElement={bodyElement}
+              shouldMaintainEnd={shouldMaintainEnd}
               live={data.sessionRunning}
               onOpenSubagent={onOpenSubagent}
             />

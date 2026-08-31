@@ -351,6 +351,8 @@ export interface ResolvedCreate {
   gitPrincipal?: string;
   /** Ephemeral capability. Durable create snapshots always strip this field. */
   gitEnv?: Record<string, string>;
+  /** Exact ref used to materialize a new branch, retained for crash recovery. */
+  worktreeBaseRef?: string;
   stackedOn?: { repo: string; branch: string };
   /** Workspace recorded on the session file. */
   workspaceId?: string;
@@ -361,11 +363,15 @@ export interface ResolvedCreate {
   /** Workspace to rename once the generated title lands (minted by THIS create). */
   autoNameWorkspace?: Workspace | null;
   parentSessionId?: string;
+  /** Number of supervised session-spawn hops from a human-created root. */
+  spawnDepth?: number;
   /** Started by a server-side agent action rather than a person's composer. */
   agentStarted?: boolean;
   /** Agent that created this session (SessionData.spawnedBy). */
   spawnedBy?: string;
   reportBack?: boolean;
+  /** Immutable automation trust provenance for workflow descendants. */
+  automationDescendantPolicy?: NativeSessionFile["automationDescendantPolicy"];
   /** Undefined only for forks of sessions with no recorded model (historic). */
   model?: string;
   effort?: string;
@@ -376,7 +382,7 @@ export interface ResolvedCreate {
   images?: ImageInput[];
   externalRefs?: NativeSessionFile["externalRefs"];
   plainThreadId?: string;
-  /** MCP allowlist persisted on the session file (non-empty lists only). */
+  /** MCP allowlist persisted on the session file. Empty means no MCP servers. */
   persistMcpServers?: string[];
   /**
    * MCP scope for the opening run. May be undefined at runtime (historic
@@ -416,6 +422,38 @@ export interface ResolvedCreate {
 }
 
 /** Per-path transport for a create: who hears the announce/stream/failures. */
+export function openingCreateTrustPolicy(
+  spec: Pick<
+    ResolvedCreate,
+    "automationDescendantPolicy" | "branch" | "runMcpServers" | "user"
+  >,
+): {
+  automation: boolean;
+  mcpServers: McpScope;
+  user: string | undefined;
+  aws: boolean;
+  trustProfile: "interactive" | "automation";
+  publicationPolicy?: { repo: string; branch: string; headBranch: string };
+} {
+  const policy = spec.automationDescendantPolicy;
+  return {
+    automation: !!policy,
+    mcpServers: policy ? [] : (spec.runMcpServers as McpScope),
+    user: policy ? undefined : spec.user,
+    aws: !policy,
+    trustProfile: policy ? "automation" : "interactive",
+    ...(policy
+      ? {
+          publicationPolicy: {
+            repo: policy.publicationRepo,
+            branch: policy.baseBranch,
+            headBranch: spec.branch,
+          },
+        }
+      : {}),
+  };
+}
+
 export interface CreateSessionIO {
   /**
    * The session file exists and the id is resolvable — the web adapter sends
@@ -775,7 +813,7 @@ async function restorePlannedOpening(sessionId: string): Promise<{
           project: restored.repoId!,
           branch: restored.branch,
           worktreePath: restored.wtPath,
-          baseBranch: restored.stackedOn?.branch,
+          baseBranch: restored.worktreeBaseRef || restored.stackedOn?.branch,
           isolated: restored.worktreeIsolated === true,
           existingBranch: restored.worktreeKind === "existing",
           credentialPrincipal: restored.gitPrincipal,
@@ -1062,6 +1100,22 @@ export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
   return true;
 }
 
+export function assertAutomationDescendantOpeningIsolation(
+  spec: Pick<
+    ResolvedCreate,
+    "automationDescendantPolicy" | "sandboxProvider" | "runnerTarget"
+  >,
+): void {
+  if (
+    spec.automationDescendantPolicy &&
+    !spec.sandboxProvider &&
+    !spec.runnerTarget
+  )
+    throw new Error(
+      "Automation descendant opening turns require an isolated sandbox or Runner",
+    );
+}
+
 export async function openCreatedSession(
   spec: ResolvedCreate,
   io: CreateSessionIO,
@@ -1069,6 +1123,7 @@ export async function openCreatedSession(
   creationEffectId?: string,
   openingRun?: { runId: string; generation: number },
 ): Promise<void> {
+  assertAutomationDescendantOpeningIsolation(spec);
   const bksId = spec.id;
   const pstackMode = enablesPstackMode(spec.displayPrompt);
   // Replace the raw first-line title with a short summary in the background;
@@ -1157,8 +1212,18 @@ export async function openCreatedSession(
         ...(spec.parentSessionId
           ? { parentSessionId: spec.parentSessionId }
           : {}),
+        ...(spec.spawnDepth !== undefined
+          ? { spawnDepth: spec.spawnDepth }
+          : {}),
         ...(spec.agentStarted ? { agentStarted: true } : {}),
         ...(spec.spawnedBy ? { spawnedBy: spec.spawnedBy } : {}),
+        ...(spec.automationDescendantPolicy
+          ? {
+              automation: spec.automationDescendantPolicy.automationName,
+              automationId: spec.automationDescendantPolicy.automationId,
+              automationDescendantPolicy: spec.automationDescendantPolicy,
+            }
+          : {}),
         // Persisted so the failure beacon (handoff-evidence.ts) can tell
         // a worker that owes its parent a report from a child session
         // that was explicitly told not to report (e.g. the PR session).
@@ -1182,7 +1247,7 @@ export async function openCreatedSession(
         ...(spec.externalRefs?.length
           ? { externalRefs: spec.externalRefs }
           : {}),
-        ...(spec.persistMcpServers?.length
+        ...(spec.persistMcpServers !== undefined
           ? { mcpServers: spec.persistMcpServers }
           : {}),
         ...(spec.sandboxProvider
@@ -1398,8 +1463,10 @@ export async function openCreatedSession(
               cwd: spec.wtPath,
               user: spec.user,
               images: spec.images,
-              mcpServers: spec.runMcpServers ?? [],
-              isAutomationSession: false,
+              mcpServers: spec.automationDescendantPolicy
+                ? []
+                : (spec.runMcpServers ?? []),
+              isAutomationSession: !!spec.automationDescendantPolicy,
               startToken,
               promptEntryId: openingPromptEntryId,
             })
@@ -1424,6 +1491,7 @@ export async function openCreatedSession(
           repositoryUrl: spec.runnerTarget.repositoryUrl,
           ...(cloneToken ? { cloneToken } : {}),
           user: spec.user,
+          automationDescendant: !!spec.automationDescendantPolicy,
         });
         await touchNativeSession(bksId, {
           runner: {
@@ -1433,7 +1501,27 @@ export async function openCreatedSession(
             lifecycle: "awake",
           },
         });
-        const created = findSession(bksId);
+        invalidateSessionsCache();
+        const stored = await findSessionAsync(bksId);
+        // The session-list projection may still hold the pre-Runner create row
+        // for this same command turn. Launch from the just-committed immutable
+        // target rather than treating that projection lag as no Runner.
+        const created = stored
+          ? {
+              ...stored,
+              runner: {
+                id: spec.runnerTarget.id,
+                name: spec.runnerTarget.name,
+                workspacePath: spec.runnerTarget.workspacePath,
+                lifecycle: "awake" as const,
+              },
+              ...(spec.automationDescendantPolicy
+                ? {
+                    automationDescendantPolicy: spec.automationDescendantPolicy,
+                  }
+                : {}),
+            }
+          : null;
         runnerOpeningRun = created
           ? await maybeLaunchRunnerRun(created, {
               prompt: openingPromptForRun,
@@ -1441,20 +1529,25 @@ export async function openCreatedSession(
               hostId: startToken,
               shouldCancel: () => isAgentSessionCancelled(bksId, startToken),
               images: spec.images,
-              mcpServers: spec.runMcpServers ?? [],
+              mcpServers: spec.automationDescendantPolicy
+                ? []
+                : (spec.runMcpServers ?? []),
+              // Authorization still uses the stored automation actor. The
+              // Runner launch derives a separate credential-free run identity.
               user: spec.user,
-              reposNote:
-                [
-                  pstackMode ? PSTACK_MODE_NOTE : "",
-                  buildBranchNote({
-                    mode: spec.mode,
-                    branch: spec.branch,
-                    worktreeDir: spec.wtPath,
-                  }),
-                  await memoryNoteFor(spec.user, spec.memoryRepoIds),
-                ]
-                  .filter(Boolean)
-                  .join("\n\n") || undefined,
+              reposNote: spec.automationDescendantPolicy
+                ? undefined
+                : [
+                    pstackMode ? PSTACK_MODE_NOTE : "",
+                    buildBranchNote({
+                      mode: spec.mode,
+                      branch: spec.branch,
+                      worktreeDir: spec.wtPath,
+                    }),
+                    await memoryNoteFor(spec.user, spec.memoryRepoIds),
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n") || undefined,
             })
           : null;
         if (!runnerOpeningRun)
@@ -1511,66 +1604,84 @@ export async function openCreatedSession(
         creationSettled = true;
         await acknowledgePromptDispatch(bksId, openingPromptEntryId);
       };
-      const openingMcp = interactiveMcpServers(spec.user, bksId);
-      const openingReposNote =
-        [
-          spec.presetNote || "",
-          pstackMode ? PSTACK_MODE_NOTE : "",
-          // A session that spans repos is handed the persisted map rather
-          // than a reconstructed branch note.
-          spanning
-            ? buildReposNote(spanning)
-            : buildBranchNote({
-                mode: spec.mode,
-                branch: spec.branch,
-                worktreeDir: spec.wtPath,
-              }),
-          await memoryNoteFor(spec.user, [
-            ...spec.memoryRepoIds,
-            ...attachedRepoIds,
-          ]),
-        ]
-          .filter(Boolean)
-          .join("\n\n") || undefined;
-      const localOpeningRun = runAgentHosted({
-        osSessionId: bksId,
-        prompt: openingPromptForRun,
-        // A recovered create is the same logical turn. Reuse the durable
-        // intake id so the transcript upserts the original user row.
-        promptEntryId: openingPromptEntryId,
-        startToken,
-        shouldCancel: () => isAgentSessionCancelled(bksId, startToken),
-        cwd: spec.wtPath,
-        mode: spec.mode,
-        mcpGrantUser: spec.user,
-        model: spec.model,
-        effort: spec.effort,
-        fastMode: spec.fastMode,
-        accountId: spec.accountId,
-        fallbackModel: interactiveFallbackModel(spec.model),
-        mcpServers: spec.runMcpServers as McpScope,
-        proxyMcpServers: Object.keys(openingMcp),
-        reposNote: openingReposNote,
-        images: spec.images,
-        ...(spec.fork
-          ? {
-              sessionId: spec.fork.engineSessionId,
-              forkSession: true,
-              resumeSessionAt: spec.fork.resumeAt,
-            }
-          : {}),
-        confirmTools: STRIPE_CONFIRM_TOOLS,
-        aws: true,
-        author: commitAuthorFor(spec.user, spec.createdBy),
-        user: spec.user,
-        journalKind: "create",
-        trustProfile: "interactive",
-        onAskUser: makeAskHandler(bksId),
-        fallbackInProcessMcp: () => openingMcp,
-      });
-      for await (const event of sandboxOpeningRun ??
-        runnerOpeningRun ??
-        localOpeningRun) {
+      const openingTrust = openingCreateTrustPolicy(spec);
+      const automationChild = openingTrust.automation;
+      const openingMcp = automationChild
+        ? {}
+        : interactiveMcpServers(spec.user, bksId);
+      const openingDeniedTools = automationChild
+        ? (await import("./automations")).automationDeniedTools()
+        : undefined;
+      const openingReposNote = automationChild
+        ? undefined
+        : [
+            spec.presetNote || "",
+            pstackMode ? PSTACK_MODE_NOTE : "",
+            // A session that spans repos is handed the persisted map rather
+            // than a reconstructed branch note.
+            spanning
+              ? buildReposNote(spanning)
+              : buildBranchNote({
+                  mode: spec.mode,
+                  branch: spec.branch,
+                  worktreeDir: spec.wtPath,
+                }),
+            await memoryNoteFor(spec.user, [
+              ...spec.memoryRepoIds,
+              ...attachedRepoIds,
+            ]),
+          ]
+            .filter(Boolean)
+            .join("\n\n") || undefined;
+      if (automationChild && !sandboxOpeningRun && !runnerOpeningRun)
+        throw new Error(
+          "Automation descendant opening turns require an isolated sandbox or Runner",
+        );
+      const localOpeningRun =
+        sandboxOpeningRun || runnerOpeningRun
+          ? null
+          : runAgentHosted({
+              osSessionId: bksId,
+              prompt: openingPromptForRun,
+              // A recovered create is the same logical turn. Reuse the durable
+              // intake id so the transcript upserts the original user row.
+              promptEntryId: openingPromptEntryId,
+              startToken,
+              shouldCancel: () => isAgentSessionCancelled(bksId, startToken),
+              cwd: spec.wtPath,
+              mode: spec.mode,
+              mcpGrantUser: openingTrust.user,
+              model: spec.model,
+              effort: spec.effort,
+              fastMode: spec.fastMode,
+              accountId: spec.accountId,
+              fallbackModel: interactiveFallbackModel(spec.model),
+              mcpServers: openingTrust.mcpServers,
+              proxyMcpServers: Object.keys(openingMcp),
+              reposNote: openingReposNote,
+              images: spec.images,
+              ...(spec.fork
+                ? {
+                    sessionId: spec.fork.engineSessionId,
+                    forkSession: true,
+                    resumeSessionAt: spec.fork.resumeAt,
+                  }
+                : {}),
+              deniedTools: openingDeniedTools,
+              publicationPolicy: openingTrust.publicationPolicy,
+              confirmTools: STRIPE_CONFIRM_TOOLS,
+              aws: openingTrust.aws,
+              author: commitAuthorFor(spec.user, spec.createdBy),
+              user: openingTrust.user,
+              journalKind: automationChild ? "automation" : "create",
+              trustProfile: openingTrust.trustProfile,
+              onAskUser: automationChild ? undefined : makeAskHandler(bksId),
+              fallbackInProcessMcp: () => openingMcp,
+            });
+      const openingRun =
+        sandboxOpeningRun ?? runnerOpeningRun ?? localOpeningRun;
+      if (!openingRun) throw new Error("Opening run isolation unavailable");
+      for await (const event of openingRun) {
         // Opening turns use this event ladder instead of run-session's
         // follow-up ladder. Consume Pi's exact boundary acknowledgement here
         // too, including context-only steers that transcript parsing hides.

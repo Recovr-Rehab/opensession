@@ -8,6 +8,7 @@ import {
   buildAutomationGroups,
   completeSidebarRepoOrder,
   deriveSidebarPrRows,
+  deriveSidebarProjectBands,
   deriveWorkspacePlacement,
   discoverSidebarRepos,
   filterSidebarSessions,
@@ -151,6 +152,51 @@ describe("sidebar derived data", () => {
     ]);
   });
 
+  test("derives ordered project bands while keeping scratch work loose", () => {
+    const repoA = {
+      ...row("repo-a-row", "jaap"),
+      status: "needsinput" as const,
+    };
+    const repoB = row("repo-b-row", "jaap");
+    const ask = row("ask-row", "jaap");
+    const scratch = row("scratch-row", "jaap");
+    const snoozed = row("repo-a-snoozed", "jaap");
+    const projects = deriveSidebarProjectBands({
+      activeRows: [repoA, repoB, ask, scratch],
+      snoozedRows: [snoozed],
+      needsReviewRows: [],
+      approvedRows: [],
+      awaitingReviewRows: [],
+      lanePrItems: [],
+      requestedPrItems: [],
+      registeredRepos: [],
+      repos: ["repo-b", "repo-a"],
+      savedRepoOrder: ["repo-b", "repo-a"],
+      filter: filter(),
+      search: "",
+      isPhone: false,
+      askBand: "__ask__",
+      rowIsFeedOnly: () => false,
+      rowIsScratch: (candidate) => candidate.key === scratch.key,
+      rowIsAsk: (candidate) => candidate.key === ask.key,
+      workspaceRepo: (candidate) =>
+        candidate.key.startsWith("repo-b") ? "repo-b" : "repo-a",
+    });
+
+    expect(projects.scratchRows.map(({ key }) => key)).toEqual(["scratch-row"]);
+    expect(projects.bands.map(({ repo }) => repo)).toEqual([
+      "__ask__",
+      "repo-b",
+      "repo-a",
+    ]);
+    expect(projects.bands.at(-1)).toMatchObject({
+      repo: "repo-a",
+      urgent: 1,
+      snoozedRows: [{ key: "repo-a-snoozed" }],
+    });
+    expect(projects.canReorder).toBe(true);
+  });
+
   test("keeps the selected session visible through repo and search filters", () => {
     const selected = session("selected", {
       repo: "repo-a",
@@ -192,7 +238,7 @@ describe("sidebar derived data", () => {
         session("daily", { automation: "daily check" }),
         session("claimed", { automation: "Claimed" }),
       ],
-      activeSubagentIds: new Set(),
+      nestedSubagentIds: new Set(),
       automationOverview: new Map(),
       filter: filter(),
       currentUser: "Jaap",

@@ -101,23 +101,38 @@ export function prepareSnapshotEnv(label: string): SnapshotDirs {
   );
   prevEnv = {
     state: process.env.OPENSESSION_STATE_DIR,
+    sessions: process.env.OPENSESSION_SESSIONS_DIR,
     mcpConfig: process.env.OPENSESSION_MCP_CONFIG,
     piDetach: process.env.OPENSESSION_PI_DETACH,
+    testInProcessRuns: process.env.OPENSESSION_TEST_IN_PROCESS_RUNS,
   };
   process.env.OPENSESSION_STATE_DIR = state;
+  // The live service exports its production sessions path. Override it before
+  // host-client loads, or a snapshot run mixes a scratch state root with the
+  // production run-host directory and the fixed helper correctly rejects it.
+  process.env.OPENSESSION_SESSIONS_DIR = sessions;
   process.env.OPENSESSION_MCP_CONFIG = mcpConfig;
   process.env.OPENSESSION_PI_DETACH = "0";
+  process.env.OPENSESSION_TEST_IN_PROCESS_RUNS = "1";
   dirs = { root, state, sessions, automations, memory, mcpConfig };
   return dirs;
 }
 
-let prevEnv: { state?: string; mcpConfig?: string; piDetach?: string } = {};
+let prevEnv: {
+  state?: string;
+  sessions?: string;
+  mcpConfig?: string;
+  piDetach?: string;
+  testInProcessRuns?: string;
+} = {};
 
 function restoreEnv(): void {
   for (const [name, value] of [
     ["OPENSESSION_STATE_DIR", prevEnv.state],
+    ["OPENSESSION_SESSIONS_DIR", prevEnv.sessions],
     ["OPENSESSION_MCP_CONFIG", prevEnv.mcpConfig],
     ["OPENSESSION_PI_DETACH", prevEnv.piDetach],
+    ["OPENSESSION_TEST_IN_PROCESS_RUNS", prevEnv.testInProcessRuns],
   ] as const) {
     if (value === undefined) delete process.env[name];
     else process.env[name] = value;

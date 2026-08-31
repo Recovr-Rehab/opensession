@@ -27,6 +27,9 @@ test("Sidebar navigation comes from NavigationContext", async () => {
   const sidebarSource = await Bun.file(
     new URL("./Sidebar.tsx", import.meta.url),
   ).text();
+  const automationBandSource = await Bun.file(
+    new URL("./sidebar/AutomationsBand.tsx", import.meta.url),
+  ).text();
   const typesSource = await Bun.file(
     new URL("../lib/sidebar-types.ts", import.meta.url),
   ).text();
@@ -50,9 +53,11 @@ test("Sidebar navigation comes from NavigationContext", async () => {
     "navigation.openWorkspace(row.workspace.id, unreadSession.id);",
   );
   expect(sidebarSource).toContain("onClick: () => navigation.openReports(),");
-  expect(sidebarSource).toContain("navigation.openReports({");
   expect(sidebarSource).toContain(
-    "automationId: overview.id,\n                                      reportId: overview.latestReport.id,",
+    "navigation.openReports({ automationId, reportId })",
+  );
+  expect(automationBandSource).toContain(
+    "onOpenReport(overview.id, overview.latestReport.id);",
   );
   expect(sidebarSource).toContain("onOpen={() => navigation.openPrItem(item)}");
   expect(sidebarSource).toContain("onOpen={() => navigation.openTicket(t)}");

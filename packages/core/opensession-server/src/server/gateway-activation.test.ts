@@ -166,6 +166,55 @@ describe("gateway activation preload barrier", () => {
     expect(ended).toBe(true);
   });
 
+  test("uses the native ownership lock command on Linux and macOS", async () => {
+    const commands: string[][] = [];
+    const spawn = (command: string[]) => {
+      commands.push(command);
+      let finish!: (code: number) => void;
+      return {
+        stdin: { end: () => finish(0) },
+        stdout: new Response("LOCKED\n").body!,
+        stderr: new Response("").body!,
+        exited: new Promise<number>((resolve) => {
+          finish = resolve;
+        }),
+      };
+    };
+    const env = {
+      HOME: "/tmp/test-home",
+      OPENSESSION_GATEWAY_LEASE_WAIT_SECS: "7",
+    };
+
+    const linux = await acquireGatewayActivationLease({
+      env,
+      platform: "linux",
+      spawn,
+    });
+    await linux.release();
+    const macos = await acquireGatewayActivationLease({
+      env,
+      platform: "darwin",
+      spawn,
+    });
+    await macos.release();
+
+    expect(commands[0]?.slice(0, 5)).toEqual([
+      "flock",
+      "-w",
+      "7",
+      "/tmp/test-home/.opensession/deploy/gateway-active.lock",
+      "/bin/sh",
+    ]);
+    expect(commands[1]?.slice(0, 6)).toEqual([
+      "/usr/bin/lockf",
+      "-k",
+      "-t",
+      "7",
+      "/tmp/test-home/.opensession/deploy/gateway-active.lock",
+      "/bin/sh",
+    ]);
+  });
+
   test("fails closed when the active lease is held", async () => {
     await expect(
       acquireGatewayActivationLease({

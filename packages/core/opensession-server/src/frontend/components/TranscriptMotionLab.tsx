@@ -9,6 +9,7 @@ import { AnimatePresence } from "motion/react";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import {
   applyTranscriptMotionEvent,
+  makeTranscriptHydrationScenario,
   makeTranscriptMotionScenario,
   makeTranscriptStreamPerformanceScenario,
   type TranscriptMotionScenario,
@@ -23,6 +24,7 @@ import { BusyInline } from "./session-viewer/busy-indicators";
 type TranscriptMotionControl = {
   paused: boolean;
   followLatest: () => void;
+  step?: () => boolean;
 };
 
 declare global {
@@ -38,7 +40,7 @@ export function TranscriptMotionLab({
 }: {
   initialSeed: number;
   speed: number;
-  profile: "motion" | "stream";
+  profile: "motion" | "stream" | "hydration";
 }) {
   const [seed, setSeed] = useState(initialSeed);
   const [run, setRun] = useState(0);
@@ -48,7 +50,17 @@ export function TranscriptMotionLab({
   const scenario =
     profile === "stream"
       ? makeTranscriptStreamPerformanceScenario()
-      : makeTranscriptMotionScenario(seed);
+      : profile === "hydration"
+        ? makeTranscriptHydrationScenario()
+        : makeTranscriptMotionScenario(seed);
+
+  useEffect(() => {
+    const splash = document.getElementById("splash");
+    if (!splash) return;
+    splash.classList.add("splash-hide");
+    const removal = window.setTimeout(() => splash.remove(), 400);
+    return () => window.clearTimeout(removal);
+  }, []);
 
   return (
     <main
@@ -57,6 +69,7 @@ export function TranscriptMotionLab({
       data-transcript-motion-seed={seed}
       data-transcript-motion-speed={speed}
       data-transcript-motion-profile={profile}
+      data-transcript-motion-events={scenario.events.length}
     >
       <header className="flex min-h-14 shrink-0 items-center justify-between gap-4 px-4 desktop:px-6">
         <div className="min-w-0">
@@ -65,8 +78,12 @@ export function TranscriptMotionLab({
           </h1>
           <p className="truncate text-label text-faint">
             No network ·{" "}
-            {profile === "stream" ? "10k · 100 deltas/s" : `seed ${seed}`} ·{" "}
-            {speed}×
+            {profile === "stream"
+              ? "10k · 100 deltas/s"
+              : profile === "hydration"
+                ? "incremental history"
+                : `seed ${seed}`}{" "}
+            · {speed}×
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -99,6 +116,7 @@ export function TranscriptMotionLab({
         key={`${seed}:${run}`}
         scenario={scenario}
         speed={speed}
+        manual={profile === "hydration"}
         onStatusChange={setStatus}
       />
     </main>
@@ -108,10 +126,12 @@ export function TranscriptMotionLab({
 function TranscriptMotionPlayer({
   scenario,
   speed,
+  manual,
   onStatusChange,
 }: {
   scenario: TranscriptMotionScenario;
   speed: number;
+  manual: boolean;
   onStatusChange: (status: "running" | "settling" | "done") => void;
 }) {
   const [state, setState] = useState(scenario.initial);
@@ -125,6 +145,7 @@ function TranscriptMotionPlayer({
     spacerRef,
     beginTurn,
     endTurn,
+    shouldMaintainEnd,
     relayout,
     onScroll,
     scrollToLatest,
@@ -155,15 +176,27 @@ function TranscriptMotionPlayer({
     const control: TranscriptMotionControl = {
       paused: false,
       followLatest: () => scrollToLatest("auto"),
+      step: manual
+        ? () => {
+            const event = scenario.events[eventIndex];
+            if (!event) return false;
+            applyEvent(event);
+            const next = eventIndex + 1;
+            setEventIndex(next);
+            if (next === scenario.events.length) onStatusChange("done");
+            return true;
+          }
+        : undefined,
     };
     window.__transcriptMotionControl = control;
     return () => {
       if (window.__transcriptMotionControl === control)
         delete window.__transcriptMotionControl;
     };
-  }, [scrollToLatest]);
+  }, [eventIndex, manual, onStatusChange, scenario, scrollToLatest]);
 
   useEffect(() => {
+    if (manual) return () => liveTurnStore.clear();
     let frame = 0;
     let next = 0;
     let elapsed = 0;
@@ -198,7 +231,7 @@ function TranscriptMotionPlayer({
         window.clearTimeout(settleTimer.current);
       liveTurnStore.clear();
     };
-  }, [scenario, speed, liveTurnStore, onStatusChange]);
+  }, [manual, scenario, speed, liveTurnStore, onStatusChange]);
 
   useLayoutEffect(() => {
     if (busyRef.current && !state.busy) endTurn();
@@ -227,10 +260,12 @@ function TranscriptMotionPlayer({
         <SessionTranscript
           entries={state.entries}
           optimisticEntries={state.optimisticEntries}
+          transcriptIndex={state.transcriptIndex}
           live={state.busy}
           sessionId=""
           liveTurnStore={liveTurnStore}
-          onLiveLayout={relayout}
+          shouldMaintainEnd={shouldMaintainEnd}
+          onLayout={relayout}
         />
         <AnimatePresence initial={false}>
           {state.busy && (

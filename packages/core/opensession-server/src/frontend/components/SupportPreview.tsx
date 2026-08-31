@@ -1,6 +1,6 @@
 import { AGENT_NAME } from "../lib/brand";
 import React, { useEffect, useRef, useState } from "react";
-import type { WSServerMessage } from "../lib/types";
+import type { WSClientMessage, WSServerMessage } from "../lib/types";
 import {
   fetchModels,
   fetchPlainThreadById,
@@ -17,7 +17,7 @@ interface Props {
   /** The Plain thread id — the preview's key. */
   threadId: string;
   connected: boolean;
-  send: (msg: any) => void;
+  send: (msg: WSClientMessage) => void;
   addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
   /** Navigate into a session (the triage button resolves to one over HTTP). */
   onOpenSession: (id: string) => void;
@@ -146,18 +146,22 @@ export function SupportPreview({
         <Composer
           value={prompt}
           onChange={setPrompt}
-          onSend={handleStart}
-          placeholder={
-            starting ? "Starting…" : "Start a session on this ticket…"
-          }
-          disabled={starting}
-          sendDisabled={starting || !connected || !prompt.trim()}
-          sendTitle="Start session on this ticket (Enter)"
-          models={models}
-          defaultModel={defaultModel}
-          model={model}
-          onModelChange={setModel}
-          modelTitle="Model for this session"
+          config={{
+            placeholder: starting
+              ? "Starting…"
+              : "Start a session on this ticket…",
+            disabled: starting,
+            sendDisabled: starting || !connected || !prompt.trim(),
+            sendTitle: "Start session on this ticket (Enter)",
+            models,
+            defaultModel,
+            model,
+            modelTitle: "Model for this session",
+          }}
+          actions={{
+            onSend: handleStart,
+            onModelChange: setModel,
+          }}
         />
         {startError && (
           <InlineAlert className="mt-2.5">{startError}</InlineAlert>

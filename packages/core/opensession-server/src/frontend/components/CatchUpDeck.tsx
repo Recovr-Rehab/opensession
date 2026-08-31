@@ -410,6 +410,9 @@ function CardBody({
   const target = replyTarget(card);
   const [entries, setEntries] = useState<TranscriptEntry[] | null>(null);
   const scrollElRef = useRef<HTMLDivElement | null>(null);
+  const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(
+    null,
+  );
   const contentElRef = useRef<HTMLDivElement | null>(null);
   const [nodesVersion, setNodesVersion] = useState(0);
   // These callback refs update state, so their identities must remain stable:
@@ -417,6 +420,7 @@ function CardBody({
   const setScrollEl = useCallback((node: HTMLDivElement | null) => {
     if (scrollElRef.current === node) return;
     scrollElRef.current = node;
+    setScrollElement(node);
     setNodesVersion((version) => version + 1);
   }, []);
   const setContentEl = useCallback((node: HTMLDivElement | null) => {
@@ -425,6 +429,7 @@ function CardBody({
     setNodesVersion((version) => version + 1);
   }, []);
   const pinned = useRef(true);
+  const shouldMaintainEnd = () => pinned.current;
 
   useEffect(() => {
     let alive = true;
@@ -525,7 +530,12 @@ function CardBody({
           ) : entries.length === 0 ? (
             <div className="text-sm text-faint">No messages yet.</div>
           ) : (
-            <TranscriptBlocks entries={entries} owner={card.owner} />
+            <TranscriptBlocks
+              entries={entries}
+              owner={card.owner}
+              scrollElement={scrollElement}
+              shouldMaintainEnd={shouldMaintainEnd}
+            />
           )}
           {/* Live "still working" ticker: while the session we're reading is mid-run,
 					    show a pulsing dot + elapsed clock at the bottom of the transcript so
@@ -673,37 +683,40 @@ function CatchUpComposer({
       onPointerDownCapture={(e) => e.stopPropagation()}
     >
       <Composer
-        draftKey={draftKey}
-        onSend={handleSend}
-        placeholder={connected ? "Reply…" : "Not connected"}
-        disabled={!connected}
-        sendDisabled={(text) =>
-          !text.trim() && images.length === 0 && files.length === 0
-        }
-        images={images}
-        onImagesChange={setImages}
-        files={files}
-        onFilesChange={setFiles}
-        models={models}
-        defaultModel={defaultModel}
-        model={model}
-        onModelChange={handleModelChange}
-        modelDisabled={!isNative && target.source !== "slack"}
-        modelTitle={
-          isNative || target.source === "slack"
-            ? "Switch the model for this session"
-            : "Set the model from the owning agent (its session file is agent-owned)"
-        }
-        effort={effort}
-        onEffortChange={setEffort}
-        accounts={isNative ? accounts : undefined}
-        accountId={accountId}
-        onAccountChange={isNative ? handleAccountChange : undefined}
-        goal={currentGoal}
-        onSetGoal={isNative ? handleSetGoal : undefined}
-        mentionFetch={(q) => fetchFileMentions(q, target.id)}
-        paletteFetch={(q) => fetchMentionSuggestions(q, target.id, currentUser)}
-        skillsFetch={(q) => fetchSkillMentions(q, target.id)}
+        config={{
+          draftKey,
+          placeholder: connected ? "Reply…" : "Not connected",
+          disabled: !connected,
+          sendDisabled: (text) =>
+            !text.trim() && images.length === 0 && files.length === 0,
+          images,
+          files,
+          models,
+          defaultModel,
+          model,
+          modelDisabled: !isNative && target.source !== "slack",
+          modelTitle:
+            isNative || target.source === "slack"
+              ? "Switch the model for this session"
+              : "Set the model from the owning agent (its session file is agent-owned)",
+          effort,
+          accounts: isNative ? accounts : undefined,
+          accountId,
+          goal: currentGoal,
+        }}
+        actions={{
+          onSend: handleSend,
+          onImagesChange: setImages,
+          onFilesChange: setFiles,
+          onModelChange: handleModelChange,
+          onEffortChange: setEffort,
+          onAccountChange: isNative ? handleAccountChange : undefined,
+          onSetGoal: isNative ? handleSetGoal : undefined,
+          mentionFetch: (query) => fetchFileMentions(query, target.id),
+          paletteFetch: (query) =>
+            fetchMentionSuggestions(query, target.id, currentUser),
+          skillsFetch: (query) => fetchSkillMentions(query, target.id),
+        }}
       />
     </div>
   );

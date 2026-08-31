@@ -86,7 +86,7 @@ import {
   startGithubTokenRefresher,
 } from "./src/server/github-auth";
 import { startGoalTicker } from "./src/server/goal-runner";
-import { startSessionIndexSweeper } from "./src/server/session-index";
+import { startSessionHistoryIndexing } from "./src/server/session-index";
 import { startEventLoopLagMonitor } from "./src/server/system-stats";
 import { ensureWarmTemplateScheduler } from "./src/server/warm-template";
 import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
@@ -152,6 +152,11 @@ import {
   stopSessionKernelRuntime,
 } from "./src/server/session-kernel";
 import { activeRunRecords } from "./src/server/run-journal";
+import {
+  markInterruptedWorkflows,
+  pauseWorkflowsForShutdown,
+} from "./src/server/workflow-store";
+import { recoverInterruptedWorkflows } from "./src/server/workflow-runner";
 import "./src/server/session-control-wiring"; // opensession-sessions MCP + Slack-link bridge
 import "./src/server/keychain"; // registers the keychain human-ask domain handler
 import { websocketHandlers } from "./src/server/ws-handlers";
@@ -718,9 +723,8 @@ if (!g.__opensessionBooted) {
         // server-owned sweep (checkpoint → terminate → lifecycle sleeping).
         // Armed here so an idle sandbox left by a previous process is still
         // stopped even if no new ensure/get ever runs.
-        const { ensureModalIdleSweep } = await import(
-          "./src/server/sandbox/adapters/modal"
-        );
+        const { ensureModalIdleSweep } =
+          await import("./src/server/sandbox/adapters/modal");
         ensureModalIdleSweep();
         await poolStartup;
       })
@@ -838,8 +842,9 @@ if (!g.__opensessionBooted) {
     startLoopTicker();
     startGoalTicker();
 
-    // Distil finished sessions into the search index (session-index.ts).
-    startSessionIndexSweeper();
+    // Finished sessions push durable per-session history index timers. This
+    // registers the handler only; it never scans the session fleet.
+    startSessionHistoryIndexing();
 
     // Gateway event-loop lag telemetry for /api/health and the health MCP tool
     // (system-stats.ts). The session-performance contract only measures the
@@ -1057,6 +1062,12 @@ if (!g.__opensessionBooted) {
         } catch (error) {
           throw error;
         }
+        markInterruptedWorkflows();
+        const recoveredWorkflows = await recoverInterruptedWorkflows();
+        if (recoveredWorkflows.length)
+          console.log(
+            `[workflow] Recovered ${recoveredWorkflows.length} interrupted workflow(s)`,
+          );
         // Transcript mutations commit their durable wake before gateway bus
         // delivery. Drain crash-window wakes before readiness so a replacement or
         // deletion does not wait for another mutation to become visible.
@@ -1185,6 +1196,11 @@ if (!g.__opensessionBooted) {
     // instances skip it (nothing resumes them, and a snapshot must never
     // make the production boot try to wake dev sessions).
     if (!devInstance) snapshotActiveSessions();
+    const pausedWorkflows = pauseWorkflowsForShutdown();
+    if (pausedWorkflows)
+      console.log(
+        `[shutdown] paused ${pausedWorkflows} workflow(s) for journal recovery`,
+      );
     // Best-effort attribution: a session-triggered `systemctl restart` shows
     // up as an in-flight run in this checkout (sharedCheckoutEditors). The
     // marker file lets the NEXT boot's hello frame name the culprit in the

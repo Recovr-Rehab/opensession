@@ -4,6 +4,12 @@ const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
 const hookSource = await Bun.file(
   new URL("useArchiveUndo.ts", import.meta.url),
 ).text();
+const lifecycleSource = await Bun.file(
+  new URL("useSessionLifecycle.ts", import.meta.url),
+).text();
+const workspaceMutationsSource = await Bun.file(
+  new URL("useWorkspaceMutations.ts", import.meta.url),
+).text();
 
 describe("archive undo ownership", () => {
   test("delegates archive undo once from App", () => {
@@ -13,9 +19,12 @@ describe("archive undo ownership", () => {
     expect(appSource).not.toContain("Nothing to reopen");
   });
 
-  test("keeps archive and reopen call sites in App", () => {
-    expect(appSource).toContain("rememberArchived([s.id])");
-    expect(appSource).toContain(
+  test("keeps archive recording at each lifecycle owner", () => {
+    expect(lifecycleSource).toContain("rememberArchived([s.id])");
+    expect(lifecycleSource).toContain(
+      "rememberArchived(sessions.map((c) => c.id))",
+    );
+    expect(workspaceMutationsSource).toContain(
       "rememberArchived(members.map((member) => member.id))",
     );
     expect(appSource).toContain("rememberArchived([viewerSession.id])");

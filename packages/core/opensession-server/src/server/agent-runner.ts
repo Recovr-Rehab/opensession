@@ -180,6 +180,8 @@ export interface RunAgentOpts {
   forkSession?: boolean;
   resumeSessionAt?: string;
   deniedTools?: Record<string, string>;
+  /** Server-enforced publication boundary for automation descendants. */
+  publicationPolicy?: { repo: string; branch: string; headBranch: string };
   confirmTools?: Record<string, string>;
   aws?: boolean;
   /**
@@ -378,6 +380,7 @@ async function* runOnModel(
       // instructions record, and folding them in here would churn this hash
       // on a wording change that altered no tool.
       deniedTools: Object.keys(opts.deniedTools || {}).sort(),
+      publicationPolicy: opts.publicationPolicy || null,
       confirmTools: Object.keys(opts.confirmTools || {}).sort(),
       mode: opts.mode || null,
       localWorkspaceToolsDisabled: !!opts.disableLocalWorkspaceTools,
@@ -2038,6 +2041,7 @@ export async function resumeInterruptedRuns(
                   : undefined,
                 user: run.user,
                 deniedTools: run.deniedTools,
+                publicationPolicy: run.publicationPolicy,
                 confirmTools: run.confirmTools,
                 aws: run.aws,
                 fallbackModel: run.fallbackModel,
@@ -2145,6 +2149,7 @@ export async function resumeInterruptedRuns(
                 : undefined,
               user: run.user,
               deniedTools: run.deniedTools,
+              publicationPolicy: run.publicationPolicy,
               confirmTools: run.confirmTools,
               aws: run.aws,
               claudeCliEnv: run.claudeCliEnv,
@@ -2242,6 +2247,7 @@ export async function resumeInterruptedRuns(
               : undefined,
             user: run.user,
             deniedTools: run.deniedTools,
+            publicationPolicy: run.publicationPolicy,
             confirmTools: run.confirmTools,
             aws: run.aws,
             claudeCliEnv: run.claudeCliEnv,

@@ -23,8 +23,7 @@ import {
   recordSessionPerf,
   scheduleTranscriptDomNodeSample,
 } from "../lib/session-performance";
-import { AGENT_NAME, DEFAULT_DOC_TITLE, sessionSourceName } from "../lib/brand";
-import { brandLogo } from "../brand-logos";
+import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { withQuotes, type Quote } from "../lib/quotes";
 import {
   absoluteLink,
@@ -35,14 +34,12 @@ import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
 import { plainThreadUrl } from "./PlainThreadPanel";
-import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
 import type {
   UnifiedSession,
   GitStatusInfo,
   SessionNote,
   SessionSlackShare,
   TranscriptEntry,
-  AskQuestion,
 } from "../lib/types";
 import {
   mergeTranscriptEntries,
@@ -52,21 +49,9 @@ import {
   HISTORY_PAGE_ENTRIES,
   shouldContinueHistoryReveal,
 } from "../lib/transcript-history";
-import { SessionTranscript } from "./SessionTranscript";
 import { MessageRail } from "./MessageRail";
 import { collectSentMessages } from "../lib/sent-messages";
-import {
-  mergeTranscriptIndexEntries,
-  transcriptIndexEntryFromPayload,
-  type TranscriptIndexedRange,
-} from "../lib/transcript-index";
-import {
-  canonicalToolName,
-  LiveSubagentsProvider,
-  OpenAssetProvider,
-  ToolPathRootsProvider,
-  type LiveSubagent,
-} from "./ToolCallBlock";
+import { canonicalToolName, type LiveSubagent } from "./ToolCallBlock";
 import {
   parsePlanItems,
   type PlanItem,
@@ -82,7 +67,6 @@ import {
   getNextChatButtonPref,
   onNextChatButtonChanged,
 } from "../lib/next-chat-pref";
-import { OpenAssetPathsProvider } from "../lib/open-asset";
 import { SubagentPane, type SubagentRef } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
 import { getCurrentUser, useCurrentUser } from "./UserPicker";
@@ -143,6 +127,7 @@ import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { useNavigation } from "../hooks/useNavigation";
 import { useSessionSocket } from "../hooks/useSessionSocket";
+import { useSessionRuntime } from "../hooks/useSessionRuntime";
 import {
   dedupeViewers,
   facepileAvatarStyle,
@@ -161,6 +146,9 @@ import {
   type SlackSent,
 } from "./ShippedChangeComposer";
 import { BrandMark } from "./BrandMark";
+import { SessionHeader } from "./session/SessionHeader";
+import { SidePanelHost } from "./session/SidePanelHost";
+import { TranscriptView } from "./session/TranscriptView";
 import { splitAttachments, type FileAttachment } from "../lib/images";
 import { cropImageRegionFile } from "../lib/image-region-comment";
 import {
@@ -215,11 +203,14 @@ import {
   peekCachedTranscriptView,
 } from "./session-viewer/transcript-cache";
 import {
-  holdTranscriptAnchor,
   pickScrollAnchor,
   readFollowingLive,
 } from "./session-viewer/transcript-anchor";
 import { useLivePlan } from "./session-viewer/use-live-plan";
+import {
+  useTranscript,
+  useTranscriptIndexAnchor,
+} from "../hooks/useTranscript";
 import {
   BusyInline,
   ConversationLoading,
@@ -227,7 +218,7 @@ import {
   WorkspaceWaiting,
 } from "./session-viewer/busy-indicators";
 import { AskCard } from "./AskCard";
-import { PrPanel } from "./PrPanel";
+import { PrPanel, type PrReviewPage } from "./PrPanel";
 import { PrStatusBar } from "./PrStatusBar";
 
 import { ConversationPane } from "./ConversationPane";
@@ -242,7 +233,7 @@ import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { PreviewPane } from "./PreviewPane";
 import { PortalPane } from "./PortalPane";
 import { PortalsPage } from "./PortalsPanel";
-import { portalTargetFor, type PortalTarget } from "../lib/portals";
+import { portalTargetFor } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
 import { WorkspaceSummary, WorkspaceSummaryBody } from "./WorkspaceSummary";
 import { SpinOffMenu } from "./SpinOffMenu";
@@ -252,7 +243,6 @@ import {
   IconTrash,
   IconArchive,
   IconCheck,
-  IconChevronDown,
   IconPlus,
   IconPencil,
   IconArrowDown,
@@ -277,12 +267,8 @@ import {
   IconRobot,
   IconMessage,
   IconArrowUpRight,
-  IconStack,
 } from "./icons";
 import { KeepInSidebarIcon } from "./sidebar/KeepInSidebarMark";
-import { SessionRelations, type RelatedSession } from "./SessionRelations";
-import { SOURCE_CHIP, sourceChipTone } from "../lib/source-chip-classes";
-import { sessionWasAgentStarted } from "../lib/sidebar-placement";
 import { Button } from "../ui/button";
 import { SessionQueue } from "./SessionQueue";
 import { deriveSessionQueue, type QueueReceipt } from "../lib/session-queue";
@@ -292,7 +278,6 @@ import {
   TopBarAction,
   TopBarActions,
   TopBarBack,
-  TopBarLeading,
   TopBarTitle,
 } from "../ui/top-bar";
 import { cn } from "../ui/cn";
@@ -307,7 +292,7 @@ import { copySessionTranscript } from "../lib/transcript-copy";
 import { onTranscriptDisclosure } from "../lib/transcript-disclosures";
 import { takePendingSessionFork } from "../lib/pending-session-fork";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
-import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
+import { getLane, onLanesChanged } from "../lib/lanes";
 import { ownedBy } from "../lib/sidebar-lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
 import {
@@ -324,15 +309,6 @@ import {
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
-import { OverflowFadeText } from "../ui/overflow-fade-text";
-import {
-  PANEL_BODY,
-  PANEL_TAB,
-  PANEL_TABS,
-  PANEL_INFO_TOP,
-  PANEL_OVERLAY,
-  PANEL_SHELL,
-} from "../lib/session-panel-classes";
 import { TURN_SPACER } from "../lib/app-shell-classes";
 import {
   SESSION_BANNERS,
@@ -352,12 +328,6 @@ import {
   TRANSCRIPT_PILL_TOP,
   VIEWER_ACTION_ROW,
   VIEWER_ACTION_ROW_WITH_SCROLL,
-  VIEWER_BRANCH,
-  VIEWER_BRANCH_EDITABLE,
-  VIEWER_BRANCH_RENAME,
-  VIEWER_CRUMB_UP,
-  VIEWER_HEADER,
-  VIEWER_HEADER_ACTIONS,
   VIEWER_INPUT,
   VIEWER_MENU_SEP,
   VIEWER_MESSAGES,
@@ -370,7 +340,6 @@ import {
   VIEWER_SUGGESTIONS_ROW,
   VIEWER_SUGGESTIONS_ROW_INLINE,
   VIEWER_SUMMARY_STEP,
-  VIEWER_TITLE,
   INFO_CONTENT,
   INFO_HERO,
   INFO_NAME,
@@ -388,213 +357,7 @@ import {
   HEADER_SESSIONBAR_USAGE,
   MOBILE_CONTROL_GLASS,
 } from "../lib/app-header-classes";
-
-interface Props {
-  session: UnifiedSession;
-  /** Verified workspace role from the ordinary auth bootstrap. */
-  canRepairSafety?: boolean;
-  /** Only the focused pane in a desktop tab split owns global shortcuts/title. */
-  focused?: boolean;
-  /** The unfocused half of a split keeps its conversation chrome-free. */
-  hideHeader?: boolean;
-  hideRightPanel?: boolean;
-  /** Open the next chat needing attention, or continue through the sidebar. */
-  canOpenNextChat?: boolean;
-  /** Archive through the sidebar so the nearest visible row becomes active. */
-  onArchive?: () => void;
-  /** Called after a successful archive (not unarchive), with whether archiving
-	    gracefully stopped an in-flight owned turn — so the parent can toast. */
-  onArchived?: (stoppedRun: boolean) => void;
-  setTyping: (sessionId: string, active: boolean) => void;
-  connected: boolean;
-  /** A client-minted session whose server record is still being persisted. */
-  pendingCreation?: boolean;
-  /** A client-minted blank tab in an existing, already-ready workspace. */
-  optimisticEmpty?: boolean;
-  /** Opening prompt shown while a just-created session is still catching up
-	    through the session poll. Reconciles away when the transcript arrives. */
-  initialPending?: {
-    content: string;
-    user: string;
-    sentAt: number;
-    images?: string[];
-  };
-  /** App-level top-bar node above the tab strip; when present the header renders
-	    there (name-on-top layout) instead of inline. */
-  topbarEl?: HTMLElement | null;
-  /** Right-side slot inside the mobile top bar (next to the centered title).
-	    On phones the header actions portal there — a single iOS-style nav bar —
-	    instead of rendering as their own row. Desktop ignores it. */
-  headerActionsEl?: HTMLElement | null;
-  /** Centered slot under the mobile top-bar title. On phones the composer's
-	    model pill is hidden, so a compact tap-to-switch model selector portals
-	    here instead. Desktop ignores it. */
-  headerModelEl?: HTMLElement | null;
-  /** Leading slot inside the mobile top-bar title pill. The repo tile portals
-	    here so it sits in front of the title (Slack-header style); an archived
-	    session replaces it with its archive mark. Desktop ignores it. */
-  headerRepoEl?: HTMLElement | null;
-  /** App-level right-column node (sibling of the left sidebar); when present the
-	    workspace/sub-agent panel portals here so it spans the full height from the
-	    top, instead of opening only below the session. */
-  rightPanelEl?: HTMLElement | null;
-  /** Bumped by the tab-bar + to start a fresh session in this same session: clears
-	    the composer and jumps to the live edge. A visual reset — same thread. */
-  newSessionSeq?: number;
-  /** One-shot pulse set when this session was opened by picking its workspace
-	    in the sidebar — focus the composer on open so you can type right away.
-	    Ignored on phones (would pop the keyboard over the session). */
-  autoFocusComposer?: boolean;
-  /** One-shot draft text appended from another surface, such as Checks. */
-  composerPrefillExternal?: { seq: number; text: string } | null;
-  onComposerPrefillConsumed?: (seq: number) => void;
-  /** Rename this session (double-click the header title); empty resets it to
-	    the derived title. Same handler the tab strip and sidebar use. */
-  onRename?: (id: string, title: string) => void;
-  /**
-   * The workspace this session belongs to. When set, the header titles the
-   * WORKSPACE (every sibling session shows the same name — per-session titles live
-   * on the tabs) and double-click renames the workspace, not the session.
-   */
-  workspaceName?: string;
-  onRenameWorkspace?: (name: string) => void;
-  /** The header overflow is workspace-scoped; session lifecycle belongs to its tab. */
-  onArchiveWorkspace?: () => void;
-  onDeleteWorkspace?: () => void | Promise<void>;
-  /** Sibling sessions in this session's workspace (the tab strip's list, oldest
-	    first) — feeds the floating overview panel's cross-session media. */
-  workspaceSessions?: UnifiedSession[];
-  /** Claim this workspace into your own per-user sidebar lanes ("mine"), or
-	    release it (null) — the ⋯ menu's twin of the sidebar row's action. */
-  onSetStatus?: (sessions: UnifiedSession[], status: Lane | null) => void;
-  /** Every session — the pool the workspace-context picker and the PR panel
-	    draw their sibling sessions from. */
-  allSessions?: UnifiedSession[];
-  /** Start a new session in this workspace. Phone surfaces it in More. */
-  canStartNewSession?: boolean;
-  /** Start a session in a new workspace. Phone surfaces it as +. */
-  canOpenNewWorkspace?: boolean;
-  /** True when the tab strip is on screen (2+ sessions, an open view tab, or a
-	    split). The strip carries its own "+", so the header one stands down
-	    rather than showing a second plus a few pixels above it. */
-  tabStripVisible?: boolean;
-  /** This workspace's closed sessions, newest activity first. With no strip
-	    there is no history button, so the ⋯ menu carries the list instead. */
-  archivedSessions?: UnifiedSession[];
-  /** Un-archive a closed session, putting it back among the tabs. */
-  onRestoreSession?: (session: UnifiedSession) => void;
-  /** Orchestrator this session was delegated from (when it's a worker
-	    sub-session), and the worker sessions it in turn spawned. Powers the
-	    header relationship chips. */
-  parentSession?: RelatedSession | null;
-  workerSessions?: RelatedSession[];
-  /** Whether relationship chips and delegated session links can navigate. */
-  canOpenSession?: boolean;
-  /** Mirror live run state into the app-level session list for sidebar rows. */
-  onRunningChange?: (id: string, isRunning: boolean) => void;
-  /** Mirror a reviewer pick / sign-off into the app-level session list so the
-	    sidebar's review bands flip immediately instead of waiting for a poll. */
-  onReviewChange?: (
-    id: string,
-    req: NonNullable<UnifiedSession["reviewRequest"]> | null,
-  ) => void;
-  /**
-   * Whether the Review pane is foregrounded — driven by the top tab strip's
-   * Review view-tab (App state), replacing the old inline Session|Review toggle.
-   * When false, the session transcript shows.
-   */
-  showReview?: boolean;
-  /** Whether PR/review triggers can foreground this session's Review view-tab. */
-  canOpenReview?: boolean;
-  /**
-   * Which PR the Review pane should land on, pulsed by the app when a sidebar
-   * row or a `repo#123` chip opened it: a workspace can carry several PRs,
-   * and the one you clicked says which you meant. `seq` re-applies the same
-   * PR after you've switched targets by hand. Branch and number are both
-   * optional — see lib/pr-focus.ts for what each caller knows.
-   */
-  reviewFocusPr?: {
-    repo: string;
-    branch?: string;
-    number?: number;
-    seq: number;
-  } | null;
-  /**
-   * Whether the Preview environment pane (the PR's Vercel preview, full-width) is
-   * foregrounded — driven by the top tab strip's Preview environment view-tab (App state).
-   */
-  showStaging?: boolean;
-  /** Close this session's Preview environment view-tab (the deploy vanished, e.g. PR merged). */
-  onCloseStaging?: () => void;
-  /**
-   * Whether the Assets pane (the session's scratch artifacts, full-width) is
-   * foregrounded — driven by the top tab strip's Assets view-tab (App state).
-   */
-  showAssets?: boolean;
-  /** Whether the Info panel can foreground this session's Assets view-tab. */
-  canOpenAssets?: boolean;
-  /** Close this session's Assets view-tab (its last asset was deleted). */
-  onCloseAssets?: () => void;
-  /**
-   * Whether the Terminal pane (interactive shells in this session's
-   * workspace) is foregrounded — driven by the top tab strip's Terminal
-   * view-tab (App state).
-   */
-  showTerminal?: boolean;
-  /** Close this session's Terminal view-tab, tearing its shells down. */
-  onCloseTerminal?: () => void;
-  /**
-   * Whether the Terminal tab is present in the strip at all — distinct from
-   * `showTerminal`, which is only true while it is foregrounded. The shells
-   * stay mounted (and their PTYs alive) whenever the tab exists, so that
-   * switching away and back returns to the same session; closing the tab is
-   * what tears them down.
-   */
-  terminalTabOpen?: boolean;
-  /**
-   * Whether the Conversation pane (the workspace's Plain support-ticket
-   * thread, full-width) is foregrounded — driven by the top tab strip's
-   * Conversation view-tab (App state).
-   */
-  showConversation?: boolean;
-  /** The Plain thread the Conversation pane renders (workspace or session). */
-  conversationThreadId?: string | null;
-  /** Whether the feed web panel (Video view-tab) is foregrounded (App state). */
-  showVideo?: boolean;
-  /** The web panel spec of the workspace's feed-item ref (the feeds design). */
-  videoPanel?: RefWebPanel | null;
-  /** The feed item's title (pane header). */
-  videoTitle?: string | null;
-  /** Foregrounded full-width local-dev Preview view-tab (App state). */
-  showPreviewTab?: boolean;
-  /** Whether stack map layer links can open another PR in the review panel. */
-  canOpenPr?: boolean;
-  /** Close the Preview view-tab (its Stop button / tab close). */
-  onClosePreviewTab?: () => void;
-  /** Foregrounded browser pane for a service selected in Portals. */
-  showPortal?: boolean;
-  /** The service currently loaded in the center-panel browser. */
-  portalTarget?: PortalTarget | null;
-  /** Whether a running service can open in the center-panel browser. */
-  canOpenPortal?: boolean;
-  /** Whether a view-tab can return to this workspace's active session. */
-  canOpenWorkspace?: boolean;
-  /**
-   * Whether the sub-agent pane (a Task drill-in from this session's transcript,
-   * full-width) is foregrounded — driven by the top tab strip's sub-agent
-   * view-tab (App state).
-   */
-  showSubagent?: boolean;
-  /** Breadcrumb of opened sub-agents; the last entry is the one shown. */
-  subagentStack?: SubagentRef[];
-  /** Open/foreground a sub-agent (a Task call's "Watch" affordance). */
-  onOpenSubagent?: (sessionId: string, agentId: string, label: string) => void;
-  /** Pop back to the sub-agent that spawned the current one. */
-  onSubagentBack?: (sessionId: string) => void;
-  /** The name the pane read off a sub-agent's transcript, for its tab: a link
-   *  carries agent ids only, so this is where a linked tab gets its label. */
-  onSubagentLabel?: (sessionId: string, agentId: string, label: string) => void;
-}
+import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 
 // Stable identity for "no sub-agent open", so the default prop doesn't hand
 // the memoized transcript a fresh array on every render.
@@ -672,81 +435,90 @@ const INDEXED_OPEN_SETTLE_MAX_MS = 2_500;
 const JUMP_PAGE_ENTRIES = HISTORY_PAGE_ENTRIES;
 const JUMP_MAX_ENTRIES = 4_000;
 const EMPTY_TRANSCRIPT_ENTRIES: TranscriptEntry[] = [];
-// One visible range can span several actor pages. Keep the client comfortably
-// below the per-session mailbox bound so a reconnect cannot enqueue a whole
-// outline at once and crowd out live transcript reads for the same session.
-const TRANSCRIPT_RANGE_CONCURRENCY = 6;
-
 export function SessionViewer({
   session,
-  canRepairSafety = false,
-  focused = true,
-  hideHeader = false,
-  hideRightPanel = false,
-  canOpenNextChat,
-  onArchive,
-  onArchived,
-  setTyping,
-  connected,
-  pendingCreation = false,
-  optimisticEmpty = false,
-  initialPending,
-  topbarEl,
-  headerRepoEl,
-  headerActionsEl,
-  headerModelEl,
-  rightPanelEl,
-  newSessionSeq,
-  autoFocusComposer,
-  composerPrefillExternal,
-  onComposerPrefillConsumed,
-  onRename,
-  workspaceName,
-  onRenameWorkspace,
-  onArchiveWorkspace,
-  onDeleteWorkspace,
-  workspaceSessions,
-  onSetStatus,
-  allSessions,
-  canStartNewSession,
-  canOpenNewWorkspace,
-  tabStripVisible,
-  archivedSessions,
-  onRestoreSession,
-  parentSession,
-  workerSessions,
-  canOpenSession,
-  onRunningChange,
-  onReviewChange,
-  showReview = false,
-  canOpenReview,
-  reviewFocusPr,
-  showStaging = false,
-  onCloseStaging,
-  showAssets = false,
-  canOpenAssets,
-  showTerminal = false,
-  terminalTabOpen = false,
-  showConversation = false,
-  conversationThreadId = null,
-  showVideo = false,
-  videoPanel = null,
-  videoTitle = null,
-  showPreviewTab = false,
-  canOpenPr,
-  onClosePreviewTab,
-  showPortal = false,
-  portalTarget = null,
-  canOpenPortal,
-  onCloseAssets,
-  onCloseTerminal,
-  canOpenWorkspace,
-  showSubagent = false,
-  subagentStack = NO_SUBAGENTS,
-  onOpenSubagent,
-  onSubagentBack,
-  onSubagentLabel,
-}: Props) {
+  composer: {
+    setTyping,
+    resetSeq: newSessionSeq,
+    autoFocus: autoFocusComposer,
+    prefill: composerPrefillExternal,
+    onPrefillConsumed: onComposerPrefillConsumed,
+  },
+  availability: {
+    canRepairSafety = false,
+    canOpenNextChat,
+    canStartNewSession,
+    canOpenNewWorkspace,
+    canOpenSession,
+    canOpenReview,
+    canOpenAssets,
+    canOpenPr,
+    canOpenPortal,
+    canOpenWorkspace,
+  },
+  lifecycle: {
+    connected,
+    pendingCreation = false,
+    optimisticEmpty = false,
+    initialPending,
+    onArchive,
+    onArchived,
+    onRename,
+    onRunningChange,
+    onReviewChange,
+  },
+  chrome: {
+    focused = true,
+    hideHeader = false,
+    hideRightPanel = false,
+    topbarEl,
+    headerRepoEl,
+    headerActionsEl,
+    headerModelEl,
+    rightPanelEl,
+  },
+  workspace: {
+    workspaceName,
+    onRenameWorkspace,
+    onArchiveWorkspace,
+    onDeleteWorkspace,
+    workspaceSessions,
+    onSetStatus,
+    allSessions,
+    tabStripVisible,
+    archivedSessions,
+    onRestoreSession,
+  },
+  viewTabs: {
+    showReview = false,
+    reviewFocusPr,
+    showStaging = false,
+    onCloseStaging,
+    showAssets = false,
+    onCloseAssets,
+    showTerminal = false,
+    onCloseTerminal,
+    terminalTabOpen = false,
+    showConversation = false,
+    conversationThreadId = null,
+    showVideo = false,
+    videoPanel = null,
+    videoTitle = null,
+    showPreviewTab = false,
+    onClosePreviewTab,
+    showPortal = false,
+    portalTarget = null,
+  },
+  subagents: {
+    parentSession,
+    workerSessions,
+    showSubagent = false,
+    subagentStack = NO_SUBAGENTS,
+    onOpenSubagent,
+    onSubagentBack,
+    onSubagentLabel,
+  },
+}: SessionViewerProps) {
   const navigation = useNavigation();
   const { send, addHandler } = useSessionSocket();
   const goBack = navigation.goBack;
@@ -971,6 +743,9 @@ export function SessionViewer({
   const [reviewFocus, setReviewFocus] = useState<PrFocus | undefined>(
     undefined,
   );
+  // Wide Review moves this navigation into the standing workspace summary.
+  // Keep the page in the host so the summary and review canvas cannot diverge.
+  const [reviewPage, setReviewPage] = useState<PrReviewPage>("files");
   const focusPrInReview = useCallback(
     (ref?: { repo: string; branch: string }, view?: "checks") => {
       if (ref || view)
@@ -1161,67 +936,29 @@ export function SessionViewer({
   const backgroundHistoryRef = useRef(false);
   const backgroundHistoryAttemptedRef = useRef(false);
   const [loadingAllHistory, setLoadingAllHistory] = useState(false);
-  const [transcriptIndexState, setTranscriptIndexState] = useState<{
-    sessionId: string;
-    entries: TranscriptIndexEntry[];
-  } | null>(() =>
-    cachedTranscript?.index
-      ? { sessionId: session.id, entries: cachedTranscript.index }
-      : null,
-  );
-  const transcriptIndexStateRef = useRef(transcriptIndexState);
-  useLayoutEffect(() => {
-    transcriptIndexStateRef.current = transcriptIndexState;
-  }, [transcriptIndexState]);
-  const [transcriptIndexExpected, setTranscriptIndexExpected] = useState(
-    Boolean(cachedTranscript?.index),
-  );
-  const transcriptIndexExpectedRef = useRef(Boolean(cachedTranscript?.index));
-  const transcriptIndex =
-    transcriptIndexState?.sessionId === session.id
-      ? transcriptIndexState.entries
-      : null;
-  const transcriptIndexEpochRef = useRef<number | null>(
-    cachedTranscript?.indexEpoch ?? null,
-  );
-  // A bounded v2 init only describes its loaded tail. The full outline is what
-  // proves every unloaded range lies above or below the opening fold, so do not
-  // accept a virtualizer "visible rows ready" signal until that frame arrives.
-  const [transcriptOutlineReady, setTranscriptOutlineReady] = useState(
-    !cachedTranscript?.index || cachedTranscript.indexEpoch !== null,
-  );
-  const transcriptRangeDemandReadyRef = useRef(false);
-  const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
-    useState(0);
-  const indexAnchorHoldCancelRef = useRef<(() => void) | null>(null);
-  // Retire the bounded index-anchor hold on an explicit return to the live
-  // edge. The hold repositions scrollTop toward the pre-refresh anchor every
-  // frame and only stops on gestures aimed at the scroller itself — a Send
-  // click or the jump pill happens outside it, so without this the hold drags
-  // the reader back up for the rest of its window while they watch their own
-  // message fail to stay in view.
-  function cancelIndexAnchorHold() {
-    indexAnchorHoldCancelRef.current?.();
-    indexAnchorHoldCancelRef.current = null;
-  }
-  const pendingIndexPositionRef = useRef<{
-    sessionId: string;
-    keepLiveEdge: boolean;
-    bottomGap: number | null;
-    anchorEid: string | null;
-    anchorTop: number | null;
-  } | null>(null);
-  const completedTranscriptRangeKeysRef = useRef(new Set<string>());
-  const transcriptRangeRequestsRef = useRef(
-    new Map<
-      string,
-      {
-        range: TranscriptIndexedRange;
-        requestId: string;
-        timer: ReturnType<typeof setTimeout>;
-      }
-    >(),
-  );
+  const {
+    index: transcriptIndex,
+    indexState: transcriptIndexState,
+    indexExpected: transcriptIndexExpected,
+    indexExpectedRef: transcriptIndexExpectedRef,
+    indexEpochRef: transcriptIndexEpochRef,
+    rangeRetryGeneration: transcriptRangeRetryGeneration,
+    existingIndexForInit,
+    setIndexMode,
+    acceptInitTail,
+    replaceIndex,
+    acceptRange,
+    projectAppend,
+    loadRanges: loadTranscriptRanges,
+    cancelIndexAnchorHold,
+    restorePendingIndexPosition,
+    settleVisibleRanges,
+  } = useTranscript({
+    sessionId: session.id,
+    cachedTranscript,
+    send,
+    transcriptViewStore,
+  });
   // Byte offset the loaded history begins at — the "load earlier" pagination
   // cursor (server: parseTranscriptTail/parseTranscriptWindow startOffset).
   // null = unknown (old server) → load_history falls back to the full resend.
@@ -1270,20 +1007,37 @@ export function SessionViewer({
   useEffect(() => {
     saveDraft(draftKey, { images, files });
   }, [draftKey, images, files]);
-  // When set, the next send forks a new session branching from this message
-  // instead of continuing this one.
-  const [forkFrom, setForkFrom] = useState<string | null>(null);
+  // When set, the next send forks a new session from either the current tip or
+  // a specific earlier message instead of continuing this one.
+  const [forkFrom, setForkFrom] = useState<
+    { kind: "tip" } | { kind: "message"; messageId: string } | null
+  >(null);
   useEffect(() => {
     const messageId = takePendingSessionFork(session.id);
-    if (messageId) setForkFrom(messageId);
+    if (messageId) setForkFrom({ kind: "message", messageId });
   }, [session.id]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [isRunningLive, setIsRunningLive] = useState(session.isRunning);
-  const [safety, setSafety] = useState(session.safety);
+  const [
+    {
+      isStreaming,
+      isRunningLive,
+      safety,
+      queued,
+      steered,
+      pendingDeliveryIds,
+      ask,
+      model,
+      usage,
+    },
+    dispatchSessionRuntime,
+  ] = useSessionRuntime({
+    isRunning: session.isRunning,
+    safety: session.safety,
+    model: session.model || "",
+    usage: session.usage,
+  });
   useEffect(() => {
-    setSafety(session.safety);
-    if (session.safety) setIsRunningLive(false);
-  }, [session.id, session.safety]);
+    dispatchSessionRuntime({ type: "sync_safety", safety: session.safety });
+  }, [dispatchSessionRuntime, session.id, session.safety]);
   // Bumped on git pushes and matching GitHub webhook events so every mounted PR
   // surface revalidates immediately.
   const [gitRefreshTick, setGitRefreshTick] = useState(0);
@@ -1310,7 +1064,6 @@ export function SessionViewer({
   useEffect(() => {
     setWorkspacePreparing(!!session.workspacePreparing);
   }, [session.workspacePreparing]);
-  const [queued, setQueued] = useState<QueueReceipt[]>([]);
   // Drag-to-reorder bookkeeping. onReorder fires continuously during a drag, so
   // we only reorder locally then flush the final order to the server on drop —
   // broadcasting mid-drag would swap the item references out from under Motion
@@ -1321,8 +1074,6 @@ export function SessionViewer({
   // Delivery ownership stays server-side, but sent steering messages live in
   // the conversation. These ids only give their bubbles a quiet pending
   // treatment until the engine confirms it has read them.
-  const [steered, setSteered] = useState<QueueReceipt[]>([]);
-  const [pendingDeliveryIds, setPendingDeliveryIds] = useState<string[]>([]);
   // One-shot draft injection into the Composer (bump seq to apply) — how
   // "edit queued message" puts the text back into the input.
   const [composerPrefill, setComposerPrefill] = useState<{
@@ -1405,7 +1156,7 @@ export function SessionViewer({
         // The server started a turn, so this is an optimistic transcript bubble,
         // not a queued row.
         setPending((current) => markPendingStarted(current, deliveredPrompt));
-        setIsRunningLive(true);
+        dispatchSessionRuntime({ type: "mark_running" });
         return;
       }
       if (result.status === "queued" || result.status === "steered") {
@@ -1418,7 +1169,7 @@ export function SessionViewer({
             result.status === "queued" ? "queue" : "steer",
           ),
         );
-        setIsRunningLive(true);
+        dispatchSessionRuntime({ type: "mark_running" });
         return;
       }
       if (result.status !== "handled") return;
@@ -1463,7 +1214,7 @@ export function SessionViewer({
       unsubscribe();
       stopObserving();
     };
-  }, [session.id, setEntries]);
+  }, [dispatchSessionRuntime, session.id, setEntries]);
   useEffect(() => {
     if (connected) void promptOutbox.flush();
   }, [connected]);
@@ -1491,10 +1242,6 @@ export function SessionViewer({
       ];
     });
   }, [entries, initialPending, session.id, setEntries]);
-  const [ask, setAsk] = useState<{
-    questionId: string;
-    questions: AskQuestion[];
-  } | null>(null);
   const [slackComposer, setSlackComposer] = useState<{
     id: string;
     message: string;
@@ -1604,6 +1351,8 @@ export function SessionViewer({
   const {
     open: panelOpen,
     setOpen: setPanelOpen,
+    page: desktopPanelPage,
+    setPage: setDesktopPanelPage,
     style: panelStyle,
     resizeHandle: panelResizeHandle,
   } = useSidePanel();
@@ -1613,24 +1362,17 @@ export function SessionViewer({
   const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
   const activePanelOpen = showReview ? reviewPanelOpen : panelOpen;
   const setActivePanelOpen = showReview ? setReviewPanelOpen : setPanelOpen;
-  // The desktop panel starts on Changes, then keeps the selected tool when it
-  // closes so reopening returns to the person's last place. Phones still use
-  // null for their Workspace details overview and push Changes from that page.
+  // Phones use null for their Workspace details overview and push tools from
+  // that page. The desktop selection comes from useSidePanel so the open panel
+  // stays on the same tool while its session changes.
   const [panelPage, setPanelPage] = useState<
     null | "changes" | "portals" | "agents" | "terminal"
   >(null);
   // Start a panel terminal only after its tab is opened. Keep it mounted while
   // switching tabs, then drop it when the panel closes.
-  const [panelTerminalMounted, setPanelTerminalMounted] = useState(false);
-  useEffect(() => {
-    if (!activePanelOpen) setPanelTerminalMounted(false);
-  }, [activePanelOpen]);
-  // Closing the host that shows pages returns to the overview; that effect
-  // needs `isPhone` to know which host to watch, so it lives beside the
-  // viewport state further down.
-  useEffect(() => {
-    setPanelPage(null);
-  }, [session.id]);
+  const [panelTerminalMounted, setPanelTerminalMounted] = useState(
+    () => activePanelOpen && desktopPanelPage === "terminal",
+  );
   // Session scratch assets (Assets tab): fetched once per session + on
   // assets_changed broadcasts; the tab only appears once files exist.
   const { files: assetFiles, refresh: refreshAssets } = useSessionAssets(
@@ -1672,7 +1414,7 @@ export function SessionViewer({
   const sessionReports = useSessionReports(session.id, addHandler);
   // Team notes — human-to-human messages on this session, interleaved into
   // the transcript as NoteBubbles. The agent never sees them; they're posted
-  // from the composer's note mode (⌘N).
+  // from the composer's note mode.
   const [notes, setNotes] = useState<SessionNote[]>([]);
   const [noteMode, setNoteMode] = useState(false);
   async function addSessionAttachments(picked: FileList | File[]) {
@@ -1908,16 +1650,17 @@ export function SessionViewer({
     scrollToLatest,
     leaveLatest,
     endTurn,
+    shouldMaintainEnd,
     relayout,
     suspendEndMaintenance,
     onScroll,
   } = useSessionScroll(true);
-  // An explicit send first resumes live-edge following immediately, then needs
-  // one more positioning pass after React has committed the optimistic row.
-  // Scrolling only in the event handler targets the old scrollHeight; the row
-  // does not exist in the DOM yet, so selection/disclosure guards or delayed
-  // virtualizer measurement can otherwise leave part of it below the composer.
-  const sentPromptNeedsLayoutScrollRef = useRef(false);
+  // An explicit tail action first resumes live-edge following immediately,
+  // then needs one more positioning pass after React commits its DOM change.
+  // Scrolling only in the event handler targets the old scrollHeight: a sent
+  // row does not exist yet, while an answered ask is about to disappear.
+  // Either transition can otherwise leave the response below the composer.
+  const tailActionNeedsLayoutScrollRef = useRef(false);
 
   // A fold toggle (turn work blocks, tool-call details, review loops) changes
   // block heights above the reader. Hold the live-edge glue off for the two
@@ -1948,28 +1691,13 @@ export function SessionViewer({
     );
     return () => window.clearTimeout(timer);
   }, [transcriptIndexExpected, transcriptRendered]);
-  const settledIndexRef = useRef<TranscriptIndexEntry[] | null>(null);
   const onVisibleRangesSettled = useCallback(() => {
-    if (!transcriptOutlineReady) return;
-    setOpenSettlePending(false);
-    // Keep the pre-refresh message anchor through the final row measurements.
-    // Two paints later every visible real row has reported its geometry, so the
-    // bounded index hold can retire without letting a last correction jump the
-    // reader. The identity guard cannot cancel a newer refresh's hold.
-    const settledHold = indexAnchorHoldCancelRef.current;
-    if (settledHold) {
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (indexAnchorHoldCancelRef.current !== settledHold) return;
-          settledHold();
-          indexAnchorHoldCancelRef.current = null;
-        }),
-      );
-    }
-    if (settledIndexRef.current === transcriptIndex) return;
-    settledIndexRef.current = transcriptIndex;
-    if (readFollowingLive(followingLive)) scrollToLatest("auto");
-  }, [followingLive, scrollToLatest, transcriptIndex, transcriptOutlineReady]);
+    settleVisibleRanges({
+      followingLive,
+      scrollToLatest,
+      onSettled: () => setOpenSettlePending(false),
+    });
+  }, [followingLive, scrollToLatest, settleVisibleRanges]);
   const [viewerInput, setViewerInput] = useState<HTMLDivElement | null>(null);
   // The focused phone composer is fixed above the keyboard, so it contributes
   // no height to the transcript's flex layout. Publish its real height without
@@ -1996,42 +1724,13 @@ export function SessionViewer({
     };
   }, [relayout, viewerInput]);
 
-  useLayoutEffect(() => {
-    const pending = pendingIndexPositionRef.current;
-    if (!pending || transcriptIndexState?.sessionId !== pending.sessionId)
-      return;
-    pendingIndexPositionRef.current = null;
-    const container = messagesRef.current;
-    if (pending.keepLiveEdge) {
-      scrollToLatest("auto");
-    } else if (container && pending.bottomGap !== null) {
-      container.scrollTop = Math.max(
-        0,
-        container.scrollHeight - container.clientHeight - pending.bottomGap,
-      );
-      if (pending.anchorEid && pending.anchorTop !== null) {
-        indexAnchorHoldCancelRef.current?.();
-        let cancelIndexHold = () => {};
-        cancelIndexHold = holdTranscriptAnchor(
-          container,
-          pending.anchorEid,
-          pending.anchorTop,
-          pending.bottomGap,
-          leaveLatest,
-          () => {
-            if (indexAnchorHoldCancelRef.current === cancelIndexHold)
-              indexAnchorHoldCancelRef.current = null;
-          },
-          15_000,
-        );
-        indexAnchorHoldCancelRef.current = cancelIndexHold;
-      }
-    }
-    requestAnimationFrame(() => {
-      transcriptRangeDemandReadyRef.current = true;
-      setTranscriptRangeRetryGeneration((generation) => generation + 1);
-    });
-  }, [leaveLatest, messagesRef, scrollToLatest, transcriptIndexState]);
+  useTranscriptIndexAnchor({
+    indexState: transcriptIndexState,
+    restorePendingIndexPosition,
+    containerRef: messagesRef,
+    scrollToLatest,
+    leaveLatest,
+  });
 
   // Keep the cached snapshot current as live frames and history pages land.
   // Scroll position is updated synchronously in handleMessagesScroll below;
@@ -2061,6 +1760,7 @@ export function SessionViewer({
     messagesRef,
     session.id,
     transcriptIndex,
+    transcriptIndexEpochRef,
   ]);
   // Where the anchor is computed. Nothing reads it until this session is
   // opened again, and pickScrollAnchor reads a rect per [data-eid] node, so
@@ -2280,62 +1980,14 @@ export function SessionViewer({
     };
   }, [session.id]);
 
-  // Immersive reading on phones: scrolling down through the transcript hides
-  // secondary chat chrome such as docked tabs, while the navigation bar stays
-  // fixed so Back and its actions remain reachable. Scrolling back up, or
-  // reaching the top or live edge, restores the secondary chrome. Toggles
-  // body.chrome-collapsed, which mobile CSS reads (inert on desktop).
-  useEffect(() => {
-    const el = messagesRef.current;
-    if (!el) return;
-    const mq = window.matchMedia("(max-width: 720px)");
-    let lastY = el.scrollTop;
-    let collapsed = false;
-    let ticking = false;
-    const set = (v: boolean) => {
-      if (v === collapsed) return;
-      collapsed = v;
-      document.body.classList.toggle("chrome-collapsed", v);
-    };
-    const onDir = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        ticking = false;
-        if (!mq.matches) {
-          set(false);
-          lastY = el.scrollTop;
-          return;
-        }
-        const y = el.scrollTop;
-        const max = el.scrollHeight - el.clientHeight;
-        const dy = y - lastY;
-        lastY = y;
-        // Keep the chrome up near the top and the live edge so the controls
-        // stay reachable; otherwise follow the scroll direction (with a small
-        // dead-zone so tiny jitters don't flip it).
-        if (y < 48 || max - y < 64) set(false);
-        else if (dy > 6) set(true);
-        else if (dy < -6) set(false);
-      });
-    };
-    el.addEventListener("scroll", onDir, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", onDir);
-      document.body.classList.remove("chrome-collapsed");
-    };
-  }, [messagesRef, session.id]);
-
   // Per-session model (switchable from the composer; "" = default)
-  const [model, setModel] = useState(session.model || "");
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   // Pinnable Claude/Codex accounts + this session's pin ("" = auto pool).
   const [accounts, setAccounts] = useState<ProviderAccountOption[]>([]);
   const [accountId, setAccountId] = useState(session.accountId || "");
-  // Live token/cost accounting — seeded from the session, updated per run via
-  // the `usage_update` broadcast. Powers the phone header's cost/context pill.
-  const [usage, setUsage] = useState(session.usage);
+  // Live token/cost accounting is seeded from the session and updated per run
+  // through the `usage_update` broadcast in useSessionRuntime.
   // Reasoning effort — a composer control mirroring the new-session palette.
   // Persisted on the session server-side and enforced per run (Claude effort /
   // Codex modelReasoningEffort), so seed from the session's stored value.
@@ -2363,8 +2015,11 @@ export function SessionViewer({
       .catch(() => {});
   }, [session.workspaceId]);
   useEffect(() => {
-    setModel(session.model || "");
-  }, [session.id, session.model]);
+    dispatchSessionRuntime({
+      type: "sync_model",
+      model: session.model || "",
+    });
+  }, [dispatchSessionRuntime, session.id, session.model]);
   useEffect(() => {
     setAccountId(session.accountId || "");
   }, [session.id, session.accountId]);
@@ -2375,8 +2030,8 @@ export function SessionViewer({
     setFastMode(session.fastMode || false);
   }, [session.id, session.fastMode]);
   useEffect(() => {
-    setUsage(session.usage);
-  }, [session.id, session.usage]);
+    dispatchSessionRuntime({ type: "sync_usage", usage: session.usage });
+  }, [dispatchSessionRuntime, session.id, session.usage]);
 
   // Dynamic workflow runs (opensession-workflows MCP): seeded by a fetch on
   // open/session switch, then kept live by workflow_update broadcasts. Powers
@@ -2415,9 +2070,19 @@ export function SessionViewer({
       stale = true;
     };
   }, [session.id]);
-  function cancelWorkflowRun(runId: string) {
-    // Fire-and-forget: the workflow_update echo flips the card to cancelled.
-    fetch(`${BASE_PATH}/api/workflows/${encodeURIComponent(runId)}/cancel`, {
+  function workflowAction(
+    runId: string,
+    action: "cancel" | "pause" | "resume" | "skip" | "retry",
+    seq?: number,
+  ) {
+    // Fire-and-forget: workflow_update echoes every state transition. Resume
+    // after a process restart may create a new run, which arrives as another
+    // workflow_update on the same session.
+    const suffix =
+      action === "skip" || action === "retry"
+        ? `/agents/${seq}/${action}`
+        : `/${action}`;
+    fetch(`${BASE_PATH}/api/workflows/${encodeURIComponent(runId)}${suffix}`, {
       method: "POST",
     }).catch(() => {});
   }
@@ -2661,8 +2326,7 @@ export function SessionViewer({
     });
   }, [isBusy, loading, entries, session.runStartedAt]);
 
-  // Session-wide composer shortcuts. ⌘/Ctrl+N toggles team-note mode even when
-  // the composer is not focused; Ctrl+R focuses it directly.
+  // Ctrl+R focuses the session composer directly.
   const archiveShortcutLabel = useShortcutLabel("session-archive");
   const copyTranscriptLabel = useShortcutLabel("session-copy-transcript");
   const nextChatKeys = useShortcutKeys("workspace-next-unread");
@@ -2672,17 +2336,6 @@ export function SessionViewer({
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (!focused) return;
-      if (
-        !e.defaultPrevented &&
-        !e.repeat &&
-        matchesShortcut(e, "composer-note") &&
-        !blockingOverlayOpen()
-      ) {
-        e.preventDefault();
-        setNoteMode((on) => !on);
-        queueMicrotask(() => composerRef.current?.focus());
-        return;
-      }
       if (matchesShortcut(e, "composer-focus")) {
         e.preventDefault();
         composerRef.current?.focus();
@@ -2797,46 +2450,6 @@ export function SessionViewer({
   const [contextSessions, setContextSessions] = useState<string[]>([]);
 
   // Subscribe to WebSocket messages
-  const loadTranscriptRanges = useCallback(
-    (ranges: TranscriptIndexedRange[]) => {
-      const epoch = transcriptIndexEpochRef.current;
-      if (epoch === null || !transcriptRangeDemandReadyRef.current) return;
-      let capacity = Math.max(
-        0,
-        TRANSCRIPT_RANGE_CONCURRENCY - transcriptRangeRequestsRef.current.size,
-      );
-      for (const range of ranges) {
-        if (capacity <= 0) break;
-        const key = `${range.firstSeq}:${range.lastSeq}`;
-        if (
-          completedTranscriptRangeKeysRef.current.has(key) ||
-          transcriptRangeRequestsRef.current.has(key)
-        )
-          continue;
-        const requestId = randomUUID();
-        const timer = setTimeout(() => {
-          transcriptRangeRequestsRef.current.delete(key);
-          setTranscriptRangeRetryGeneration((generation) => generation + 1);
-        }, 15_000);
-        transcriptRangeRequestsRef.current.set(key, {
-          range,
-          requestId,
-          timer,
-        });
-        capacity -= 1;
-        send({
-          type: "load_transcript_range",
-          sessionId: session.id,
-          requestId,
-          firstSeq: range.firstSeq,
-          lastSeq: range.lastSeq,
-          epoch,
-        });
-      }
-    },
-    [send, session.id],
-  );
-
   const subscribeToSession = useEffectEvent(() => {
     if (!connected) return;
 
@@ -2888,13 +2501,8 @@ export function SessionViewer({
           // falls back to a full legacy snapshot). Init frames are
           // authoritative for the mode.
           const v2 = msg.v2 === true && typeof msg.lastSeq === "number";
-          const existingIndex =
-            v2 && transcriptIndexStateRef.current?.sessionId === session.id
-              ? transcriptIndexStateRef.current.entries
-              : null;
-          transcriptIndexExpectedRef.current = v2;
-          setTranscriptIndexExpected(v2);
-          setTranscriptOutlineReady(!v2);
+          const existingIndex = existingIndexForInit(v2);
+          setIndexMode(v2);
           if (v2) {
             transcriptSeqRef.current = {
               sessionId: session.id,
@@ -2922,26 +2530,7 @@ export function SessionViewer({
               transcriptCursorRef.current = null;
             }
           }
-          if (v2) {
-            const tailIndex = msg.entries
-              .map(transcriptIndexEntryFromPayload)
-              .filter((entry): entry is TranscriptIndexEntry => entry !== null);
-            setTranscriptIndexState({
-              sessionId: session.id,
-              entries: existingIndex
-                ? mergeTranscriptIndexEntries(existingIndex, tailIndex)
-                : tailIndex,
-            });
-            transcriptIndexEpochRef.current = null;
-            transcriptRangeDemandReadyRef.current = false;
-            pendingIndexPositionRef.current = null;
-            indexAnchorHoldCancelRef.current?.();
-            indexAnchorHoldCancelRef.current = null;
-            for (const request of transcriptRangeRequestsRef.current.values())
-              clearTimeout(request.timer);
-            transcriptRangeRequestsRef.current.clear();
-            completedTranscriptRangeKeysRef.current.clear();
-          }
+          if (v2) acceptInitTail(msg.entries, existingIndex);
           if (v2 && existingIndex)
             transcriptViewStore.merge(merged, true, true);
           else transcriptViewStore.replace(merged, true, v2);
@@ -2976,90 +2565,16 @@ export function SessionViewer({
           break;
         }
         case "transcript_index": {
-          const scrollContainer = messagesRef.current;
-          // `following` can be silently dropped by a layout-driven scroll
-          // event (only a real gesture re-engages it), so a reader visually
-          // parked at the bottom still counts as at the live edge. Treating
-          // them as a history reader armed a long anchor hold at the
-          // pre-refresh position, which then fought the next send's jump and
-          // crawled the transcript back up.
-          const keepLiveEdge =
-            followingLive.current ||
-            (!!scrollContainer &&
-              scrollContainer.scrollHeight -
-                scrollContainer.scrollTop -
-                scrollContainer.clientHeight <
-                90);
-          const previousBottomGap =
-            !keepLiveEdge && scrollContainer
-              ? Math.max(
-                  0,
-                  scrollContainer.scrollHeight -
-                    scrollContainer.scrollTop -
-                    scrollContainer.clientHeight,
-                )
-              : null;
-          const previousAnchor =
-            !keepLiveEdge && scrollContainer
-              ? pickScrollAnchor(scrollContainer)
-              : null;
-          const previousAnchorEid = previousAnchor?.dataset.eid ?? null;
-          const previousAnchorTop =
-            previousAnchor && scrollContainer
-              ? previousAnchor.getBoundingClientRect().top -
-                scrollContainer.getBoundingClientRect().top
-              : null;
-          pendingIndexPositionRef.current = {
-            sessionId: session.id,
-            keepLiveEdge,
-            bottomGap: previousBottomGap,
-            anchorEid: previousAnchorEid,
-            anchorTop: previousAnchorTop,
-          };
-          transcriptIndexExpectedRef.current = true;
-          setTranscriptIndexExpected(true);
-          transcriptIndexEpochRef.current = msg.epoch;
-          setTranscriptOutlineReady(true);
-          setTranscriptIndexState({
-            sessionId: session.id,
-            entries: msg.entries,
-          });
+          replaceIndex(msg, messagesRef.current, followingLive.current);
           setHistoryTruncated(false);
           backgroundHistoryRef.current = false;
           historyRevealRef.current = null;
           loadingHistoryRef.current = false;
           setLoadingHistory(false);
-          transcriptRangeDemandReadyRef.current = false;
           break;
         }
         case "transcript_range": {
-          if (msg.epoch !== transcriptIndexEpochRef.current) break;
-          const found = [...transcriptRangeRequestsRef.current.entries()].find(
-            ([, request]) => request.requestId === msg.requestId,
-          );
-          if (!found) break;
-          transcriptViewStore.mergeRange(msg.entries);
-          const [key, request] = found;
-          clearTimeout(request.timer);
-          if (msg.complete) {
-            completedTranscriptRangeKeysRef.current.add(key);
-            transcriptRangeRequestsRef.current.delete(key);
-            setTranscriptRangeRetryGeneration((generation) => generation + 1);
-          } else {
-            request.timer = setTimeout(() => {
-              transcriptRangeRequestsRef.current.delete(key);
-              setTranscriptRangeRetryGeneration((generation) => generation + 1);
-            }, 15_000);
-            send({
-              type: "load_transcript_range",
-              sessionId: session.id,
-              requestId: request.requestId,
-              firstSeq: request.range.firstSeq,
-              lastSeq: request.range.lastSeq,
-              afterSeq: msg.coveredThroughSeq,
-              epoch: msg.epoch,
-            });
-          }
+          acceptRange(msg);
           break;
         }
         case "transcript_history": {
@@ -3164,25 +2679,7 @@ export function SessionViewer({
             };
           }
           transcriptViewStore.merge(msg.entries, inSeqMode, true);
-          if (inSeqMode && transcriptIndexEpochRef.current !== null) {
-            const projected = msg.entries
-              .map(transcriptIndexEntryFromPayload)
-              .filter((entry): entry is TranscriptIndexEntry => entry !== null);
-            setTranscriptIndexState((current) =>
-              current?.sessionId === session.id
-                ? {
-                    ...current,
-                    entries: mergeTranscriptIndexEntries(
-                      current.entries,
-                      projected,
-                    ),
-                  }
-                : current,
-            );
-            if (msg.entries.length === 0 && typeof msg.firstSeq === "number") {
-              send({ type: "load_transcript_index", sessionId: session.id });
-            }
-          }
+          if (inSeqMode) projectAppend(msg.entries, msg.firstSeq);
           // The live stream and the transcript tail both carry assistant text.
           // stream_text accumulates whole blocks until stream_done (end of the
           // run), so a mid-run text block would otherwise show twice: as the
@@ -3211,19 +2708,17 @@ export function SessionViewer({
             // Don't let a broadcast rewrite the list mid-drag (see
             // draggingQueueRef) — the drop will send our order and the
             // server's echo reconciles it right after.
-            if (!draggingQueueRef.current) setQueued(msg.queued);
-            setSteered(msg.steered || []);
-            setPendingDeliveryIds(msg.pendingDeliveryIds || []);
+            dispatchSessionRuntime({
+              type: "frame",
+              frame: msg,
+              acceptQueueUpdate: !draggingQueueRef.current,
+            });
           }
           break;
         case "queued_prompt_taken": {
           if (msg.sessionId !== session.id) break;
           if (!msg.item) {
-            setSteered((current) =>
-              current.map((item) =>
-                item.id === msg.queueId ? { ...item, editing: false } : item,
-              ),
-            );
+            dispatchSessionRuntime({ type: "frame", frame: msg });
             toast(msg.message || "That queued message could not be edited");
             break;
           }
@@ -3264,16 +2759,9 @@ export function SessionViewer({
           break;
         }
         case "ask_question":
-          if (msg.sessionId === session.id) {
-            setAsk({ questionId: msg.questionId, questions: msg.questions });
-          }
-          break;
         case "ask_resolved":
-          if (msg.sessionId === session.id) {
-            setAsk((prev) =>
-              prev?.questionId === msg.questionId ? null : prev,
-            );
-          }
+          if (msg.sessionId === session.id)
+            dispatchSessionRuntime({ type: "frame", frame: msg });
           break;
         case "reply_suggestions":
           // Null retires the row (the turn they answered has been answered).
@@ -3306,15 +2794,13 @@ export function SessionViewer({
           break;
         case "session_status": {
           const running = !!msg.isRunning && !msg.safety;
-          setSafety(msg.safety);
-          setIsRunningLive(running);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           if (!running) {
             // Every isRunning:false broadcast follows its run's stream_done,
             // so a live turn never gets cut here. This clears the stale case:
             // a socket that died mid-stream (server restart) reconnects, the
             // re-watch hello reports the turn already over, and the spinner
             // from the dead stream would otherwise stay up forever.
-            setIsStreaming(false);
             liveTurnStore.finish();
           }
           onRunningChange?.(session.id, running);
@@ -3333,7 +2819,7 @@ export function SessionViewer({
           if (msg.sessionId === session.id) setWorkspacePreparing(!msg.ready);
           break;
         case "stream_start":
-          setIsStreaming(true);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           // A new turn is never the stopped one: clear the pending stop so
           // its label can't bleed into the run that follows it.
           setStopRequestedAt(null);
@@ -3359,13 +2845,13 @@ export function SessionViewer({
           transcriptViewStore.merge([msg.entry]);
           break;
         case "stream_done": {
-          setIsStreaming(false);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           liveTurnStore.finish();
           break;
         }
         case "model_changed":
           if (msg.sessionId !== session.id) break;
-          setModel(msg.model);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           if (msg.by && msg.by !== getCurrentUser()) {
             setEntries((prev) => [
               ...prev,
@@ -3386,7 +2872,7 @@ export function SessionViewer({
           break;
         case "usage_update":
           if (msg.sessionId !== session.id) break;
-          setUsage(msg.usage);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           break;
         case "cache_warning":
           if (msg.sessionId !== session.id) break;
@@ -3404,7 +2890,7 @@ export function SessionViewer({
           ]);
           break;
         case "error":
-          setIsStreaming(false);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           liveTurnStore.finish();
           // Show the failure where the reply would have been — otherwise a
           // failed run looks like a send that silently went nowhere.
@@ -3497,10 +2983,11 @@ export function SessionViewer({
           ]
         : [],
     );
-    setIsRunningLive(session.isRunning);
-    setPendingDeliveryIds([]);
+    dispatchSessionRuntime({
+      type: "reset_live",
+      isRunning: session.isRunning,
+    });
     liveTurnStore.clear();
-    setIsStreaming(false);
   });
   useLayoutEffect(() => {
     resetOptimisticState();
@@ -3688,10 +3175,10 @@ export function SessionViewer({
   // Layout effect so the adjustment happens before the browser paints — no flicker.
   useLayoutEffect(() => {
     relayout();
-    if (!sentPromptNeedsLayoutScrollRef.current) return;
-    sentPromptNeedsLayoutScrollRef.current = false;
+    if (!tailActionNeedsLayoutScrollRef.current) return;
+    tailActionNeedsLayoutScrollRef.current = false;
     scrollToLatest("auto");
-  }, [entries, queued, steered, pending, relayout, scrollToLatest]);
+  }, [entries, queued, steered, pending, ask, relayout, scrollToLatest]);
 
   // Shared preamble: stop tracking the live edge, and pin the reader to the
   // content they're on while the page prepends above it.
@@ -3743,7 +3230,13 @@ export function SessionViewer({
     }
     beginHistoryLoad();
     requestHistoryPage();
-  }, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
+  }, [
+    beginHistoryLoad,
+    historyTruncated,
+    requestHistoryPage,
+    session.id,
+    transcriptIndexExpectedRef,
+  ]);
   const loadAllHistory = useCallback(() => {
     if (
       transcriptIndexExpectedRef.current ||
@@ -3762,7 +3255,13 @@ export function SessionViewer({
     setLoadingAllHistory(true);
     beginHistoryLoad(60_000);
     requestHistoryPage(true);
-  }, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
+  }, [
+    beginHistoryLoad,
+    historyTruncated,
+    requestHistoryPage,
+    session.id,
+    transcriptIndexExpectedRef,
+  ]);
 
   // Preserve the fast opening snapshot, then download one fuller page once the
   // browser has had time to paint it. This only runs at the live edge in seq
@@ -4106,8 +3605,8 @@ export function SessionViewer({
   // still fork as a new sibling with a transcript handoff.
   const canForkSession = session.source === "opensession" && !!session.ran;
 
-  const handleFork = useCallback((messageId: string) => {
-    setForkFrom(messageId);
+  const handleFork = useCallback((messageId?: string) => {
+    setForkFrom(messageId ? { kind: "message", messageId } : { kind: "tip" });
   }, []);
 
   // "Continue" under a failed run's notice. An ordinary prompt, so it steers,
@@ -4142,11 +3641,10 @@ export function SessionViewer({
 
   const repairSafetyPause = useCallback(async () => {
     await repairPausedSession(session.id);
-    setSafety(undefined);
-    setIsRunningLive(false);
+    dispatchSessionRuntime({ type: "repair_safety" });
     onRunningChange?.(session.id, false);
     toast("Session repaired");
-  }, [onRunningChange, session.id]);
+  }, [dispatchSessionRuntime, onRunningChange, session.id]);
 
   // Session and asset links navigate on a delegated click. markdown.ts renders
   // them into dangerouslySetInnerHTML, where they cannot carry React handlers;
@@ -4344,15 +3842,21 @@ export function SessionViewer({
         : { name: f.name, dataUrl: f.dataUrl },
     );
 
-    // Fork mode: branch a brand-new session from the selected message, keeping
-    // the real conversation history. App navigates into it on session_created.
+    // Fork mode: branch a brand-new session from the current tip or selected
+    // message, keeping the real conversation history. App navigates into it on
+    // session_created.
     if (!isolated && forkFrom) {
       send({
         type: "create_session",
         branch: "",
         prompt: text || "Continue from here.",
         user,
-        forkFrom: { sourceId: session.id, messageId: forkFrom },
+        forkFrom: {
+          sourceId: session.id,
+          ...(forkFrom.kind === "message"
+            ? { messageId: forkFrom.messageId }
+            : {}),
+        },
         ...(imgs.length ? { images: imgs } : {}),
         ...(fls.length ? { files: filePayload } : {}),
       });
@@ -4416,13 +3920,13 @@ export function SessionViewer({
     unhideForSession(session);
     if (!isBusy || steerNow) {
       if (!isBusy) {
-        setIsRunningLive(true);
+        dispatchSessionRuntime({ type: "mark_running" });
         onRunningChange?.(session.id, true);
       }
       // Sent messages always enter the conversation immediately. A busy steer
       // keeps its delivery mode only so the bubble can remain slightly muted
       // until the engine reads it.
-      sentPromptNeedsLayoutScrollRef.current = true;
+      tailActionNeedsLayoutScrollRef.current = true;
       setPending((p) => [
         ...p,
         {
@@ -4524,11 +4028,11 @@ export function SessionViewer({
     }
     if (!q.id) return;
     if (steering) {
-      setSteered((current) =>
-        current.map((item) =>
-          item.id === q.id ? { ...item, editing: true } : item,
-        ),
-      );
+      dispatchSessionRuntime({
+        type: "set_steered_editing",
+        queueId: q.id,
+        editing: true,
+      });
     }
     send({
       type: steering ? "take_steered_prompt" : "take_queued_prompt",
@@ -4563,7 +4067,7 @@ export function SessionViewer({
 
   function handleQueueReorder(next: QueueReceipt[]) {
     pendingReorderRef.current = next;
-    setQueued(next);
+    dispatchSessionRuntime({ type: "reorder_queue", queued: next });
   }
 
   function commitQueueReorder() {
@@ -4737,7 +4241,7 @@ export function SessionViewer({
   function handleModelChange(next: string) {
     const target = next || defaultModel;
     if (!target || target === (model || defaultModel)) return;
-    setModel(next);
+    dispatchSessionRuntime({ type: "select_model", model: next });
     // Routed through the /model slash command so it persists, notices, and
     // broadcasts to other viewers.
     send({
@@ -4793,6 +4297,7 @@ export function SessionViewer({
   // of the surrounding chrome.
   const headerRef = useRef<HTMLDivElement>(null);
   const headerActionsRef = useRef<HTMLDivElement>(null);
+  const desktopChangesRef = useRef<HTMLDivElement>(null);
   const [headerW, setHeaderW] = useState(0);
   // Whether the header's workspace-summary card is up. The transcript and
   // composer shift out from under it while it is, and the header's own PR
@@ -4839,6 +4344,15 @@ export function SessionViewer({
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
+  useEffect(() => {
+    if (!activePanelOpen) {
+      setPanelTerminalMounted(false);
+    } else if (!isPhone && desktopPanelPage === "terminal") {
+      // A newly mounted session inherits the selected tab and starts its own
+      // terminal, just as selecting Terminal in-place would.
+      setPanelTerminalMounted(true);
+    }
+  }, [activePanelOpen, desktopPanelPage, isPhone]);
   // Whether the pane can hold the card beside the reading column instead of
   // over it. Unmeasured counts as room: the width lands in a layout effect
   // before the first paint, and assuming the common case keeps a pinned card
@@ -4878,7 +4392,7 @@ export function SessionViewer({
   // dot) is always visible; on a phone the right panel overlays the session and
   // is closed by default, so a running workflow fan-out has no glance.
   const runningWorkflowRuns = workflowRuns.filter(
-    (r) => r.status === "running",
+    (r) => r.status === "running" || r.status === "paused",
   );
   // Sub-agents ride along only while one is live, so a finished batch doesn't
   // pad a later workflow's tallies (their statuses clamp to done once the
@@ -5688,11 +5202,12 @@ export function SessionViewer({
             <Menu.Item
               onClick={() => {
                 setOverflowOpen(false);
-                setPanelPage("portals");
                 if (isPhone) {
+                  setPanelPage("portals");
                   setInfoPageScrolled(false);
                   setInfoPageOpen(true);
                 } else {
+                  setDesktopPanelPage("portals");
                   setActivePanelOpen(true);
                 }
               }}
@@ -5782,19 +5297,15 @@ export function SessionViewer({
               )}
             </>
           );
-          // Fork: a new session carrying this one's history up to its last
-          // answer, so you can take the same context somewhere else without
-          // disturbing this transcript. Forking from a specific message stays on
-          // that message's own menu; this is the "from here" case, which is what
-          // people mean from the header. Both land in the same composer mode.
-          const lastAssistantId = entries.findLast(
-            (e) => e.type === "assistant",
-          )?.id;
-          const forkAction = canForkSession && lastAssistantId && (
+          // Fork: a new session carrying this one's history at the current tip,
+          // so you can take the same context somewhere else without disturbing
+          // this transcript. Forking from a specific message stays on that
+          // message's own menu. Both land in the same composer mode.
+          const forkAction = canForkSession && (
             <Menu.Item
               onClick={() => {
                 setOverflowOpen(false);
-                handleFork(lastAssistantId);
+                handleFork();
               }}
               title="Start a new session from this one's history"
             >
@@ -6036,7 +5547,9 @@ export function SessionViewer({
                   {(compactHeader || isPhone) && shareAction(true)}
                   <Menu.Separator className={VIEWER_MENU_SEP} />
                   {newSessionAction}
-                  {!workspaceScopedMenu && forkAction}
+                  {/* Fork always applies to the open session, even when the
+                      rest of this menu is scoped to its workspace. */}
+                  {forkAction}
                   {!workspaceScopedMenu && spinOffAction}
                   {!workspaceScopedMenu && transcriptActions}
                   {portalsAction}
@@ -6069,449 +5582,206 @@ export function SessionViewer({
             </Menu.Root>
           );
           const header = (
-            <TopBar className={VIEWER_HEADER} ref={headerRef}>
-              <TopBarLeading className={VIEWER_TITLE}>
-                {!session.desk &&
-                  session.worktreeDir &&
-                  hasWorkspace &&
-                  // Repo-less sessions get a static tile instead of the repo
-                  // switch/attach menu: scratch names the feed it came from,
-                  // an Ask session with the repo turned off says so.
-                  (session.repoLess ? (
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <span
-                        className="flex min-w-0 items-center gap-1.5 text-label font-medium text-dim"
-                        title={
-                          session.mode === "scratch"
-                            ? "Scratch session · no repo"
-                            : "Ask session · no repo"
-                        }
-                      >
-                        {session.mode === "scratch" ? (
-                          <RepoTile
-                            name={session.externalRefs?.[0]?.kind || "scratch"}
-                          />
-                        ) : (
-                          <IconEye size={16} className="shrink-0 text-faint" />
-                        )}
-                        <span className="truncate">
-                          {session.mode === "scratch"
-                            ? session.externalRefs?.[0]?.kind || "scratch"
-                            : "No repo"}
-                        </span>
-                      </span>
-                      <IconChevronDown
-                        size={18}
-                        className="shrink-0 -rotate-90 text-faint"
-                      />
-                    </span>
-                  ) : (
-                    <RepoBar
-                      sessionId={session.id}
-                      primaryRepo={session.repo || "repository"}
-                      branch={session.branch}
-                      initialAttached={session.attachedRepos || []}
-                    />
-                  ))}
-                {/* A worker session sits UNDER the session that spawned it, so the
-					    bar reads repo > session > worker and the middle crumb is the way
-					    back up. It replaces the "worker of …" chip that used to trail the
-					    title while a temporary tab said the same thing again in the strip. */}
-                {parentSession && openSession && (
-                  <>
-                    <button
-                      type="button"
-                      className={cn(VIEWER_BRANCH, VIEWER_CRUMB_UP)}
-                      onClick={() => openSession(parentSession.id)}
-                      title={`Back to ${workspaceName || parentSession.title}`}
-                    >
-                      {workspaceName || parentSession.title}
-                    </button>
-                    <IconChevronDown
-                      size={18}
-                      className="-mx-1 shrink-0 -rotate-90 text-faint"
-                      aria-hidden="true"
-                    />
-                  </>
-                )}
-                {session.archived && (
-                  <Tooltip label="Unarchive session" side="bottom">
-                    <Button
-                      variant="ghost"
-                      size="md"
-                      className="shrink-0 text-dim"
-                      icon={<IconArchive size={20} aria-hidden />}
-                      disabled={archiving}
-                      onClick={() => void handleArchive()}
-                    >
-                      {archiving ? "Unarchiving…" : "Unarchive"}
-                    </Button>
-                  </Tooltip>
-                )}
-                {renameDraft !== null ? (
-                  <input
-                    className={VIEWER_BRANCH_RENAME}
-                    value={renameDraft}
-                    autoFocus
-                    onChange={(e) => setRenameDraft(e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                    onBlur={commitRename}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitRename();
-                      else if (e.key === "Escape") setRenameDraft(null);
-                      e.stopPropagation();
-                    }}
-                  />
-                ) : (
-                  <OverflowFadeText
-                    className={`${VIEWER_BRANCH} ${onRename ? VIEWER_BRANCH_EDITABLE : ""}`}
-                    title={
-                      parentSession
-                        ? onRename
-                          ? `${session.title} · double-click to rename`
-                          : session.title
-                        : workspaceName
-                          ? `${session.title} · double-click to rename the workspace`
-                          : onRename
-                            ? "Double-click to rename"
-                            : session.title
-                    }
-                    onDoubleClick={
-                      onRename
-                        ? () =>
-                            setRenameDraft(
-                              parentSession
-                                ? session.title
-                                : workspaceName || session.title,
-                            )
-                        : undefined
-                    }
-                  >
-                    {parentSession
-                      ? session.title
-                      : workspaceName || session.title}
-                  </OverflowFadeText>
-                )}
-                {/* Where the session came FROM, as a quiet mark AFTER the name. It
-					    used to be a tinted pill at the head of the row, which made the
-					    loudest thing in the bar a fact you read once — and put it in
-					    front of the repo, where it read as part of the path. Origins
-					    with a brand mark draw it in the same faint ink as the
-					    automation and sandbox glyphs beside it; the rest keep the
-					    worded chip. Ask mode isn't an origin — it's a mode you can
-					    change — so it rides the composer toolbar next to the model
-					    pill instead, where the switch is one click from where you're
-					    typing. "opensession" is the default origin (web UI): as a chip
-					    it's noise, and for backstage-repo sessions it read as the repo
-					    said twice. */}
-                {session.source !== "opensession" &&
-                  (brandLogo(session.source) ? (
-                    <span
-                      className="flex shrink-0 items-center text-faint"
-                      title={`From ${sessionSourceName(session.source)}`}
-                      aria-label={`From ${sessionSourceName(session.source)}`}
-                      role="img"
-                    >
-                      <BrandMark name={session.source} size={14} />
-                    </span>
-                  ) : (
-                    <span
-                      className={cn(
-                        SOURCE_CHIP,
-                        sourceChipTone(session.source),
-                      )}
-                    >
-                      {session.source}
-                    </span>
-                  ))}
-                {/* A quiet robot after the title says the opening turn came from an
-					    agent action. Named automation runs link to their settings; report
-					    tasks and delegated sessions keep the same mark without pretending
-					    they are owned by that automation. */}
-                {session.automation ? (
-                  <Tooltip
-                    label={`Automation · ${session.automation}`}
-                    side="bottom"
-                  >
-                    <a
-                      href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
-                      className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover hover:text-fg"
-                      aria-label={`Open ${session.automation} automation settings`}
-                    >
-                      <IconRobot size={18} />
-                    </a>
-                  </Tooltip>
-                ) : sessionWasAgentStarted(session) ? (
-                  <span
-                    className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center text-faint"
-                    role="img"
-                    aria-label="Started by an agent"
-                    title="Started by an agent"
-                  >
-                    <IconRobot size={18} />
-                  </span>
-                ) : null}
-                {/* Sandbox badge: this session's runs execute inside an isolated
-					    container (docker/daytona/e2b). Renders nothing for host sessions
-					    — purely from session fields, no container polling. */}
-                <SandboxBadge
-                  sessionId={session.id}
-                  sandbox={session.sandbox}
-                  runner={session.runner}
-                />
-                {/* The parent edge is the crumb before the title; this is the other
-					    direction, the workers this session delegated to. */}
-                {openSession && !!workerSessions?.length && (
-                  <SessionRelations
-                    workers={workerSessions}
-                    models={models}
-                    onOpen={openSession}
-                  />
-                )}
-                {/* This workspace's own controls, at the end of its own cluster: the
-					    ⋯ menu, then the lone-session "+ New tab". The menu used to sit at
-					    the far right of the bar, a whole header away from the thing it
-					    acts on and mixed in with the status controls; here it reads as
-					    belonging to the name, and the right end is left to say what the
-					    workspace is doing. The two are 32px ghost squares, so they take
-					    the icon cluster's own 2px gap rather than the row's 10px and read
-					    as one pair, and the pair is pulled in a little because each
-					    button already pads its own glyph. */}
-                {!isPhone && (
-                  <div className="-ml-1 flex flex-none items-center gap-0.5">
-                    {overflowMenu}
-                    {/* With no tab strip on screen the affordance to spawn a sibling
-							    session lives here beside the title (⌘⌥N does the same). The
-							    moment the strip appears, whether from a second session, an
-							    open view tab like Review, or a split, its own + takes over
-							    and this disappears, so the two never stack. Phone keeps this
-							    sibling-session action in More. Rendered AS the Button
-							    primitive, like the ⋯ beside it and the side-panel control at
-							    the other end of the bar, so the 32px square, radius, hover
-							    wash and press scale match by construction rather than by
-							    hand-matching a chip. */}
-                    {/* Not on a worker: its header is a level below the workspace, and
-							    a new tab belongs to the session above it. */}
-                    {!session.desk &&
-                      openNewSession &&
-                      !tabStripVisible &&
-                      !parentSession &&
-                      workspaceSessions?.length === 1 && (
-                        <Tooltip
-                          label="New tab in this workspace"
-                          shortcut={newSiblingKeys ?? undefined}
-                        >
-                          <Button
-                            variant="ghost"
-                            size="md"
-                            className="flex-none rounded-control"
-                            onClick={(event) => {
-                              const animate =
-                                event.detail > 0 &&
-                                !window.matchMedia(
-                                  "(prefers-reduced-motion: reduce)",
-                                ).matches;
-                              const rect = animate
-                                ? event.currentTarget.getBoundingClientRect()
-                                : null;
-                              void openNewSession(
-                                "share",
-                                rect
-                                  ? {
-                                      left: rect.left,
-                                      top: rect.top,
-                                      width: rect.width,
-                                      height: rect.height,
-                                    }
-                                  : undefined,
-                              );
-                            }}
-                            aria-label="New tab"
-                            // 22, the standard standalone step the ⋯ and side-panel
-                            // glyphs use. IconPlus now draws the set's 14.5 span, so
-                            // it lands at their size and weight without a bump.
-                            icon={<IconPlus size={22} />}
-                          />
-                        </Tooltip>
-                      )}
-                  </div>
-                )}
-              </TopBarLeading>
-              <TopBarActions
-                className={VIEWER_HEADER_ACTIONS}
-                ref={headerActionsRef}
-              >
-                {!isPhone && secondaryActions(false)}
-                {!isPhone && keepInSidebarAction(false)}
-                {/* Whoever ELSE has the session open, right before Share. Your
+            <SessionHeader
+              session={session}
+              hasWorkspace={hasWorkspace}
+              workspaceName={workspaceName}
+              parentSession={parentSession}
+              workerSessions={workerSessions}
+              models={models}
+              openSession={openSession}
+              archiving={archiving}
+              onArchive={() => void handleArchive()}
+              renameDraft={renameDraft}
+              onRenameDraftChange={setRenameDraft}
+              onCommitRename={commitRename}
+              onCancelRename={() => setRenameDraft(null)}
+              canRename={Boolean(onRename)}
+              menu={overflowMenu}
+              isPhone={isPhone}
+              openNewSession={openNewSession}
+              tabStripVisible={tabStripVisible}
+              workspaceSessionCount={workspaceSessions?.length}
+              newSiblingKeys={newSiblingKeys}
+              headerRef={headerRef}
+              headerActionsRef={headerActionsRef}
+              topbarEl={topbarEl}
+              headerActionsEl={headerActionsEl}
+              actions={
+                <>
+                  {!isPhone && secondaryActions(false)}
+                  {!isPhone && keepInSidebarAction(false)}
+                  {/* Whoever ELSE has the session open, right before Share. Your
 					    own face used to sit here too, which meant every session
 					    you opened showed a face permanently — the one thing a
 					    presence pile must never do, since it reads as somebody
 					    standing behind you. You know you're here; this row is for
 					    the people you can't see. (The native app has always
 					    filtered its own name out — this matches it.) */}
-                {!isPhone && others.length > 0 && (
-                  <div
-                    className={VIEWER_PRESENCE}
-                    title={`Viewing: ${others.join(", ")}`}
-                  >
-                    {dedupeViewers(others).map((v, index, viewers) => (
-                      <UserAvatar
-                        key={v.name}
-                        name={v.name}
-                        size={24}
-                        className={VIEWER_PRESENCE_AVATAR}
-                        style={facepileAvatarStyle(
-                          index,
-                          viewers.length,
-                          "var(--bg)",
-                        )}
-                      />
-                    ))}
-                  </div>
-                )}
-                {/* Share rides inline when there's room, else collapses into the ⋯
+                  {!isPhone && others.length > 0 && (
+                    <div
+                      className={VIEWER_PRESENCE}
+                      title={`Viewing: ${others.join(", ")}`}
+                    >
+                      {dedupeViewers(others).map((v, index, viewers) => (
+                        <UserAvatar
+                          key={v.name}
+                          name={v.name}
+                          size={24}
+                          className={VIEWER_PRESENCE_AVATAR}
+                          style={facepileAvatarStyle(
+                            index,
+                            viewers.length,
+                            "var(--bg)",
+                          )}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {/* Share rides inline when there's room, else collapses into the ⋯
 					    menu so it never crowds the title. It sits before Workspace so
 					    the Workspace toggle stays rightmost. On phones the secondary
 					    controls fold in too. */}
-                {!compactHeader && !isPhone && shareAction(false)}
-                {/* Phones portal this menu into the action bar above the composer. */}
-                {isPhone &&
-                  !infoPageOpen &&
-                  mobileActionMenuEl &&
-                  createPortal(overflowMenu, mobileActionMenuEl)}
-                {/* Code-workspace testing affordances dock immediately left of the
+                  {!compactHeader && !isPhone && shareAction(false)}
+                  {/* Phones portal this menu into the action bar above the composer. */}
+                  {isPhone &&
+                    !infoPageOpen &&
+                    mobileActionMenuEl &&
+                    createPortal(overflowMenu, mobileActionMenuEl)}
+                  {/* Code-workspace testing affordances dock immediately left of the
 					    side-panel toggle. The local preview launcher lives in the ⋯ menu;
 					    the globe rides here only while nothing else is showing it. The
 					    panel carries it in its PR row, the summary card as a row of its
 					    own, so it is never in two places at once. */}
-                {!isPhone && !showReview && !panelOpen && !summaryVisible && (
-                  <StagingLink
-                    session={session}
-                    variant="header"
-                    refreshTick={gitRefreshTick}
-                  />
-                )}
-                {/* Panel closed → surface the PR chip + its primary action (Merge/
+                  {!isPhone && !showReview && !panelOpen && !summaryVisible && (
+                    <StagingLink
+                      session={session}
+                      variant="header"
+                      refreshTick={gitRefreshTick}
+                    />
+                  )}
+                  {/* Panel closed → surface the PR chip + its primary action (Merge/
 					    Push/Resolve) inline, grouped with the globe directly left of
 					    the side-panel toggle. Review owns that action in its own header,
 					    so the global copy steps out while Review is open. So does the
 					    summary card below, which says the same three things in rows with
 					    room for the rest of them. */}
-                {!isPhone &&
-                  hasRepoWork &&
-                  !panelOpen &&
-                  !showReview &&
-                  !summaryVisible && (
-                    <PrStatusBar
-                      sessionId={session.id}
-                      repo={session.repo || undefined}
-                      archived={session.archived}
-                      prs={session.prs}
-                      send={connected ? send : undefined}
-                      onOpenPrTab={focusPrInReview}
-                      onOpenChecksTab={() =>
-                        focusPrInReview(undefined, "checks")
-                      }
+                  {!isPhone &&
+                    hasRepoWork &&
+                    !workspacePreparing &&
+                    !panelOpen &&
+                    !showReview &&
+                    !summaryVisible && (
+                      <PrStatusBar
+                        sessionId={session.id}
+                        repo={session.repo || undefined}
+                        archived={session.archived}
+                        prs={session.prs}
+                        send={connected ? send : undefined}
+                        onOpenPrTab={focusPrInReview}
+                        onOpenChecksTab={() =>
+                          focusPrInReview(undefined, "checks")
+                        }
+                        onArchive={handleArchive}
+                        variant="header"
+                        running={isRunningLive}
+                        refreshTick={gitRefreshTick}
+                      />
+                    )}
+                  {/* The compact Workspace summary keeps the card's quiet row grammar.
+					    Detailed comments, files and tools open in the full side panel. */}
+                  {!isPhone && hasRepoWork && !activePanelOpen && (
+                    <WorkspaceSummary
+                      session={session}
+                      anchor={headerActionsRef}
+                      // Changes opens beside the card. Review rows go to the full Review
+                      // canvas now that the side panel contains tools only.
+                      onOpenPanelTab={(tab) => {
+                        if (tab === "changes") {
+                          setDesktopPanelPage("changes");
+                          setActivePanelOpen(true);
+                        } else {
+                          openReview?.();
+                        }
+                      }}
+                      onOpenPr={() => focusPrInReview()}
+                      onOpenStackPr={openPr}
+                      onOpenChecks={() => focusPrInReview(undefined, "checks")}
+                      onOpenAsset={openAssetFromTranscript}
+                      onOpenAssets={openAssets}
+                      onOpenSession={openSession}
                       onArchive={handleArchive}
-                      variant="header"
+                      // Already resolved across the workspace's sessions (the
+                      // request may live on a sibling), and already folded
+                      // together with a GitHub review that completes it.
+                      reviewRequest={effectiveReview?.req ?? null}
+                      reviewRequestSessionId={effectiveReview?.ownerId}
+                      onReviewChange={onReviewChange}
+                      prReviewRequested={effectiveReview?.prReviewRequested}
                       running={isRunningLive}
+                      workspacePreparing={workspacePreparing}
+                      send={connected ? send : undefined}
                       refreshTick={gitRefreshTick}
+                      onOpenChange={setSummaryOpen}
+                      tabStripVisible={tabStripVisible}
+                      reviewMode={showReview}
+                      reviewPage={reviewPage}
+                      onReviewPageChange={setReviewPage}
+                      // Too narrow for both, and the card gets out of the way
+                      // until someone asks for it from the same button.
+                      hasRoom={summaryHasRoom}
                     />
                   )}
-                {/* The compact Workspace summary keeps the card's quiet row grammar.
-					    Detailed comments, files and tools open in the full side panel. */}
-                {!isPhone && hasRepoWork && !activePanelOpen && (
-                  <WorkspaceSummary
-                    session={session}
-                    anchor={headerActionsRef}
-                    // Changes opens beside the card. Review rows go to the full Review
-                    // canvas now that the side panel contains tools only.
-                    onOpenPanelTab={(tab) => {
-                      if (tab === "changes") {
-                        setPanelPage("changes");
-                        setActivePanelOpen(true);
-                      } else {
-                        openReview?.();
-                      }
-                    }}
-                    onOpenPr={() => focusPrInReview()}
-                    onOpenStackPr={openPr}
-                    onOpenChecks={() => focusPrInReview(undefined, "checks")}
-                    onOpenAsset={openAssetFromTranscript}
-                    onOpenAssets={openAssets}
-                    onOpenSession={openSession}
-                    onArchive={handleArchive}
-                    // Already resolved across the workspace's sessions (the
-                    // request may live on a sibling), and already folded
-                    // together with a GitHub review that completes it.
-                    reviewRequest={effectiveReview?.req ?? null}
-                    reviewRequestSessionId={effectiveReview?.ownerId}
-                    onReviewChange={onReviewChange}
-                    prReviewRequested={effectiveReview?.prReviewRequested}
-                    running={isRunningLive}
-                    send={connected ? send : undefined}
-                    refreshTick={gitRefreshTick}
-                    onOpenChange={setSummaryOpen}
-                    tabStripVisible={tabStripVisible}
-                    reviewMode={showReview}
-                    // Too narrow for both, and the card gets out of the way
-                    // until someone asks for it from the same button.
-                    hasRoom={summaryHasRoom}
-                  />
-                )}
-                {/* Phones have no workspace panel and no status strip, so the PR
+                  {/* Phones have no workspace panel and no status strip, so the PR
 					    state had nowhere to show: you had to open the info page to
 					    learn whether checks were red. One toned chip in the bar's
 					    right slot says the number and the state in its colour, and
 					    tapping it opens Review on that PR. Only when the session
 					    actually has one: a chip that says "no PR" is chrome. */}
-                {isPhone && phonePr && (
-                  <button
-                    type="button"
-                    className={prPhoneChipClass(refTone(phonePr))}
-                    title={refLabel(phonePr)}
-                    aria-label={refLabel(phonePr)}
-                    onClick={() =>
-                      focusPrInReview({
-                        repo: phonePr.repo,
-                        branch: phonePr.branch,
-                      })
-                    }
-                  >
-                    {refChipText(phonePr, session.repo || undefined)}
-                  </button>
-                )}
-                {!isPhone && panelAvailable && (
-                  <Tooltip label="Toggle workspace panel">
-                    <Button
-                      variant="ghost"
-                      size="md"
-                      // No height/width overrides: the primitive's icon-only box is
-                      // already the 32px square the ⋯ and share buttons use.
-                      // text-dim, not text-faint: the share and ⋯ buttons beside it
-                      // are dim, and a lighter ink made this read as disabled.
-                      // No negative margin after the ⋯ either: that -4px pull dated
-                      // from when both were narrow padded controls, and now that all
-                      // three are equal squares it just made this gap 4px where the
-                      // share → ⋯ one is the row's 8px.
-                      className="rounded-control text-dim hover:bg-hover hover:text-fg phone:order-2 phone:h-[38px] phone:min-h-[38px] phone:w-[38px] phone:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:text-accent"
-                      onClick={() => setActivePanelOpen(!activePanelOpen)}
-                      aria-label="Toggle side panel"
-                      // Iconic sidebar-right glyph — reads as "right side panel".
-                      // Passed as `icon` (not children) so the primitive uses its
-                      // icon-only square; as a child it counts as a label and gets
-                      // the text button's px-3, which made it 50px wide.
-                      icon={<IconSidebarRight size={22} />}
-                    />
-                  </Tooltip>
-                )}
-              </TopBarActions>
-            </TopBar>
+                  {isPhone && phonePr && (
+                    <button
+                      type="button"
+                      className={prPhoneChipClass(refTone(phonePr))}
+                      title={refLabel(phonePr)}
+                      aria-label={refLabel(phonePr)}
+                      onClick={() =>
+                        focusPrInReview({
+                          repo: phonePr.repo,
+                          branch: phonePr.branch,
+                        })
+                      }
+                    >
+                      {refChipText(phonePr, session.repo || undefined)}
+                    </button>
+                  )}
+                  {!isPhone && panelAvailable && (
+                    <Tooltip label="Toggle workspace panel">
+                      <Button
+                        variant="ghost"
+                        size="md"
+                        // No height/width overrides: the primitive's icon-only box is
+                        // already the 32px square the ⋯ and share buttons use.
+                        // text-dim, not text-faint: the share and ⋯ buttons beside it
+                        // are dim, and a lighter ink made this read as disabled.
+                        // No negative margin after the ⋯ either: that -4px pull dated
+                        // from when both were narrow padded controls, and now that all
+                        // three are equal squares it just made this gap 4px where the
+                        // share → ⋯ one is the row's 8px.
+                        className="rounded-control text-dim hover:bg-hover hover:text-fg phone:order-2 phone:h-[38px] phone:min-h-[38px] phone:w-[38px] phone:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:text-accent"
+                        onClick={() => setActivePanelOpen(!activePanelOpen)}
+                        aria-label="Toggle side panel"
+                        // Iconic sidebar-right glyph — reads as "right side panel".
+                        // Passed as `icon` (not children) so the primitive uses its
+                        // icon-only square; as a child it counts as a label and gets
+                        // the text button's px-3, which made it 50px wide.
+                        icon={<IconSidebarRight size={22} />}
+                      />
+                    </Tooltip>
+                  )}
+                </>
+              }
+            />
           );
-          // Phones: the whole header rides in the top bar's right slot (the
-          // title row is CSS-hidden there — the centered bar title replaces
-          // it), giving one iOS-style nav bar instead of a second chrome row.
           const phoneInfoPage =
             isPhone && infoPageOpen
               ? createPortal(
@@ -6708,6 +5978,7 @@ export function SessionViewer({
                                 effectiveReview?.prReviewRequested
                               }
                               running={isRunningLive}
+                              workspacePreparing={workspacePreparing}
                               send={connected ? send : undefined}
                               refreshTick={gitRefreshTick}
                               liveMedia={liveOverviewMedia}
@@ -6720,12 +5991,20 @@ export function SessionViewer({
                               <WorkflowPanel
                                 sessionId={session.id}
                                 runs={workflowRuns}
-                                onCancel={cancelWorkflowRun}
+                                onAction={workflowAction}
                                 subagents={subagents}
                                 onOpenSubagent={(agentId, label) => {
                                   setInfoPageOpen(false);
                                   openSubagent(agentId, label);
                                 }}
+                                onOpenSession={
+                                  openSession
+                                    ? (id) => {
+                                        setInfoPageOpen(false);
+                                        openSession(id);
+                                      }
+                                    : undefined
+                                }
                               />
                             </div>
                           )}
@@ -6746,15 +6025,9 @@ export function SessionViewer({
                   document.body,
                 )
               : null;
-          const placedHeader =
-            isPhone && headerActionsEl
-              ? createPortal(header, headerActionsEl)
-              : topbarEl
-                ? createPortal(header, topbarEl)
-                : header;
           return (
             <>
-              {placedHeader}
+              {header}
               {phoneInfoPage}
             </>
           );
@@ -7078,6 +6351,8 @@ export function SessionViewer({
                 hideWideOverviewRail
                 linkable
                 walkthrough={session.walkthrough}
+                page={reviewPage}
+                onPageChange={setReviewPage}
                 compactToolbar={summaryVisible}
                 flushToolbarTop={!tabStripVisible}
               />
@@ -7271,80 +6546,53 @@ export function SessionViewer({
                         Empty transcript
                       </div>
                     ) : (
-                      <div
-                        className={cn(
-                          "w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150",
-                          openSettlePending && "opacity-0",
-                        )}
-                      >
-                        <OpenAssetPathsProvider value={assetPaths}>
-                          <React.Profiler
-                            id="transcript"
-                            onRender={onTranscriptRender}
-                          >
-                            <ToolPathRootsProvider value={toolPathRoots}>
-                              <LiveSubagentsProvider value={liveSubagents}>
-                                <OpenAssetProvider
-                                  value={openAssetFromTranscript}
-                                >
-                                  <SessionTranscript
-                                    entries={entries}
-                                    optimisticEntries={
-                                      optimisticTranscriptEntries
-                                    }
-                                    pendingDeliveryIds={
-                                      pendingTranscriptDeliveryIds
-                                    }
-                                    transcriptIndex={
-                                      transcriptIndex ?? undefined
-                                    }
-                                    transcriptRangeRetryGeneration={
-                                      transcriptRangeRetryGeneration
-                                    }
-                                    onLoadTranscriptRanges={
-                                      loadTranscriptRanges
-                                    }
-                                    onVisibleRangesSettled={
-                                      onVisibleRangesSettled
-                                    }
-                                    live={isBusy}
-                                    sessionId={session.id}
-                                    liveTurnStore={liveTurnStore}
-                                    onLiveLayout={relayout}
-                                    reviewResult={reviewResult}
-                                    onEditMessage={editSentMessageInComposer}
-                                    // Same gate the composer sends under: a busy session
-                                    // is already continuing, and one you cannot type into
-                                    // must not offer a button that types for you.
-                                    onContinue={
-                                      connected && !isBusy && !noEngine
-                                        ? continueAfterFailure
-                                        : undefined
-                                    }
-                                    walkthrough={sessionWalkthrough}
-                                    notes={notes}
-                                    slackShare={shippedChangeShare}
-                                    onFork={
-                                      canForkSession ? handleFork : undefined
-                                    }
-                                    onOpenSubagent={openSubagent}
-                                    // For automation-owned sessions (e.g. a GitHub PR run), the
-                                    // automation never *types* a user turn — humans steer them.
-                                    // So don't credit un-attributed turns to the automation
-                                    // ("GitHub (automation)"); leave the owner unset so they read
-                                    // as "You" (explicit [Name] steers still show the teammate).
-                                    owner={
-                                      session.automation
-                                        ? undefined
-                                        : session.startedBy || undefined
-                                    }
-                                  />
-                                </OpenAssetProvider>
-                              </LiveSubagentsProvider>
-                            </ToolPathRootsProvider>
-                          </React.Profiler>
-                        </OpenAssetPathsProvider>
-                      </div>
+                      <TranscriptView
+                        openSettlePending={openSettlePending}
+                        assetPaths={assetPaths}
+                        toolPathRoots={toolPathRoots}
+                        liveSubagents={liveSubagents}
+                        openAsset={openAssetFromTranscript}
+                        onRender={onTranscriptRender}
+                        entries={entries}
+                        optimisticEntries={optimisticTranscriptEntries}
+                        pendingDeliveryIds={pendingTranscriptDeliveryIds}
+                        transcriptIndex={transcriptIndex ?? undefined}
+                        transcriptRangeRetryGeneration={
+                          transcriptRangeRetryGeneration
+                        }
+                        onLoadTranscriptRanges={loadTranscriptRanges}
+                        onVisibleRangesSettled={onVisibleRangesSettled}
+                        live={isBusy}
+                        sessionId={session.id}
+                        liveTurnStore={liveTurnStore}
+                        shouldMaintainEnd={shouldMaintainEnd}
+                        onLayout={relayout}
+                        reviewResult={reviewResult}
+                        onEditMessage={editSentMessageInComposer}
+                        // Same gate the composer sends under: a busy session
+                        // is already continuing, and one you cannot type into
+                        // must not offer a button that types for you.
+                        onContinue={
+                          connected && !isBusy && !noEngine
+                            ? continueAfterFailure
+                            : undefined
+                        }
+                        walkthrough={sessionWalkthrough}
+                        notes={notes}
+                        slackShare={shippedChangeShare}
+                        onFork={canForkSession ? handleFork : undefined}
+                        onOpenSubagent={openSubagent}
+                        // For automation-owned sessions (e.g. a GitHub PR run), the
+                        // automation never *types* a user turn — humans steer them.
+                        // So don't credit un-attributed turns to the automation
+                        // ("GitHub (automation)"); leave the owner unset so they read
+                        // as "You" (explicit [Name] steers still show the teammate).
+                        owner={
+                          session.automation
+                            ? undefined
+                            : session.startedBy || undefined
+                        }
+                      />
                     )}
                   </AnimatePresence>
 
@@ -7381,14 +6629,19 @@ export function SessionViewer({
                     <AskCard
                       key={ask.questionId}
                       questions={ask.questions}
-                      onAnswer={(answers) =>
+                      onAnswer={(answers) => {
+                        tailActionNeedsLayoutScrollRef.current = true;
                         send({
                           type: "answer_question",
                           sessionId: session.id,
                           questionId: ask.questionId,
                           answers,
-                        })
-                      }
+                        });
+                        // Answering is explicit intent to watch the resumed
+                        // turn, even if the ask was only partly in view.
+                        cancelIndexAnchorHold();
+                        scrollToLatest("auto");
+                      }}
                     />
                   )}
 
@@ -7399,6 +6652,7 @@ export function SessionViewer({
                       defaultMessage={slackComposer.message}
                       initialScreenshots={slackComposer.images}
                       defaultChannel={slackComposer.channel}
+                      draftId={slackComposer.id}
                       status={slackComposerStatus}
                       reconnectRequired={slackComposerReconnect}
                       loadChannels={() => fetchSlackChannels(session.id)}
@@ -7534,8 +6788,9 @@ export function SessionViewer({
                     {forkFrom && (
                       <div className="mb-2 flex items-center justify-between gap-3 rounded-control border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-3 py-[7px] text-supporting text-fg">
                         <span>
-                          ⑂ Forking a new session from the selected message.
-                          Type the new direction.
+                          {forkFrom.kind === "tip"
+                            ? "⑂ Forking a new session from the current history. Type the new direction."
+                            : "⑂ Forking a new session from the selected message. Type the new direction."}
                         </span>
                         <button
                           className="cursor-pointer bg-transparent text-label text-dim hover:text-fg"
@@ -7675,22 +6930,15 @@ export function SessionViewer({
                       // per session via draftKey). Remount on the tab-bar +
                       // after its persisted draft has been cleared.
                       key={composerResetSeq ?? 0}
-                      draftKey={draftKey}
-                      onSend={handleSend}
                       onTyping={(active) => setTyping(session.id, active)}
-                      images={images}
-                      onImagesChange={setImages}
-                      files={files}
-                      onFilesChange={setFiles}
-                      staging={uploadStaging}
-                      onAddAttachments={addSessionAttachments}
-                      onRemovePendingImage={uploads.cancelPendingImage}
-                      onRemovePendingFile={uploads.cancelPendingFile}
-                      attachmentShortcutActive={focused}
-                      quote={quote}
-                      onQuoteClear={clearQuote}
-                      placeholder={
-                        safety
+                      config={{
+                        draftKey,
+                        images,
+                        files,
+                        staging: uploadStaging,
+                        attachmentShortcutActive: focused,
+                        quote,
+                        placeholder: safety
                           ? "Paused for safety"
                           : settingUpWorkspace
                             ? "Queue while workspace sets up…"
@@ -7704,38 +6952,87 @@ export function SessionViewer({
                                     ? "Queue for when it finishes…"
                                     : isAsk
                                       ? `Ask ${AGENT_NAME}, read-only…`
-                                      : `Ask ${AGENT_NAME}…`
-                      }
-                      disabled={!!safety || (!connected && !!forkFrom)}
-                      sendDisabled={(text) =>
-                        !!safety ||
-                        promoting ||
-                        (!text.trim() &&
-                          images.length === 0 &&
-                          (noteMode || files.length === 0) &&
-                          !forkFrom)
-                      }
-                      // Tints the composer green and names the mode in a chip above
-                      // the field. Only opensession sessions can promote (the
-                      // server owns that rule), so elsewhere the chip keeps the
-                      // label and drops the ✕ rather than offering a dead end.
-                      askMode={isAsk}
-                      onAskModeExit={
-                        isAsk && session.source === "opensession"
-                          ? () => void handlePromote()
-                          : undefined
-                      }
-                      askExitPending={promoting}
-                      // Team notes: the send posts to the transcript for the
-                      // humans reading it, never to the agent (⌘N, or the "+").
-                      noteMode={noteMode}
-                      onNoteModeChange={setNoteMode}
-                      busy={isBusy && !forkFrom}
-                      onStop={handleCancel}
-                      stopping={stopRequestedAt != null}
-                      // Bumped by the ⌘. listener above; the composer opens the
-                      // same confirmation Escape does.
-                      stopRequest={stopRequest}
+                                      : `Ask ${AGENT_NAME}…`,
+                        disabled: !!safety || (!connected && !!forkFrom),
+                        sendDisabled: (text) =>
+                          !!safety ||
+                          promoting ||
+                          (!text.trim() &&
+                            images.length === 0 &&
+                            (noteMode || files.length === 0) &&
+                            !forkFrom),
+                        // Tints the composer green and names the mode in a chip above
+                        // the field. Only opensession sessions can promote.
+                        askMode: isAsk,
+                        askExitPending: promoting,
+                        // Team notes post to the human transcript, never to the agent.
+                        noteMode,
+                        busy: isBusy && !forkFrom,
+                        stopping: stopRequestedAt != null,
+                        // Bumped by the ⌘. listener above; the composer opens the
+                        // same confirmation Escape does.
+                        stopRequest,
+                        prefill: composerPrefill,
+                        models,
+                        defaultModel,
+                        model,
+                        modelDisabled:
+                          session.source !== "opensession" &&
+                          session.source !== "slack",
+                        modelTitle:
+                          session.source === "opensession" ||
+                          session.source === "slack"
+                            ? "Switch the model for this session"
+                            : "Set the model from the owning agent (its session file is agent-owned)",
+                        effort,
+                        fastMode,
+                        // Account pinning is a backstage-session affordance. The
+                        // picker filters the combined pool by the active model.
+                        accounts:
+                          session.source === "opensession"
+                            ? accounts
+                            : undefined,
+                        accountId,
+                        goal: currentGoal,
+                        usage,
+                        textareaRef: composerRef,
+                      }}
+                      actions={{
+                        onSend: handleSend,
+                        onImagesChange: setImages,
+                        onFilesChange: setFiles,
+                        onAddAttachments: addSessionAttachments,
+                        onRemovePendingImage: uploads.cancelPendingImage,
+                        onRemovePendingFile: uploads.cancelPendingFile,
+                        onQuoteClear: clearQuote,
+                        onAskModeExit:
+                          isAsk && session.source === "opensession"
+                            ? () => void handlePromote()
+                            : undefined,
+                        onNoteModeChange: setNoteMode,
+                        onStop: handleCancel,
+                        onModelChange: handleModelChange,
+                        onEffortChange: setEffort,
+                        onFastModeChange: setFastMode,
+                        onAccountChange:
+                          session.source === "opensession"
+                            ? handleAccountChange
+                            : undefined,
+                        onSetGoal:
+                          session.source === "opensession"
+                            ? handleSetGoal
+                            : undefined,
+                        mentionFetch: (query) =>
+                          fetchFileMentions(query, session.id),
+                        paletteFetch: (query) =>
+                          fetchMentionSuggestions(
+                            query,
+                            session.id,
+                            getCurrentUser(),
+                          ),
+                        skillsFetch: (query) =>
+                          fetchSkillMentions(query, session.id),
+                      }}
                       // Leaving ask mode is a setting of this session, so it sits in
                       // the composer's "+" with the rest of them. It disappears as
                       // soon as selected; workspace setup reports progress on the
@@ -7778,49 +7075,6 @@ export function SessionViewer({
                         </>
                       )}
                       attached={attachedComposer}
-                      prefill={composerPrefill}
-                      models={models}
-                      defaultModel={defaultModel}
-                      model={model}
-                      onModelChange={handleModelChange}
-                      modelDisabled={
-                        session.source !== "opensession" &&
-                        session.source !== "slack"
-                      }
-                      modelTitle={
-                        session.source === "opensession" ||
-                        session.source === "slack"
-                          ? "Switch the model for this session"
-                          : "Set the model from the owning agent (its session file is agent-owned)"
-                      }
-                      effort={effort}
-                      onEffortChange={setEffort}
-                      fastMode={fastMode}
-                      onFastModeChange={setFastMode}
-                      // Account pinning is a backstage-session affordance. The
-                      // picker filters the combined pool by the active model.
-                      accounts={
-                        session.source === "opensession" ? accounts : undefined
-                      }
-                      accountId={accountId}
-                      onAccountChange={
-                        session.source === "opensession"
-                          ? handleAccountChange
-                          : undefined
-                      }
-                      goal={currentGoal}
-                      onSetGoal={
-                        session.source === "opensession"
-                          ? handleSetGoal
-                          : undefined
-                      }
-                      usage={usage}
-                      mentionFetch={(q) => fetchFileMentions(q, session.id)}
-                      paletteFetch={(q) =>
-                        fetchMentionSuggestions(q, session.id, getCurrentUser())
-                      }
-                      skillsFetch={(q) => fetchSkillMentions(q, session.id)}
-                      textareaRef={composerRef}
                       sendMenu={
                         session.source === "opensession"
                           ? ({ text, disabled, onScheduled }) => (
@@ -7857,154 +7111,106 @@ export function SessionViewer({
         {/* Right region: the Workspace panel. Portaled to an app-level slot so
             it opens as a full-height column beside the left sidebar (not just
             below the session header). */}
-        {(() => {
-          const desktopPanelPage = panelPage ?? "changes";
-          const rightRegion = (
+        <SidePanelHost
+          hidden={hideRightPanel}
+          isPhone={isPhone}
+          available={panelAvailable}
+          open={activePanelOpen}
+          onOpenChange={setActivePanelOpen}
+          portalTarget={rightPanelEl}
+          style={panelStyle}
+          resizeHandle={panelResizeHandle}
+          hasWorkspace={hasWorkspace}
+          page={desktopPanelPage}
+          onPageChange={setDesktopPanelPage}
+          livePortals={livePortals}
+          runningAgents={runningAgents}
+          terminalMounted={panelTerminalMounted}
+          onTerminalMount={() => setPanelTerminalMounted(true)}
+          sessionId={session.id}
+          changes={
             <>
-              {!isPhone && panelAvailable && activePanelOpen && (
-                <div
-                  className={PANEL_OVERLAY}
-                  onClick={() => setActivePanelOpen(false)}
+              <section
+                aria-label="Workspace summary"
+                className="flex flex-col border-b border-divider py-2"
+              >
+                <WorkspaceSummaryBody
+                  session={session}
+                  onOpenPanelTab={(tab) => {
+                    if (tab === "changes") {
+                      desktopChangesRef.current?.scrollIntoView({
+                        block: "start",
+                      });
+                      return;
+                    }
+                    focusPrInReview();
+                  }}
+                  onOpenPr={() => focusPrInReview()}
+                  onOpenStackPr={openPr}
+                  onOpenChecks={() => focusPrInReview(undefined, "checks")}
+                  onOpenAsset={openAssetFromTranscript}
+                  onOpenAssets={openAssets}
+                  onOpenSession={openSession}
+                  onArchive={handleArchive}
+                  reviewRequest={effectiveReview?.req ?? null}
+                  reviewRequestSessionId={effectiveReview?.ownerId}
+                  onReviewChange={onReviewChange}
+                  prReviewRequested={effectiveReview?.prReviewRequested}
+                  running={isRunningLive}
+                  workspacePreparing={workspacePreparing}
+                  send={connected ? send : undefined}
+                  refreshTick={gitRefreshTick}
+                  liveMedia={liveOverviewMedia}
+                  close={() => setActivePanelOpen(false)}
                 />
-              )}
-              {!isPhone && panelAvailable && activePanelOpen ? (
-                <div className={PANEL_SHELL} style={panelStyle}>
-                  {panelResizeHandle}
-                  {hasWorkspace && (
-                    <div className={PANEL_TABS}>
-                      <button
-                        type="button"
-                        aria-pressed={desktopPanelPage === "changes"}
-                        className={cn(
-                          PANEL_TAB,
-                          desktopPanelPage === "changes" && "bg-hover text-fg",
-                        )}
-                        onClick={() => setPanelPage("changes")}
-                      >
-                        <IconFile size={15} className="shrink-0" />
-                        <span className="@max-[380px]:hidden">Changes</span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={desktopPanelPage === "portals"}
-                        className={cn(
-                          PANEL_TAB,
-                          desktopPanelPage === "portals" && "bg-hover text-fg",
-                        )}
-                        onClick={() => setPanelPage("portals")}
-                      >
-                        <IconGlobe size={15} className="shrink-0" />
-                        <span className="@max-[380px]:hidden">Portals</span>
-                        {livePortals > 0 && (
-                          <span className="shrink-0 tabular-nums text-faint @max-[380px]:hidden">
-                            {livePortals}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={desktopPanelPage === "agents"}
-                        className={cn(
-                          PANEL_TAB,
-                          desktopPanelPage === "agents" && "bg-hover text-fg",
-                        )}
-                        onClick={() => setPanelPage("agents")}
-                      >
-                        <IconStack size={15} className="shrink-0" />
-                        <span className="@max-[380px]:hidden">Agents</span>
-                        {runningAgents > 0 && (
-                          <span className="shrink-0 tabular-nums text-yellow @max-[380px]:hidden">
-                            {runningAgents}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={desktopPanelPage === "terminal"}
-                        className={cn(
-                          PANEL_TAB,
-                          desktopPanelPage === "terminal" && "bg-hover text-fg",
-                        )}
-                        onClick={() => {
-                          setPanelTerminalMounted(true);
-                          setPanelPage("terminal");
-                        }}
-                      >
-                        <IconTerminal size={15} className="shrink-0" />
-                        <span className="@max-[380px]:hidden">Terminal</span>
-                      </button>
-                    </div>
-                  )}
-                  <div className={PANEL_BODY}>
-                    {desktopPanelPage === "changes" ? (
-                      waitingForWorkspace ? (
-                        <WorkspaceWaiting detail="This takes a moment." />
-                      ) : (
-                        <DiffPanel
-                          sessionId={session.id}
-                          isRunning={isBusy}
-                          canSend={connected && !isBusy && !noEngine}
-                          send={send}
-                          diff={diffState}
-                          showFileList={false}
-                          source={worktreeDiffSource}
-                          onSourceChange={changeWorktreeDiffSource}
-                        />
-                      )
-                    ) : desktopPanelPage === "portals" ? (
-                      <PortalsPage
-                        sessionId={session.id}
-                        status={previewStatus}
-                        activePortal={portalTarget}
-                        onBack={() => setActivePanelOpen(false)}
-                        hideHeader
-                        onOpenPortal={openPortal}
-                        onStartPortal={startDeclaredPortal}
-                        onPortalAction={async (name, action) => {
-                          setPreviewStatus(
-                            await portalActionApi(session.id, name, action),
-                          );
-                        }}
-                      />
-                    ) : desktopPanelPage === "agents" ? (
-                      <WorkflowPanel
-                        sessionId={session.id}
-                        runs={workflowRuns}
-                        onCancel={cancelWorkflowRun}
-                        subagents={subagents}
-                        onOpenSubagent={openSubagent}
-                        onBack={() => setActivePanelOpen(false)}
-                        hideHeader
-                      />
-                    ) : null}
-                    {/* Keep terminals mounted while switching panel tabs so their PTYs
-							    survive. Closing the panel still closes its terminals. */}
-                    {hasWorkspace && panelTerminalMounted && (
-                      <div
-                        className={
-                          desktopPanelPage === "terminal"
-                            ? "flex h-full min-h-0 flex-col"
-                            : "hidden"
-                        }
-                      >
-                        <div className="min-h-0 flex-1">
-                          <ShellPanel
-                            sessionId={session.id}
-                            visible={desktopPanelPage === "terminal"}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
+              </section>
+              <div ref={desktopChangesRef}>
+                {waitingForWorkspace ? (
+                  <WorkspaceWaiting detail="This takes a moment." />
+                ) : (
+                  <DiffPanel
+                    sessionId={session.id}
+                    isRunning={isBusy}
+                    canSend={connected && !isBusy && !noEngine}
+                    send={send}
+                    diff={diffState}
+                    showFileList={false}
+                    source={worktreeDiffSource}
+                    onSourceChange={changeWorktreeDiffSource}
+                  />
+                )}
+              </div>
             </>
-          );
-          if (hideRightPanel) return null;
-          return rightPanelEl
-            ? createPortal(rightRegion, rightPanelEl)
-            : rightRegion;
-        })()}
+          }
+          portals={
+            <PortalsPage
+              sessionId={session.id}
+              status={previewStatus}
+              activePortal={portalTarget}
+              onBack={() => setActivePanelOpen(false)}
+              hideHeader
+              onOpenPortal={openPortal}
+              onStartPortal={startDeclaredPortal}
+              onPortalAction={async (name, action) => {
+                setPreviewStatus(
+                  await portalActionApi(session.id, name, action),
+                );
+              }}
+            />
+          }
+          agents={
+            <WorkflowPanel
+              sessionId={session.id}
+              runs={workflowRuns}
+              onAction={workflowAction}
+              subagents={subagents}
+              onOpenSubagent={openSubagent}
+              onOpenSession={openSession}
+              onBack={() => setActivePanelOpen(false)}
+              hideHeader
+            />
+          }
+        />
       </div>
       {/* Portals to the body, so it sits over the whole viewer rather than
 			    inside whichever column opened it. */}

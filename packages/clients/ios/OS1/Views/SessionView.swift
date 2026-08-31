@@ -1,6 +1,8 @@
 import SwiftUI
 #if os(macOS)
 import AppKit
+#else
+import UIKit
 #endif
 
 /// Owns session start/stop and foreground presence without putting lifecycle
@@ -42,6 +44,9 @@ private struct SessionSceneLifecycle: View {
 struct SessionView: View {
     @State private var viewModel: SessionViewModel
     private let tabs: [Session]
+    /// Direct child sessions delegated by this conversation. They stay out of
+    /// `tabs` and live in the More menu, matching the web session header.
+    private let workerSessions: [Session]
     /// Canonical workspace names, id-keyed, as the sessions list holds them.
     /// Regrouping `tabs` here rebuilds the sidebar row this session sits in,
     /// and without these the row would be titled by whatever the fallback
@@ -235,6 +240,7 @@ struct SessionView: View {
         if let sent = viewModel.sentAskAnswer { return "ask-sent-\(sent.id)" }
         // While work is in flight the run clock IS the last row.
         if viewModel.isRunning { return "run-status" }
+        if viewModel.inlineRunFailureMessage != nil { return "run-failure" }
         if !viewModel.liveText.isEmpty { return "live-stream" }
         return viewModel.displayBlocks.last?.id
     }
@@ -255,12 +261,14 @@ struct SessionView: View {
         emptyContent != nil
             && viewModel.displayBlocks.isEmpty
             && viewModel.liveText.isEmpty
+            && viewModel.inlineRunFailureMessage == nil
     }
 
     init(
         session: Session,
         seed: SessionViewModel.OptimisticSeed? = nil,
         tabs: [Session]? = nil,
+        workerSessions: [Session] = [],
         workspaceNames: [String: String] = [:],
         composerDraft: SessionViewModel.ComposerDraft? = nil,
         onSelectTab: ((Session) -> Void)? = nil,
@@ -279,6 +287,7 @@ struct SessionView: View {
             composerDraft: composerDraft
         ))
         self.tabs = tabs ?? [session]
+        self.workerSessions = workerSessions
         self.workspaceNames = workspaceNames
         self.onSelectTab = onSelectTab
         self.onSaveComposerDraft = onSaveComposerDraft
@@ -294,6 +303,7 @@ struct SessionView: View {
     init(
         viewModel: SessionViewModel,
         tabs: [Session],
+        workerSessions: [Session] = [],
         workspaceNames: [String: String] = [:],
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
         onNewSession: (() -> Void)? = nil,
@@ -306,6 +316,7 @@ struct SessionView: View {
     ) {
         _viewModel = State(initialValue: viewModel)
         self.tabs = tabs
+        self.workerSessions = workerSessions
         self.workspaceNames = workspaceNames
         self.onSelectTab = nil
         self.onSaveComposerDraft = onSaveComposerDraft
@@ -386,9 +397,14 @@ struct SessionView: View {
                         // `liveText` changes. Follow its measured height, not
                         // the pre-layout text update, so the run footer stays
                         // planted instead of stepping around while words land.
-                        if new.contentHeight > old.contentHeight,
-                           !follow.readerMovedTowardHistory,
-                           wasFollowing || (holdingAtLatest && !readerScrollActive) {
+                        if TranscriptScroll.shouldFollowContentGrowth(
+                            previousContentHeight: old.contentHeight,
+                            contentHeight: new.contentHeight,
+                            readerMovedTowardHistory: follow.readerMovedTowardHistory,
+                            wasFollowing: wasFollowing,
+                            holdingAtLatest: holdingAtLatest,
+                            readerScrollActive: readerScrollActive
+                        ) {
                             nextPinned = true
                             scrollToBottom(proxy, animated: false, repin: false)
                         }
@@ -534,6 +550,11 @@ struct SessionView: View {
                         }
                         .onChange(of: viewModel.sentAskAnswer) {
                             scrollToBottom(proxy, animated: true)
+                            // The answer receipt is optimistic. Its durable
+                            // replacement and the resumed run can change the
+                            // tail while this animation still targets the old
+                            // row, so follow until those rows settle.
+                            beginHold(proxy, after: .milliseconds(450))
                         }
 
                     let deliveryScroll = receivedScroll
@@ -762,6 +783,9 @@ struct SessionView: View {
                 }
             }
             ToolbarItem(placement: .principal) { macSessionTitle }
+            ToolbarItem(placement: .topTrailingCompat) {
+                AddToSidebarButton(session: viewModel.session, siblings: tabs)
+            }
             if !workspaceHistoryRows.isEmpty, onRestoreArchivedSession != nil {
                 ToolbarItem(placement: .topTrailingCompat) {
                     SessionHistoryMenu(
@@ -847,6 +871,35 @@ struct SessionView: View {
                 }
                 if ProcessInfo.processInfo.environment["OS1_SHOW_STEERED_MESSAGE"] == "1" {
                     viewModel.showSteeredMessageForScreenshot()
+                }
+                if ProcessInfo.processInfo.environment["OS1_SHOW_ATTACHMENT_ANNOTATION"] == "1",
+                   viewModel.attachedImages.isEmpty {
+                    let renderer = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600))
+                    let image = renderer.image { context in
+                        UIColor.systemGroupedBackground.setFill()
+                        context.cgContext.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
+                        UIColor.secondarySystemGroupedBackground.setFill()
+                        context.cgContext.fill(CGRect(x: 70, y: 70, width: 760, height: 460))
+                        let title = "Review settings"
+                        title.draw(
+                            at: CGPoint(x: 120, y: 120),
+                            withAttributes: [.font: UIFont.boldSystemFont(ofSize: 42)]
+                        )
+                        UIColor.systemBlue.setFill()
+                        context.cgContext.fillEllipse(in: CGRect(x: 620, y: 365, width: 150, height: 68))
+                        "Save".draw(
+                            at: CGPoint(x: 650, y: 379),
+                            withAttributes: [
+                                .font: UIFont.boldSystemFont(ofSize: 28),
+                                .foregroundColor: UIColor.white,
+                            ]
+                        )
+                    }
+                    if let data = image.jpegData(compressionQuality: 0.9) {
+                        viewModel.attachedImages = [
+                            AttachedImage(id: "annotation-fixture", jpegData: data)
+                        ]
+                    }
                 }
                 #endif
                 catalog = try? await OS1API.models(workspaceId: viewModel.session.workspaceId)
@@ -937,6 +990,7 @@ struct SessionView: View {
             SessionActionsMenu(
                 viewModel: viewModel,
                 tabs: tabs,
+                workerSessions: workerSessions,
                 workspaceNames: workspaceNames,
                 catalog: catalog,
                 onNewSession: onNewSession,
@@ -1361,9 +1415,7 @@ struct SessionView: View {
         // Nothing on screen: the caller may own this space (the Desk puts its
         // board here). Keep it inside the transcript so composer and scrolling
         // behavior remain the session's own.
-        if let emptyContent,
-           viewModel.displayBlocks.isEmpty,
-           viewModel.liveText.isEmpty {
+        if showingEmptyContent, let emptyContent {
             emptyContent()
                 .id("empty-content")
         }
@@ -1374,6 +1426,11 @@ struct SessionView: View {
             StreamingBubble(text: viewModel.liveText)
                 .id("live-stream")
                 .transcriptTail(tailId == "live-stream")
+        }
+        if let message = viewModel.inlineRunFailureMessage {
+            runFailureAlert(message)
+                .id("run-failure")
+                .transcriptTail(tailId == "run-failure")
         }
         // The run clock closes the transcript while work is in flight, under
         // the durable answer, live stream, or working fold.
@@ -1411,6 +1468,25 @@ struct SessionView: View {
             .id("transcript-end")
     }
 
+    private func runFailureAlert(_ message: String) -> some View {
+        VStack(spacing: 4) {
+            Label("Run failed", systemImage: "exclamationmark.triangle.fill")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(OS1VisualStyle.redInk)
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .multilineTextAlignment(.center)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(
+            OS1VisualStyle.red.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 12)
+        )
+        .accessibilityElement(children: .combine)
+    }
+
     private var transcriptScrollBase: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
@@ -1440,9 +1516,10 @@ struct SessionView: View {
             showingEmptyContent ? .top : .bottom,
             for: .sizeChanges
         )
-        // Let the transcript track a downward swipe so the keyboard can be
-        // dismissed without leaving the conversation.
-        .scrollDismissesKeyboardCompat()
+        // A transcript swipe dismisses the keyboard immediately. Interactive
+        // dismissal can park the safe-area bar partly behind the keyboard,
+        // hiding the composer while the keyboard still looks open.
+        .scrollDismissesKeyboardImmediatelyCompat()
         .scrollPosition($scrollPosition)
     }
 
@@ -1462,6 +1539,8 @@ struct SessionView: View {
                 viewModel.expansionState(id: $0, defaultExpanded: $1)
             },
             activity: turnActivity,
+            isActiveReasoning: viewModel.isRunning
+                && block.id == viewModel.displayBlocks.last?.id,
             // An automation's turns are not a person's words, so they get no
             // author fallback. The web makes the same exception.
             owner: viewModel.session.transcriptOwner,
@@ -1629,6 +1708,24 @@ private struct SlackComposeReceiptRow: View {
     }
 }
 
+/// Isolated from `SessionView.body` so lane and hide updates do not invalidate
+/// the transcript. On Mac this is the open session's direct toolbar action.
+private struct AddToSidebarButton: View {
+    let session: Session
+    let siblings: [Session]
+
+    var body: some View {
+        if SidebarAddition.currentIntent(for: session, siblings: siblings) != nil {
+            Button {
+                SidebarAddition.add(session: session, siblings: siblings)
+            } label: {
+                Label("Add to sidebar", systemImage: "sidebar.left")
+            }
+            .help("Add to sidebar")
+        }
+    }
+}
+
 #if os(iOS)
 /// The session's overflow menu — the trailing nav-bar control, a native `Menu` so
 /// iOS renders (and animates) it as a real UIMenu.
@@ -1645,6 +1742,8 @@ private struct SessionActionsMenu: View {
     let viewModel: SessionViewModel
     /// The sessions of this worktree — the sidebar row, regrouped below.
     let tabs: [Session]
+    /// Direct child sessions hidden from the tab strip.
+    let workerSessions: [Session]
     /// Workspace names for that regrouping; see `SessionView.workspaceNames`.
     let workspaceNames: [String: String]
     /// Model/effort catalog for the nested settings rows; nil until the first
@@ -1670,9 +1769,17 @@ private struct SessionActionsMenu: View {
     @State private var pendingMerge: String?
     @State private var merging = false
     @State private var mergeError: String?
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         Menu {
+            if addIntent != nil {
+                Button {
+                    SidebarAddition.add(session: viewModel.session, siblings: tabs)
+                } label: {
+                    Label("Add to sidebar", systemImage: "sidebar.left")
+                }
+            }
             if let onNewSession {
                 Button(action: onNewSession) {
                     // Two words, because the workspace it lands in is the one
@@ -1690,6 +1797,28 @@ private struct SessionActionsMenu: View {
                         ? "New session"
                         : "New session in this workspace"
                 )
+            }
+            if !workerSessions.isEmpty {
+                Menu {
+                    ForEach(workerSessions) { worker in
+                        Button {
+                            openWorker(worker)
+                        } label: {
+                            Label(
+                                worker.displayTitle,
+                                systemImage: worker.isRunning == true ? "circle.fill" : "circle"
+                            )
+                        }
+                        .accessibilityLabel(
+                            "\(worker.displayTitle), \(worker.isRunning == true ? "running" : "finished")"
+                        )
+                    }
+                } label: {
+                    Label(
+                        "Delegated workers (\(workerSessions.count))",
+                        systemImage: "arrow.down.right"
+                    )
+                }
             }
             // What was closed here, next to the way to open a new one: the
             // two are the same errand, another conversation in this
@@ -1834,7 +1963,7 @@ private struct SessionActionsMenu: View {
                     // Hiding is the personal counterpart to archiving: the row
                     // leaves YOUR sidebar while the session keeps running for
                     // everyone else — so it isn't destructive-styled.
-                    if HideStore.shared.isHidden(workspace) {
+                    if HideStore.shared.isHidden(workspace), addIntent == nil {
                         Button {
                             // `unhide` rather than clearing this row's key:
                             // it drops every key the session could sit under,
@@ -1845,7 +1974,7 @@ private struct SessionActionsMenu: View {
                         } label: {
                             Label("Restore to sidebar", systemImage: "eye")
                         }
-                    } else {
+                    } else if !HideStore.shared.isHidden(workspace) {
                         Button {
                             HideStore.shared.hide(workspace)
                         } label: {
@@ -1897,6 +2026,15 @@ private struct SessionActionsMenu: View {
         } message: {
             Text(mergeError ?? "Please try again.")
         }
+    }
+
+    private func openWorker(_ worker: Session) {
+        guard let url = SessionLinks.url(for: worker.id) else { return }
+        openURL(url)
+    }
+
+    private var addIntent: SidebarAddition.Intent? {
+        SidebarAddition.currentIntent(for: viewModel.session, siblings: tabs)
     }
 
     private var mergeConfirmationTitle: String {
@@ -2038,6 +2176,8 @@ struct ScrollToLatestButton: View {
 struct SessionTabsView: View {
     let initialSession: Session
     let tabs: [Session]
+    /// Every live session available for resolving direct worker relationships.
+    let relatedSessions: [Session]
     /// Passed straight through to SessionView; see its `workspaceNames`.
     let workspaceNames: [String: String]
     let viewModelForSession: (Session) -> SessionViewModel
@@ -2100,6 +2240,7 @@ struct SessionTabsView: View {
     init(
         session: Session,
         tabs: [Session],
+        relatedSessions: [Session] = [],
         workspaceNames: [String: String] = [:],
         viewModelForSession: @escaping (Session) -> SessionViewModel,
         onSaveComposerDraft: @escaping (Session, SessionViewModel.ComposerDraft) -> Void,
@@ -2113,6 +2254,7 @@ struct SessionTabsView: View {
     ) {
         initialSession = session
         self.tabs = tabs
+        self.relatedSessions = relatedSessions
         self.workspaceNames = workspaceNames
         self.viewModelForSession = viewModelForSession
         self.onSaveComposerDraft = onSaveComposerDraft
@@ -2198,6 +2340,10 @@ struct SessionTabsView: View {
                 SessionView(
                         viewModel: viewModelForSession(session),
                         tabs: visibleTabs,
+                        workerSessions: SessionsListViewModel.workerSessions(
+                            in: relatedSessions,
+                            parentId: session.id
+                        ),
                         workspaceNames: workspaceNames,
                         onSaveComposerDraft: { draft in
                             onSaveComposerDraft(session, draft)
@@ -2810,6 +2956,7 @@ private struct SessionInputBar: View {
     /// a long dictation does — state living in the button would die mid-word.
     @State private var dictation = Dictation()
     @State private var sessionProjection = ComposerSessionProjectionState()
+    @State private var inputSelection: TextSelection?
     /// Notes are one-message context: they post straight to the team and never
     /// enter the engine or busy-message queue.
     @State private var noteMode = false
@@ -2899,9 +3046,25 @@ private struct SessionInputBar: View {
             }
 
             if !viewModel.attachedImages.isEmpty {
-                AttachedImagesRow(images: viewModel.attachedImages) { image in
-                    viewModel.attachedImages.removeAll { $0.id == image.id }
-                }
+                AttachedImagesRow(
+                    images: viewModel.attachedImages,
+                    onRemove: { image in
+                        guard let index = viewModel.attachedImages.firstIndex(of: image)
+                        else { return }
+                        viewModel.draft = ImageAttachmentComments.rebasing(
+                            viewModel.draft, removingImageAt: index
+                        )
+                        viewModel.attachedImages.remove(at: index)
+                    },
+                    onComment: { index, region, text in
+                        viewModel.draft = ImageAttachmentComments.appending(
+                            to: viewModel.draft,
+                            imageIndex: index,
+                            region: region,
+                            comment: text
+                        )
+                    }
+                )
             }
 
             if let typingLabel {
@@ -2924,6 +3087,16 @@ private struct SessionInputBar: View {
                 )
             }
             #endif
+
+            ComposerMentionPalette(
+                text: projectedDraft.wrappedValue,
+                selection: inputSelection,
+                scope: ComposerMentionScope(sessionId: viewModel.session.id)
+            ) { edit in
+                projectedDraft.wrappedValue = edit.text
+                inputSelection = edit.selection
+                inputFocused = true
+            }
 
             VStack(spacing: 0) {
                 if hasQueueItems {
@@ -3475,11 +3648,8 @@ private struct SessionInputBar: View {
                 }
 
                 TextField(
-                    text: sessionProjection.binding(
-                        $viewModel.draft,
-                        titleGeneration: TranscriptLinks.shared.generation,
-                        refreshTitles: !inputFocused
-                    ),
+                    text: projectedDraft,
+                    selection: $inputSelection,
                     prompt: Text(composerPlaceholder).foregroundStyle(
                         noteMode ? OS1VisualStyle.notePlaceholder : OS1VisualStyle.textFaint
                     ),
@@ -3669,6 +3839,14 @@ private struct SessionInputBar: View {
                 isSingleRow && !inputFocused && !hasQueueItems ? 8 : 0
             )
         #endif
+    }
+
+    private var projectedDraft: Binding<String> {
+        sessionProjection.binding(
+            $viewModel.draft,
+            titleGeneration: TranscriptLinks.shared.generation,
+            refreshTitles: !inputFocused
+        )
     }
 
     /// The composer's "+": attachments plus the session-level actions
