@@ -78,10 +78,12 @@ describe("ActiveSubagentRows", () => {
     expect(html).toContain('data-parent-session-id="parent"');
     expect(html).toContain('data-parent-session-id="direct"');
     expect(html).toContain('aria-current="page"');
-    // 41 is the workspace row's repo-tile column, so the arrow centres under
-    // the tile rather than in the gap before it.
-    expect(html).toContain("--sidebar-icon-left:41px");
-    expect(html).toContain("--sidebar-icon-left:53px");
+    // Direct workers indent one compact step; deeper workers take another.
+    expect(html).toContain("--sidebar-icon-left:29px");
+    expect(html).toContain("--sidebar-icon-left:39px");
+    expect(html).toContain(
+      'd="M6.75 5.75V9.25C6.75 13.116 9.884 16.25 13.75 16.25H18.25"',
+    );
     expect(html).toContain("Worker nested, subagent, Running");
   });
 

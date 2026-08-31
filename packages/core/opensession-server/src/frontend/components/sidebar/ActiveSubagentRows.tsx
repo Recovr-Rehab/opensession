@@ -8,7 +8,7 @@ import {
 } from "../../lib/sidebar-classes";
 import type { UnifiedSession } from "../../lib/types";
 import { cn } from "../../ui/cn";
-import { IconArrowDownRight } from "../icons";
+import { IconArrowTurnDownRight } from "../icons";
 import { SIDEBAR_ROW_TITLE } from "./SidebarItem";
 import type { CSSProperties } from "react";
 
@@ -45,18 +45,13 @@ export function ActiveSubagentRows({
               SIDEBAR_HOVER_LAYER,
               selected && "bg-selected",
             )}
-            // The rail a child indents to, and it is derived rather than
-            // picked: the workspace row above opens with the 22px rail at
-            // --sidebar-icon-left (16), then the 7px rail gap, then its
-            // 14px repo tile, so that tile's centre sits at 52 and a 22px
-            // rail centres there from 41. At the 28 this was, the arrow
-            // landed in the gap in front of the tile and the child's title
-            // came out to the LEFT of its parent's, which read as a sibling
-            // rather than a child. Deeper levels step 12 and stop at the
-            // third, so a long chain keeps room for a title.
+            // A direct worker's title sits 13px past its parent, enough to
+            // read as nested without spending a full icon column on empty
+            // space. Deeper levels take two smaller steps, then stop so a
+            // long delegation chain keeps room for its title.
             style={
               {
-                "--sidebar-icon-left": `${41 + Math.min(depth - 1, 2) * 12}px`,
+                "--sidebar-icon-left": `${29 + Math.min(depth - 1, 2) * 10}px`,
               } as CSSProperties
             }
             data-active-subagent-row=""
@@ -67,7 +62,7 @@ export function ActiveSubagentRows({
             onClick={() => onSelect(session)}
           >
             <span className={cn(SIDEBAR_RAIL, "text-faint")} aria-hidden="true">
-              <IconArrowDownRight size={16} />
+              <IconArrowTurnDownRight size={16} />
             </span>
             <span className={SIDEBAR_ROW_TITLE}>{session.title}</span>
             <span
