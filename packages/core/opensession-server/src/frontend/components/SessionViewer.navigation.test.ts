@@ -106,10 +106,14 @@ test("SessionViewer navigation comes from NavigationContext", async () => {
   expect(viewer).toContain("onOpenSession={openCurrentWorkspace}");
 });
 
-test("fork session stays available inside a workspace", async () => {
+test("fork session stays available at the current tip inside a workspace", async () => {
   const { viewer } = await sources();
   expect(viewer).toContain("                  {forkAction}");
   expect(viewer).not.toContain("{!workspaceScopedMenu && forkAction}");
+  expect(viewer).toContain("                handleFork();");
+  expect(viewer).not.toContain("const lastAssistantId = entries.findLast(");
+  expect(viewer).toContain('{ kind: "tip" }');
+  expect(viewer).toContain("? { messageId: forkFrom.messageId }");
 });
 
 test("App passes only SessionViewer navigation availability", async () => {

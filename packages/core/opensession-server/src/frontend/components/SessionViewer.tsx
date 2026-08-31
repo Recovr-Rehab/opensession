@@ -1274,12 +1274,14 @@ export function SessionViewer({
   useEffect(() => {
     saveDraft(draftKey, { images, files });
   }, [draftKey, images, files]);
-  // When set, the next send forks a new session branching from this message
-  // instead of continuing this one.
-  const [forkFrom, setForkFrom] = useState<string | null>(null);
+  // When set, the next send forks a new session from either the current tip or
+  // a specific earlier message instead of continuing this one.
+  const [forkFrom, setForkFrom] = useState<
+    { kind: "tip" } | { kind: "message"; messageId: string } | null
+  >(null);
   useEffect(() => {
     const messageId = takePendingSessionFork(session.id);
-    if (messageId) setForkFrom(messageId);
+    if (messageId) setForkFrom({ kind: "message", messageId });
   }, [session.id]);
   const [
     {
@@ -4107,8 +4109,8 @@ export function SessionViewer({
   // still fork as a new sibling with a transcript handoff.
   const canForkSession = session.source === "opensession" && !!session.ran;
 
-  const handleFork = useCallback((messageId: string) => {
-    setForkFrom(messageId);
+  const handleFork = useCallback((messageId?: string) => {
+    setForkFrom(messageId ? { kind: "message", messageId } : { kind: "tip" });
   }, []);
 
   // "Continue" under a failed run's notice. An ordinary prompt, so it steers,
@@ -4344,15 +4346,21 @@ export function SessionViewer({
         : { name: f.name, dataUrl: f.dataUrl },
     );
 
-    // Fork mode: branch a brand-new session from the selected message, keeping
-    // the real conversation history. App navigates into it on session_created.
+    // Fork mode: branch a brand-new session from the current tip or selected
+    // message, keeping the real conversation history. App navigates into it on
+    // session_created.
     if (!isolated && forkFrom) {
       send({
         type: "create_session",
         branch: "",
         prompt: text || "Continue from here.",
         user,
-        forkFrom: { sourceId: session.id, messageId: forkFrom },
+        forkFrom: {
+          sourceId: session.id,
+          ...(forkFrom.kind === "message"
+            ? { messageId: forkFrom.messageId }
+            : {}),
+        },
         ...(imgs.length ? { images: imgs } : {}),
         ...(fls.length ? { files: filePayload } : {}),
       });
@@ -5792,19 +5800,15 @@ export function SessionViewer({
               )}
             </>
           );
-          // Fork: a new session carrying this one's history up to its last
-          // answer, so you can take the same context somewhere else without
-          // disturbing this transcript. Forking from a specific message stays on
-          // that message's own menu; this is the "from here" case, which is what
-          // people mean from the header. Both land in the same composer mode.
-          const lastAssistantId = entries.findLast(
-            (e) => e.type === "assistant",
-          )?.id;
-          const forkAction = canForkSession && lastAssistantId && (
+          // Fork: a new session carrying this one's history at the current tip,
+          // so you can take the same context somewhere else without disturbing
+          // this transcript. Forking from a specific message stays on that
+          // message's own menu. Both land in the same composer mode.
+          const forkAction = canForkSession && (
             <Menu.Item
               onClick={() => {
                 setOverflowOpen(false);
-                handleFork(lastAssistantId);
+                handleFork();
               }}
               title="Start a new session from this one's history"
             >
@@ -7570,8 +7574,9 @@ export function SessionViewer({
                     {forkFrom && (
                       <div className="mb-2 flex items-center justify-between gap-3 rounded-control border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-3 py-[7px] text-supporting text-fg">
                         <span>
-                          ⑂ Forking a new session from the selected message.
-                          Type the new direction.
+                          {forkFrom.kind === "tip"
+                            ? "⑂ Forking a new session from the current history. Type the new direction."
+                            : "⑂ Forking a new session from the selected message. Type the new direction."}
                         </span>
                         <button
                           className="cursor-pointer bg-transparent text-label text-dim hover:text-fg"
