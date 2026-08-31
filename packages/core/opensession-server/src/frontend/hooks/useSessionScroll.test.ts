@@ -33,5 +33,9 @@ test("range hydration preserves an existing live-edge decision", () => {
   expect(source).toContain(
     "lastGestureRef.current !== gestureAtStart ||\n        lastTouchRef.current !== touchAtStart ||\n        towardHistoryGestureRef.current",
   );
+  expect(source).toContain(
+    "now < liveEdgeLayoutUntilRef.current &&\n      !gestured &&\n      !towardHistoryGestureRef.current",
+  );
+  expect(source).toContain("el.scrollTop = el.scrollHeight;");
   expect(source).toContain('scrollToLatest("auto");');
 });
