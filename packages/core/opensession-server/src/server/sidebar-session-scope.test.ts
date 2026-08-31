@@ -215,6 +215,52 @@ describe("scopeSessionsForSidebar", () => {
     ).toEqual(["selected", "sibling"]);
   });
 
+  test("keeps a selected worker nested under its ancestor workspace", () => {
+    const rows = [
+      session("parent", {
+        workspaceId: "ws-parent",
+        startedBy: "Grace",
+      }),
+      session("parent-sibling", {
+        workspaceId: "ws-parent",
+        startedBy: "Grace",
+      }),
+      session("worker", {
+        workspaceId: "ws-worker",
+        parentSessionId: "parent",
+        startedBy: "Grace",
+      }),
+      session("worker-sibling", {
+        workspaceId: "ws-worker",
+        startedBy: "Grace",
+      }),
+      session("nested-worker", {
+        workspaceId: "ws-nested",
+        parentSessionId: "worker",
+        startedBy: "Grace",
+        isRunning: true,
+      }),
+      session("unrelated", {
+        workspaceId: "ws-unrelated",
+        startedBy: "Grace",
+      }),
+    ];
+
+    expect(
+      scopeSessionsForSidebar(
+        rows,
+        scope({ selectedSessionId: "worker" }),
+        context(),
+      ).map((row) => row.id),
+    ).toEqual([
+      "parent",
+      "parent-sibling",
+      "worker",
+      "worker-sibling",
+      "nested-worker",
+    ]);
+  });
+
   test("filters automation runs by owner", () => {
     const rows = [
       session("mine", { automation: "nightly", startedBy: undefined }),

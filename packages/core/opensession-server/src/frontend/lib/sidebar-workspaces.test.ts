@@ -235,6 +235,16 @@ describe("activeSubagentsForWorkspace", () => {
     ]);
   });
 
+  test("does not nest a selected worker beneath its own temporary workspace", () => {
+    const worker = session("worker", {
+      workspaceId: "ws-worker",
+      parentSessionId: "missing-parent",
+      isRunning: true,
+    });
+
+    expect(activeSubagentsForWorkspace([worker], "ws-worker")).toEqual([]);
+  });
+
   test("deduplicates child sessions by id", () => {
     const child = session("child", {
       workspaceId: "ws-1",

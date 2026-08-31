@@ -183,6 +183,10 @@ export function activeSubagentsForWorkspace(
       (session) =>
         family.has(session.id) &&
         !!session.parentSessionId &&
+        // A scoped response can briefly contain a selected worker before its
+        // parent group arrives. Do not treat that worker as a child of its own
+        // temporary workspace: a nested row requires its parent in the family.
+        family.has(session.parentSessionId) &&
         !session.archived &&
         (session.isRunning ||
           !!session.waitingForInput ||

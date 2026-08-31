@@ -296,18 +296,28 @@ export function scopeSessionsForSidebar<T extends SidebarScopeSession>(
   if (scope.selectedWorkspaceId)
     selectedGroupKeys.add(`workspace:${scope.selectedWorkspaceId}`);
   if (scope.selectedSessionId) {
-    const selected = sessions.find(
-      (session) =>
-        session.id === scope.selectedSessionId ||
-        session.aliasIds?.includes(scope.selectedSessionId!),
-    );
-    if (selected) selectedGroupKeys.add(sessionGroupKey(selected));
+    const byId = new Map<string, T>();
+    for (const session of sessions) {
+      byId.set(session.id, session);
+      for (const alias of session.aliasIds || []) byId.set(alias, session);
+    }
+    let selected = byId.get(scope.selectedSessionId);
+    const seen = new Set<string>();
+    while (selected && !seen.has(selected.id)) {
+      seen.add(selected.id);
+      selectedGroupKeys.add(sessionGroupKey(selected));
+      selected = selected.parentSessionId
+        ? byId.get(selected.parentSessionId)
+        : undefined;
+    }
   }
   for (const session of sessions)
     if (selectedGroupKeys.has(sessionGroupKey(session)))
       selectedIds.add(session.id);
   // Active workers can live in temporary child workspaces. Keep their chain
-  // when the selected workspace or parent session is open.
+  // when the selected workspace or parent session is open. A selected worker's
+  // ancestor groups above stay whole too, so a person or repo lens cannot turn
+  // the worker's temporary workspace into a top-level row on navigation.
   let expanded = true;
   while (expanded) {
     expanded = false;
