@@ -63,3 +63,7 @@ test("popup review heading keeps a small gap after a lone PR band", () => {
     '"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-1"',
   );
 });
+
+test("popup review tabs keep a small gap after the PR band", () => {
+  expect(summarySource).toContain('className={embedded ? undefined : "mt-1"}');
+});

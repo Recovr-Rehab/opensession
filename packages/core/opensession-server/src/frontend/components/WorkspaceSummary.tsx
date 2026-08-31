@@ -1033,7 +1033,11 @@ export function WorkspaceSummaryBody({
       </div>
 
       {reviewMode && reviewPage && onReviewPageChange && (
-        <div role="tablist" aria-label="Pull request pages">
+        <div
+          className={embedded ? undefined : "mt-1"}
+          role="tablist"
+          aria-label="Pull request pages"
+        >
           <button
             className={WS_SUMMARY_ROW}
             role="tab"
