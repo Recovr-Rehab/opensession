@@ -8,7 +8,10 @@ import {
   boxMachineType,
   boxNativeFilePath,
   boxResumePrimeCommand,
+  boxRuntimeHomeFailure,
   boxSnapshotSaveIsRecoverable,
+  boxSshLaneSettles,
+  boxSshTransportFailed,
   parseBoxSshEndpoint,
 } from "./box";
 
@@ -138,5 +141,64 @@ describe("Box command readiness", () => {
     expect(boxCommandPlaneUnavailable({ status: 409, code: "other" })).toBe(
       false,
     );
+  });
+});
+
+describe("Box SSH lane adoption", () => {
+  test("adopts a lane that settles after the first-connection race", async () => {
+    // A snapshot-restored box answers on 22 before sshd hands out a session:
+    // attempt one dies with ssh's own 255, the next one carries the command.
+    const codes = [255, 0];
+    let calls = 0;
+    const settled = await boxSshLaneSettles(
+      async () => {
+        calls += 1;
+        return { exitCode: codes.shift() ?? 0 };
+      },
+      3,
+      0,
+    );
+    expect(settled).toBe(true);
+    expect(calls).toBe(2);
+  });
+
+  test("gives up on a lane that never carries a command", async () => {
+    let calls = 0;
+    const settled = await boxSshLaneSettles(
+      async () => {
+        calls += 1;
+        return { exitCode: 255 };
+      },
+      3,
+      0,
+    );
+    expect(settled).toBe(false);
+    expect(calls).toBe(3);
+  });
+});
+
+describe("Box runtime home failures", () => {
+  test("names the transport when ssh, not the filesystem, is what failed", () => {
+    expect(boxSshTransportFailed(255)).toBe(true);
+    expect(boxSshTransportFailed(124)).toBe(true);
+    expect(boxSshTransportFailed(1)).toBe(false);
+    expect(
+      boxRuntimeHomeFailure({
+        exitCode: 255,
+        stdout: "",
+        stderr:
+          "mux_client_request_session: read from master failed: Broken pipe\nFailed to connect to new control master",
+      }),
+    ).toBe(
+      "Box runtime home check could not reach the sandbox (exit 255): " +
+        "mux_client_request_session: read from master failed: Broken pipe " +
+        "Failed to connect to new control master",
+    );
+  });
+
+  test("still reports a genuine home-layout failure as one", () => {
+    expect(
+      boxRuntimeHomeFailure({ exitCode: 1, stdout: "", stderr: "" }),
+    ).toBe("Box did not preserve /home/ubuntu as the durable canonical home");
   });
 });

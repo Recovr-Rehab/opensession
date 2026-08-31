@@ -480,8 +480,10 @@ function boxSshArgs(target: BoxSshTarget, command: string): string[] {
     "-o",
     "ServerAliveCountMax=2",
     // Reuse one host-local authenticated connection for launch material. The
-    // %C hash scopes the socket to user/host/port/key, and OpenSSH falls back
-    // safely when a resumed VM has killed the old master.
+    // %C hash scopes the socket to user/host/port/key. A master that dies while
+    // it is still being set up does NOT fall back: the client reports "Failed to
+    // connect to new control master" and exits 255, so callers must prove a lane
+    // works before routing a box's commands down it.
     "-o",
     "ControlMaster=auto",
     "-o",
@@ -491,6 +493,29 @@ function boxSshArgs(target: BoxSshTarget, command: string): string[] {
     `${target.user}@${target.host}`,
     command,
   ];
+}
+
+/** ssh's own failure code, and the timeout boxSshExec substitutes for one.
+ * Neither says anything about the sandbox filesystem. */
+export function boxSshTransportFailed(exitCode: number): boolean {
+  return exitCode === 255 || exitCode === 124;
+}
+
+/** A freshly booted or snapshot-restored Box accepts TCP on port 22 before sshd
+ * will hand out a session: the first client wins a control master that dies
+ * mid-handshake while the very next attempt succeeds. Adopt a lane only once it
+ * has actually carried a command, so a racing lane degrades to Box's HTTP
+ * command plane instead of failing every exec against the box. */
+export async function boxSshLaneSettles(
+  probe: () => Promise<{ exitCode: number }>,
+  attempts = 3,
+  delayMs = 1_500,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) await new Promise((wake) => setTimeout(wake, delayMs));
+    if ((await probe()).exitCode === 0) return true;
+  }
+  return false;
 }
 
 async function boxSshExec(
@@ -824,7 +849,16 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       if (!runtimeHomeReady) await ensureRuntimeHome();
       try {
         const target = await installBoxSshTarget(cfg, box);
-        boxSshTargets().set(boxId, target);
+        if (
+          await boxSshLaneSettles(() => boxSshExec(target, "true", 20_000))
+        ) {
+          boxSshTargets().set(boxId, target);
+        } else {
+          console.warn(
+            `[sandbox:box] SSH control lane for ${boxId} did not settle; ` +
+              `staying on the command plane`,
+          );
+        }
       } catch (error) {
         console.warn(
           `[sandbox:box] could not establish SSH control lane for ${boxId}:`,
@@ -1554,16 +1588,30 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
   },
 };
 
+/** Qualification reported every failed home probe as a filesystem verdict, so a
+ * lost SSH session read as "Box did not preserve /home/ubuntu" and sent the
+ * investigation to the wrong owner. Name the layer that actually failed. */
+export function boxRuntimeHomeFailure(probe: {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}): string {
+  const detail = (probe.stderr || probe.stdout)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
+  const suffix = detail ? `: ${detail}` : "";
+  return boxSshTransportFailed(probe.exitCode)
+    ? `Box runtime home check could not reach the sandbox (exit ${probe.exitCode})${suffix}`
+    : `Box did not preserve /home/ubuntu as the durable canonical home${suffix}`;
+}
+
 async function assertBoxRuntimeHome(driver: RemoteDriver): Promise<void> {
   const probe = await driver.exec(
     "test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && test /home/ubuntu -ef /home/user && " +
       "temporary=$(mktemp -d) && case $temporary in /home/ubuntu/.tmp/*) rmdir $temporary ;; *) exit 1 ;; esac",
   );
-  if (probe.exitCode !== 0) {
-    throw new Error(
-      "Box did not preserve /home/ubuntu as the durable canonical home",
-    );
-  }
+  if (probe.exitCode !== 0) throw new Error(boxRuntimeHomeFailure(probe));
 }
 
 /** Workspace qualification: credentials/quota, exec semantics, file upload,
