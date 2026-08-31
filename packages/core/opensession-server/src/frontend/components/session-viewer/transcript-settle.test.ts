@@ -1,20 +1,39 @@
 import { expect, test } from "bun:test";
 import { readFollowingLive } from "./transcript-anchor";
 
-const viewer = await Bun.file(
-  new URL("../SessionViewer.tsx", import.meta.url),
-).text();
-const settledCallback = viewer.match(
-  /const onVisibleRangesSettled = useCallback\([\s\S]*?\}, \[followingLive, scrollToLatest, transcriptIndex, transcriptOutlineReady\]\);/,
-)?.[0];
+const [viewer, transcriptHook] = await Promise.all([
+  Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text(),
+  Bun.file(new URL("../../hooks/useTranscript.ts", import.meta.url)).text(),
+]);
 
 test("fresh transcript ranges reaffirm a cached reader's live edge", () => {
-  expect(settledCallback).toContain(
-    "settledIndexRef.current = transcriptIndex",
-  );
-  expect(settledCallback).toContain(
+  expect(transcriptHook).toContain("settledIndexRef.current = index");
+  expect(transcriptHook).toContain(
     'if (readFollowingLive(followingLive)) scrollToLatest("auto")',
   );
+  expect(viewer).toContain("settleVisibleRanges({");
+});
+
+test("index replacement preserves the bounded tail's scroll mapping", () => {
+  const capture = transcriptHook.match(
+    /const replaceIndex =[\s\S]*?const loadRanges =/,
+  )?.[0];
+  const restore = transcriptHook.match(
+    /const restorePendingIndexPosition =[\s\S]*?const settleVisibleRanges =/,
+  )?.[0];
+
+  expect(capture).toContain(
+    "container.scrollHeight -\n              container.scrollTop -\n              container.clientHeight",
+  );
+  expect(capture).toContain("anchorEid: anchor?.dataset.eid ?? null");
+  expect(capture!.indexOf("pendingIndexPositionRef.current = {")).toBeLessThan(
+    capture!.indexOf("setIndexState({ sessionId, entries: message.entries })"),
+  );
+  expect(restore).toContain(
+    "container.scrollHeight - container.clientHeight - pending.bottomGap",
+  );
+  expect(restore).toContain("holdTranscriptAnchor(");
+  expect(viewer).toContain("useTranscriptIndexAnchor({");
 });
 
 test("setup and loading surfaces leave before transcript rows mount", () => {
@@ -25,10 +44,11 @@ test("setup and loading surfaces leave before transcript rows mount", () => {
 });
 
 test("indexed transcripts settle positively but cannot stay hidden forever", () => {
-  expect(settledCallback).toContain("if (!transcriptOutlineReady) return");
-  expect(settledCallback).toContain("setOpenSettlePending(false)");
-  expect(viewer).toContain("setTranscriptOutlineReady(!v2)");
-  expect(viewer).toContain("setTranscriptOutlineReady(true)");
+  expect(transcriptHook).toContain("if (!outlineReady) return");
+  expect(viewer).toContain("onSettled: () => setOpenSettlePending(false)");
+  expect(viewer).toContain("setIndexMode(v2)");
+  expect(transcriptHook).toContain("setOutlineReady(!v2)");
+  expect(transcriptHook).toContain("setOutlineReady(true)");
   expect(viewer).toContain("const LEGACY_OPEN_SETTLE_MAX_MS = 350");
   expect(viewer).toContain("const INDEXED_OPEN_SETTLE_MAX_MS = 2_500");
   expect(viewer).toContain("if (!transcriptRendered) return");

@@ -35,7 +35,6 @@ import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
 import { plainThreadUrl } from "./PlainThreadPanel";
-import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
 import type {
   UnifiedSession,
   GitStatusInfo,
@@ -54,11 +53,6 @@ import {
 import { SessionTranscript } from "./SessionTranscript";
 import { MessageRail } from "./MessageRail";
 import { collectSentMessages } from "../lib/sent-messages";
-import {
-  mergeTranscriptIndexEntries,
-  transcriptIndexEntryFromPayload,
-  type TranscriptIndexedRange,
-} from "../lib/transcript-index";
 import {
   canonicalToolName,
   LiveSubagentsProvider,
@@ -215,11 +209,14 @@ import {
   peekCachedTranscriptView,
 } from "./session-viewer/transcript-cache";
 import {
-  holdTranscriptAnchor,
   pickScrollAnchor,
   readFollowingLive,
 } from "./session-viewer/transcript-anchor";
 import { useLivePlan } from "./session-viewer/use-live-plan";
+import {
+  useTranscript,
+  useTranscriptIndexAnchor,
+} from "../hooks/useTranscript";
 import {
   BusyInline,
   ConversationLoading,
@@ -673,11 +670,6 @@ const INDEXED_OPEN_SETTLE_MAX_MS = 2_500;
 const JUMP_PAGE_ENTRIES = HISTORY_PAGE_ENTRIES;
 const JUMP_MAX_ENTRIES = 4_000;
 const EMPTY_TRANSCRIPT_ENTRIES: TranscriptEntry[] = [];
-// One visible range can span several actor pages. Keep the client comfortably
-// below the per-session mailbox bound so a reconnect cannot enqueue a whole
-// outline at once and crowd out live transcript reads for the same session.
-const TRANSCRIPT_RANGE_CONCURRENCY = 6;
-
 export function SessionViewer({
   session,
   canRepairSafety = false,
@@ -1165,67 +1157,29 @@ export function SessionViewer({
   const backgroundHistoryRef = useRef(false);
   const backgroundHistoryAttemptedRef = useRef(false);
   const [loadingAllHistory, setLoadingAllHistory] = useState(false);
-  const [transcriptIndexState, setTranscriptIndexState] = useState<{
-    sessionId: string;
-    entries: TranscriptIndexEntry[];
-  } | null>(() =>
-    cachedTranscript?.index
-      ? { sessionId: session.id, entries: cachedTranscript.index }
-      : null,
-  );
-  const transcriptIndexStateRef = useRef(transcriptIndexState);
-  useLayoutEffect(() => {
-    transcriptIndexStateRef.current = transcriptIndexState;
-  }, [transcriptIndexState]);
-  const [transcriptIndexExpected, setTranscriptIndexExpected] = useState(
-    Boolean(cachedTranscript?.index),
-  );
-  const transcriptIndexExpectedRef = useRef(Boolean(cachedTranscript?.index));
-  const transcriptIndex =
-    transcriptIndexState?.sessionId === session.id
-      ? transcriptIndexState.entries
-      : null;
-  const transcriptIndexEpochRef = useRef<number | null>(
-    cachedTranscript?.indexEpoch ?? null,
-  );
-  // A bounded v2 init only describes its loaded tail. The full outline is what
-  // proves every unloaded range lies above or below the opening fold, so do not
-  // accept a virtualizer "visible rows ready" signal until that frame arrives.
-  const [transcriptOutlineReady, setTranscriptOutlineReady] = useState(
-    !cachedTranscript?.index || cachedTranscript.indexEpoch !== null,
-  );
-  const transcriptRangeDemandReadyRef = useRef(false);
-  const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
-    useState(0);
-  const indexAnchorHoldCancelRef = useRef<(() => void) | null>(null);
-  // Retire the bounded index-anchor hold on an explicit return to the live
-  // edge. The hold repositions scrollTop toward the pre-refresh anchor every
-  // frame and only stops on gestures aimed at the scroller itself — a Send
-  // click or the jump pill happens outside it, so without this the hold drags
-  // the reader back up for the rest of its window while they watch their own
-  // message fail to stay in view.
-  function cancelIndexAnchorHold() {
-    indexAnchorHoldCancelRef.current?.();
-    indexAnchorHoldCancelRef.current = null;
-  }
-  const pendingIndexPositionRef = useRef<{
-    sessionId: string;
-    keepLiveEdge: boolean;
-    bottomGap: number | null;
-    anchorEid: string | null;
-    anchorTop: number | null;
-  } | null>(null);
-  const completedTranscriptRangeKeysRef = useRef(new Set<string>());
-  const transcriptRangeRequestsRef = useRef(
-    new Map<
-      string,
-      {
-        range: TranscriptIndexedRange;
-        requestId: string;
-        timer: ReturnType<typeof setTimeout>;
-      }
-    >(),
-  );
+  const {
+    index: transcriptIndex,
+    indexState: transcriptIndexState,
+    indexExpected: transcriptIndexExpected,
+    indexExpectedRef: transcriptIndexExpectedRef,
+    indexEpochRef: transcriptIndexEpochRef,
+    rangeRetryGeneration: transcriptRangeRetryGeneration,
+    existingIndexForInit,
+    setIndexMode,
+    acceptInitTail,
+    replaceIndex,
+    acceptRange,
+    projectAppend,
+    loadRanges: loadTranscriptRanges,
+    cancelIndexAnchorHold,
+    restorePendingIndexPosition,
+    settleVisibleRanges,
+  } = useTranscript({
+    sessionId: session.id,
+    cachedTranscript,
+    send,
+    transcriptViewStore,
+  });
   // Byte offset the loaded history begins at — the "load earlier" pagination
   // cursor (server: parseTranscriptTail/parseTranscriptWindow startOffset).
   // null = unknown (old server) → load_history falls back to the full resend.
@@ -1957,28 +1911,13 @@ export function SessionViewer({
     );
     return () => window.clearTimeout(timer);
   }, [transcriptIndexExpected, transcriptRendered]);
-  const settledIndexRef = useRef<TranscriptIndexEntry[] | null>(null);
   const onVisibleRangesSettled = useCallback(() => {
-    if (!transcriptOutlineReady) return;
-    setOpenSettlePending(false);
-    // Keep the pre-refresh message anchor through the final row measurements.
-    // Two paints later every visible real row has reported its geometry, so the
-    // bounded index hold can retire without letting a last correction jump the
-    // reader. The identity guard cannot cancel a newer refresh's hold.
-    const settledHold = indexAnchorHoldCancelRef.current;
-    if (settledHold) {
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (indexAnchorHoldCancelRef.current !== settledHold) return;
-          settledHold();
-          indexAnchorHoldCancelRef.current = null;
-        }),
-      );
-    }
-    if (settledIndexRef.current === transcriptIndex) return;
-    settledIndexRef.current = transcriptIndex;
-    if (readFollowingLive(followingLive)) scrollToLatest("auto");
-  }, [followingLive, scrollToLatest, transcriptIndex, transcriptOutlineReady]);
+    settleVisibleRanges({
+      followingLive,
+      scrollToLatest,
+      onSettled: () => setOpenSettlePending(false),
+    });
+  }, [followingLive, scrollToLatest, settleVisibleRanges]);
   const [viewerInput, setViewerInput] = useState<HTMLDivElement | null>(null);
   // The focused phone composer is fixed above the keyboard, so it contributes
   // no height to the transcript's flex layout. Publish its real height without
@@ -2005,42 +1944,13 @@ export function SessionViewer({
     };
   }, [relayout, viewerInput]);
 
-  useLayoutEffect(() => {
-    const pending = pendingIndexPositionRef.current;
-    if (!pending || transcriptIndexState?.sessionId !== pending.sessionId)
-      return;
-    pendingIndexPositionRef.current = null;
-    const container = messagesRef.current;
-    if (pending.keepLiveEdge) {
-      scrollToLatest("auto");
-    } else if (container && pending.bottomGap !== null) {
-      container.scrollTop = Math.max(
-        0,
-        container.scrollHeight - container.clientHeight - pending.bottomGap,
-      );
-      if (pending.anchorEid && pending.anchorTop !== null) {
-        indexAnchorHoldCancelRef.current?.();
-        let cancelIndexHold = () => {};
-        cancelIndexHold = holdTranscriptAnchor(
-          container,
-          pending.anchorEid,
-          pending.anchorTop,
-          pending.bottomGap,
-          leaveLatest,
-          () => {
-            if (indexAnchorHoldCancelRef.current === cancelIndexHold)
-              indexAnchorHoldCancelRef.current = null;
-          },
-          15_000,
-        );
-        indexAnchorHoldCancelRef.current = cancelIndexHold;
-      }
-    }
-    requestAnimationFrame(() => {
-      transcriptRangeDemandReadyRef.current = true;
-      setTranscriptRangeRetryGeneration((generation) => generation + 1);
-    });
-  }, [leaveLatest, messagesRef, scrollToLatest, transcriptIndexState]);
+  useTranscriptIndexAnchor({
+    indexState: transcriptIndexState,
+    restorePendingIndexPosition,
+    containerRef: messagesRef,
+    scrollToLatest,
+    leaveLatest,
+  });
 
   // Keep the cached snapshot current as live frames and history pages land.
   // Scroll position is updated synchronously in handleMessagesScroll below;
@@ -2070,6 +1980,7 @@ export function SessionViewer({
     messagesRef,
     session.id,
     transcriptIndex,
+    transcriptIndexEpochRef,
   ]);
   // Where the anchor is computed. Nothing reads it until this session is
   // opened again, and pickScrollAnchor reads a rect per [data-eid] node, so
@@ -2805,46 +2716,6 @@ export function SessionViewer({
   const [contextSessions, setContextSessions] = useState<string[]>([]);
 
   // Subscribe to WebSocket messages
-  const loadTranscriptRanges = useCallback(
-    (ranges: TranscriptIndexedRange[]) => {
-      const epoch = transcriptIndexEpochRef.current;
-      if (epoch === null || !transcriptRangeDemandReadyRef.current) return;
-      let capacity = Math.max(
-        0,
-        TRANSCRIPT_RANGE_CONCURRENCY - transcriptRangeRequestsRef.current.size,
-      );
-      for (const range of ranges) {
-        if (capacity <= 0) break;
-        const key = `${range.firstSeq}:${range.lastSeq}`;
-        if (
-          completedTranscriptRangeKeysRef.current.has(key) ||
-          transcriptRangeRequestsRef.current.has(key)
-        )
-          continue;
-        const requestId = randomUUID();
-        const timer = setTimeout(() => {
-          transcriptRangeRequestsRef.current.delete(key);
-          setTranscriptRangeRetryGeneration((generation) => generation + 1);
-        }, 15_000);
-        transcriptRangeRequestsRef.current.set(key, {
-          range,
-          requestId,
-          timer,
-        });
-        capacity -= 1;
-        send({
-          type: "load_transcript_range",
-          sessionId: session.id,
-          requestId,
-          firstSeq: range.firstSeq,
-          lastSeq: range.lastSeq,
-          epoch,
-        });
-      }
-    },
-    [send, session.id],
-  );
-
   const subscribeToSession = useEffectEvent(() => {
     if (!connected) return;
 
@@ -2896,13 +2767,8 @@ export function SessionViewer({
           // falls back to a full legacy snapshot). Init frames are
           // authoritative for the mode.
           const v2 = msg.v2 === true && typeof msg.lastSeq === "number";
-          const existingIndex =
-            v2 && transcriptIndexStateRef.current?.sessionId === session.id
-              ? transcriptIndexStateRef.current.entries
-              : null;
-          transcriptIndexExpectedRef.current = v2;
-          setTranscriptIndexExpected(v2);
-          setTranscriptOutlineReady(!v2);
+          const existingIndex = existingIndexForInit(v2);
+          setIndexMode(v2);
           if (v2) {
             transcriptSeqRef.current = {
               sessionId: session.id,
@@ -2930,26 +2796,7 @@ export function SessionViewer({
               transcriptCursorRef.current = null;
             }
           }
-          if (v2) {
-            const tailIndex = msg.entries
-              .map(transcriptIndexEntryFromPayload)
-              .filter((entry): entry is TranscriptIndexEntry => entry !== null);
-            setTranscriptIndexState({
-              sessionId: session.id,
-              entries: existingIndex
-                ? mergeTranscriptIndexEntries(existingIndex, tailIndex)
-                : tailIndex,
-            });
-            transcriptIndexEpochRef.current = null;
-            transcriptRangeDemandReadyRef.current = false;
-            pendingIndexPositionRef.current = null;
-            indexAnchorHoldCancelRef.current?.();
-            indexAnchorHoldCancelRef.current = null;
-            for (const request of transcriptRangeRequestsRef.current.values())
-              clearTimeout(request.timer);
-            transcriptRangeRequestsRef.current.clear();
-            completedTranscriptRangeKeysRef.current.clear();
-          }
+          if (v2) acceptInitTail(msg.entries, existingIndex);
           if (v2 && existingIndex)
             transcriptViewStore.merge(merged, true, true);
           else transcriptViewStore.replace(merged, true, v2);
@@ -2984,90 +2831,16 @@ export function SessionViewer({
           break;
         }
         case "transcript_index": {
-          const scrollContainer = messagesRef.current;
-          // `following` can be silently dropped by a layout-driven scroll
-          // event (only a real gesture re-engages it), so a reader visually
-          // parked at the bottom still counts as at the live edge. Treating
-          // them as a history reader armed a long anchor hold at the
-          // pre-refresh position, which then fought the next send's jump and
-          // crawled the transcript back up.
-          const keepLiveEdge =
-            followingLive.current ||
-            (!!scrollContainer &&
-              scrollContainer.scrollHeight -
-                scrollContainer.scrollTop -
-                scrollContainer.clientHeight <
-                90);
-          const previousBottomGap =
-            !keepLiveEdge && scrollContainer
-              ? Math.max(
-                  0,
-                  scrollContainer.scrollHeight -
-                    scrollContainer.scrollTop -
-                    scrollContainer.clientHeight,
-                )
-              : null;
-          const previousAnchor =
-            !keepLiveEdge && scrollContainer
-              ? pickScrollAnchor(scrollContainer)
-              : null;
-          const previousAnchorEid = previousAnchor?.dataset.eid ?? null;
-          const previousAnchorTop =
-            previousAnchor && scrollContainer
-              ? previousAnchor.getBoundingClientRect().top -
-                scrollContainer.getBoundingClientRect().top
-              : null;
-          pendingIndexPositionRef.current = {
-            sessionId: session.id,
-            keepLiveEdge,
-            bottomGap: previousBottomGap,
-            anchorEid: previousAnchorEid,
-            anchorTop: previousAnchorTop,
-          };
-          transcriptIndexExpectedRef.current = true;
-          setTranscriptIndexExpected(true);
-          transcriptIndexEpochRef.current = msg.epoch;
-          setTranscriptOutlineReady(true);
-          setTranscriptIndexState({
-            sessionId: session.id,
-            entries: msg.entries,
-          });
+          replaceIndex(msg, messagesRef.current, followingLive.current);
           setHistoryTruncated(false);
           backgroundHistoryRef.current = false;
           historyRevealRef.current = null;
           loadingHistoryRef.current = false;
           setLoadingHistory(false);
-          transcriptRangeDemandReadyRef.current = false;
           break;
         }
         case "transcript_range": {
-          if (msg.epoch !== transcriptIndexEpochRef.current) break;
-          const found = [...transcriptRangeRequestsRef.current.entries()].find(
-            ([, request]) => request.requestId === msg.requestId,
-          );
-          if (!found) break;
-          transcriptViewStore.mergeRange(msg.entries);
-          const [key, request] = found;
-          clearTimeout(request.timer);
-          if (msg.complete) {
-            completedTranscriptRangeKeysRef.current.add(key);
-            transcriptRangeRequestsRef.current.delete(key);
-            setTranscriptRangeRetryGeneration((generation) => generation + 1);
-          } else {
-            request.timer = setTimeout(() => {
-              transcriptRangeRequestsRef.current.delete(key);
-              setTranscriptRangeRetryGeneration((generation) => generation + 1);
-            }, 15_000);
-            send({
-              type: "load_transcript_range",
-              sessionId: session.id,
-              requestId: request.requestId,
-              firstSeq: request.range.firstSeq,
-              lastSeq: request.range.lastSeq,
-              afterSeq: msg.coveredThroughSeq,
-              epoch: msg.epoch,
-            });
-          }
+          acceptRange(msg);
           break;
         }
         case "transcript_history": {
@@ -3172,25 +2945,7 @@ export function SessionViewer({
             };
           }
           transcriptViewStore.merge(msg.entries, inSeqMode, true);
-          if (inSeqMode && transcriptIndexEpochRef.current !== null) {
-            const projected = msg.entries
-              .map(transcriptIndexEntryFromPayload)
-              .filter((entry): entry is TranscriptIndexEntry => entry !== null);
-            setTranscriptIndexState((current) =>
-              current?.sessionId === session.id
-                ? {
-                    ...current,
-                    entries: mergeTranscriptIndexEntries(
-                      current.entries,
-                      projected,
-                    ),
-                  }
-                : current,
-            );
-            if (msg.entries.length === 0 && typeof msg.firstSeq === "number") {
-              send({ type: "load_transcript_index", sessionId: session.id });
-            }
-          }
+          if (inSeqMode) projectAppend(msg.entries, msg.firstSeq);
           // The live stream and the transcript tail both carry assistant text.
           // stream_text accumulates whole blocks until stream_done (end of the
           // run), so a mid-run text block would otherwise show twice: as the
@@ -3741,7 +3496,13 @@ export function SessionViewer({
     }
     beginHistoryLoad();
     requestHistoryPage();
-  }, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
+  }, [
+    beginHistoryLoad,
+    historyTruncated,
+    requestHistoryPage,
+    session.id,
+    transcriptIndexExpectedRef,
+  ]);
   const loadAllHistory = useCallback(() => {
     if (
       transcriptIndexExpectedRef.current ||
@@ -3760,7 +3521,13 @@ export function SessionViewer({
     setLoadingAllHistory(true);
     beginHistoryLoad(60_000);
     requestHistoryPage(true);
-  }, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
+  }, [
+    beginHistoryLoad,
+    historyTruncated,
+    requestHistoryPage,
+    session.id,
+    transcriptIndexExpectedRef,
+  ]);
 
   // Preserve the fast opening snapshot, then download one fuller page once the
   // browser has had time to paint it. This only runs at the live edge in seq
