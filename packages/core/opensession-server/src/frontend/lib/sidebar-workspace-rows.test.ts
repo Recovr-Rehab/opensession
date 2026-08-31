@@ -37,7 +37,7 @@ function build(
     sessions: [],
     workspaces: [],
     openPrs: [],
-    activeSubagentIds: new Set(),
+    nestedSubagentIds: new Set(),
     selectedWorkspaceId: null,
     selectedSessionId: null,
     reads: {},
@@ -85,13 +85,37 @@ describe("buildWorkspaceRows", () => {
         }),
       ],
       workspaces: [workspace("workspace-1")],
-      activeSubagentIds: new Set(["worker"]),
+      nestedSubagentIds: new Set(["worker"]),
       selectedWorkspaceId: "workspace-1",
     });
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.running).toBe(true);
     expect(rows[0]?.status).toBe("inprogress");
+  });
+
+  test("does not create top-level rows for merged or closed subagents", () => {
+    const rows = build({
+      sessions: [
+        session("parent", { workspaceId: "workspace-1" }),
+        session("merged-worker", {
+          workspaceId: "workspace-merged-worker",
+          parentSessionId: "parent",
+          prState: "MERGED",
+        }),
+        session("closed-worker", {
+          workspaceId: "workspace-closed-worker",
+          parentSessionId: "parent",
+          prState: "CLOSED",
+        }),
+      ],
+      workspaces: [workspace("workspace-1")],
+      nestedSubagentIds: new Set(["merged-worker", "closed-worker"]),
+      selectedWorkspaceId: "workspace-1",
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.sessions.map(({ id }) => id)).toEqual(["parent"]);
   });
 
   test("badge face and jump target come from the same mentioned member", () => {

@@ -1,4 +1,4 @@
-import { prLinksMatch, sessionPrRefs } from "./session-prs";
+import { sessionPrRefs } from "./session-prs";
 import type { UnifiedSession, Workspace } from "./types";
 
 export function isScratchWorkspace(
@@ -85,41 +85,14 @@ export function sessionSharesSelectedSidebarGroup(
   );
 }
 
-export interface ActiveWorkspaceSubagent {
+export interface WorkspaceSubagent {
   session: UnifiedSession;
   /** One for a direct child of workspace work, increasing for nested workers. */
   depth: number;
 }
 
-/** An open PR still makes an idle worker part of unfinished work. */
 export function sessionHasOpenPr(session: UnifiedSession): boolean {
   return sessionPrRefs(session).some((pr) => (pr.state ?? "OPEN") === "OPEN");
-}
-
-/**
- * Whether an idle child owns open PR work that its root session does not.
- *
- * Discovery projects a workspace PR onto every session sharing that branch.
- * That must not revive old inline review or research children as unfinished
- * sidebar work. A child only stays nested after it becomes idle when it carries
- * an open PR distinct from every PR already carried by the root session.
- */
-function sessionHasOwnOpenPr(
-  session: UnifiedSession,
-  root: UnifiedSession,
-): boolean {
-  const rootPrs = sessionPrRefs(root);
-  return sessionPrRefs(session).some(
-    (pr) =>
-      (pr.state ?? "OPEN") === "OPEN" &&
-      !rootPrs.some(
-        (rootPr) =>
-          (!!pr.url && prLinksMatch(pr.url, rootPr.url)) ||
-          (pr.repo === rootPr.repo &&
-            ((pr.number !== undefined && pr.number === rootPr.number) ||
-              (!!pr.branch && pr.branch === rootPr.branch))),
-      ),
-  );
 }
 
 /**
@@ -157,23 +130,23 @@ export function sidebarWorkspaceIdForSession(
 }
 
 /**
- * Active or awaiting-merge child sessions grouped under their root workspace.
+ * Unarchived child sessions grouped under their root workspace.
  *
  * A worker can mint a temporary workspace of its own, but `parentSessionId`
- * remains the sidebar relationship. Resolve every live child to its highest
- * known ancestor so changing the selected session cannot turn that temporary
- * workspace back into a top-level row.
+ * remains the sidebar relationship. Resolve every child to its highest known
+ * ancestor so finishing or merging its work cannot turn that temporary
+ * workspace into a top-level row. Archiving is the explicit way to remove it.
  */
-export function activeSubagentsByWorkspace(
+export function subagentsByWorkspace(
   sessions: readonly UnifiedSession[],
-): Map<string, ActiveWorkspaceSubagent[]> {
+): Map<string, WorkspaceSubagent[]> {
   // The live session list should already be unique. Keeping the last copy of
   // a duplicate makes this helper defensive against an optimistic list merge
   // without ever rendering the same child twice.
   const byId = new Map<string, UnifiedSession>();
   for (const session of sessions) byId.set(session.id, session);
 
-  const groups = new Map<string, ActiveWorkspaceSubagent[]>();
+  const groups = new Map<string, WorkspaceSubagent[]>();
   for (const session of byId.values()) {
     if (!session.parentSessionId || session.archived) continue;
 
@@ -197,12 +170,6 @@ export function activeSubagentsByWorkspace(
       parentId = parent.parentSessionId;
     }
     if (!root?.workspaceId) continue;
-    const active =
-      !!session.isRunning ||
-      !!session.waitingForInput ||
-      (session.queuedCount ?? 0) > 0;
-    if (!active && !sessionHasOwnOpenPr(session, root)) continue;
-
     const items = groups.get(root.workspaceId) ?? [];
     items.push({ session, depth });
     groups.set(root.workspaceId, items);
@@ -217,21 +184,21 @@ export function activeSubagentsByWorkspace(
   return groups;
 }
 
-/** Active or awaiting-merge children owned by one workspace row. */
-export function activeSubagentsForWorkspace(
+/** Unarchived children owned by one workspace row. */
+export function subagentsForWorkspace(
   sessions: readonly UnifiedSession[],
   workspaceId: string | null | undefined,
-): ActiveWorkspaceSubagent[] {
+): WorkspaceSubagent[] {
   if (!workspaceId) return [];
-  return activeSubagentsByWorkspace(sessions).get(workspaceId) ?? [];
+  return subagentsByWorkspace(sessions).get(workspaceId) ?? [];
 }
 
 /** Expand child rows only beneath the workspace that is currently selected. */
 export function subagentsForSelectedWorkspace(
-  groups: ReadonlyMap<string, ActiveWorkspaceSubagent[]>,
+  groups: ReadonlyMap<string, WorkspaceSubagent[]>,
   workspaceId: string | null | undefined,
   selectedWorkspaceId: string | null | undefined,
-): ActiveWorkspaceSubagent[] {
+): WorkspaceSubagent[] {
   if (!workspaceId || workspaceId !== selectedWorkspaceId) return [];
   return groups.get(workspaceId) ?? [];
 }

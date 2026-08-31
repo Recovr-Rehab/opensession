@@ -78,9 +78,9 @@ import {
 import { mobileFilterBtn } from "../lib/app-header-classes";
 import {
   ASK_BAND,
-  activeSubagentsByWorkspace,
   isAskWorkspace,
   isScratchWorkspace,
+  subagentsByWorkspace,
   subagentsForSelectedWorkspace,
   workspaceMainSession,
   workspaceRowOwnsSelection,
@@ -310,7 +310,7 @@ import { AutoCreatedMark } from "./sidebar/AutoCreatedMark";
 import { KeepInSidebarMark } from "./sidebar/KeepInSidebarMark";
 import { OriginMark } from "./sidebar/OriginMark";
 import { AutomationReportRow } from "./sidebar/AutomationReportRow";
-import { ActiveSubagentRows } from "./sidebar/ActiveSubagentRows";
+import { SubagentRows } from "./sidebar/SubagentRows";
 import { DraftRow } from "./sidebar/DraftRow";
 import { WorkspaceDraftIndicator } from "./sidebar/WorkspaceDraftIndicator";
 import { WorkspaceContextMenu } from "./sidebar/WorkspaceContextMenu";
@@ -1123,23 +1123,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   });
   const sorted = sortSidebarSessions(filtered, filter.sort);
 
-  // Child sessions belong to their root workspace, not to whichever session
-  // happens to be selected. Derive every family from the complete live list,
-  // then keep only groups whose root row survives the current lens. That keeps
-  // temporary worker workspaces nested without making a filtered parent make
-  // its children disappear.
+  // Child sessions belong to their root workspace, not to whichever temporary
+  // workspace they created. Derive every family from the complete live list,
+  // then keep only groups whose root row survives the current lens. A worker
+  // therefore stays nested after its run or pull request finishes.
   const visibleWorkspaceIds = new Set(
     filtered.flatMap((session) =>
       session.workspaceId ? [session.workspaceId] : [],
     ),
   );
-  const activeSubagentsByWorkspaceId = new Map(
-    Array.from(activeSubagentsByWorkspace(sessions)).filter(([workspaceId]) =>
+  const subagentsByWorkspaceId = new Map(
+    Array.from(subagentsByWorkspace(sessions)).filter(([workspaceId]) =>
       visibleWorkspaceIds.has(workspaceId),
     ),
   );
-  const activeWorkspaceSubagentIds = new Set(
-    Array.from(activeSubagentsByWorkspaceId.values()).flatMap((items) =>
+  const workspaceSubagentIds = new Set(
+    Array.from(subagentsByWorkspaceId.values()).flatMap((items) =>
       items.map(({ session }) => session.id),
     ),
   );
@@ -1173,7 +1172,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     sessions: filtered,
     workspaces,
     openPrs: openPrs ?? [],
-    activeSubagentIds: activeWorkspaceSubagentIds,
+    nestedSubagentIds: workspaceSubagentIds,
     selectedWorkspaceId,
     selectedSessionId: selectedId,
     reads,
@@ -1250,7 +1249,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
 
   const groups = buildAutomationGroups({
     sessions: sorted,
-    activeSubagentIds: activeWorkspaceSubagentIds,
+    nestedSubagentIds: workspaceSubagentIds,
     automationOverview,
     filter,
     currentUser,
@@ -2471,7 +2470,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     const noSectionHeading = rowIsScratch(row);
     const subagents = includeSubagents
       ? subagentsForSelectedWorkspace(
-          activeSubagentsByWorkspaceId,
+          subagentsByWorkspaceId,
           row.workspace?.id,
           selectedWorkspaceId,
         )
@@ -3024,10 +3023,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     return (
       <React.Fragment key={row.key}>
         {workspaceRow}
-        <ActiveSubagentRows
+        <SubagentRows
           items={subagents}
           selectedId={selectedId}
           onSelect={openSidebarSession}
+          onArchive={(session) => onArchive(session, null)}
         />
       </React.Fragment>
     );
@@ -4923,7 +4923,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                     // legacy pin can still point at it). Skip it so it can't render
                     // as an un-archivable ghost row.
                     .filter((s): s is UnifiedSession => !!s && !s.archived)
-                    .filter((s) => !activeWorkspaceSubagentIds.has(s.id))
+                    .filter((s) => !workspaceSubagentIds.has(s.id))
                     // Honor the repo filter — a pinned session from another repo
                     // shouldn't leak into a repo-scoped view (workspace pins
                     // already drop out via wsRows/filtered).

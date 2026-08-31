@@ -11,7 +11,7 @@ interface BuildWorkspaceRowsInput {
   sessions: UnifiedSession[];
   workspaces: Workspace[];
   openPrs: OpenPr[];
-  activeSubagentIds: ReadonlySet<string>;
+  nestedSubagentIds: ReadonlySet<string>;
   selectedWorkspaceId?: string | null;
   selectedSessionId: string | null;
   reads: Record<string, string>;
@@ -36,7 +36,7 @@ export function buildWorkspaceRows({
   sessions,
   workspaces,
   openPrs,
-  activeSubagentIds,
+  nestedSubagentIds,
   selectedWorkspaceId,
   selectedSessionId,
   reads,
@@ -59,7 +59,7 @@ export function buildWorkspaceRows({
 
   for (const session of sessions) {
     if (
-      activeSubagentIds.has(session.id) &&
+      nestedSubagentIds.has(session.id) &&
       session.workspaceId !== selectedWorkspaceId
     ) {
       continue;

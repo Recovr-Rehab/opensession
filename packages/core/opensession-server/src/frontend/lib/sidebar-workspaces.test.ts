@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  activeSubagentsByWorkspace,
-  activeSubagentsForWorkspace,
+  subagentsByWorkspace,
+  subagentsForWorkspace,
   isAskWorkspace,
   isScratchWorkspace,
   sessionSharesSelectedSidebarGroup,
@@ -172,8 +172,8 @@ describe("sidebarWorkspaceIdForSession", () => {
   });
 });
 
-describe("activeSubagentsForWorkspace", () => {
-  test("returns only active children of the selected workspace", () => {
+describe("subagentsForWorkspace", () => {
+  test("returns every unarchived child of the selected workspace", () => {
     const sessions = [
       session("parent", { workspaceId: "ws-1" }),
       session("running", {
@@ -203,12 +203,10 @@ describe("activeSubagentsForWorkspace", () => {
     ];
 
     expect(
-      activeSubagentsForWorkspace(sessions, "ws-1").map(
-        ({ session }) => session.id,
-      ),
-    ).toEqual(["queued", "running", "waiting"]);
-    expect(activeSubagentsForWorkspace(sessions, "ws-3")).toEqual([]);
-    expect(activeSubagentsForWorkspace(sessions, null)).toEqual([]);
+      subagentsForWorkspace(sessions, "ws-1").map(({ session }) => session.id),
+    ).toEqual(["idle", "queued", "running", "waiting"]);
+    expect(subagentsForWorkspace(sessions, "ws-3")).toEqual([]);
+    expect(subagentsForWorkspace(sessions, null)).toEqual([]);
   });
 
   test("follows nested parent edges across temporary child workspaces", () => {
@@ -229,71 +227,44 @@ describe("activeSubagentsForWorkspace", () => {
     ];
 
     expect(
-      activeSubagentsForWorkspace(sessions, "ws-1").map(
-        ({ session, depth }) => [session.id, depth],
-      ),
+      subagentsForWorkspace(sessions, "ws-1").map(({ session, depth }) => [
+        session.id,
+        depth,
+      ]),
     ).toEqual([
       ["child", 1],
       ["grandchild", 2],
     ]);
     expect(
-      activeSubagentsByWorkspace(sessions)
+      subagentsByWorkspace(sessions)
         .get("ws-1")
         ?.map(({ session }) => session.id),
     ).toEqual(["child", "grandchild"]);
-    expect(activeSubagentsByWorkspace(sessions).has("ws-child")).toBe(false);
+    expect(subagentsByWorkspace(sessions).has("ws-child")).toBe(false);
   });
 
-  test("keeps idle workers nested only while they own an open PR", () => {
-    const parent = session("parent", {
-      workspaceId: "ws-parent",
-      prUrl: "https://github.com/tellahq/example/pull/99",
-      prState: "OPEN",
-    });
-    const open = session("open", {
-      workspaceId: "ws-worker",
-      parentSessionId: "parent",
-      prUrl: "https://github.com/tellahq/example/pull/1",
-      prState: "OPEN",
-    });
-    const projectedOpen = session("projected-open", {
-      parentSessionId: "parent",
-      prs: [
-        {
-          repo: "tellahq/example",
-          branch: "fix",
-          source: "primary",
-          state: "OPEN",
-          url: "https://github.com/tellahq/example/pull/2",
-        },
-      ],
-    });
-    const inherited = session("inline-review", {
-      workspaceId: "ws-parent",
-      parentSessionId: "parent",
-      prs: [
-        {
-          repo: "tellahq/example",
-          branch: "parent-branch",
-          source: "discovered",
-          state: "OPEN",
-          url: "https://github.com/tellahq/example/pull/99",
-          number: 99,
-        },
-      ],
-    });
+  test("keeps idle workers nested after their PR merges or closes", () => {
+    const parent = session("parent", { workspaceId: "ws-parent" });
     const merged = session("merged", {
+      workspaceId: "ws-merged-worker",
       parentSessionId: "parent",
       prUrl: "https://github.com/tellahq/example/pull/3",
       prState: "MERGED",
+      createdAt: "2026-08-18T10:00:01Z",
+    });
+    const closed = session("closed", {
+      workspaceId: "ws-closed-worker",
+      parentSessionId: "parent",
+      prUrl: "https://github.com/tellahq/example/pull/4",
+      prState: "CLOSED",
+      createdAt: "2026-08-18T10:00:02Z",
     });
 
     expect(
-      activeSubagentsForWorkspace(
-        [parent, open, projectedOpen, inherited, merged],
-        "ws-parent",
-      ).map(({ session }) => session.id),
-    ).toEqual(["projected-open", "open"]);
+      subagentsForWorkspace([parent, merged, closed], "ws-parent").map(
+        ({ session }) => session.id,
+      ),
+    ).toEqual(["merged", "closed"]);
   });
 
   test("expands child rows only for the selected root workspace", () => {
@@ -318,7 +289,7 @@ describe("activeSubagentsForWorkspace", () => {
       isRunning: true,
     });
 
-    expect(activeSubagentsForWorkspace([worker], "ws-worker")).toEqual([]);
+    expect(subagentsForWorkspace([worker], "ws-worker")).toEqual([]);
   });
 
   test("deduplicates child sessions by id", () => {
@@ -327,7 +298,7 @@ describe("activeSubagentsForWorkspace", () => {
       parentSessionId: "parent",
       isRunning: true,
     });
-    const rows = activeSubagentsForWorkspace(
+    const rows = subagentsForWorkspace(
       [session("parent", { workspaceId: "ws-1" }), child, { ...child }],
       "ws-1",
     );
