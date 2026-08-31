@@ -125,6 +125,7 @@ class TranscriptVirtualizer extends React.Component<
   private topApproachContainer: HTMLDivElement | null = null;
   private topApproachCallback: (() => void) | undefined;
   private topApproachTimer: number | undefined;
+  private underfilledHistoryTimer: number | undefined;
   private topApproachTouchY: number | null = null;
   private topApproachScrollTop: number | null = null;
   private topApproachGate = new TranscriptTopApproachGate();
@@ -164,6 +165,7 @@ class TranscriptVirtualizer extends React.Component<
       this.mountCleanup = this.virtualizer._didMount();
       this.virtualizer._willUpdate();
       this.syncTopApproach();
+      this.scheduleUnderfilledHistory();
       this.syncNavigation();
       this.scheduleVisibleItems();
     });
@@ -209,6 +211,13 @@ class TranscriptVirtualizer extends React.Component<
         }
       }
       this.syncTopApproach();
+      if (
+        prevProps.items.length !== this.props.items.length ||
+        prevProps.topGrowthKey !== this.props.topGrowthKey ||
+        prevProps.topGrowthVersion !== this.props.topGrowthVersion ||
+        prevProps.topApproachGeneration !== this.props.topApproachGeneration
+      )
+        this.scheduleUnderfilledHistory();
       this.syncNavigation();
       this.scheduleVisibleItems();
     });
@@ -219,6 +228,8 @@ class TranscriptVirtualizer extends React.Component<
     this.mountCleanup?.();
     this.navigationCleanup?.();
     this.clearTopApproach();
+    if (this.underfilledHistoryTimer !== undefined)
+      window.clearTimeout(this.underfilledHistoryTimer);
     if (this.visibleTimer !== undefined) window.clearTimeout(this.visibleTimer);
     if (this.headGrowthTimer !== undefined)
       window.clearTimeout(this.headGrowthTimer);
@@ -516,6 +527,37 @@ class TranscriptVirtualizer extends React.Component<
     this.onTopApproachScroll();
   };
 
+  private scheduleUnderfilledHistory() {
+    if (this.underfilledHistoryTimer !== undefined) return;
+    const container = this.topApproachContainer;
+    if (
+      !container ||
+      !this.topApproachCallback ||
+      !transcriptViewportNeedsHistory(
+        container.scrollHeight,
+        container.clientHeight,
+      )
+    )
+      return;
+    // The complete index becomes demand-ready one frame after positioning.
+    // Recheck asynchronously so an opening tail that cannot scroll can request
+    // enough real history to create an upward scroll path.
+    this.underfilledHistoryTimer = window.setTimeout(() => {
+      this.underfilledHistoryTimer = undefined;
+      const current = this.topApproachContainer;
+      const callback = this.topApproachCallback;
+      if (
+        current &&
+        callback &&
+        transcriptViewportNeedsHistory(
+          current.scrollHeight,
+          current.clientHeight,
+        )
+      )
+        callback();
+    }, 100);
+  }
+
   private onTopApproachWheel = (event: WheelEvent) => {
     if (event.deltaY < 0) this.requestTopApproach();
   };
@@ -750,6 +792,13 @@ export function shouldTransitionTranscriptItemPosition(
   // A prompt may move when its optimistic row becomes a durable transcript
   // range. That identity handoff must be visually inert, not a delayed glide.
   return !item.arrivalAliases?.length;
+}
+
+export function transcriptViewportNeedsHistory(
+  scrollHeight: number,
+  clientHeight: number,
+): boolean {
+  return clientHeight > 0 && scrollHeight <= clientHeight + 1;
 }
 
 export function didScrollTranscriptTowardHistory(

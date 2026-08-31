@@ -8,6 +8,7 @@ import {
   shouldAdjustTranscriptScroll,
   shouldTransitionTranscriptItemPosition,
   transcriptOverscan,
+  transcriptViewportNeedsHistory,
   type VirtualTranscriptItem,
   virtualTranscriptRange,
 } from "./VirtualTranscriptList";
@@ -45,6 +46,16 @@ describe("VirtualTranscriptList", () => {
     expect(source).toContain("capture: true");
     expect(source).toMatch(/removeEventListener\(\s*"scroll"/);
   });
+
+  test("loads history when the opening content cannot scroll", () => {
+    expect(transcriptViewportNeedsHistory(700, 700)).toBe(true);
+    expect(transcriptViewportNeedsHistory(699, 700)).toBe(true);
+    expect(transcriptViewportNeedsHistory(701, 700)).toBe(true);
+    expect(transcriptViewportNeedsHistory(702, 700)).toBe(false);
+    expect(transcriptViewportNeedsHistory(0, 0)).toBe(false);
+    expect(source).toContain("this.scheduleUnderfilledHistory()");
+  });
+
   test("keeps the live-edge tail in the same virtual coordinate space", () => {
     expect(virtualTranscriptRange([10, 11], 40, 3)).toEqual([
       10, 11, 37, 38, 39,
