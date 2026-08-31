@@ -91,13 +91,6 @@ import { sameOpenPrSnapshot } from "../lib/open-pr-snapshot";
 import { useCurrentUser } from "./UserPicker";
 import { getLane, getLanes, onLanesChanged } from "../lib/lanes";
 import {
-  getPins,
-  onPinsChanged,
-  togglePin,
-  reorderPins,
-  unpin,
-} from "../lib/pins";
-import {
   SNOOZE_SOMEDAY,
   clearSnooze,
   getSnoozes,
@@ -134,12 +127,7 @@ import {
   getSidebarDensity,
   onSidebarDensityChanged,
 } from "../lib/sidebar-density";
-import {
-  getRepoOrder,
-  onRepoOrderChanged,
-  replaceVisibleRepoOrder,
-  setRepoOrder,
-} from "../lib/repo-order";
+import { setRepoOrder } from "../lib/repo-order";
 import { UserAvatar, githubLoginFor } from "./UserAvatar";
 import { facepileAvatarStyle, otherViewers } from "../lib/presence";
 import { shortTime } from "../lib/time";
@@ -176,6 +164,7 @@ import { RepoTile } from "./RepoTile";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useNavigation } from "../hooks/useNavigation";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
+import { useSidebarDnd } from "../hooks/useSidebarDnd";
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PrRow } from "./PrRow";
@@ -272,6 +261,7 @@ import {
   type GroupBand,
   type MineStatus,
   type OpenNextSidebarItem,
+  type PersonalBandPinnedEntry,
   type Props,
   type SidebarHandle,
   type WsRow,
@@ -290,10 +280,7 @@ import { AutoCreatedMark } from "./sidebar/AutoCreatedMark";
 import { KeepInSidebarMark } from "./sidebar/KeepInSidebarMark";
 import { OriginMark } from "./sidebar/OriginMark";
 import { AutomationsBand } from "./sidebar/AutomationsBand";
-import {
-  PersonalBand,
-  type PersonalBandPinnedEntry,
-} from "./sidebar/PersonalBand";
+import { PersonalBand } from "./sidebar/PersonalBand";
 import { PeopleBand } from "./sidebar/PeopleBand";
 import { ProjectBands } from "./sidebar/ProjectBands";
 import { SubagentRows } from "./sidebar/SubagentRows";
@@ -405,68 +392,24 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   const [hiddenTools, setHiddenTools] = useState(readHiddenSidebarTools);
   const [toolOrder, setToolOrderState] = useState(getSidebarToolOrder);
   const [hiddenFeeds, setHiddenFeeds] = useState(readHiddenSidebarFeeds);
-  const [savedRepoOrder, setSavedRepoOrder] = useState(getRepoOrder);
-  useEffect(
-    () => onRepoOrderChanged(() => setSavedRepoOrder(getRepoOrder())),
-    [],
-  );
-  const [repoOrderDraft, setRepoOrderDraft] = useState<string[] | null>(null);
-  const repoOrderAtDragStart = useRef<string[] | null>(null);
-  const repoOrderPending = useRef<string[] | null>(null);
-  const repoVisualOrder = useRef<string[] | null>(null);
-  const repoDragging = useRef<string | null>(null);
-  const [repoDragKey, setRepoDragKey] = useState<string | null>(null);
-  const repoAutoScrollFrame = useRef<number | null>(null);
-  const repoAutoScrollSpeed = useRef(0);
-  const repoAutoScrollContainer = useRef<HTMLElement | null>(null);
-  const repoJustDragged = useRef(false);
-  const stopRepoAutoScroll = () => {
-    if (repoAutoScrollFrame.current !== null)
-      cancelAnimationFrame(repoAutoScrollFrame.current);
-    repoAutoScrollFrame.current = null;
-    repoAutoScrollSpeed.current = 0;
-    repoAutoScrollContainer.current = null;
-  };
-  const tickRepoAutoScroll = () => {
-    const container = repoAutoScrollContainer.current;
-    if (!container || repoAutoScrollSpeed.current === 0) {
-      repoAutoScrollFrame.current = null;
-      return;
-    }
-    container.scrollTop += repoAutoScrollSpeed.current;
-    repoAutoScrollFrame.current = requestAnimationFrame(tickRepoAutoScroll);
-  };
-  const handleRepoAutoScroll = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!repoDragging.current) return;
-    event.preventDefault();
-    const container = event.currentTarget;
-    const rect = container.getBoundingClientRect();
-    const edge = Math.min(96, rect.height * 0.18);
-    const fromTop = event.clientY - rect.top;
-    const fromBottom = rect.bottom - event.clientY;
-    const maxSpeed = 18;
-    let speed = 0;
-    if (fromTop < edge)
-      speed = -Math.ceil(maxSpeed * (1 - Math.max(0, fromTop) / edge));
-    else if (fromBottom < edge)
-      speed = Math.ceil(maxSpeed * (1 - Math.max(0, fromBottom) / edge));
-    if (speed === 0) {
-      stopRepoAutoScroll();
-      return;
-    }
-    repoAutoScrollContainer.current = container;
-    repoAutoScrollSpeed.current = speed;
-    if (repoAutoScrollFrame.current === null)
-      repoAutoScrollFrame.current = requestAnimationFrame(tickRepoAutoScroll);
-  };
-  useEffect(
-    () => () => {
-      if (repoAutoScrollFrame.current !== null)
-        cancelAnimationFrame(repoAutoScrollFrame.current);
-    },
-    [],
-  );
-  const [pins, setPins] = useState<string[]>(getPins);
+  const {
+    sidebarScrollRef,
+    savedRepoOrder,
+    repoOrderDraft,
+    repoDrag,
+    handleRepoAutoScroll,
+    stopRepoAutoScroll,
+    pins,
+    replacePins,
+    pinOrderDraft,
+    pinDragMeta,
+    laneDropHover,
+    sessionPinState,
+    workspacePinState,
+    togglePinKey,
+    togglePinnedKeys,
+    createPinnedDrag,
+  } = useSidebarDnd({ onSetStatus });
   // Per-user workspace snoozes (row key → ISO until). An overlay like pins:
   // actively-snoozed rows park in the Snoozed section; the wake sweep below
   // prunes lapsed entries and marks their rows unread.
@@ -476,114 +419,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // counterpart to Archive, which is global: a hidden row leaves only THIS
   // user's sidebar, and the session keeps running for everyone else.
   const [hides, setHidesState] = useState<Record<string, string>>(getHides);
-  // Drag-to-reorder in the Pinned band. onReorder fires continuously during a
-  // drag, so the in-flight order lives in local state (pinOrderDraft) and only
-  // commits to the pins store on drop — mirroring the composer queue's pattern.
-  // pinDragKey marks the floating row (background + stacking); pinJustDragged
-  // swallows the click that lands on the row right after a drop.
-  const [pinOrderDraft, setPinOrderDraft] = useState<string[] | null>(null);
-  const pinOrderPending = useRef<string[] | null>(null);
-  const [pinDragKey, setPinDragKey] = useState<string | null>(null);
-  const pinJustDragged = useRef(false);
-  // Drag-into-lane: while a Pinned row is mid-drag, the status lanes below
-  // double as drop targets (per-repo lanes only for the row's own repo).
-  // pinDragMeta carries the dragged entry's sessions/repo/pin keys; laneDropHover
-  // marks the lane under the pointer. Both keep a ref twin so the drag-end
-  // commit never reads a stale closure mid-batch.
-  type PinDragMeta = {
-    repo: string | null;
-    sessions: UnifiedSession[];
-    pinKeys: string[];
-  };
-  type LaneDropTarget = { gkey: string; lane: MineStatus };
-  const [pinDragMeta, setPinDragMeta] = useState<PinDragMeta | null>(null);
-  const pinDragMetaRef = useRef<PinDragMeta | null>(null);
-  const [laneDropHover, setLaneDropHover] = useState<LaneDropTarget | null>(
-    null,
-  );
-  const laneDropHoverRef = useRef<LaneDropTarget | null>(null);
-
-  // The lane rects, in DOM order, taken once per drag. Motion writes the
-  // dragged row's transform on every pointer frame, so measuring the 40-odd
-  // targets inside the move handler forced a fresh layout on each of them.
-  // Nothing under the pointer moves during a drag: the lanes materialize
-  // before it starts, and a hover only repaints (ring + fill).
-  type LaneDropRect = LaneDropTarget & { repo: string; rect: DOMRect };
-  const laneDropRectsRef = useRef<LaneDropRect[] | null>(null);
-  function measureLaneDropTargets() {
-    const targets =
-      sidebarScrollRef.current?.querySelectorAll<HTMLElement>(
-        "[data-lane-drop]",
-      ) ?? [];
-    const rects: LaneDropRect[] = [];
-    for (const el of targets)
-      rects.push({
-        gkey: el.dataset.laneDrop!,
-        lane: el.dataset.laneStatus as MineStatus,
-        repo: el.dataset.laneRepo || "",
-        rect: el.getBoundingClientRect(),
-      });
-    laneDropRectsRef.current = rects;
-  }
-
-  // Hit-test the pointer against the lane drop targets below the Pinned band
-  // (they carry data-lane-* attributes while a drag is live). Geometric rect
-  // checks instead of elementFromPoint — the dragged row itself rides under
-  // the pointer and would swallow the hit.
-  function updateLaneDropHover(clientX: number, clientY: number) {
-    const meta = pinDragMetaRef.current;
-    let next: LaneDropTarget | null = null;
-    if (meta && meta.sessions.length > 0) {
-      // Null only for a move that beat the snapshot effect below.
-      if (!laneDropRectsRef.current) measureLaneDropTargets();
-      for (const target of laneDropRectsRef.current ?? []) {
-        const r = target.rect;
-        const inside =
-          clientX >= r.left &&
-          clientX <= r.right &&
-          clientY >= r.top &&
-          clientY <= r.bottom;
-        if (!inside) continue;
-        // Per-repo lanes only take rows of their own repo; the global
-        // lanes (no data-lane-repo) take anything.
-        if (target.repo && target.repo !== meta.repo) continue;
-        next = { gkey: target.gkey, lane: target.lane };
-        break;
-      }
-    }
-    if (laneDropHoverRef.current?.gkey !== next?.gkey) {
-      laneDropHoverRef.current = next;
-      setLaneDropHover(next);
-    }
-  }
-  // The targets exist only once pinDragMeta has rendered them (empty lanes
-  // materialize with it), so the snapshot waits for that commit. Scrolling or
-  // resizing the rail underneath a live drag is what can move them.
-  useEffect(() => {
-    if (!pinDragMeta || pinDragMeta.sessions.length === 0) {
-      laneDropRectsRef.current = null;
-      return;
-    }
-    measureLaneDropTargets();
-    const root = sidebarScrollRef.current;
-    // Drop the snapshot rather than re-take it here: the next move re-takes
-    // it, so a burst of scrolling or row updates costs one measurement
-    // instead of one each. A poll landing mid-drag can move a row between
-    // lanes, which is why the rows are watched at all.
-    const invalidate = () => {
-      laneDropRectsRef.current = null;
-    };
-    root?.addEventListener("scroll", invalidate, { passive: true });
-    window.addEventListener("resize", invalidate);
-    const rowObserver = new MutationObserver(invalidate);
-    if (root) rowObserver.observe(root, { childList: true, subtree: true });
-    return () => {
-      root?.removeEventListener("scroll", invalidate);
-      window.removeEventListener("resize", invalidate);
-      rowObserver.disconnect();
-      laneDropRectsRef.current = null;
-    };
-  }, [pinDragMeta]);
   const [recents, setRecents] = useState<string[]>(getRecents);
   // Per-session last-read marks, driving the unread dot. Kept in sync via the
   // same event the viewer fires when it marks a session read.
@@ -603,8 +438,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     () => onSidebarFeedsChanged(() => setHiddenFeeds(readHiddenSidebarFeeds())),
     [],
   );
-  const sidebarScrollRef = useRef<HTMLDivElement>(null);
-
   // CSS has no interoperable :stuck selector. Track the shared sidebar
   // scrollport instead so section/lane labels can stay transparent in-flow and
   // gain an opaque surface only while position:sticky is actively pinning them.
@@ -719,7 +552,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
       densityObserver.disconnect();
       if (frame) cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [sidebarScrollRef]);
 
   // Filter popover (group by / repo / sort) — its choices persist together.
   // The person lens is shared with Home's facepile (lib/sidebar-filter), so
@@ -779,7 +612,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     // filter.person changes the title text ("X's workspaces"), so re-measure.
   }, [filter.repo, filter.person]);
 
-  useEffect(() => onPinsChanged(() => setPins(getPins())), []);
   useEffect(() => onSnoozesChanged(() => setSnoozesState(getSnoozes())), []);
   useEffect(() => onHidesChanged(() => setHidesState(getHides())), []);
   // Per-user lanes (lib/lanes.ts). mineStatus/pinnedLane read the lib cache
@@ -1265,42 +1097,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   ) {
     onArchive(session, openNextSidebarItem(`session:${session.id}`, current));
   }
-  function sessionPinState(s: UnifiedSession) {
-    const keys = [s.id, ...(s.aliasIds || [])].filter(
-      (k, i, a) => pins.includes(k) && a.indexOf(k) === i,
-    );
-    const pinned = keys.length > 0;
-    const toggle = () => {
-      if (pinned) {
-        let next = pins;
-        for (const k of keys) next = togglePin(k);
-        setPins(next);
-      } else {
-        setPins(togglePin(s.id));
-      }
-    };
-    return { pinned, toggle };
-  }
-  function workspacePinState(row: WsRow) {
-    const pinKey = row.workspace ? `workspace:${row.workspace.id}` : row.key;
-    const keys = [
-      pinKey,
-      row.key,
-      ...row.sessions.flatMap((c) => [c.id, ...(c.aliasIds || [])]),
-    ].filter((k, i, a) => pins.includes(k) && a.indexOf(k) === i);
-    const pinned = keys.length > 0;
-    const toggle = () => {
-      if (pinned) {
-        let next = pins;
-        for (const k of keys) next = togglePin(k);
-        setPins(next);
-      } else {
-        setPins(togglePin(pinKey));
-      }
-    };
-    return { pinned, toggle };
-  }
-
   // Pinned rows (pinned via their own key or a legacy pin on a member session)
   // and the focus person's rows — shared by the list rendering below and by
   // archive-next, so both always agree on what's actually in the sidebar.
@@ -1465,7 +1261,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         item={item}
         selected={prRowSelected(item)}
         pinned={pins.includes(pinKey)}
-        onTogglePin={() => setPins(togglePin(pinKey))}
+        onTogglePin={() => togglePinKey(pinKey)}
         onOpen={() => navigation.openPrItem(item)}
         onClose={() => void closePrRow(item)}
         closing={closingPrUrls.has(item.pr.url)}
@@ -1635,11 +1431,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
       row.key,
       ...row.sessions.flatMap((c) => [c.id, ...(c.aliasIds || [])]),
     ].filter((k, i, a) => pins.includes(k) && a.indexOf(k) === i);
-    if (pinnedKeys.length) {
-      let next = pins;
-      for (const k of pinnedKeys) next = togglePin(k);
-      setPins(next);
-    }
+    if (pinnedKeys.length) togglePinnedKeys(pinnedKeys);
     clearSnooze(row.key);
     // Keep something open if the row being hidden owns the active session.
     if (row.sessions.some((c) => c.id === selectedId)) {
@@ -3115,7 +2907,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         session={linked}
         active={supportThreadActive(t)}
         pinned={pins.includes(pinKey)}
-        onTogglePin={() => setPins(togglePin(pinKey))}
+        onTogglePin={() => togglePinKey(pinKey)}
         onOpen={() => navigation.openTicket(t)}
         onMarkDone={() => markSupportRowDone(t.id)}
         onSetStatus={
@@ -3526,77 +3318,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     ];
   }
 
-  // Drag handlers stay in Sidebar so refs are reached only from deferred
-  // browser events, never while ProjectBands builds its JSX.
-  function moveDraggedRepo(
-    targetRepo: string,
-    order: string[],
-    fullOrder: string[],
-    event: React.DragEvent<HTMLDivElement>,
-  ) {
-    const draggedRepo = repoDragging.current;
-    if (!draggedRepo || targetRepo === ASK_BAND) return;
-    event.preventDefault();
-    if (draggedRepo === targetRepo) return;
-    const visibleOrder = [
-      ...(repoVisualOrder.current ?? order.filter((repo) => repo !== ASK_BAND)),
-    ];
-    const from = visibleOrder.indexOf(draggedRepo);
-    if (from < 0) return;
-    visibleOrder.splice(from, 1);
-    let target = visibleOrder.indexOf(targetRepo);
-    if (target < 0) return;
-    const header = event.currentTarget.querySelector<HTMLElement>(
-      ":scope > [data-sticky-head]",
-    );
-    const rect = (header ?? event.currentTarget).getBoundingClientRect();
-    if (event.clientY > rect.top + rect.height / 2) target++;
-    visibleOrder.splice(target, 0, draggedRepo);
-    if (
-      JSON.stringify(visibleOrder) === JSON.stringify(repoVisualOrder.current)
-    )
-      return;
-    repoVisualOrder.current = visibleOrder;
-    const baseline = repoOrderAtDragStart.current ?? fullOrder;
-    const next = replaceVisibleRepoOrder(baseline, visibleOrder);
-    repoOrderPending.current = next;
-    setRepoOrderDraft(next);
-  }
-  function finishRepoDrag(commit: boolean) {
-    stopRepoAutoScroll();
-    repoJustDragged.current = true;
-    setTimeout(() => {
-      repoJustDragged.current = false;
-    }, 0);
-    repoOrderAtDragStart.current = null;
-    repoVisualOrder.current = null;
-    repoDragging.current = null;
-    setRepoDragKey(null);
-    const pending = repoOrderPending.current;
-    repoOrderPending.current = null;
-    setRepoOrderDraft(null);
-    if (commit && pending) setRepoOrder(pending);
-  }
-  function startRepoDrag(
-    repo: string,
-    fullOrder: string[],
-    order: string[],
-    event: React.DragEvent<HTMLButtonElement>,
-  ) {
-    repoDragging.current = repo;
-    setRepoDragKey(repo);
-    repoOrderAtDragStart.current = [...fullOrder];
-    repoOrderPending.current = null;
-    repoVisualOrder.current = order.filter((item) => item !== ASK_BAND);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", repo);
-  }
-  function swallowRepoDragClick(event: React.MouseEvent) {
-    if (!repoJustDragged.current) return;
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
   // ProjectBands owns presentation. Build its pure row-membership model only
   // for project grouping because deriving it buckets every visible row.
   const projectBands = groupsByRepo
@@ -3766,7 +3487,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           session={linked}
           active={feedItemActive(feed, item)}
           pinned={pins.includes(pinKey)}
-          onTogglePin={() => setPins(togglePin(pinKey))}
+          onTogglePin={() => togglePinKey(pinKey)}
           onOpen={() => navigation.openFeedItem(feed, item)}
           onSetStatus={
             linked ? (status) => onSetStatus([linked], status) : undefined
@@ -4030,7 +3751,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
             session={linked}
             active={feedItemActive(feed, item)}
             pinned
-            onTogglePin={() => setPins(togglePin(pinKey))}
+            onTogglePin={() => togglePinKey(pinKey)}
             onOpen={() => navigation.openFeedItem(feed, item)}
             onSetStatus={
               linked ? (status) => onSetStatus([linked], status) : undefined
@@ -4061,87 +3782,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           (draftIdx.get(a.key) ?? Infinity) - (draftIdx.get(b.key) ?? Infinity),
       );
     }
-    const entryMap = new Map(entries.map((e) => [e.key, e] as const));
-    // Whole-row y-drag would fight touch scrolling and the swipe
-    // gestures, so drag reorder is desktop-only; the order itself is
-    // per-user server state, so a desktop reorder shows up on the phone.
-    // (>0, not >1: even a lone pinned row can be dragged into a lane.)
-    const canDragPins = !isPhone && entries.length > 0;
-    const commitPinReorder = () => {
-      setPinDragKey(null);
-      pinJustDragged.current = true;
-      // The drop's click fires synchronously after pointerup; clear the
-      // swallow flag right after so the next real click works.
-      setTimeout(() => {
-        pinJustDragged.current = false;
-      }, 0);
-      // A drop onto a status lane wins over the reorder: lane-pin the
-      // row's sessions there and unpin it — dragging OUT of Pinned reads
-      // as a move, unlike right-click Set-status which keeps the pin
-      // (the row shows in both the Pinned band and its lane).
-      const laneDrop = laneDropHoverRef.current;
-      const dragMeta = pinDragMetaRef.current;
-      pinDragMetaRef.current = null;
-      setPinDragMeta(null);
-      laneDropHoverRef.current = null;
-      setLaneDropHover(null);
-      if (laneDrop && dragMeta && dragMeta.sessions.length > 0) {
-        pinOrderPending.current = null;
-        setPinOrderDraft(null);
-        setPins(unpin(dragMeta.pinKeys));
-        onSetStatus(dragMeta.sessions, laneDrop.lane);
-        return;
-      }
-      const orderKeys = pinOrderPending.current;
-      pinOrderPending.current = null;
-      setPinOrderDraft(null);
-      if (!orderKeys) return;
-      // New pins array: the visible entries' keys take the slots that
-      // visible keys already occupy (in the new order), so pins hidden
-      // from the band (archived, repo-filtered, review-band rows) keep
-      // their exact positions instead of getting shoved to the end.
-      const flat = orderKeys.flatMap((k) => entryMap.get(k)?.pinKeys ?? []);
-      const visible = new Set(flat);
-      const queue = [...flat];
-      setPins(
-        reorderPins(
-          pins.map((p) => (visible.has(p) ? (queue.shift() ?? p) : p)),
-        ),
-      );
-    };
+    const drag = createPinnedDrag(entries, isPhone);
     return {
       entries,
       open: pinnedOpen,
-      canDrag: canDragPins,
-      dragKey: pinDragKey,
       onToggle: () => toggleGroup("pinned"),
-      onReorder: (keys: string[]) => {
-        pinOrderPending.current = keys;
-        setPinOrderDraft(keys);
-      },
-      onEntryDragStart: (entry: PersonalBandPinnedEntry) => {
-        setPinDragKey(entry.key);
-        const meta = {
-          repo: entry.repo,
-          sessions: entry.sessions,
-          pinKeys: entry.pinKeys,
-        };
-        pinDragMetaRef.current = meta;
-        setPinDragMeta(meta);
-      },
-      onEntryDrag: (event: MouseEvent | TouchEvent | PointerEvent) => {
-        if ("clientX" in event)
-          updateLaneDropHover(event.clientX, event.clientY);
-      },
-      onEntryDragEnd: commitPinReorder,
-      onEntryClickCapture: (event: React.MouseEvent) => {
-        // Swallow the click that lands on the row when a drag is dropped. It
-        // would otherwise open the session under the cursor.
-        if (pinJustDragged.current) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      },
+      ...drag,
     };
   })();
 
@@ -4709,7 +4355,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                 activeSnoozeKeys={activeSnoozeKeys}
                 snoozes={snoozes}
                 hiddenRowKeys={hiddenRowKeys}
-                onPinsChange={setPins}
+                onPinsChange={replacePins}
                 onSetStatus={onSetStatus}
                 onSnooze={(row, until) =>
                   until ? setSnooze(row.key, until) : clearSnooze(row.key)
@@ -4881,13 +4527,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                             workspaceRow: rowOwnsSelection,
                             prRow: prRowSelected,
                           }}
-                          drag={{
-                            repoKey: repoDragKey,
-                            move: moveDraggedRepo,
-                            start: startRepoDrag,
-                            finish: finishRepoDrag,
-                            swallowClick: swallowRepoDragClick,
-                          }}
+                          drag={repoDrag}
                         />
                         {visibleFeeds.map((descriptor) =>
                           renderFeedBand(descriptor, true),
@@ -5035,13 +4675,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                   row={row}
                   pinned={pinned}
                   onTogglePin={() => {
-                    if (pinned) {
-                      let next = pins;
-                      for (const k of pinnedKeys) next = togglePin(k);
-                      setPins(next);
-                    } else {
-                      setPins(togglePin(pinKey));
-                    }
+                    if (pinned) togglePinnedKeys(pinnedKeys);
+                    else togglePinKey(pinKey);
                   }}
                   onClose={() => setWsSheet(null)}
                   onArchive={() => archiveWorkspaceWithNext(row, source)}

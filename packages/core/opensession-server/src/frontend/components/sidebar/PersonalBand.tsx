@@ -17,21 +17,9 @@ import {
   SIDEBAR_STICKY_LANE,
   SIDEBAR_STUCK_BACKING,
 } from "../../lib/sidebar-classes";
-import type { UnifiedSession } from "../../lib/types";
+import type { PersonalBandPinnedEntry } from "../../lib/sidebar-types";
 import { cn } from "../../ui/cn";
 import { IconChevronDown, IconRobot } from "../icons";
-
-export interface PersonalBandPinnedEntry {
-  key: string;
-  /** Every pin key represented by this row. Legacy session pins move with the
-   * workspace pin so one visible entry always reorders as one unit. */
-  pinKeys: string[];
-  /** Lane-drop payload. Empty sessions make non-work entries such as tickets
-   * ineligible; repo limits nested lane targets to the matching project. */
-  repo: string | null;
-  sessions: UnifiedSession[];
-  node: React.ReactNode;
-}
 
 interface PersonalBandPinned {
   entries: PersonalBandPinnedEntry[];
