@@ -25,8 +25,12 @@ describe("buildRunInstructions", () => {
       "For PRs outside the current primary repository, write `<repo>#<number>`, never bare `#<number>`.",
     );
     expect(prompt).toContain(
-      "If it contains an object ID, use one that exists in staging, never a local fixture. Verify the resulting staging URL opens the feature you changed.",
+      "For editors, call `opensession-portals` `set_editor_preview_path`",
     );
-    expect(prompt.length).toBeLessThan(1_000);
+    expect(prompt).toContain(
+      "at least 60 seconds, 2+ clips, and a ready non-empty transcript",
+    );
+    expect(prompt).toContain("to prevent reuse by another active session");
+    expect(prompt.length).toBeLessThan(1_200);
   });
 });

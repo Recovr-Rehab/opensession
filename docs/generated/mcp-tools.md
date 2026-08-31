@@ -52,7 +52,7 @@ touches an in-process tool:
 | [`opensession-repos`](#opensession-repos) | 4 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
 | [`opensession-web`](#opensession-web) | 3 | interactive, goal wake | Needs a session id. |
-| [`opensession-portals`](#opensession-portals) | 6 | interactive | Needs a session id. |
+| [`opensession-portals`](#opensession-portals) | 7 | interactive | Needs a session id. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
@@ -68,7 +68,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-27 servers, 117 tools.
+27 servers, 118 tools.
 
 ## opensession-sessions
 
@@ -646,6 +646,12 @@ Stop one supervised Portal in this session. It never affects services in another
 `mcp__opensession-portals__restart_portal` · input: `name` (string, required)
 
 Restart one supervised Portal using its registered command and port. Repository-declared Portals are refreshed from their trusted recipe before restart.
+
+### `set_editor_preview_path`
+
+`mcp__opensession-portals__set_editor_preview_path` · input: `path` (string, required), `exclusiveKey` (string, required), `durationSeconds` (number, required), `clipCount` (integer, required), `transcriptWordCount` (integer, required), `leaseMinutes` (integer)
+
+Set and exclusively reserve the staging route for an editor feature. Call this only after verifying the staging record is at least 60 seconds long, has multiple clips, and has a ready non-empty transcript.
 
 ### `set_portal_path`
 

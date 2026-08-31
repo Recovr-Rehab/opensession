@@ -6,6 +6,7 @@ import { createServer } from "node:net";
 import {
   listPortalServices,
   listSandboxPortalServices,
+  normalizePortalPath,
   readPortalRegistry,
   reapOrphanedPortalServices,
   SANDBOX_PORTAL_AGENT_ENTRY,
@@ -32,6 +33,17 @@ afterAll(() => {
 });
 
 describe("session Portal supervisor", () => {
+  test("accepts only root-relative default routes", () => {
+    expect(
+      normalizePortalPath(" /video/vid_fixture/edit?status=Subtitles "),
+    ).toBe("/video/vid_fixture/edit?status=Subtitles");
+    expect(normalizePortalPath(" ")).toBeUndefined();
+    for (const path of ["video/fixture", "//other.example/path", "/bad\npath"])
+      expect(() => normalizePortalPath(path)).toThrow(
+        "Portal path must be root-relative",
+      );
+  });
+
   test("launches the remote relay from the current runner layout", () => {
     expect(SANDBOX_PORTAL_AGENT_ENTRY).toEndWith(
       "/packages/core/opensession-server/src/runner-host/sandbox-portal-agent.ts",

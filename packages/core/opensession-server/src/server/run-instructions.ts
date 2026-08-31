@@ -169,10 +169,13 @@ export function buildRunInstructions(input: {
   }
   if (!input.isAsk && inproc["opensession-portals"]) {
     parts.push(
-      "## Preview links\nFor a user-facing web change, call `opensession-portals` " +
-        "`set_portal_path` without a name before finishing. Set the exact root-relative " +
-        "route, including its query string. If it contains an object ID, use one that exists " +
-        "in staging, never a local fixture. Verify the resulting staging URL opens the feature you changed.",
+      "## Preview links\nBefore finishing a user-facing web change, set its exact " +
+        "root-relative route, query included. For editors, call `opensession-portals` " +
+        "`set_editor_preview_path` with a dedicated or fresh staging record: at least 60 " +
+        "seconds, 2+ clips, and a ready non-empty transcript. Pass a stable `exclusiveKey` " +
+        "such as `video:<id>` to prevent reuse by another active session. Never use a local " +
+        "fixture. For other web changes, call `set_portal_path` without a name. Open the " +
+        "resulting staging URL and verify it shows the changed feature.",
     );
   }
 
