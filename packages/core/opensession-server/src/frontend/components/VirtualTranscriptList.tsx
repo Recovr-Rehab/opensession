@@ -186,11 +186,62 @@ class TranscriptVirtualizer extends React.Component<
     });
   }
 
-  componentDidUpdate(prevProps: Omit<Props, "enabled">) {
+  /** Pre-mutation scroller height, captured only for commits that prepend
+   * history above the reader (growth key handoff or a partial head range
+   * completing). Detecting those from props alone keeps ordinary commits free
+   * of forced layout: the unconditional scrollHeight read that used to live in
+   * every componentDidUpdate was the largest non-idle self-time entry in
+   * history-scroll profiles. */
+  getSnapshotBeforeUpdate(
+    prevProps: Omit<Props, "enabled">,
+  ): TranscriptBottomAnchor | null {
+    const growthKey = this.props.topGrowthKey ?? this.props.items[0]?.key ?? "";
+    const previousKey = prevProps.topGrowthKey ?? prevProps.items[0]?.key ?? "";
+    const prependedRange =
+      Boolean(growthKey) &&
+      growthKey !== previousKey &&
+      this.props.items.some((item) => item.key === previousKey);
+    const completedPartialRange =
+      Boolean(growthKey) &&
+      growthKey === previousKey &&
+      prevProps.topGrowthVersion !== undefined &&
+      this.props.topGrowthVersion !== prevProps.topGrowthVersion;
+    const hydratedHistory =
+      this.props.historyGrowthVersion !== undefined &&
+      this.props.historyGrowthVersion !== prevProps.historyGrowthVersion;
+    if (!prependedRange && !completedPartialRange && !hydratedHistory)
+      return null;
+    const container = this.scrollContainer();
+    return container
+      ? transcriptBottomAnchor(
+          container.scrollHeight,
+          container.scrollTop,
+          container.clientHeight,
+        )
+      : null;
+  }
+
+  componentDidUpdate(
+    prevProps: Omit<Props, "enabled">,
+    _prevState: AdapterState,
+    snapshot: TranscriptBottomAnchor | null,
+  ) {
     this.runCommitLifecycle(() => {
       this.measureCommittedRows(prevProps);
       this.virtualizer._willUpdate();
       this.scheduleHeadGrowthClear();
+      if (snapshot !== null) {
+        // Indexed hydration only adds rows above the loaded window. Restore the
+        // exact pre-commit distance from the bottom instead of inferring an
+        // offset delta from whichever estimates happened to render first.
+        const container = this.scrollContainer();
+        if (container)
+          container.scrollTop = transcriptScrollTopForBottomAnchor(
+            container.scrollHeight,
+            container.clientHeight,
+            snapshot,
+          );
+      }
       this.syncTopApproach();
       if (
         prevProps.items.length !== this.props.items.length ||
@@ -344,10 +395,6 @@ class TranscriptVirtualizer extends React.Component<
     return {
       count: props.items.length,
       getScrollElement: () => this.scrollContainer(),
-      // TanStack's chat mode keeps a stable keyed item in place when older
-      // rows prepend and preserves an already-pinned end through measurements.
-      anchorTo: "end",
-      scrollEndThreshold: 120,
       estimateSize: (index) => {
         const item = props.items[index];
         if (!item) return 96;
@@ -765,6 +812,28 @@ class TranscriptVirtualizer extends React.Component<
     this.rendering = false;
     return result;
   }
+}
+
+export interface TranscriptBottomAnchor {
+  distanceFromBottom: number;
+}
+
+export function transcriptBottomAnchor(
+  scrollHeight: number,
+  scrollTop: number,
+  clientHeight: number,
+): TranscriptBottomAnchor {
+  return {
+    distanceFromBottom: Math.max(0, scrollHeight - scrollTop - clientHeight),
+  };
+}
+
+export function transcriptScrollTopForBottomAnchor(
+  scrollHeight: number,
+  clientHeight: number,
+  anchor: TranscriptBottomAnchor,
+): number {
+  return Math.max(0, scrollHeight - clientHeight - anchor.distanceFromBottom);
 }
 
 export function committedTranscriptMeasureKeys(
