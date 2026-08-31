@@ -66,7 +66,7 @@ import {
   INFO_LIST_CLASS,
   INFO_SECTION_CLASS,
 } from "../lib/session-viewer-classes";
-import { openLightbox } from "./MediaLightbox";
+import { openLightbox } from "../lib/media-lightbox";
 import { SandboxBadge } from "./SandboxBadge";
 import {
   IconBell,

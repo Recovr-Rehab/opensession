@@ -39,7 +39,7 @@ import { noAutofill } from "../lib/composer-autofill";
 import { useSessionNameProjection } from "../hooks/useSessionNameProjection";
 import { useFileMentions } from "./useFileMentions";
 import { ImageThumbs } from "./ImageThumbs";
-import type { ImageRegionAnnotation } from "./MediaLightbox";
+import type { ImageRegionAnnotation } from "../lib/media-lightbox";
 import { FileChips } from "./FileChips";
 import { cn } from "../ui/cn";
 import { getCurrentUser } from "./UserPicker";

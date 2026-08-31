@@ -23,7 +23,7 @@ import {
 import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
 import { useAssetViewMode } from "../lib/asset-view-mode";
 import { AssetViewToggle } from "./AssetViewToggle";
-import { openLightbox } from "./MediaLightbox";
+import { openLightbox } from "../lib/media-lightbox";
 import { fullTime } from "../lib/time";
 import { commitPrompt } from "../lib/commit-prompt";
 import { errorMessage } from "../lib/error-message";
