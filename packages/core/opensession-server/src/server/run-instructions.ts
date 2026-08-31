@@ -167,6 +167,13 @@ export function buildRunInstructions(input: {
         "in-process worker.",
     );
   }
+  if (!input.isAsk && inproc["opensession-portals"]) {
+    parts.push(
+      "## Preview links\nFor a user-facing web change, call `opensession-portals` " +
+        "`set_portal_path` without a name before finishing. Set the exact root-relative " +
+        "route, including its query string, so Preview and staging links open the feature you changed.",
+    );
+  }
 
   parts.push(
     "## Media\nShow selected results with `OPENSESSION_IMAGE: /abs/path.png` or " +

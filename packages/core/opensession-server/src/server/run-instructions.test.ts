@@ -6,7 +6,10 @@ describe("buildRunInstructions", () => {
     const prompt = buildRunInstructions({
       isAsk: false,
       osSessionId: "os-test",
-      inProcessMcp: { "opensession-sessions": {} },
+      inProcessMcp: {
+        "opensession-sessions": {},
+        "opensession-portals": {},
+      },
     });
 
     expect(prompt.match(/^## .+$/gm)).toEqual([
@@ -15,11 +18,15 @@ describe("buildRunInstructions", () => {
       "## References",
       "## PR attribution",
       "## New sessions",
+      "## Preview links",
       "## Media",
     ]);
     expect(prompt).toContain(
       "For PRs outside the current primary repository, write `<repo>#<number>`, never bare `#<number>`.",
     );
-    expect(prompt.length).toBeLessThan(700);
+    expect(prompt).toContain(
+      "Set the exact root-relative route, including its query string, so Preview and staging links open the feature you changed.",
+    );
+    expect(prompt.length).toBeLessThan(900);
   });
 });
