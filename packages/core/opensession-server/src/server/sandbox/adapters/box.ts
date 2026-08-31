@@ -849,9 +849,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       if (!runtimeHomeReady) await ensureRuntimeHome();
       try {
         const target = await installBoxSshTarget(cfg, box);
-        if (
-          await boxSshLaneSettles(() => boxSshExec(target, "true", 20_000))
-        ) {
+        if (await boxSshLaneSettles(() => boxSshExec(target, "true", 20_000))) {
           boxSshTargets().set(boxId, target);
         } else {
           console.warn(
@@ -984,7 +982,16 @@ export async function boxSshTarget(sandboxId: string): Promise<BoxSshTarget> {
   if (!box) throw new Error(`box ${sandboxId} disappeared after resume`);
   const cached = boxSshTargets().get(sandboxId);
   if (cached) return cached;
+  // Reaching here means ensureStarted just declined to adopt a lane. A
+  // terminal has no command-plane fallback to degrade to, so settle one or say
+  // why there is no terminal - handing back an unproven target only moves the
+  // failure into the user's session.
   const target = await installBoxSshTarget(cfg, box);
+  if (!(await boxSshLaneSettles(() => boxSshExec(target, "true", 20_000)))) {
+    throw new Error(
+      `box ${sandboxId} is not accepting SSH sessions yet; try the terminal again in a moment`,
+    );
+  }
   boxSshTargets().set(sandboxId, target);
   return target;
 }
