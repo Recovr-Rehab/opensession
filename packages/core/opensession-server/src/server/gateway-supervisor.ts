@@ -994,8 +994,22 @@ function deployStateRoot(): string {
   );
 }
 
-function currentReleaseRoot(): string {
-  return realpathSync(join(deployStateRoot(), "current"));
+export function resolveInitialReleaseRoot(
+  state = deployStateRoot(),
+  sourceRoot = process.cwd(),
+): string {
+  const current = join(state, "current");
+  if (existsSync(current)) return realpathSync(current);
+
+  const source = realpathSync(sourceRoot);
+  if (
+    existsSync(join(source, "packages/core/opensession-server/opensession.ts"))
+  ) {
+    return source;
+  }
+  throw new Error(
+    `no active release at ${current} and ${source} is not an Open Session source checkout`,
+  );
 }
 
 export function writeGatewayHandoffTransaction(
@@ -1138,7 +1152,7 @@ async function requestSupervisor(
 }
 
 async function runSupervisor(): Promise<void> {
-  const releaseRoot = currentReleaseRoot();
+  const releaseRoot = resolveInitialReleaseRoot();
   const interrupted = readGatewayHandoffTransaction();
   if (interrupted) {
     console.warn(
