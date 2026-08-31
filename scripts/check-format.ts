@@ -5,7 +5,9 @@ interface FormatConfig {
 }
 
 const root = join(import.meta.dir, "..");
-const config = (await Bun.file(join(root, ".oxfmtrc.json")).json()) as FormatConfig;
+const config = (await Bun.file(
+  join(root, ".oxfmtrc.json"),
+).json()) as FormatConfig;
 const ignorePatterns = Array.isArray(config.ignorePatterns)
   ? config.ignorePatterns.filter(
       (pattern): pattern is string => typeof pattern === "string",
