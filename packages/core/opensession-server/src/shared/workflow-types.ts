@@ -39,10 +39,10 @@ export const WORKFLOW_LIMITS = {
   maxWriteAgents: 40,
   /** Per-agent wall clock before the run is failed. An agent may use the
    * workflow's full active-time budget instead of being cut off early. */
-  agentTimeoutMs: 60 * 60_000,
+  agentTimeoutMs: 4 * 60 * 60_000,
   /** Whole-workflow active wall clock before the worker is terminated. Time
    * spent paused does not consume this allowance. */
-  workflowTimeoutMs: 60 * 60_000,
+  workflowTimeoutMs: 4 * 60 * 60_000,
   /** Advisory threshold surfaced in the UI and telemetry. */
   largeWorkflowAgents: 25,
   /** Advisory combined input/output-token threshold. */
