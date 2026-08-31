@@ -13,7 +13,10 @@ import { reviewRequestTargetsPerson } from "./lib/review-queue";
 import { repoLabel } from "./lib/repo-label";
 import { NO_REPO } from "./lib/session-repo";
 import { sessionReferenceTitle } from "./lib/session-title";
-import { ASK_BAND } from "./lib/sidebar-workspaces";
+import {
+  ASK_BAND,
+  sidebarWorkspaceIdForSession,
+} from "./lib/sidebar-workspaces";
 import React, {
   useCallback,
   useEffect,
@@ -2227,6 +2230,12 @@ export function App({
   // still gets a strip (one tab + the + button).
   const activeWorkspaceId =
     routeWorkspaceId ?? (currentSession?.workspaceId || null);
+  // A worker may run inside a temporary workspace, but its sidebar context is
+  // still the root session that spawned it. Keep the worker's own workspace
+  // active for panes and tools while selecting and expanding the root row.
+  const sidebarWorkspaceId = currentSession
+    ? sidebarWorkspaceIdForSession(sessions, currentSession)
+    : activeWorkspaceId;
   const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(
     null,
   );
@@ -4371,7 +4380,7 @@ export function App({
                     connected={connected}
                     tasksActive={route.view === "tasks"}
                     taskCount={taskCount}
-                    selectedWorkspaceId={activeWorkspaceId}
+                    selectedWorkspaceId={sidebarWorkspaceId}
                     plainActive={route.view === "plain"}
                     supportTinderActive={route.view === "supporttinder"}
                     reportsActive={route.view === "reports"}

@@ -91,6 +91,40 @@ export interface ActiveWorkspaceSubagent {
 }
 
 /**
+ * The workspace whose sidebar row provides context for an open session.
+ *
+ * Workers can mint temporary workspaces of their own. Those workspaces power
+ * the worker's tools and panes, but the sidebar still nests the worker beneath
+ * the root session that spawned it. Follow parent edges to the highest known
+ * ancestor instead of letting a worker's temporary workspace become a new
+ * top-level selection.
+ */
+export function sidebarWorkspaceIdForSession(
+  sessions: readonly Pick<
+    UnifiedSession,
+    "id" | "parentSessionId" | "workspaceId"
+  >[],
+  selected: Pick<
+    UnifiedSession,
+    "id" | "parentSessionId" | "workspaceId"
+  > | null,
+): string | null {
+  if (!selected) return null;
+
+  const byId = new Map(sessions.map((session) => [session.id, session]));
+  byId.set(selected.id, selected);
+  let root = selected;
+  const seen = new Set([selected.id]);
+  while (root.parentSessionId && !seen.has(root.parentSessionId)) {
+    const parent = byId.get(root.parentSessionId);
+    if (!parent) break;
+    seen.add(parent.id);
+    root = parent;
+  }
+  return root.workspaceId ?? null;
+}
+
+/**
  * Active child sessions owned by one open workspace.
  *
  * `parentSessionId` is the relationship. A worker can carry the parent's

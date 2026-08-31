@@ -4,6 +4,7 @@ import {
   isAskWorkspace,
   isScratchWorkspace,
   sessionSharesSelectedSidebarGroup,
+  sidebarWorkspaceIdForSession,
   spawnedSessionBelongsInSidebar,
   workspaceMainSession,
   workspaceRowOwnsSelection,
@@ -131,6 +132,41 @@ describe("sessionSharesSelectedSidebarGroup", () => {
     expect(sessionSharesSelectedSidebarGroup(session("legacy"), selected)).toBe(
       true,
     );
+  });
+});
+
+describe("sidebarWorkspaceIdForSession", () => {
+  test("keeps temporary child workspaces nested beneath the root workspace", () => {
+    const root = session("root", { workspaceId: "ws-root" });
+    const child = session("child", {
+      parentSessionId: "root",
+      workspaceId: "ws-child",
+    });
+    const grandchild = session("grandchild", {
+      parentSessionId: "child",
+      workspaceId: "ws-grandchild",
+    });
+
+    expect(
+      sidebarWorkspaceIdForSession([root, child, grandchild], grandchild),
+    ).toBe("ws-root");
+  });
+
+  test("uses a top-level session's own workspace", () => {
+    const selected = session("selected", { workspaceId: "ws-selected" });
+    expect(sidebarWorkspaceIdForSession([selected], selected)).toBe(
+      "ws-selected",
+    );
+  });
+
+  test("preserves workspace-less roots and tolerates a missing parent", () => {
+    const root = session("root");
+    const child = session("child", {
+      parentSessionId: "root",
+      workspaceId: "ws-child",
+    });
+    expect(sidebarWorkspaceIdForSession([root, child], child)).toBeNull();
+    expect(sidebarWorkspaceIdForSession([child], child)).toBe("ws-child");
   });
 });
 
