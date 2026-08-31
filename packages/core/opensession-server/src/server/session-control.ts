@@ -22,7 +22,11 @@ import type { UnifiedSession, TranscriptEntry } from "./types";
  * UI/MCP most cares about — a run paused on an AskUserQuestion, needing a human.
  */
 export type SessionState =
-  "running" | "waiting_question" | "queued" | "idle" | "archived";
+  | "running"
+  | "waiting_question"
+  | "queued"
+  | "idle"
+  | "archived";
 
 /** A pending AskUserQuestion a session is blocked on, surfaced for answering. */
 export interface PendingQuestionView {

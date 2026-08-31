@@ -561,7 +561,8 @@ describe("session creator metadata", () => {
         (tool) => tool.name === "create_session",
       );
       const branchSchema = createTool?.inputSchema.properties?.branch as
-        { description?: string } | undefined;
+        | { description?: string }
+        | undefined;
       expect(branchSchema?.description).toContain("generated from the prompt");
 
       const result = await client.callTool({

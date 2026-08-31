@@ -21,6 +21,7 @@
   "scripts": {
     "app:dev": "bun scripts/app-dev.ts",
     "bench:memory": "bun scripts/memory-bench.ts",
+    "check": "bun run format:check && bun run typecheck && bun run lint && scripts/test-unit-isolated.sh && bun run test:snapshots",
     "dev": "bun --hot packages/core/opensession-server/opensession.ts",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
