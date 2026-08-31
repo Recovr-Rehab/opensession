@@ -117,6 +117,8 @@ interface Props {
   onVisibleRangesSettled?: () => void;
   /** Indexed range rows reuse this renderer without nesting a virtualizer. */
   virtualize?: boolean;
+  /** Stable outer range identity for the one work turn rendered inside it. */
+  turnMountScope?: string;
 }
 
 type ReviewBlockRole =
@@ -238,8 +240,12 @@ function renderBlockEntries(block: RenderBlock): TranscriptEntry[] {
   return [];
 }
 
-function renderBlockKey(block: RenderBlock, index: number): string {
-  if (block.kind === "turn") return turnMountKey(block.items);
+function renderBlockKey(
+  block: RenderBlock,
+  index: number,
+  turnMountScope?: string,
+): string {
+  if (block.kind === "turn") return turnMountKey(block.items, turnMountScope);
   if (block.kind === "walkthrough") return "walkthrough";
   if (block.kind === "note") return `note:${block.note.id}`;
   if (block.kind === "footer") return `${block.entry.id}:footer`;
@@ -323,6 +329,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   optimisticEntries,
   pendingDeliveryIds,
   virtualize = true,
+  turnMountScope,
   onVisibleRangesSettled,
 }: Props) {
   // Top level only (nested per-range instances pass virtualize={false} and are
@@ -468,7 +475,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 
   const virtualItems: VirtualTranscriptItem[] = groupedBlocks.map(
     (block, i) => {
-      const key = renderBlockKey(block, i);
+      const key = renderBlockKey(block, i, turnMountScope);
       const entriesInBlock = renderBlockEntries(block);
       if (block.kind === "review-loop") {
         // Final assistant output deliberately sits outside the review disclosure.
@@ -502,7 +509,11 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
               onOpenChange={onReviewLoopOpenChange}
             >
               {block.blocks.map((inner, innerIndex) => {
-                const innerKey = renderBlockKey(inner, innerIndex);
+                const innerKey = renderBlockKey(
+                  inner,
+                  innerIndex,
+                  turnMountScope,
+                );
                 return (
                   <React.Fragment key={innerKey}>
                     {inner.kind === "turn" ? (
@@ -961,6 +972,7 @@ function IndexedTranscriptBlocks(props: Props) {
               notes={indexedItemNotes(item)}
               walkthrough={indexedItemWalkthrough(item)}
               virtualize={false}
+              turnMountScope={item.kind === "range" ? key : undefined}
               live={Boolean(props.live && isLast)}
               reviewLoopsOpen={
                 item.kind === "review" && openedReviewKeys.has(key)

@@ -53,14 +53,17 @@ export function shouldAnimateTranscriptItemArrival(
 
 /**
  * A mounted live turn keeps the identity of its first entry while later steps
- * append. This is separate from its scroll anchor, which follows the tail.
+ * append. Indexed ranges provide their stable structural key too: payload
+ * slices can prepend older steps, so neither end entry alone survives both
+ * hydration and live appends.
  */
 export function turnMountKey(
   entries: readonly TranscriptEntryIdentity[],
+  rangeKey?: string,
 ): string {
   const first = entries[0];
   if (!first) throw new Error("Turn blocks require at least one entry");
-  return first.id;
+  return rangeKey ? `${rangeKey}#turn` : first.id;
 }
 
 /** How many tail positions count as the live edge for arrival animation. A

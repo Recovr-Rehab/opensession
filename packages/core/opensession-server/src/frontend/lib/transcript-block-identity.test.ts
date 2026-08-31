@@ -22,6 +22,15 @@ describe("transcript turn identity", () => {
       turnScrollAnchor([entry("first"), entry("second"), entry("third")]),
     );
   });
+
+  test("keeps the mounted component when an indexed slice prepends steps", () => {
+    expect(turnMountKey([entry("second"), entry("third")], "range:user")).toBe(
+      turnMountKey(
+        [entry("first"), entry("second"), entry("third")],
+        "range:user",
+      ),
+    );
+  });
 });
 
 describe("optimistic transcript identity", () => {
