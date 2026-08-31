@@ -43,6 +43,12 @@ test("uncommitted work opens Changes without using the separate commit action", 
   expect(summarySource).toContain('title="View uncommitted changes"');
 });
 
+test("reviewers stay hidden until a pull request is connected", () => {
+  expect(summarySource).toContain("if (!pr) return []");
+  expect(summarySource).toContain("const hasConnectedPr = pr !== null");
+  expect(summarySource).toContain("hidden={!hasConnectedPr}");
+});
+
 test("an assigned reviewer can be changed or cleared from the summary", () => {
   expect(summarySource).toContain("reviewRequestSessionId?: string");
   expect(summarySource).toContain("Clear review request");

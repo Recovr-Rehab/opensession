@@ -163,9 +163,8 @@ interface Props {
   onArchive?: () => void;
   /**
    * The teammate this session's review was handed to, if anyone. Open
-   * Session's own request, which is a different thing from the reviewers on
-   * the pull request: this one is a person somebody here asked, and it is the
-   * only one of the two that can be pending with no PR in sight.
+   * Session's own request is different from the reviewers on the pull request,
+   * but the summary only shows either kind after a PR is connected.
    *
    * The workspace's request may live on a sibling session, so the viewer
    * resolves it (see `effectiveReview`) and hands the answer down.
@@ -251,6 +250,8 @@ function reviewLines(
   request: UnifiedSession["reviewRequest"] | null | undefined,
   prReviewRequested: string[] | undefined,
 ): ReviewLine[] {
+  if (!pr) return [];
+
   const lines: ReviewLine[] = [];
   const seen = new Map<string, ReviewLine>();
   const add = (line: ReviewLine) => {
@@ -261,8 +262,8 @@ function reviewLines(
     return line;
   };
 
-  // Whoever we asked, first: this is the row that exists even with no pull
-  // request open at all.
+  // Whoever we asked, first: this is the row whose picker can change the
+  // current request while the connected pull request is still visible.
   const requestedPeople = request?.recipients?.length
     ? request.recipients
     : [request?.to];
@@ -589,6 +590,7 @@ export function WorkspaceSummaryBody({
     revision: refreshTick,
   });
   const pr = prResource.data ?? null;
+  const hasConnectedPr = pr !== null;
   const git = gitResource.data ?? null;
   const assets = assetsResource.data ?? [];
   const commits = overviewResource.data?.commits ?? [];
@@ -1092,7 +1094,10 @@ export function WorkspaceSummaryBody({
         </div>
       )}
 
-      <div className={cn(groupClass, "ws-summary-review-group")}>
+      <div
+        className={cn(groupClass, "ws-summary-review-group")}
+        hidden={!hasConnectedPr}
+      >
         {/* One review section for both the automated reading and the people asked
 				    to review. Its action opens the complete workspace review; the final row
 				    owns the picker, so neither action requires the workspace panel. */}
