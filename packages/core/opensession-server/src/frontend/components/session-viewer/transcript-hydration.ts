@@ -5,6 +5,14 @@ export interface TranscriptHydrationOutlineItem {
   ranges: readonly TranscriptIndexedRange[];
 }
 
+/** A rendered decoration does not make its surrounding indexed history loaded. */
+export function transcriptRangesContainPayload(
+  ranges: readonly TranscriptIndexedRange[],
+  hasPayload: (entryId: string) => boolean,
+): boolean {
+  return ranges.some((range) => range.entryIds.some(hasPayload));
+}
+
 /**
  * Missing payload can move the opening viewport only when it belongs to a row
  * the virtualizer actually reports as visible. Unloaded ranges occupy no

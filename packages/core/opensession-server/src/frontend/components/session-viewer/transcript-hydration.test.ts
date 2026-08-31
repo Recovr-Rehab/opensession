@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TranscriptIndexedRange } from "../../lib/transcript-index";
 import {
+  transcriptRangesContainPayload,
   visibleTranscriptHydrationDemand,
   type TranscriptHydrationOutlineItem,
 } from "./transcript-hydration";
@@ -31,6 +32,17 @@ const outline: TranscriptHydrationOutlineItem[] = ranges.map((item) => ({
 }));
 
 describe("visible transcript hydration", () => {
+  test("does not treat a standalone decoration as loaded indexed history", () => {
+    const review = range("review", 1, ["review-entry"]);
+    expect(transcriptRangesContainPayload([review], () => false)).toBe(false);
+    expect(
+      transcriptRangesContainPayload(
+        [review, range("tail", 2, ["tail-entry"])],
+        (id) => id === "tail-entry",
+      ),
+    ).toBe(true);
+  });
+
   test("settles when every range in the near-visible window is loaded", () => {
     const loaded = new Set(["above", "visible", "below"]);
     expect(

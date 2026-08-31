@@ -45,7 +45,10 @@ import {
   type ShippedChangeComposerProps,
 } from "./ShippedChangeComposer";
 import { SessionContextMessage } from "./SessionContextMessage";
-import { visibleTranscriptHydrationDemand } from "./session-viewer/transcript-hydration";
+import {
+  transcriptRangesContainPayload,
+  visibleTranscriptHydrationDemand,
+} from "./session-viewer/transcript-hydration";
 import { isLegacyReasoningHeading } from "../lib/reasoning-display";
 
 type RenderBlock =
@@ -792,8 +795,10 @@ function IndexedTranscriptBlocks(props: Props) {
   // switch placed before the loaded tail by timestamp) must not become the
   // demand head or they strand every indexed range after them. A content-free
   // opening has no range head yet, so demand starts from the outline tail.
-  const firstRenderedRange = renderedTimeline.find(
-    ({ item }) => indexedItemRanges(item).length > 0,
+  const firstRenderedRange = renderedTimeline.find(({ item }) =>
+    transcriptRangesContainPayload(indexedItemRanges(item), (id) =>
+      payloadById.has(id),
+    ),
   );
   const firstRenderedRangeKey = firstRenderedRange
     ? indexedItemKey(firstRenderedRange.item, firstRenderedRange.index)
