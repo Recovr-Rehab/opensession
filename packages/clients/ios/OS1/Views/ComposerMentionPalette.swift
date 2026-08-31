@@ -111,7 +111,6 @@ struct ComposerMentionPalette: View {
                                 Text(group.category)
                                     .font(.caption2.weight(.semibold))
                                     .foregroundStyle(OS1VisualStyle.textFaint)
-                                    .textCase(.uppercase)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 5)
