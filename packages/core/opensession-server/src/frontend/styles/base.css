@@ -1274,6 +1274,25 @@ a {
   height: 100%;
 }
 
+/* The desktop shell has one fixed viewport and no document scrolling. Anchor
+   the app to that box instead of asking Chromium to keep resolving another
+   percentage-height flex descendant. Electron can retain the app's old used
+   height when a root-wide palette change invalidates layout, even while #root
+   has already returned to the full window height. Insets make the two boxes
+   structurally identical. Phones keep the flow height above because their app
+   has to follow WebKit's keyboard and standalone-screen corrections. */
+@media (min-width: 721px) {
+  html:is(.wco, .desktop-shell) #root {
+    position: relative;
+  }
+
+  html:is(.wco, .desktop-shell) .app {
+    position: absolute;
+    inset: 0;
+    height: auto;
+  }
+}
+
 /* The installed phone composer is a native-feeling capsule rather than the
    desktop squircle. Safari already falls back to circular corners because it
    does not support corner-shape; this keeps Chromium PWAs consistent. Its edge,
