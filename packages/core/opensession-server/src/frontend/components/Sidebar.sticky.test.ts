@@ -5,6 +5,9 @@ import {
 } from "../lib/sidebar-classes";
 
 const source = await Bun.file(new URL("./Sidebar.tsx", import.meta.url)).text();
+const projectBandsSource = await Bun.file(
+  new URL("./sidebar/ProjectBands.tsx", import.meta.url),
+).text();
 
 describe("sidebar sticky headings", () => {
   test("keeps the stuck marker across React className updates", () => {
@@ -38,6 +41,8 @@ describe("sidebar sticky headings", () => {
     expect(activeSection).toContain("nested && SIDEBAR_STICKY_LANE_NESTED");
     expect(activeSection).not.toContain("ns && SIDEBAR_STICKY_LANE_NESTED");
     expect(source).toContain("const nested = !!laneRepo;");
-    expect(source).toContain('scratchRows,\n              "scratch::"');
+    expect(projectBandsSource).toContain(
+      'projects.scratchRows,\n            "scratch::",',
+    );
   });
 });

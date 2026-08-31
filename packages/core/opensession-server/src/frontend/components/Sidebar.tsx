@@ -37,9 +37,6 @@ import {
   SIDEBAR_LANE_EMPTY,
   SIDEBAR_LIST,
   SIDEBAR_NAV_X,
-  SIDEBAR_PIN_DRAG_ACTIVE,
-  SIDEBAR_PIN_ENTRY,
-  SIDEBAR_PIN_ENTRY_DRAGGING,
   SIDEBAR_RAIL,
   SIDEBAR_RAIL_GAP,
   SIDEBAR_REPO_TILE,
@@ -117,7 +114,6 @@ import {
   partitionHidden,
   setHide,
 } from "../lib/hides";
-import { Reorder } from "motion/react";
 import { getRecents, onRecentsChanged } from "../lib/recents";
 import {
   getReads,
@@ -140,7 +136,6 @@ import {
 } from "../lib/sidebar-density";
 import {
   getRepoOrder,
-  normalizeRepoOrder,
   onRepoOrderChanged,
   replaceVisibleRepoOrder,
   setRepoOrder,
@@ -156,8 +151,6 @@ import {
   IconX,
   IconInbox,
   IconPlus,
-  IconRobot,
-  IconEye,
   IconEyeOff,
   IconStack,
   IconPin,
@@ -179,7 +172,7 @@ import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import { RowCardPopup } from "./SidebarRowCards";
 import { pointerCanHover } from "../lib/pointer";
-import { RepoTile, repoLabel } from "./RepoTile";
+import { RepoTile } from "./RepoTile";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useNavigation } from "../hooks/useNavigation";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
@@ -231,7 +224,6 @@ import {
   FEED_FILTERS_KEY,
   SUPPORT_PRIORITY_GROUPS,
   dget,
-  includesEmptyRepoBands,
   personLensFilter,
   personLensValue,
   readExpanded,
@@ -298,7 +290,12 @@ import { AutoCreatedMark } from "./sidebar/AutoCreatedMark";
 import { KeepInSidebarMark } from "./sidebar/KeepInSidebarMark";
 import { OriginMark } from "./sidebar/OriginMark";
 import { AutomationsBand } from "./sidebar/AutomationsBand";
+import {
+  PersonalBand,
+  type PersonalBandPinnedEntry,
+} from "./sidebar/PersonalBand";
 import { PeopleBand } from "./sidebar/PeopleBand";
+import { ProjectBands } from "./sidebar/ProjectBands";
 import { SubagentRows } from "./sidebar/SubagentRows";
 import { DraftRow } from "./sidebar/DraftRow";
 import { WorkspaceDraftIndicator } from "./sidebar/WorkspaceDraftIndicator";
@@ -313,6 +310,7 @@ import {
   buildAutomationGroups,
   completeSidebarRepoOrder,
   deriveSidebarPrRows,
+  deriveSidebarProjectBands,
   deriveWorkspacePlacement,
   discoverSidebarRepos,
   filterSidebarSessions,
@@ -3161,11 +3159,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // default project (lib/session-repo).
   const rowIsAsk = (row: WsRow) => isAskWorkspace(row.sessions);
 
-  // A repo band only holds rows that file under a project: renderRepoGroups
-  // drops feed-only and scratch rows from every per-repo bucket, and the loose
-  // scratch list it renders instead is drawn from the status lanes, which no
-  // review row reaches. So under a repo grouping those rows keep the top-level
-  // review band. A review being asked of you must not be what vanishes.
+  // Project bands only hold rows that deriveSidebarProjectBands classifies as
+  // project work. Feed-only and scratch rows stay outside those buckets, and
+  // the loose scratch list comes from status lanes, which no review row
+  // reaches. So under project grouping those rows keep the top-level review
+  // band. A review being asked of you must not be what vanishes.
   const rowNestsInRepoBand = (row: WsRow) =>
     !rowIsFeedOnly(row) && !rowIsScratch(row);
   const topBandRows = (rows: WsRow[]) =>
@@ -3528,13 +3526,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     ];
   }
 
-  // Project grouping is independent from the section mode. Each collapsible
-  // repo repeats Inbox, Activity, or Status according to the other control.
-  // Scratch workspaces stay in one unlabelled group above them:
-  // they have no project, even when an older workspace record carries a stale
-  // repo. A collapsed band wears a count of the urgent rows it hides. Repos
-  // Drag handlers stay outside the render helper so refs are reached only from
-  // deferred browser events, never while the helper builds its JSX.
+  // Drag handlers stay in Sidebar so refs are reached only from deferred
+  // browser events, never while ProjectBands builds its JSX.
   function moveDraggedRepo(
     targetRepo: string,
     order: string[],
@@ -3604,346 +3597,30 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     event.stopPropagation();
   }
 
-  // are ordered by the user's shared preference (`repos`), with newly seen
-  // repositories appended in frequency order; a band is force-open while it
-  // holds the selected row so the open session never hides inside a collapsed repo.
-  function renderRepoGroups() {
-    const byRepo = new Map<string, WsRow[]>();
-    const snoozedByRepo = new Map<string, WsRow[]>();
-    const scratchRows = activeFocusWsRows.filter(
-      (row) => !rowIsFeedOnly(row) && rowIsScratch(row),
-    );
-    const scratchSnoozedRows = snoozedWsRows.filter(
-      (row) => !rowIsFeedOnly(row) && rowIsScratch(row),
-    );
-    const bucket = (map: Map<string, WsRow[]>, repo: string) => {
-      let b = map.get(repo);
-      if (!b) {
-        b = [];
-        map.set(repo, b);
-      }
-      return b;
-    };
-    // Feed workspaces are represented by their feed band's item rows —
-    // don't also mint a pseudo-repo band for them (rowIsFeedOnly above).
-    // Repo-less Ask rows bucket under ASK_BAND: wsRowRepo would otherwise
-    // file them under the default project, which is the one place they
-    // certainly don't belong.
-    const bandOf = (r: WsRow) => (rowIsAsk(r) ? ASK_BAND : wsRowRepo(r));
-    for (const r of activeFocusWsRows)
-      if (!rowIsFeedOnly(r) && !rowIsScratch(r))
-        bucket(byRepo, bandOf(r)).push(r);
-    // Each repo's snoozed rows stay in that repo's own band, as a Snoozed
-    // group beside its other bands — a global Snoozed group would strand
-    // them away from their repo.
-    for (const r of snoozedWsRows)
-      if (!rowIsFeedOnly(r) && !rowIsScratch(r))
-        bucket(snoozedByRepo, bandOf(r)).push(r);
-    // Session-less PR rows file into their repo's band alongside the
-    // workspace rows (the dissolved Pull-requests band). Review requests
-    // pointed at you are excluded — they ride the notification band under
-    // Pinned instead.
-    const prByRepo = new Map<string, ReviewQueueItem[]>();
-    for (const item of lanePrItems) {
-      const list = prByRepo.get(item.pr.repo) || [];
-      list.push(item);
-      prByRepo.set(item.pr.repo, list);
-    }
-    // The review rows sit in their repo's band as lanes of their own. They're
-    // absent from focusWsRows (every review-band key is), so they're bucketed
-    // separately, and a repo whose only work is a review still earns a band.
-    const reviewByRepo = (source: WsRow[]) => {
-      const map = new Map<string, WsRow[]>();
-      for (const r of source)
-        if (rowNestsInRepoBand(r)) bucket(map, bandOf(r)).push(r);
-      return map;
-    };
-    const needsReviewByRepo = reviewByRepo(needsReviewRows);
-    const approvedByRepo = reviewByRepo(approvedReviewRows);
-    const awaitingReviewByRepo = reviewByRepo(awaitingReviewRows);
-    // The GitHub requests pointed at you ride the Needs review lane, keyed by
-    // the PR's own repo. They stay out of prByRepo, which files its rows into
-    // the status lanes by prItemLane.
-    const requestedPrByRepo = new Map<string, ReviewQueueItem[]>();
-    for (const item of requestedPrItems) {
-      const list = requestedPrByRepo.get(item.pr.repo) || [];
-      list.push(item);
-      requestedPrByRepo.set(item.pr.repo, list);
-    }
-    const present = new Set([
-      ...byRepo.keys(),
-      ...snoozedByRepo.keys(),
-      ...needsReviewByRepo.keys(),
-      ...approvedByRepo.keys(),
-      ...awaitingReviewByRepo.keys(),
-      ...prByRepo.keys(),
-      ...requestedPrByRepo.keys(),
-    ]);
-    // A fresh registered repo still earns its project band in the default
-    // lens. Its existing + action is the shortest path to the first session.
-    // Search and teammate lenses stay result-driven rather than filling with
-    // unrelated empty projects, and so does the whole list once "Empty
-    // projects" is set to hidden — except when the list is scoped to one
-    // project, where the band is what was asked for rather than clutter.
-    if (includesEmptyRepoBands(filter, search)) {
-      for (const repo of registeredRepos) {
-        if (filter.repo === "all" || filter.repo === repo) present.add(repo);
-      }
-    }
-    const order = [
-      ...repos.filter((r) => present.has(r)),
-      ...Array.from(present).filter(
-        (r) => !repos.includes(r) && r !== ASK_BAND,
-      ),
-    ];
-    // Ask is pinned above every project and takes no part in the reorder:
-    // it is a band, not a repo. Everything below reads `order` for layout
-    // and `fullOrder` for the saved pref, so keeping the sentinel out of
-    // the second is what keeps it out of the user's stored repo order.
-    const fullOrder = normalizeRepoOrder([
-      ...normalizeRepoOrder(savedRepoOrder),
-      ...repos.filter((repo) => !savedRepoOrder.includes(repo)),
-      ...order.filter((repo) => !repos.includes(repo)),
-    ]);
-    if (present.has(ASK_BAND)) order.unshift(ASK_BAND);
-    const canReorder =
-      !isPhone &&
-      filter.repo === "all" &&
-      order.filter((r) => r !== ASK_BAND).length > 1;
-    return (
-      <>
-        {(scratchRows.length > 0 || scratchSnoozedRows.length > 0) && (
-          <div className="mb-2" data-sidebar-scratch-workspaces>
-            {renderWorkspaceGrouping(
-              scratchRows,
-              "scratch::",
-              scratchSnoozedRows,
-            )}
-          </div>
-        )}
-        {/* Every band after the first opens with whitespace, whatever
-				    precedes it: a sibling band, this drag-reorder list, or the loose
-				    workspace rows above it. `+ band` only matched two bands with the
-				    same parent, so the feed projects (Plain, Slack) — which follow
-				    this list rather than sit inside it — started flush against the
-				    last workspace row of the band above and read as one more of its
-				    rows. The gap is wider than a band's own rows (2px) and its lane
-				    headers (8px) by enough to separate one project from the next. */}
-        <div className="[&:not(:first-child)]:mt-4">
-          {order.map((repo) => {
-            const rows = byRepo.get(repo) || [];
-            const snoozedRows = snoozedByRepo.get(repo) || [];
-            const needsReviewRepoRows = needsReviewByRepo.get(repo) || [];
-            const approvedRows = approvedByRepo.get(repo) || [];
-            const awaitingRepoRows = awaitingReviewByRepo.get(repo) || [];
-            const prs = prByRepo.get(repo) || [];
-            const requestedPrs = requestedPrByRepo.get(repo) || [];
-            // What a collapsed band must not swallow. A row waiting for input
-            // and a review being asked of you are both blocked on you, and
-            // neither is visible once the band is shut. A question is a
-            // question whoever minted the session, so machine-started rows
-            // count here too, which they now do by sitting in `rows`.
-            const urgent =
-              rows.filter((r) => r.status === "needsinput").length +
-              needsReviewRepoRows.length +
-              requestedPrs.length;
-            const gkey = `repo:${repo}`;
-            const open = isOpen(gkey);
-            // A collapsed band still surfaces the selected row(s) so the
-            // open session never hides, without force-opening the band
-            // (which made its chevron a frustrating no-op). Review rows keep
-            // their own renderer here too, so a click still opens the Review
-            // tab rather than the session.
-            const selectedRows = open
-              ? []
-              : [...rows, ...snoozedRows, ...awaitingRepoRows].filter(
-                  rowOwnsSelection,
-                );
-            const selectedReviewRows = open
-              ? []
-              : [...needsReviewRepoRows, ...approvedRows].filter(
-                  rowOwnsSelection,
-                );
-            const selectedPrs = open
-              ? []
-              : [...prs, ...requestedPrs].filter(prRowSelected);
-            return (
-              <div
-                className={cn(
-                  "[&:not(:first-child)]:mt-4",
-                  canReorder && "cursor-grab active:cursor-grabbing",
-                  repoDragKey === repo &&
-                    "[&>[data-sticky-head]]:rounded-md [&>[data-sticky-head]]:bg-hover [&>[data-sticky-head]]:opacity-50 [&>[data-sticky-head]]:ring-1 [&>[data-sticky-head]]:ring-inset [&>[data-sticky-head]]:ring-line-strong",
-                )}
-                key={gkey}
-                data-repo-id={repo}
-                onDragOver={(event) =>
-                  moveDraggedRepo(repo, order, fullOrder, event)
-                }
-                onDrop={(event) => {
-                  event.preventDefault();
-                  finishRepoDrag(true);
-                }}
-                onClickCapture={swallowRepoDragClick}
-              >
-                <button
-                  className={cn(
-                    SIDEBAR_GROUP_HEADER,
-                    SIDEBAR_GROUP_HEADER_INSET,
-                    SIDEBAR_HEADER_ROW,
-                    "group transition-colors",
-                    SIDEBAR_STICKY_LANE,
-                    SIDEBAR_STUCK_BACKING,
-                  )}
-                  data-sticky-head
-                  draggable={canReorder && repo !== ASK_BAND}
-                  title={
-                    canReorder && repo !== ASK_BAND
-                      ? "Drag to reorder repositories"
-                      : undefined
-                  }
-                  onDragStart={(event) =>
-                    startRepoDrag(repo, fullOrder, order, event)
-                  }
-                  onDragEnd={() => finishRepoDrag(false)}
-                  onClick={() => toggleGroup(gkey)}
-                >
-                  {/* The rail holds the tile on the same column (and text rail)
-							    as every other header's mark; the tile rides centred in it. */}
-                  <span className={SIDEBAR_RAIL}>
-                    {/* Ask has no repo and so no tile. The eye is the same mark
-								    the palette's mode picker and the composer use for the
-								    mode, so the band reads as "these are Ask sessions"
-								    rather than as a project called Ask. */}
-                    {repo === ASK_BAND ? (
-                      <IconEye size={16} className="text-faint" />
-                    ) : (
-                      <RepoTile name={repo} className={SIDEBAR_REPO_TILE} />
-                    )}
-                  </span>
-                  {/* The differently sized name and count share a baseline, while the
-							    pair stays vertically centred against the tile. */}
-                  <span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5 desktop:gap-[9px]">
-                    <span
-                      className={cn(
-                        SIDEBAR_GROUP_NAME,
-                        "flex-[0_1_auto] font-semibold",
-                      )}
-                    >
-                      {repo === ASK_BAND ? "Ask" : repoLabel(repo)}
-                    </span>
-                    <span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
-                      {rows.length +
-                        snoozedRows.length +
-                        needsReviewRepoRows.length +
-                        approvedRows.length +
-                        awaitingRepoRows.length +
-                        prs.length +
-                        requestedPrs.length}
-                    </span>
-                  </span>
-                  {/* Work blocked on you must not vanish into a closed band: a
-							    collapsed header wears the count of rows waiting for input
-							    and of reviews being asked of you. */}
-                  {!open && urgent > 0 && (
-                    <span
-                      className={cn(SIDEBAR_ATTN_COUNT, "bg-blue")}
-                      aria-label={`${urgent} waiting on you`}
-                    >
-                      {urgent}
-                    </span>
-                  )}
-                  <IconChevronDown
-                    className={cn(
-                      SIDEBAR_GROUP_CHEVRON,
-                      !open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-                    )}
-                    size={22}
-                    style={{ transform: open ? "none" : "rotate(-90deg)" }}
-                  />
-                  {/* Hover action at the far end: start a new session with this
-							    repo already selected. role=button (not a nested <button>).
-							    The 28px box is the pointer target; the wash is a ::before
-							    inset by 2px, since filling all 28px in a 30px row read as a
-							    slab the height of the header. 24px around a 20px glyph is
-							    the same proportion `paletteIconBtn` keeps — the step below
-							    (20px, i.e. `inset-1` on a 24px glyph) crowds the plus
-							    against its own wash. `corner-shape` has to be restated
-							    because it does not inherit into a pseudo-element. */}
-                  {!borrowedLens && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      className="relative ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color] duration-150 hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 before:absolute before:inset-0.5 before:z-0 before:rounded-sm before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-hover [&>*]:relative [&>*]:z-[1]"
-                      title={
-                        repo === ASK_BAND
-                          ? "New Ask session, no repo"
-                          : `New session in ${repoLabel(repo)}`
-                      }
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigation.openNewSessionInRepo(repo);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.stopPropagation();
-                          navigation.openNewSessionInRepo(repo);
-                        }
-                      }}
-                    >
-                      <IconPlus size={20} />
-                    </span>
-                  )}
-                </button>
-                {open ? (
-                  <div className="mt-0.5">
-                    {renderLabeledLane({
-                      label: "Needs review",
-                      name: "needsreview",
-                      rows: needsReviewRepoRows,
-                      prs: requestedPrs,
-                      ns: `repo:${repo}::`,
-                      renderRow: renderReviewWsRow,
-                    })}
-                    {renderLabeledLane({
-                      label: "Approved",
-                      name: "approvedreview",
-                      rows: approvedRows,
-                      ns: `repo:${repo}::`,
-                      renderRow: renderReviewWsRow,
-                    })}
-                    {renderLabeledLane({
-                      label: "Awaiting review",
-                      name: "awaitingreview",
-                      rows: awaitingRepoRows,
-                      ns: `repo:${repo}::`,
-                    })}
-                    {renderWorkspaceGrouping(
-                      rows,
-                      `repo:${repo}::`,
-                      snoozedRows,
-                      repo,
-                      prs,
-                    )}
-                  </div>
-                ) : (
-                  (selectedReviewRows.length > 0 ||
-                    selectedRows.length > 0 ||
-                    selectedPrs.length > 0) && (
-                    <div className="mt-0.5">
-                      {selectedReviewRows.map(renderReviewWsRow)}
-                      {selectedRows.map(renderWsRow)}
-                      {selectedPrs.map(renderPrRow)}
-                    </div>
-                  )
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </>
-    );
-  }
+  // ProjectBands owns presentation. Build its pure row-membership model only
+  // for project grouping because deriving it buckets every visible row.
+  const projectBands = groupsByRepo
+    ? deriveSidebarProjectBands({
+        activeRows: activeFocusWsRows,
+        snoozedRows: snoozedWsRows,
+        needsReviewRows,
+        approvedRows: approvedReviewRows,
+        awaitingReviewRows,
+        lanePrItems,
+        requestedPrItems,
+        registeredRepos,
+        repos,
+        savedRepoOrder,
+        filter,
+        search,
+        isPhone,
+        askBand: ASK_BAND,
+        rowIsFeedOnly,
+        rowIsScratch,
+        rowIsAsk,
+        workspaceRepo: wsRowRepo,
+      })
+    : null;
 
   // ── Plain (support) as a project ────────────────────────────────────────
   // The Plain TODO queue rendered as a sibling of the repo bands: a project
@@ -4209,6 +3886,264 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
       </div>
     );
   }
+
+  // Resolve every visible pin into one entry before PersonalBand adds the
+  // disclosure and drag wrapper. Pinning and drag state stay owned here.
+  const personalPinnedBand = (() => {
+    const pinnedRows = pinnedWsRows;
+    // Pinned sessions that don't map to a workspace row (automation runs).
+    const rowSessionIds = new Set(
+      wsRows.flatMap((r) => r.sessions.map((c) => c.id)),
+    );
+    const pinnedLoose = pins
+      .filter((e) => !e.startsWith("workspace:"))
+      .filter((id) => !rowSessionIds.has(id))
+      .map((id) =>
+        sessions.find((s) => s.id === id || s.aliasIds?.includes(id)),
+      )
+      // An archived session must never surface in Pinned — its pin is
+      // stale (archiving drops it server-side, but a resurrected or
+      // legacy pin can still point at it). Skip it so it can't render
+      // as an un-archivable ghost row.
+      .filter((s): s is UnifiedSession => !!s && !s.archived)
+      .filter((s) => !workspaceSubagentIds.has(s.id))
+      // Honor the repo filter — a pinned session from another repo
+      // shouldn't leak into a repo-scoped view (workspace pins
+      // already drop out via wsRows/filtered).
+      .filter((s) => filter.repo === "all" || sessionRepo(s) === filter.repo);
+    // Pinned Plain tickets and PRs — resolved against the live
+    // queues, so a done ticket / closed PR just stops rendering
+    // (its stale pin key is harmless, like an archived session's).
+    const pinnedTickets = pins
+      .filter((e) => e.startsWith("support:"))
+      .map((e) => (supportThreads || []).find((t) => t.id === e.slice(8)))
+      .filter((t): t is SupportThread => !!t);
+    // Pinned feed items (videos, dashboards):
+    // resolved against the live feed items like tickets are.
+    const pinnedFeedItems = pins
+      .filter((e) => e.startsWith("feed:"))
+      .map((e) => {
+        const [, refKind, ...idParts] = e.split(":");
+        const id = idParts.join(":");
+        const feed = feeds.find((f) => f.refKind === refKind);
+        const item = feed
+          ? (feedItems[feed.id] || []).find((i) => i.id === id)
+          : undefined;
+        return feed && item ? { feed, item } : null;
+      })
+      .filter((x): x is { feed: FeedDescriptor; item: FeedItem } => !!x);
+    const pinnedPrs = pins
+      .filter((e) => e.startsWith("pr:"))
+      .map((e) => reviewQueueItems.find((i) => i.pr.url === e.slice(3)))
+      .filter((i): i is ReviewQueueItem => !!i)
+      // Once a workspace carries this PR, the workspace row is the
+      // single place for it, even if an older standalone PR pin remains.
+      .filter((item) => !workspaceCoveredPrUrls.has(item.pr.url));
+    if (
+      !pinnedRows.length &&
+      !pinnedLoose.length &&
+      !pinnedTickets.length &&
+      !pinnedFeedItems.length &&
+      !pinnedPrs.length
+    )
+      return null;
+    const pinnedOpen = isOpen("pinned");
+
+    // One flat drag-to-reorder list: every pinned thing (workspace row,
+    // loose session, ticket) becomes an entry slotted by its first key's
+    // position in the pins array, so reordering is just rewriting that
+    // array (reorderPins). `pinKeys` is everything in `pins` that maps
+    // to the entry — a workspace can be pinned via its own key AND
+    // legacy member-session pins — so a drop moves them as one unit.
+    type PinEntry = PersonalBandPinnedEntry;
+    const pinIdx = new Map(pins.map((p, i) => [p, i] as const));
+    const entries: PinEntry[] = [];
+    for (const row of pinnedRows) {
+      entries.push({
+        key: `ws:${row.key}`,
+        pinKeys: [row.key, ...row.sessions.map((c) => c.id)].filter((k) =>
+          pinIdx.has(k),
+        ),
+        repo: wsRowRepo(row),
+        sessions: row.sessions,
+        node: renderPinnedWsRow(row),
+      });
+    }
+    const seenLoose = new Set<string>();
+    for (const s of pinnedLoose) {
+      // A session pinned via both its id and an alias maps to the same
+      // session twice — render (and reorder) it once.
+      if (seenLoose.has(s.id)) continue;
+      seenLoose.add(s.id);
+      const pin = sessionPinState(s);
+      entries.push({
+        key: `session:${s.id}`,
+        pinKeys: [s.id, ...(s.aliasIds ?? [])].filter((k) => pinIdx.has(k)),
+        repo: sessionRepo(s),
+        sessions: [s],
+        node: (
+          <SidebarItem
+            session={s}
+            selected={automationRowSelected(s)}
+            unread={
+              s.id !== selectedId && isUnread(s.id, s.lastActivity, reads)
+            }
+            mention={s.id !== selectedId ? mentionFor(s.id)?.by : undefined}
+            mine={
+              !!s.startedBy &&
+              !s.automation &&
+              s.startedBy.toLowerCase() === currentUser.toLowerCase()
+            }
+            onClick={() => openSidebarSession(s)}
+            onArchive={(current) => archiveWithNext(s, current)}
+            pinned={pin.pinned}
+            onTogglePin={pin.toggle}
+            shipsDirectlyToMain={shipsDirectlyToMain(s.repo, s.branch)}
+            onRename={(title) => onRename(s, title)}
+            onSetStatus={(st) => onSetStatus([s], st)}
+          />
+        ),
+      });
+    }
+    for (const t of pinnedTickets) {
+      entries.push({
+        key: `support:${t.id}`,
+        pinKeys: [`support:${t.id}`],
+        repo: null,
+        sessions: [],
+        node: renderSupportRow(t),
+      });
+    }
+    for (const { feed, item } of pinnedFeedItems) {
+      const pinKey = `feed:${feed.refKind}:${item.id}`;
+      const linked = feedSessionByRef.get(`${feed.refKind}:${item.id}`) || null;
+      entries.push({
+        key: pinKey,
+        pinKeys: [pinKey],
+        repo: null,
+        sessions: [],
+        node: (
+          <FeedRow
+            key={pinKey}
+            feed={feed}
+            item={item}
+            session={linked}
+            active={feedItemActive(feed, item)}
+            pinned
+            onTogglePin={() => setPins(togglePin(pinKey))}
+            onOpen={() => navigation.openFeedItem(feed, item)}
+            onSetStatus={
+              linked ? (status) => onSetStatus([linked], status) : undefined
+            }
+          />
+        ),
+      });
+    }
+    for (const item of pinnedPrs) {
+      entries.push({
+        key: `pr:${item.pr.url}`,
+        pinKeys: [`pr:${item.pr.url}`],
+        repo: null,
+        sessions: [],
+        node: renderPrRow(item),
+      });
+    }
+    const firstIdx = (e: PinEntry) =>
+      e.pinKeys.length
+        ? Math.min(...e.pinKeys.map((k) => pinIdx.get(k)!))
+        : Infinity;
+    entries.sort((a, b) => firstIdx(a) - firstIdx(b));
+    // Mid-drag, Motion's in-flight order wins until the drop commits it.
+    if (pinOrderDraft) {
+      const draftIdx = new Map(pinOrderDraft.map((k, i) => [k, i] as const));
+      entries.sort(
+        (a, b) =>
+          (draftIdx.get(a.key) ?? Infinity) - (draftIdx.get(b.key) ?? Infinity),
+      );
+    }
+    const entryMap = new Map(entries.map((e) => [e.key, e] as const));
+    // Whole-row y-drag would fight touch scrolling and the swipe
+    // gestures, so drag reorder is desktop-only; the order itself is
+    // per-user server state, so a desktop reorder shows up on the phone.
+    // (>0, not >1: even a lone pinned row can be dragged into a lane.)
+    const canDragPins = !isPhone && entries.length > 0;
+    const commitPinReorder = () => {
+      setPinDragKey(null);
+      pinJustDragged.current = true;
+      // The drop's click fires synchronously after pointerup; clear the
+      // swallow flag right after so the next real click works.
+      setTimeout(() => {
+        pinJustDragged.current = false;
+      }, 0);
+      // A drop onto a status lane wins over the reorder: lane-pin the
+      // row's sessions there and unpin it — dragging OUT of Pinned reads
+      // as a move, unlike right-click Set-status which keeps the pin
+      // (the row shows in both the Pinned band and its lane).
+      const laneDrop = laneDropHoverRef.current;
+      const dragMeta = pinDragMetaRef.current;
+      pinDragMetaRef.current = null;
+      setPinDragMeta(null);
+      laneDropHoverRef.current = null;
+      setLaneDropHover(null);
+      if (laneDrop && dragMeta && dragMeta.sessions.length > 0) {
+        pinOrderPending.current = null;
+        setPinOrderDraft(null);
+        setPins(unpin(dragMeta.pinKeys));
+        onSetStatus(dragMeta.sessions, laneDrop.lane);
+        return;
+      }
+      const orderKeys = pinOrderPending.current;
+      pinOrderPending.current = null;
+      setPinOrderDraft(null);
+      if (!orderKeys) return;
+      // New pins array: the visible entries' keys take the slots that
+      // visible keys already occupy (in the new order), so pins hidden
+      // from the band (archived, repo-filtered, review-band rows) keep
+      // their exact positions instead of getting shoved to the end.
+      const flat = orderKeys.flatMap((k) => entryMap.get(k)?.pinKeys ?? []);
+      const visible = new Set(flat);
+      const queue = [...flat];
+      setPins(
+        reorderPins(
+          pins.map((p) => (visible.has(p) ? (queue.shift() ?? p) : p)),
+        ),
+      );
+    };
+    return {
+      entries,
+      open: pinnedOpen,
+      canDrag: canDragPins,
+      dragKey: pinDragKey,
+      onToggle: () => toggleGroup("pinned"),
+      onReorder: (keys: string[]) => {
+        pinOrderPending.current = keys;
+        setPinOrderDraft(keys);
+      },
+      onEntryDragStart: (entry: PersonalBandPinnedEntry) => {
+        setPinDragKey(entry.key);
+        const meta = {
+          repo: entry.repo,
+          sessions: entry.sessions,
+          pinKeys: entry.pinKeys,
+        };
+        pinDragMetaRef.current = meta;
+        setPinDragMeta(meta);
+      },
+      onEntryDrag: (event: MouseEvent | TouchEvent | PointerEvent) => {
+        if ("clientX" in event)
+          updateLaneDropHover(event.clientX, event.clientY);
+      },
+      onEntryDragEnd: commitPinReorder,
+      onEntryClickCapture: (event: React.MouseEvent) => {
+        // Swallow the click that lands on the row when a drag is dropped. It
+        // would otherwise open the session under the cursor.
+        if (pinJustDragged.current) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      },
+    };
+  })();
 
   // The sidebar's fixed head: the organization row, the tool rows, and the
   // Workspaces band heading with its filter and new-session buttons.
@@ -4903,478 +4838,96 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                     </div>
                   )}
 
-                {/* ── Needs review: everything waiting on YOUR review, both the
-				    sessions a teammate asked you to look at (the info panel's
-				    Reviewer picker) and the GitHub PRs that requested you. Both are
-				    the same ask, so they share one band, and it rides above
-				    everything like a blocked question. Under a repo grouping each
-				    project's reviews ride that project's own band instead
-				    (renderRepoGroups); what stays here is the rows no band can hold.
-				    PRs already covered by a workspace row in view are filtered out
-				    of prRowItems, so nothing appears twice. ── */}
-                {renderLabeledBand({
-                  label: "Needs review",
-                  name: "needsreview",
-                  rows: topBandRows(needsReviewRows),
-                  prs: groupsByRepo ? [] : requestedPrItems,
-                  renderRow: renderReviewWsRow,
-                })}
-
-                {/* ── Approved: reviews you asked for that came back with a yes and
-				    are still open. An approval belongs with the rest of that
-				    project's work rather than stacked above every band, so under a
-				    repo grouping it rides its repo's band as a lane. ── */}
-                {renderLabeledBand({
-                  label: "Approved",
-                  name: "approvedreview",
-                  rows: topBandRows(approvedReviewRows),
-                  renderRow: renderReviewWsRow,
-                })}
-
-                {/* ── Awaiting review: sessions YOU asked a teammate to review (the
-				    mirror of Needs review). Grouped so a session you've sent out for
-				    review moves out of the status lanes into one place. ── */}
-                {renderLabeledBand({
-                  label: "Awaiting review",
-                  name: "awaitingreview",
-                  rows: topBandRows(awaitingReviewRows),
-                })}
-
-                {/* ── Pinned (workspaces, sessions, tickets, PRs, feed items) ── */}
-                {(() => {
-                  const pinnedRows = pinnedWsRows;
-                  // Pinned sessions that don't map to a workspace row (automation runs).
-                  const rowSessionIds = new Set(
-                    wsRows.flatMap((r) => r.sessions.map((c) => c.id)),
-                  );
-                  const pinnedLoose = pins
-                    .filter((e) => !e.startsWith("workspace:"))
-                    .filter((id) => !rowSessionIds.has(id))
-                    .map((id) =>
-                      sessions.find(
-                        (s) => s.id === id || s.aliasIds?.includes(id),
-                      ),
-                    )
-                    // An archived session must never surface in Pinned — its pin is
-                    // stale (archiving drops it server-side, but a resurrected or
-                    // legacy pin can still point at it). Skip it so it can't render
-                    // as an un-archivable ghost row.
-                    .filter((s): s is UnifiedSession => !!s && !s.archived)
-                    .filter((s) => !workspaceSubagentIds.has(s.id))
-                    // Honor the repo filter — a pinned session from another repo
-                    // shouldn't leak into a repo-scoped view (workspace pins
-                    // already drop out via wsRows/filtered).
-                    .filter(
-                      (s) =>
-                        filter.repo === "all" || sessionRepo(s) === filter.repo,
-                    );
-                  // Pinned Plain tickets and PRs — resolved against the live
-                  // queues, so a done ticket / closed PR just stops rendering
-                  // (its stale pin key is harmless, like an archived session's).
-                  const pinnedTickets = pins
-                    .filter((e) => e.startsWith("support:"))
-                    .map((e) =>
-                      (supportThreads || []).find((t) => t.id === e.slice(8)),
-                    )
-                    .filter((t): t is SupportThread => !!t);
-                  // Pinned feed items (videos, dashboards):
-                  // resolved against the live feed items like tickets are.
-                  const pinnedFeedItems = pins
-                    .filter((e) => e.startsWith("feed:"))
-                    .map((e) => {
-                      const [, refKind, ...idParts] = e.split(":");
-                      const id = idParts.join(":");
-                      const feed = feeds.find((f) => f.refKind === refKind);
-                      const item = feed
-                        ? (feedItems[feed.id] || []).find((i) => i.id === id)
-                        : undefined;
-                      return feed && item ? { feed, item } : null;
-                    })
-                    .filter(
-                      (x): x is { feed: FeedDescriptor; item: FeedItem } => !!x,
-                    );
-                  const pinnedPrs = pins
-                    .filter((e) => e.startsWith("pr:"))
-                    .map((e) =>
-                      reviewQueueItems.find((i) => i.pr.url === e.slice(3)),
-                    )
-                    .filter((i): i is ReviewQueueItem => !!i)
-                    // Once a workspace carries this PR, the workspace row is the
-                    // single place for it, even if an older standalone PR pin remains.
-                    .filter((item) => !workspaceCoveredPrUrls.has(item.pr.url));
-                  if (
-                    !pinnedRows.length &&
-                    !pinnedLoose.length &&
-                    !pinnedTickets.length &&
-                    !pinnedFeedItems.length &&
-                    !pinnedPrs.length
-                  )
-                    return null;
-                  const pinnedOpen = isOpen("pinned");
-
-                  // One flat drag-to-reorder list: every pinned thing (workspace row,
-                  // loose session, ticket) becomes an entry slotted by its first key's
-                  // position in the pins array, so reordering is just rewriting that
-                  // array (reorderPins). `pinKeys` is everything in `pins` that maps
-                  // to the entry — a workspace can be pinned via its own key AND
-                  // legacy member-session pins — so a drop moves them as one unit.
-                  type PinEntry = {
-                    key: string;
-                    pinKeys: string[];
-                    /** Lane-drop payload: the sessions a lane drop re-lanes (empty
-						    = not droppable, e.g. a pinned ticket) + the entry's repo
-						    for the same-repo rule under per-repo lanes. */
-                    repo: string | null;
-                    sessions: UnifiedSession[];
-                    node: React.ReactNode;
-                  };
-                  const pinIdx = new Map(pins.map((p, i) => [p, i] as const));
-                  const entries: PinEntry[] = [];
-                  for (const row of pinnedRows) {
-                    entries.push({
-                      key: `ws:${row.key}`,
-                      pinKeys: [
-                        row.key,
-                        ...row.sessions.map((c) => c.id),
-                      ].filter((k) => pinIdx.has(k)),
-                      repo: wsRowRepo(row),
-                      sessions: row.sessions,
-                      node: renderPinnedWsRow(row),
-                    });
-                  }
-                  const seenLoose = new Set<string>();
-                  for (const s of pinnedLoose) {
-                    // A session pinned via both its id and an alias maps to the same
-                    // session twice — render (and reorder) it once.
-                    if (seenLoose.has(s.id)) continue;
-                    seenLoose.add(s.id);
-                    const pin = sessionPinState(s);
-                    entries.push({
-                      key: `session:${s.id}`,
-                      pinKeys: [s.id, ...(s.aliasIds ?? [])].filter((k) =>
-                        pinIdx.has(k),
-                      ),
-                      repo: sessionRepo(s),
-                      sessions: [s],
-                      node: (
-                        <SidebarItem
-                          session={s}
-                          selected={automationRowSelected(s)}
-                          unread={
-                            s.id !== selectedId &&
-                            isUnread(s.id, s.lastActivity, reads)
+                <PersonalBand
+                  needsReview={renderLabeledBand({
+                    label: "Needs review",
+                    name: "needsreview",
+                    rows: topBandRows(needsReviewRows),
+                    prs: groupsByRepo ? [] : requestedPrItems,
+                    renderRow: renderReviewWsRow,
+                  })}
+                  approved={renderLabeledBand({
+                    label: "Approved",
+                    name: "approvedreview",
+                    rows: topBandRows(approvedReviewRows),
+                    renderRow: renderReviewWsRow,
+                  })}
+                  awaitingReview={renderLabeledBand({
+                    label: "Awaiting review",
+                    name: "awaitingreview",
+                    rows: topBandRows(awaitingReviewRows),
+                  })}
+                  pinned={personalPinnedBand}
+                  projects={
+                    projectBands ? (
+                      <>
+                        <ProjectBands
+                          projects={projectBands}
+                          askBand={ASK_BAND}
+                          borrowedLens={borrowedLens}
+                          isOpen={isOpen}
+                          onToggleGroup={toggleGroup}
+                          onOpenNewSessionInRepo={
+                            navigation.openNewSessionInRepo
                           }
-                          mention={
-                            s.id !== selectedId
-                              ? mentionFor(s.id)?.by
-                              : undefined
-                          }
-                          mine={
-                            !!s.startedBy &&
-                            !s.automation &&
-                            s.startedBy.toLowerCase() ===
-                              currentUser.toLowerCase()
-                          }
-                          onClick={() => openSidebarSession(s)}
-                          onArchive={(current) => archiveWithNext(s, current)}
-                          pinned={pin.pinned}
-                          onTogglePin={pin.toggle}
-                          shipsDirectlyToMain={shipsDirectlyToMain(
-                            s.repo,
-                            s.branch,
-                          )}
-                          onRename={(title) => onRename(s, title)}
-                          onSetStatus={(st) => onSetStatus([s], st)}
+                          renderers={{
+                            workspaceGrouping: renderWorkspaceGrouping,
+                            labeledLane: renderLabeledLane,
+                            workspaceRow: renderWsRow,
+                            reviewWorkspaceRow: renderReviewWsRow,
+                            prRow: renderPrRow,
+                          }}
+                          selection={{
+                            workspaceRow: rowOwnsSelection,
+                            prRow: prRowSelected,
+                          }}
+                          drag={{
+                            repoKey: repoDragKey,
+                            move: moveDraggedRepo,
+                            start: startRepoDrag,
+                            finish: finishRepoDrag,
+                            swallowClick: swallowRepoDragClick,
+                          }}
                         />
-                      ),
-                    });
-                  }
-                  for (const t of pinnedTickets) {
-                    entries.push({
-                      key: `support:${t.id}`,
-                      pinKeys: [`support:${t.id}`],
-                      repo: null,
-                      sessions: [],
-                      node: renderSupportRow(t),
-                    });
-                  }
-                  for (const { feed, item } of pinnedFeedItems) {
-                    const pinKey = `feed:${feed.refKind}:${item.id}`;
-                    const linked =
-                      feedSessionByRef.get(`${feed.refKind}:${item.id}`) ||
-                      null;
-                    entries.push({
-                      key: pinKey,
-                      pinKeys: [pinKey],
-                      repo: null,
-                      sessions: [],
-                      node: (
-                        <FeedRow
-                          key={pinKey}
-                          feed={feed}
-                          item={item}
-                          session={linked}
-                          active={feedItemActive(feed, item)}
-                          pinned
-                          onTogglePin={() => setPins(togglePin(pinKey))}
-                          onOpen={() => navigation.openFeedItem(feed, item)}
-                          onSetStatus={
-                            linked
-                              ? (status) => onSetStatus([linked], status)
-                              : undefined
-                          }
-                        />
-                      ),
-                    });
-                  }
-                  for (const item of pinnedPrs) {
-                    entries.push({
-                      key: `pr:${item.pr.url}`,
-                      pinKeys: [`pr:${item.pr.url}`],
-                      repo: null,
-                      sessions: [],
-                      node: renderPrRow(item),
-                    });
-                  }
-                  const firstIdx = (e: PinEntry) =>
-                    e.pinKeys.length
-                      ? Math.min(...e.pinKeys.map((k) => pinIdx.get(k)!))
-                      : Infinity;
-                  entries.sort((a, b) => firstIdx(a) - firstIdx(b));
-                  // Mid-drag, Motion's in-flight order wins until the drop commits it.
-                  if (pinOrderDraft) {
-                    const draftIdx = new Map(
-                      pinOrderDraft.map((k, i) => [k, i] as const),
-                    );
-                    entries.sort(
-                      (a, b) =>
-                        (draftIdx.get(a.key) ?? Infinity) -
-                        (draftIdx.get(b.key) ?? Infinity),
-                    );
-                  }
-                  const entryMap = new Map(
-                    entries.map((e) => [e.key, e] as const),
-                  );
-                  // Whole-row y-drag would fight touch scrolling and the swipe
-                  // gestures, so drag reorder is desktop-only; the order itself is
-                  // per-user server state, so a desktop reorder shows up on the phone.
-                  // (>0, not >1: even a lone pinned row can be dragged into a lane.)
-                  const canDragPins = !isPhone && entries.length > 0;
-                  const commitPinReorder = () => {
-                    setPinDragKey(null);
-                    pinJustDragged.current = true;
-                    // The drop's click fires synchronously after pointerup; clear the
-                    // swallow flag right after so the next real click works.
-                    setTimeout(() => {
-                      pinJustDragged.current = false;
-                    }, 0);
-                    // A drop onto a status lane wins over the reorder: lane-pin the
-                    // row's sessions there and unpin it — dragging OUT of Pinned reads
-                    // as a move, unlike right-click Set-status which keeps the pin
-                    // (the row shows in both the Pinned band and its lane).
-                    const laneDrop = laneDropHoverRef.current;
-                    const dragMeta = pinDragMetaRef.current;
-                    pinDragMetaRef.current = null;
-                    setPinDragMeta(null);
-                    laneDropHoverRef.current = null;
-                    setLaneDropHover(null);
-                    if (laneDrop && dragMeta && dragMeta.sessions.length > 0) {
-                      pinOrderPending.current = null;
-                      setPinOrderDraft(null);
-                      setPins(unpin(dragMeta.pinKeys));
-                      onSetStatus(dragMeta.sessions, laneDrop.lane);
-                      return;
-                    }
-                    const orderKeys = pinOrderPending.current;
-                    pinOrderPending.current = null;
-                    setPinOrderDraft(null);
-                    if (!orderKeys) return;
-                    // New pins array: the visible entries' keys take the slots that
-                    // visible keys already occupy (in the new order), so pins hidden
-                    // from the band (archived, repo-filtered, review-band rows) keep
-                    // their exact positions instead of getting shoved to the end.
-                    const flat = orderKeys.flatMap(
-                      (k) => entryMap.get(k)?.pinKeys ?? [],
-                    );
-                    const visible = new Set(flat);
-                    const queue = [...flat];
-                    setPins(
-                      reorderPins(
-                        pins.map((p) =>
-                          visible.has(p) ? (queue.shift() ?? p) : p,
-                        ),
-                      ),
-                    );
-                  };
-                  const pinnedCount = entries.length;
-                  return (
-                    <div className={SIDEBAR_GROUP}>
-                      {/* Same header treatment as the status lanes below. */}
-                      <button
-                        className={cn(
-                          SIDEBAR_GROUP_HEADER,
-                          SIDEBAR_GROUP_HEADER_INSET,
-                          SIDEBAR_LANE_HEADER,
-                          SIDEBAR_STICKY_LANE,
-                          SIDEBAR_STUCK_BACKING,
+                        {visibleFeeds.map((descriptor) =>
+                          renderFeedBand(descriptor, true),
                         )}
-                        data-sticky-head
-                        onClick={() => toggleGroup("pinned")}
-                      >
-                        <span
-                          className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}
-                        >
-                          Pinned
-                        </span>
-                        <span className={SIDEBAR_LANE_COUNT}>
-                          {pinnedCount}
-                        </span>
-                        <IconChevronDown
-                          className={cn(
-                            SIDEBAR_GROUP_CHEVRON,
-                            !pinnedOpen && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-                          )}
-                          size={12}
-                          style={{
-                            transform: pinnedOpen ? "none" : "rotate(-90deg)",
-                          }}
-                        />
-                      </button>
-                      {pinnedOpen && (
-                        <Reorder.Group
-                          as="div"
-                          axis="y"
-                          values={entries.map((e) => e.key)}
-                          onReorder={(keys: string[]) => {
-                            pinOrderPending.current = keys;
-                            setPinOrderDraft(keys);
-                          }}
-                        >
-                          {entries.map((e) => (
-                            <Reorder.Item
-                              as="div"
-                              key={e.key}
-                              value={e.key}
-                              dragListener={canDragPins}
-                              transition={{ duration: 0 }}
-                              onDragStart={() => {
-                                setPinDragKey(e.key);
-                                const meta = {
-                                  repo: e.repo,
-                                  sessions: e.sessions,
-                                  pinKeys: e.pinKeys,
-                                };
-                                pinDragMetaRef.current = meta;
-                                setPinDragMeta(meta);
-                              }}
-                              onDrag={(
-                                ev: MouseEvent | TouchEvent | PointerEvent,
-                              ) => {
-                                if ("clientX" in ev)
-                                  updateLaneDropHover(ev.clientX, ev.clientY);
-                              }}
-                              onDragEnd={commitPinReorder}
-                              whileDrag={{ scale: 1.01 }}
-                              className={cn(
-                                SIDEBAR_PIN_ENTRY,
-                                pinDragKey && SIDEBAR_PIN_DRAG_ACTIVE,
-                                pinDragKey === e.key &&
-                                  SIDEBAR_PIN_ENTRY_DRAGGING,
-                              )}
-                              onClickCapture={(ev: React.MouseEvent) => {
-                                // Swallow the click that lands on the row when a drag
-                                // is dropped — it would open the session under the
-                                // cursor.
-                                if (pinJustDragged.current) {
-                                  ev.preventDefault();
-                                  ev.stopPropagation();
-                                }
-                              }}
-                            >
-                              {e.node}
-                            </Reorder.Item>
-                          ))}
-                        </Reorder.Group>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* ── Workspaces: status lanes live directly under the Workspaces
-				    header above (which carries the filter, new-workspace and
-				    new-session actions) — no second in-list heading. ── */}
-                <div className={SIDEBAR_GROUP}>
-                  {/* Inbox, Activity, and Status choose the row sections. Project
-					    independently decides whether those sections repeat per repo. */}
-                  {/* Snoozed rows sit out of focusWsRows, so each layout places
-					    them itself: under a project band every band gets its own
-					    Snoozed group (renderRepoGroups), the ungrouped inbox renders
-					    a single global one after the rows, and the status lanes slot
-					    it above Backlog via renderStatusLanes. */}
-                  {/* Plain (support tickets) renders as one more project: a band
-					    beside the repos with priority lanes nested under it — or,
-					    under ungrouped status lanes, its priority lanes appended
-					    after them so everything reads as one list. */}
-                  {/* Session-less PR and feed rows keep their project-shaped sections;
-					    Active/Snoozed applies to workspace rows with resumable sessions. */}
-                  {groupsByRepo ? (
-                    <>
-                      {renderRepoGroups()}
-                      {visibleFeeds.map((d) => renderFeedBand(d, true))}
-                    </>
-                  ) : (
-                    [
-                      ...renderWorkspaceGrouping(
-                        activeFocusWsRows,
-                        "",
-                        snoozedWsRows,
-                        undefined,
-                        filter.groupBy === "status" ? lanePrItems : [],
-                      ),
-                      ...(filter.groupBy === "status"
-                        ? [
-                            ...renderSupportLanes(plainThreadsInView),
-                            ...visibleFeeds
-                              .filter((d) => d.id !== "plain")
-                              .map((d) => renderFeedBand(d, false)),
-                          ]
-                        : visibleFeeds.map((d) => renderFeedBand(d, true))),
-                    ]
-                  )}
-                </div>
-
-                {/* The agent's own workspaces, switched from the foot of the list
-				    it is adding to or taking from: after the rows it counts, where
-				    the list runs out and you would wonder what is missing. It says
-				    which way it goes, so it is always its own undo. Faint: it is
-				    a note about the list, not a row in it.
-
-				    It does not say "auto created". The Automations band sits
-				    directly under this switch, and one word for two different
-				    things reads as though this controls that: an automation is a
-				    job somebody configured, while these are one-off workspaces an
-				    agent opened for itself with no automation behind them. */}
-                {autoCreatedRows > 0 && (
-                  <button
-                    className={cn(
-                      "mb-1 flex w-full items-center gap-1.5 rounded-row px-4 py-1.5 text-left text-label text-faint",
-                      SIDEBAR_HOVER_LAYER,
-                      "hover:text-dim",
-                    )}
-                    onClick={() =>
-                      setFilter({
-                        autoCreated:
-                          filter.autoCreated === "hide" ? "show" : "hide",
-                      })
-                    }
-                  >
-                    <IconRobot size={20} className="shrink-0" />
-                    <span className="min-w-0 truncate">
-                      {filter.autoCreated === "hide" ? "Show" : "Hide"}{" "}
-                      {autoCreatedRows} started by an agent
-                    </span>
-                  </button>
-                )}
+                      </>
+                    ) : (
+                      [
+                        ...renderWorkspaceGrouping(
+                          activeFocusWsRows,
+                          "",
+                          snoozedWsRows,
+                          undefined,
+                          filter.groupBy === "status" ? lanePrItems : [],
+                        ),
+                        ...(filter.groupBy === "status"
+                          ? [
+                              ...renderSupportLanes(plainThreadsInView),
+                              ...visibleFeeds
+                                .filter(
+                                  (descriptor) => descriptor.id !== "plain",
+                                )
+                                .map((descriptor) =>
+                                  renderFeedBand(descriptor, false),
+                                ),
+                            ]
+                          : visibleFeeds.map((descriptor) =>
+                              renderFeedBand(descriptor, true),
+                            )),
+                      ]
+                    )
+                  }
+                  autoCreatedRows={autoCreatedRows}
+                  autoCreatedHidden={filter.autoCreated === "hide"}
+                  onToggleAutoCreated={() =>
+                    setFilter({
+                      autoCreated:
+                        filter.autoCreated === "hide" ? "show" : "hide",
+                    })
+                  }
+                />
               </div>
             )}
           </div>

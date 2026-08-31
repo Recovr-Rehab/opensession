@@ -107,7 +107,7 @@ export interface SidebarHandle {
 //   "personal"    — My sessions (split by status), Pinned
 //   "people"      — one group per other teammate (+ ownerless source groups)
 //   "automations" — one group per automation
-// Distinct from the *project* bands below (renderRepoGroups + the feed bands):
+// Distinct from the *project* bands below (ProjectBands + the feed bands):
 // a project is a source of work — a repo or a feed like Plain — and the rows
 // inside it are workspaces. See CONCEPTS.md.
 export type GroupBand = "personal" | "people" | "automations";
