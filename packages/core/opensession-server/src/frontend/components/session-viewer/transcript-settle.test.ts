@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { readFollowingLive } from "./transcript-anchor";
 
-const [viewer, transcriptHook] = await Promise.all([
+const [viewer, transcriptView, transcriptHook] = await Promise.all([
   Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text(),
+  Bun.file(new URL("../session/TranscriptView.tsx", import.meta.url)).text(),
   Bun.file(new URL("../../hooks/useTranscript.ts", import.meta.url)).text(),
 ]);
 
@@ -54,7 +55,7 @@ test("indexed transcripts settle positively but cannot stay hidden forever", () 
   expect(viewer).toContain("if (!transcriptRendered) return");
   expect(viewer).toContain("? INDEXED_OPEN_SETTLE_MAX_MS");
   expect(viewer).toContain(": LEGACY_OPEN_SETTLE_MAX_MS,");
-  expect(viewer).toContain(
+  expect(transcriptView).toContain(
     '"w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150"',
   );
 });

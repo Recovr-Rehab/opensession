@@ -49,16 +49,9 @@ import {
   HISTORY_PAGE_ENTRIES,
   shouldContinueHistoryReveal,
 } from "../lib/transcript-history";
-import { SessionTranscript } from "./SessionTranscript";
 import { MessageRail } from "./MessageRail";
 import { collectSentMessages } from "../lib/sent-messages";
-import {
-  canonicalToolName,
-  LiveSubagentsProvider,
-  OpenAssetProvider,
-  ToolPathRootsProvider,
-  type LiveSubagent,
-} from "./ToolCallBlock";
+import { canonicalToolName, type LiveSubagent } from "./ToolCallBlock";
 import {
   parsePlanItems,
   type PlanItem,
@@ -74,7 +67,6 @@ import {
   getNextChatButtonPref,
   onNextChatButtonChanged,
 } from "../lib/next-chat-pref";
-import { OpenAssetPathsProvider } from "../lib/open-asset";
 import { SubagentPane, type SubagentRef } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
 import { getCurrentUser, useCurrentUser } from "./UserPicker";
@@ -156,6 +148,7 @@ import {
 import { BrandMark } from "./BrandMark";
 import { SessionHeader } from "./session/SessionHeader";
 import { SidePanelHost } from "./session/SidePanelHost";
+import { TranscriptView } from "./session/TranscriptView";
 import { splitAttachments, type FileAttachment } from "../lib/images";
 import { cropImageRegionFile } from "../lib/image-region-comment";
 import {
@@ -6795,80 +6788,52 @@ export function SessionViewer({
                         Empty transcript
                       </div>
                     ) : (
-                      <div
-                        className={cn(
-                          "w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150",
-                          openSettlePending && "opacity-0",
-                        )}
-                      >
-                        <OpenAssetPathsProvider value={assetPaths}>
-                          <React.Profiler
-                            id="transcript"
-                            onRender={onTranscriptRender}
-                          >
-                            <ToolPathRootsProvider value={toolPathRoots}>
-                              <LiveSubagentsProvider value={liveSubagents}>
-                                <OpenAssetProvider
-                                  value={openAssetFromTranscript}
-                                >
-                                  <SessionTranscript
-                                    entries={entries}
-                                    optimisticEntries={
-                                      optimisticTranscriptEntries
-                                    }
-                                    pendingDeliveryIds={
-                                      pendingTranscriptDeliveryIds
-                                    }
-                                    transcriptIndex={
-                                      transcriptIndex ?? undefined
-                                    }
-                                    transcriptRangeRetryGeneration={
-                                      transcriptRangeRetryGeneration
-                                    }
-                                    onLoadTranscriptRanges={
-                                      loadTranscriptRanges
-                                    }
-                                    onVisibleRangesSettled={
-                                      onVisibleRangesSettled
-                                    }
-                                    live={isBusy}
-                                    sessionId={session.id}
-                                    liveTurnStore={liveTurnStore}
-                                    onLiveLayout={relayout}
-                                    reviewResult={reviewResult}
-                                    onEditMessage={editSentMessageInComposer}
-                                    // Same gate the composer sends under: a busy session
-                                    // is already continuing, and one you cannot type into
-                                    // must not offer a button that types for you.
-                                    onContinue={
-                                      connected && !isBusy && !noEngine
-                                        ? continueAfterFailure
-                                        : undefined
-                                    }
-                                    walkthrough={sessionWalkthrough}
-                                    notes={notes}
-                                    slackShare={shippedChangeShare}
-                                    onFork={
-                                      canForkSession ? handleFork : undefined
-                                    }
-                                    onOpenSubagent={openSubagent}
-                                    // For automation-owned sessions (e.g. a GitHub PR run), the
-                                    // automation never *types* a user turn — humans steer them.
-                                    // So don't credit un-attributed turns to the automation
-                                    // ("GitHub (automation)"); leave the owner unset so they read
-                                    // as "You" (explicit [Name] steers still show the teammate).
-                                    owner={
-                                      session.automation
-                                        ? undefined
-                                        : session.startedBy || undefined
-                                    }
-                                  />
-                                </OpenAssetProvider>
-                              </LiveSubagentsProvider>
-                            </ToolPathRootsProvider>
-                          </React.Profiler>
-                        </OpenAssetPathsProvider>
-                      </div>
+                      <TranscriptView
+                        openSettlePending={openSettlePending}
+                        assetPaths={assetPaths}
+                        toolPathRoots={toolPathRoots}
+                        liveSubagents={liveSubagents}
+                        openAsset={openAssetFromTranscript}
+                        onRender={onTranscriptRender}
+                        entries={entries}
+                        optimisticEntries={optimisticTranscriptEntries}
+                        pendingDeliveryIds={pendingTranscriptDeliveryIds}
+                        transcriptIndex={transcriptIndex ?? undefined}
+                        transcriptRangeRetryGeneration={
+                          transcriptRangeRetryGeneration
+                        }
+                        onLoadTranscriptRanges={loadTranscriptRanges}
+                        onVisibleRangesSettled={onVisibleRangesSettled}
+                        live={isBusy}
+                        sessionId={session.id}
+                        liveTurnStore={liveTurnStore}
+                        onLiveLayout={relayout}
+                        reviewResult={reviewResult}
+                        onEditMessage={editSentMessageInComposer}
+                        // Same gate the composer sends under: a busy session
+                        // is already continuing, and one you cannot type into
+                        // must not offer a button that types for you.
+                        onContinue={
+                          connected && !isBusy && !noEngine
+                            ? continueAfterFailure
+                            : undefined
+                        }
+                        walkthrough={sessionWalkthrough}
+                        notes={notes}
+                        slackShare={shippedChangeShare}
+                        onFork={canForkSession ? handleFork : undefined}
+                        onOpenSubagent={openSubagent}
+                        // For automation-owned sessions (e.g. a GitHub PR run), the
+                        // automation never *types* a user turn — humans steer them.
+                        // So don't credit un-attributed turns to the automation
+                        // ("GitHub (automation)"); leave the owner unset so they read
+                        // as "You" (explicit [Name] steers still show the teammate).
+                        owner={
+                          session.automation
+                            ? undefined
+                            : session.startedBy || undefined
+                        }
+                      />
                     )}
                   </AnimatePresence>
 
