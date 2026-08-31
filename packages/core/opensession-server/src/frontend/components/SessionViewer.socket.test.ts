@@ -21,14 +21,19 @@ function invocation(sourceText: string, component: string, from = 0) {
 }
 
 test("SessionViewer receives its socket capabilities from context", async () => {
-  const [viewer, app] = await Promise.all([
+  const [viewer, app, bindings] = await Promise.all([
     source("./SessionViewer.tsx"),
     source("../App.tsx"),
+    source("../lib/session-viewer-bindings.ts"),
   ]);
   const props = componentProps(viewer);
   expect(props).not.toContain("send:");
   expect(props).not.toContain("addHandler:");
-  expect(props).toContain("setTyping:");
+  expect(props).not.toContain("setTyping:");
+  expect(props).toContain("composer: ComposerBinding;");
+  expect(bindings).toContain(
+    "setTyping: (sessionId: string, active: boolean) => void;",
+  );
   expect(props).toContain("connected:");
   expect(viewer).toContain(
     'import { useSessionSocket } from "../hooks/useSessionSocket";',
@@ -38,7 +43,9 @@ test("SessionViewer receives its socket capabilities from context", async () => 
   const viewerInvocation = invocation(app, "SessionViewer");
   expect(viewerInvocation).not.toContain("send=");
   expect(viewerInvocation).not.toContain("addHandler=");
-  expect(viewerInvocation).toContain("setTyping={socket.setTyping}");
+  expect(viewerInvocation).not.toContain("setTyping=");
+  expect(viewerInvocation).toContain("composer={{");
+  expect(viewerInvocation).toContain("setTyping: socket.setTyping,");
   expect(viewerInvocation).toContain(
     "connected={socket.connected && !pendingSocket}",
   );

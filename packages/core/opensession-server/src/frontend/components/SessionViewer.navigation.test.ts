@@ -33,8 +33,6 @@ const availabilityProps = [
 const retainedCallbackProps = [
   "onArchive",
   "onArchived",
-  "setTyping",
-  "onComposerPrefillConsumed",
   "onRename",
   "onRenameWorkspace",
   "onArchiveWorkspace",

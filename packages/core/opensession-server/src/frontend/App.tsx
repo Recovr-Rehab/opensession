@@ -3746,7 +3746,20 @@ export function App({
             // this can't double-record.
             rememberArchived([viewerSession.id]);
           }}
-          setTyping={socket.setTyping}
+          composer={{
+            setTyping: socket.setTyping,
+            resetSeq: focused ? newSessionSeq : 0,
+            autoFocus: focused && focusComposerOnOpen,
+            prefill: sessionComposerPrefills[viewerSession.id] ?? null,
+            onPrefillConsumed: (seq) =>
+              setSessionComposerPrefills((prev) => {
+                const cur = prev[viewerSession.id];
+                if (!cur || cur.seq !== seq) return prev;
+                const next = { ...prev };
+                delete next[viewerSession.id];
+                return next;
+              }),
+          }}
           connected={socket.connected && !pendingSocket}
           pendingCreation={
             focused && route.view === "session" && route.id === pendingSessionId
@@ -3763,20 +3776,6 @@ export function App({
           headerModelEl={focused ? headerModelEl : null}
           headerRepoEl={focused ? headerRepoEl : null}
           rightPanelEl={focused ? rightPanelEl : null}
-          newSessionSeq={focused ? newSessionSeq : 0}
-          autoFocusComposer={focused && focusComposerOnOpen}
-          composerPrefillExternal={
-            sessionComposerPrefills[viewerSession.id] ?? null
-          }
-          onComposerPrefillConsumed={(seq) =>
-            setSessionComposerPrefills((prev) => {
-              const cur = prev[viewerSession.id];
-              if (!cur || cur.seq !== seq) return prev;
-              const next = { ...prev };
-              delete next[viewerSession.id];
-              return next;
-            })
-          }
           workspaceSessions={workspaceSessions}
           onSetStatus={setSessionLanes}
           showReview={

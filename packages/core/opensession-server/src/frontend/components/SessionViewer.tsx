@@ -359,9 +359,11 @@ import {
   HEADER_SESSIONBAR_USAGE,
   MOBILE_CONTROL_GLASS,
 } from "../lib/app-header-classes";
+import type { ComposerBinding } from "../lib/session-viewer-bindings";
 
 interface Props {
   session: UnifiedSession;
+  composer: ComposerBinding;
   /** Verified workspace role from the ordinary auth bootstrap. */
   canRepairSafety?: boolean;
   /** Only the focused pane in a desktop tab split owns global shortcuts/title. */
@@ -376,7 +378,6 @@ interface Props {
   /** Called after a successful archive (not unarchive), with whether archiving
 	    gracefully stopped an in-flight owned turn — so the parent can toast. */
   onArchived?: (stoppedRun: boolean) => void;
-  setTyping: (sessionId: string, active: boolean) => void;
   connected: boolean;
   /** A client-minted session whose server record is still being persisted. */
   pendingCreation?: boolean;
@@ -409,16 +410,6 @@ interface Props {
 	    workspace/sub-agent panel portals here so it spans the full height from the
 	    top, instead of opening only below the session. */
   rightPanelEl?: HTMLElement | null;
-  /** Bumped by the tab-bar + to start a fresh session in this same session: clears
-	    the composer and jumps to the live edge. A visual reset — same thread. */
-  newSessionSeq?: number;
-  /** One-shot pulse set when this session was opened by picking its workspace
-	    in the sidebar — focus the composer on open so you can type right away.
-	    Ignored on phones (would pop the keyboard over the session). */
-  autoFocusComposer?: boolean;
-  /** One-shot draft text appended from another surface, such as Checks. */
-  composerPrefillExternal?: { seq: number; text: string } | null;
-  onComposerPrefillConsumed?: (seq: number) => void;
   /** Rename this session (double-click the header title); empty resets it to
 	    the derived title. Same handler the tab strip and sidebar use. */
   onRename?: (id: string, title: string) => void;
@@ -652,7 +643,13 @@ export function SessionViewer({
   canOpenNextChat,
   onArchive,
   onArchived,
-  setTyping,
+  composer: {
+    setTyping,
+    resetSeq: newSessionSeq,
+    autoFocus: autoFocusComposer,
+    prefill: composerPrefillExternal,
+    onPrefillConsumed: onComposerPrefillConsumed,
+  },
   connected,
   pendingCreation = false,
   optimisticEmpty = false,
@@ -662,10 +659,6 @@ export function SessionViewer({
   headerActionsEl,
   headerModelEl,
   rightPanelEl,
-  newSessionSeq,
-  autoFocusComposer,
-  composerPrefillExternal,
-  onComposerPrefillConsumed,
   onRename,
   workspaceName,
   onRenameWorkspace,
