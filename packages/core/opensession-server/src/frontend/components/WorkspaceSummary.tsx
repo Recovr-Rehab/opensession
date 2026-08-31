@@ -1096,8 +1096,11 @@ export function WorkspaceSummaryBody({
       )}
 
       <div
-        className={cn(groupClass, "ws-summary-review-group")}
-        hidden={!hasConnectedPr}
+        className={cn(
+          groupClass,
+          "ws-summary-review-group",
+          !hasConnectedPr && "hidden!",
+        )}
       >
         {/* One review section for both the automated reading and the people asked
 				    to review. Its action opens the complete workspace review; the final row

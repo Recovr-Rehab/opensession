@@ -48,7 +48,7 @@ test("reviewers stay hidden until a pull request is connected", () => {
   expect(summarySource).toContain(
     "const hasConnectedPr = sessionHasConnectedPr(session)",
   );
-  expect(summarySource).toContain("hidden={!hasConnectedPr}");
+  expect(summarySource).toContain('!hasConnectedPr && "hidden!"');
 });
 
 test("an assigned reviewer can be changed or cleared from the summary", () => {
