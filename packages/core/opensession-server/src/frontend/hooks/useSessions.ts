@@ -14,6 +14,7 @@ import {
   settledOverrides,
   type LocalArchiveOverride,
 } from "../lib/session-slices";
+import { errorMessage } from "../lib/error-message";
 
 /** The unscoped live list, kept as a compatibility fallback. */
 const LIVE_QUERY = "?archived=exclude";
@@ -348,10 +349,10 @@ export function useSessions({
             setLiveAt(startedAt);
           setLoading(false);
           setError(null);
-        })().catch(async (e: any) => {
-          if (e?.name === "AbortError") return;
+        })().catch(async (error) => {
+          if (error instanceof Error && error.name === "AbortError") return;
           if (mountedRef.current) {
-            setError(e.message);
+            setError(errorMessage(error, "Failed to load sessions"));
             setLoading(false);
           }
         });

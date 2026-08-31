@@ -281,9 +281,14 @@ export async function switchPrimaryRepoApi(
   );
 }
 
-export async function fetchWorktrees(repo?: string) {
+export interface WorktreeInfo {
+  branch: string;
+  path: string;
+}
+
+export async function fetchWorktrees(repo?: string): Promise<WorktreeInfo[]> {
   const qs = repo ? `?repo=${encodeURIComponent(repo)}` : "";
-  return request<any>(`/worktrees${qs}`, {
+  return request<WorktreeInfo[]>(`/worktrees${qs}`, {
     label: "Failed to fetch worktrees",
   });
 }
