@@ -54,6 +54,9 @@ describe("VirtualTranscriptList", () => {
     expect(transcriptViewportNeedsHistory(702, 700)).toBe(false);
     expect(transcriptViewportNeedsHistory(0, 0)).toBe(false);
     expect(source).toContain("this.scheduleUnderfilledHistory()");
+    expect(source).toContain(
+      "if (callback()) this.scheduleUnderfilledHistory()",
+    );
   });
 
   test("keeps the live-edge tail in the same virtual coordinate space", () => {

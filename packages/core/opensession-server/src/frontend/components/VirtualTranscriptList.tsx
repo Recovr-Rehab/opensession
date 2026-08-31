@@ -54,8 +54,9 @@ interface Props {
   trailingMounted: number;
   onVisibleItems?: (items: VirtualTranscriptItem[]) => void;
   /** Fired when the reader climbs near the top of what is mounted, so a
-   * caller loading history incrementally can hydrate the next page. */
-  onTopApproach?: () => void;
+   * caller loading history incrementally can hydrate the next page. Returns
+   * whether more history remains available for an underfilled viewport. */
+  onTopApproach?: () => boolean;
   /** Re-evaluate visible demand after the caller enables or retries loading. */
   topApproachGeneration?: number;
   /** Head of the incrementally hydrated range window. */
@@ -123,7 +124,7 @@ class TranscriptVirtualizer extends React.Component<
   private containerFor: HTMLDivElement | null = null;
   private container: HTMLDivElement | null = null;
   private topApproachContainer: HTMLDivElement | null = null;
-  private topApproachCallback: (() => void) | undefined;
+  private topApproachCallback: (() => boolean) | undefined;
   private topApproachTimer: number | undefined;
   private underfilledHistoryTimer: number | undefined;
   private topApproachTouchY: number | null = null;
@@ -547,15 +548,16 @@ class TranscriptVirtualizer extends React.Component<
       const current = this.topApproachContainer;
       const callback = this.topApproachCallback;
       if (
-        current &&
-        callback &&
-        transcriptViewportNeedsHistory(
+        !current ||
+        !callback ||
+        !transcriptViewportNeedsHistory(
           current.scrollHeight,
           current.clientHeight,
         )
       )
-        callback();
-    }, 100);
+        return;
+      if (callback()) this.scheduleUnderfilledHistory();
+    }, 250);
   }
 
   private onTopApproachWheel = (event: WheelEvent) => {

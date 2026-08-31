@@ -816,7 +816,7 @@ function IndexedTranscriptBlocks(props: Props) {
   // timed-out request remains retryable here.
   const handleTopApproach = () => {
     const onLoad = props.onLoadTranscriptRanges;
-    if (!onLoad) return;
+    if (!onLoad) return false;
     let head = firstRenderedRangeKey
       ? timeline.findIndex(
           (item, index) =>
@@ -842,12 +842,13 @@ function IndexedTranscriptBlocks(props: Props) {
         }
       }
     }
-    if (wanted.length) onLoad(wanted.reverse());
+    if (!wanted.length) return false;
+    onLoad(wanted.reverse());
+    return true;
   };
   // VirtualTranscriptList re-evaluates generation changes through its own
-  // viewport-proximity gate. Calling handleTopApproach directly here chained
-  // every completed response into another request even after the reader left
-  // the top, eventually hydrating most of a large transcript in the background.
+  // viewport-proximity gate. It chains responses only while the rendered
+  // transcript is too short to scroll, then returns to explicit reader intent.
   const hydrationOutline = timeline.map((item, index) => ({
     key: indexedItemKey(item, index),
     ranges: indexedItemRanges(item),
