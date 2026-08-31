@@ -65,13 +65,10 @@ interface Props {
   onTopApproach?: () => boolean;
   /** Re-evaluate visible demand after the caller enables or retries loading. */
   topApproachGeneration?: number;
-  /** Head of the incrementally hydrated range window. */
+  /** Head range whose missing prefix is hydrating into an existing row. */
   topGrowthKey?: string | null;
-  /** Loaded-row count while the head range is partial. */
+  /** Loaded-row count while that head range is a partial suffix. */
   topGrowthVersion?: number;
-  /** Count of indexed payload rows hydrated into the outline. An increase only
-   * adds history above the existing loaded window. */
-  historyGrowthVersion?: number;
   /** Range children reuse the renderer without nesting another virtualizer. */
   enabled?: boolean;
   /** Session identity for the measured-height cache. */
@@ -141,21 +138,15 @@ class TranscriptVirtualizer extends React.Component<
   private topApproachGate = new TranscriptTopApproachGate();
   private rowObserver: ResizeObserver | null = null;
   private rowRefs = new Map<string, (node: HTMLDivElement | null) => void>();
-  /** Rows newly inserted at the hydrated head need measurement compensation
-   * even while they straddle the viewport. The normal TanStack predicate only
-   * adjusts rows whose estimated end is already above scrollTop; a tall new
-   * row can therefore paint for one frame before the next correction. */
+  /** A bounded opening payload can be a suffix of its structural row. When
+   * older payload joins that row's start, preserve the point inside the row;
+   * ordinary pages append at the end and native keyed anchoring owns them. */
   private headGrowthKeys = new Set<string>();
   private headGrowthGeneration = 0;
   private scheduledHeadGrowthGeneration = 0;
   private headGrowthTimer: number | undefined;
   private renderedGrowth:
-    | {
-        key: string;
-        version: number | undefined;
-        historyVersion: number | undefined;
-        items: VirtualTranscriptItem[];
-      }
+    | { key: string; version: number | undefined }
     | undefined;
   /** Every block key this adapter instance has ever mounted. The first build
    *  seeds it (opening a session is not an arrival); afterwards, a tail key
@@ -186,62 +177,11 @@ class TranscriptVirtualizer extends React.Component<
     });
   }
 
-  /** Pre-mutation scroller height, captured only for commits that prepend
-   * history above the reader (growth key handoff or a partial head range
-   * completing). Detecting those from props alone keeps ordinary commits free
-   * of forced layout: the unconditional scrollHeight read that used to live in
-   * every componentDidUpdate was the largest non-idle self-time entry in
-   * history-scroll profiles. */
-  getSnapshotBeforeUpdate(
-    prevProps: Omit<Props, "enabled">,
-  ): TranscriptBottomAnchor | null {
-    const growthKey = this.props.topGrowthKey ?? this.props.items[0]?.key ?? "";
-    const previousKey = prevProps.topGrowthKey ?? prevProps.items[0]?.key ?? "";
-    const prependedRange =
-      Boolean(growthKey) &&
-      growthKey !== previousKey &&
-      this.props.items.some((item) => item.key === previousKey);
-    const completedPartialRange =
-      Boolean(growthKey) &&
-      growthKey === previousKey &&
-      prevProps.topGrowthVersion !== undefined &&
-      this.props.topGrowthVersion !== prevProps.topGrowthVersion;
-    const hydratedHistory =
-      this.props.historyGrowthVersion !== undefined &&
-      this.props.historyGrowthVersion !== prevProps.historyGrowthVersion;
-    if (!prependedRange && !completedPartialRange && !hydratedHistory)
-      return null;
-    const container = this.scrollContainer();
-    return container
-      ? transcriptBottomAnchor(
-          container.scrollHeight,
-          container.scrollTop,
-          container.clientHeight,
-        )
-      : null;
-  }
-
-  componentDidUpdate(
-    prevProps: Omit<Props, "enabled">,
-    _prevState: AdapterState,
-    snapshot: TranscriptBottomAnchor | null,
-  ) {
+  componentDidUpdate(prevProps: Omit<Props, "enabled">) {
     this.runCommitLifecycle(() => {
       this.measureCommittedRows(prevProps);
       this.virtualizer._willUpdate();
       this.scheduleHeadGrowthClear();
-      if (snapshot !== null) {
-        // Indexed hydration only adds rows above the loaded window. Restore the
-        // exact pre-commit distance from the bottom instead of inferring an
-        // offset delta from whichever estimates happened to render first.
-        const container = this.scrollContainer();
-        if (container)
-          container.scrollTop = transcriptScrollTopForBottomAnchor(
-            container.scrollHeight,
-            container.clientHeight,
-            snapshot,
-          );
-      }
       this.syncTopApproach();
       if (
         prevProps.items.length !== this.props.items.length ||
@@ -269,53 +209,22 @@ class TranscriptVirtualizer extends React.Component<
   }
 
   private prepareHeadGrowth(props: Omit<Props, "enabled">) {
-    const key = props.topGrowthKey ?? props.items[0]?.key ?? "";
-    const next = {
-      key,
-      version: props.topGrowthVersion,
-      historyVersion: props.historyGrowthVersion,
-      items: props.items,
-    };
+    const key = props.topGrowthKey ?? "";
+    const next = { key, version: props.topGrowthVersion };
     const previous = this.renderedGrowth;
     this.renderedGrowth = next;
-    if (!previous || !key) return;
-
-    let added = false;
     if (
-      next.historyVersion !== undefined &&
-      next.historyVersion !== previous.historyVersion
-    ) {
-      const changedKeys = committedTranscriptMeasureKeys(
-        previous.items,
-        props.items,
-      );
-      for (const item of props.items) {
-        if (
-          item.animatePositionChanges === false &&
-          changedKeys.has(item.key)
-        ) {
-          this.headGrowthKeys.add(item.key);
-          added = true;
-        }
-      }
-    }
-    if (key !== previous.key) {
-      const previousIndex = props.items.findIndex(
-        (item) => item.key === previous.key,
-      );
-      if (previousIndex > 0) {
-        for (const item of props.items.slice(0, previousIndex)) {
-          this.headGrowthKeys.add(item.key);
-          added = true;
-        }
-      }
-    } else if (next.version !== previous.version) {
-      // The bounded opening payload can start inside a structural range.
-      // Completing its older prefix grows the same row above visible content.
-      this.headGrowthKeys.add(key);
-      added = true;
-    }
-    if (added) this.headGrowthGeneration++;
+      !previous ||
+      !key ||
+      key !== previous.key ||
+      next.version === previous.version
+    )
+      return;
+    // This is the one hydration shape that is not a keyed insertion: the
+    // opening payload was a suffix of the row, and older content joined its
+    // start. Ordinary range pages append at the end and must not use this path.
+    this.headGrowthKeys.add(key);
+    this.headGrowthGeneration++;
   }
 
   private scheduleHeadGrowthClear() {
@@ -395,6 +304,10 @@ class TranscriptVirtualizer extends React.Component<
     return {
       count: props.items.length,
       getScrollElement: () => this.scrollContainer(),
+      // TanStack's chat mode keeps a stable keyed item in place when older
+      // rows prepend and preserves an already-pinned end through measurements.
+      anchorTo: "end",
+      scrollEndThreshold: 120,
       estimateSize: (index) => {
         const item = props.items[index];
         if (!item) return 96;
@@ -736,12 +649,15 @@ class TranscriptVirtualizer extends React.Component<
         scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 120
           ? delta
           : undefined;
-      return shouldAdjustTranscriptScroll(
-        item.end,
-        instance.scrollOffset ?? 0,
-        this.headGrowthKeys.has(String(item.key)),
+      return shouldAdjustTranscriptScroll({
+        itemStart: item.start,
+        itemEnd: item.end,
+        scrollOffset: instance.scrollOffset ?? 0,
+        firstMeasurement: !instance.itemSizeCache.has(item.key),
+        scrollingBackward: instance.scrollDirection === "backward",
+        growsAtStart: this.headGrowthKeys.has(String(item.key)),
         liveEdgeDelta,
-      );
+      });
     };
     const virtualItems = this.virtualizer.getVirtualItems();
     const totalSize = this.virtualizer.getTotalSize();
@@ -814,28 +730,6 @@ class TranscriptVirtualizer extends React.Component<
   }
 }
 
-export interface TranscriptBottomAnchor {
-  distanceFromBottom: number;
-}
-
-export function transcriptBottomAnchor(
-  scrollHeight: number,
-  scrollTop: number,
-  clientHeight: number,
-): TranscriptBottomAnchor {
-  return {
-    distanceFromBottom: Math.max(0, scrollHeight - scrollTop - clientHeight),
-  };
-}
-
-export function transcriptScrollTopForBottomAnchor(
-  scrollHeight: number,
-  clientHeight: number,
-  anchor: TranscriptBottomAnchor,
-): number {
-  return Math.max(0, scrollHeight - clientHeight - anchor.distanceFromBottom);
-}
-
 export function committedTranscriptMeasureKeys(
   previous: VirtualTranscriptItem[],
   next: VirtualTranscriptItem[],
@@ -897,14 +791,33 @@ export function didScrollTranscriptTowardHistory(
   );
 }
 
-export function shouldAdjustTranscriptScroll(
-  itemEnd: number,
-  scrollOffset: number,
-  headGrowth = false,
-  liveEdgeDelta?: number,
-): boolean {
+export function shouldAdjustTranscriptScroll({
+  itemStart,
+  itemEnd,
+  scrollOffset,
+  firstMeasurement = false,
+  scrollingBackward = false,
+  growsAtStart = false,
+  liveEdgeDelta,
+}: {
+  itemStart: number;
+  itemEnd: number;
+  scrollOffset: number;
+  firstMeasurement?: boolean;
+  scrollingBackward?: boolean;
+  growsAtStart?: boolean;
+  liveEdgeDelta?: number;
+}): boolean {
   if (liveEdgeDelta !== undefined) return liveEdgeDelta > 0;
-  return headGrowth || itemEnd <= scrollOffset + 1;
+  // Preserve the point inside a partial opening suffix as older content joins
+  // its start. A continuation page grows at the end and should not move a
+  // reader whose viewport intersects that row.
+  if (growsAtStart) return itemStart < scrollOffset + 1;
+  // Match TanStack's native measurement predicate everywhere else. Supplying
+  // the transcript exception above replaces the core callback, so its default
+  // behavior needs to remain intact here.
+  if (firstMeasurement) return itemStart < scrollOffset;
+  return itemEnd <= scrollOffset + 1 && !scrollingBackward;
 }
 
 export function transcriptOverscan(phone: boolean): number {

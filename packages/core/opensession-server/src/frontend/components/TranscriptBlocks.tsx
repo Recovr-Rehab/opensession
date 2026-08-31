@@ -48,6 +48,7 @@ import {
 import { SessionContextMessage } from "./SessionContextMessage";
 import {
   nextBackgroundTranscriptRange,
+  transcriptRangeHasLoadedSuffix,
   transcriptRangesContainPayload,
   visibleTranscriptHydrationDemand,
 } from "./session-viewer/transcript-hydration";
@@ -695,9 +696,6 @@ function IndexedTranscriptBlocks(props: Props) {
   const ranges = buildTranscriptRanges(transcriptIndex);
   const payloadById = new Map(entries.map((entry) => [entry.id, entry]));
   const indexedIds = new Set(ranges.flatMap((range) => range.entryIds));
-  let hydratedIndexedEntryCount = 0;
-  for (const id of indexedIds)
-    if (payloadById.has(id)) hydratedIndexedEntryCount++;
   const optimisticIds = new Set(
     (props.optimisticEntries ?? []).map((entry) => entry.id),
   );
@@ -859,9 +857,10 @@ function IndexedTranscriptBlocks(props: Props) {
   const firstRenderedRangeLoaded = firstRenderedRangeIds.filter((id) =>
     payloadById.has(id),
   ).length;
-  const firstRenderedRangePartial =
-    firstRenderedRangeLoaded > 0 &&
-    firstRenderedRangeLoaded < firstRenderedRangeIds.length;
+  const firstRenderedRangeIsPartialSuffix = transcriptRangeHasLoadedSuffix(
+    firstRenderedRangeIds,
+    (id) => payloadById.has(id),
+  );
   // Fired when the reader nears the top of the mounted window: collect the
   // next batch of missing ranges walking backwards from the window's head.
   // Start AT the head because the bounded opening payload can begin partway
@@ -1006,9 +1005,8 @@ function IndexedTranscriptBlocks(props: Props) {
       topApproachGeneration={props.transcriptRangeRetryGeneration}
       topGrowthKey={firstRenderedRangeKey}
       topGrowthVersion={
-        firstRenderedRangePartial ? firstRenderedRangeLoaded : undefined
+        firstRenderedRangeIsPartialSuffix ? firstRenderedRangeLoaded : undefined
       }
-      historyGrowthVersion={hydratedIndexedEntryCount}
       onVisibleItems={(visible) => {
         const wanted = visibleTranscriptHydrationDemand(
           hydrationOutline,
