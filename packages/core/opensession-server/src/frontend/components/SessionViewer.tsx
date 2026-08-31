@@ -1908,12 +1908,12 @@ export function SessionViewer({
     suspendEndMaintenance,
     onScroll,
   } = useSessionScroll(true);
-  // An explicit send first resumes live-edge following immediately, then needs
-  // one more positioning pass after React has committed the optimistic row.
-  // Scrolling only in the event handler targets the old scrollHeight; the row
-  // does not exist in the DOM yet, so selection/disclosure guards or delayed
-  // virtualizer measurement can otherwise leave part of it below the composer.
-  const sentPromptNeedsLayoutScrollRef = useRef(false);
+  // An explicit tail action first resumes live-edge following immediately,
+  // then needs one more positioning pass after React commits its DOM change.
+  // Scrolling only in the event handler targets the old scrollHeight: a sent
+  // row does not exist yet, while an answered ask is about to disappear.
+  // Either transition can otherwise leave the response below the composer.
+  const tailActionNeedsLayoutScrollRef = useRef(false);
 
   // A fold toggle (turn work blocks, tool-call details, review loops) changes
   // block heights above the reader. Hold the live-edge glue off for the two
@@ -3682,10 +3682,10 @@ export function SessionViewer({
   // Layout effect so the adjustment happens before the browser paints — no flicker.
   useLayoutEffect(() => {
     relayout();
-    if (!sentPromptNeedsLayoutScrollRef.current) return;
-    sentPromptNeedsLayoutScrollRef.current = false;
+    if (!tailActionNeedsLayoutScrollRef.current) return;
+    tailActionNeedsLayoutScrollRef.current = false;
     scrollToLatest("auto");
-  }, [entries, queued, steered, pending, relayout, scrollToLatest]);
+  }, [entries, queued, steered, pending, ask, relayout, scrollToLatest]);
 
   // Shared preamble: stop tracking the live edge, and pin the reader to the
   // content they're on while the page prepends above it.
@@ -4416,7 +4416,7 @@ export function SessionViewer({
       // Sent messages always enter the conversation immediately. A busy steer
       // keeps its delivery mode only so the bubble can remain slightly muted
       // until the engine reads it.
-      sentPromptNeedsLayoutScrollRef.current = true;
+      tailActionNeedsLayoutScrollRef.current = true;
       setPending((p) => [
         ...p,
         {
@@ -7388,14 +7388,19 @@ export function SessionViewer({
                     <AskCard
                       key={ask.questionId}
                       questions={ask.questions}
-                      onAnswer={(answers) =>
+                      onAnswer={(answers) => {
+                        tailActionNeedsLayoutScrollRef.current = true;
                         send({
                           type: "answer_question",
                           sessionId: session.id,
                           questionId: ask.questionId,
                           answers,
-                        })
-                      }
+                        });
+                        // Answering is explicit intent to watch the resumed
+                        // turn, even if the ask was only partly in view.
+                        cancelIndexAnchorHold();
+                        scrollToLatest("auto");
+                      }}
                     />
                   )}
 

@@ -49,16 +49,30 @@ test("late action clearance keeps a following transcript at the bottom", () => {
 });
 
 test("a sent prompt scrolls again after its optimistic row commits", () => {
-  expect(viewer).toContain("sentPromptNeedsLayoutScrollRef.current = true");
+  expect(viewer).toContain("tailActionNeedsLayoutScrollRef.current = true");
   const contentLayoutEffect = viewer.match(
     /\/\/ After any content change:[\s\S]*?\}, \[\s*entries,[\s\S]*?scrollToLatest,?[\s\S]*?\]\);/,
   )?.[0];
 
   expect(contentLayoutEffect).toContain("relayout()");
   expect(contentLayoutEffect).toContain(
-    "if (!sentPromptNeedsLayoutScrollRef.current) return",
+    "if (!tailActionNeedsLayoutScrollRef.current) return",
   );
   expect(contentLayoutEffect).toContain('scrollToLatest("auto")');
+});
+
+test("answering an ask follows the response after the ask card disappears", () => {
+  const askCard = viewer.match(
+    /\{ask && \([\s\S]*?<AskCard[\s\S]*?\/>\s*\)\}/,
+  )?.[0];
+  const contentLayoutEffect = viewer.match(
+    /\/\/ After any content change:[\s\S]*?\}, \[\s*entries,[\s\S]*?scrollToLatest,?[\s\S]*?\]\);/,
+  )?.[0];
+
+  expect(askCard).toContain("tailActionNeedsLayoutScrollRef.current = true");
+  expect(askCard).toContain("cancelIndexAnchorHold()");
+  expect(askCard).toContain('scrollToLatest("auto")');
+  expect(contentLayoutEffect).toContain("pending, ask, relayout");
 });
 
 test("the stable callback reads current live-edge intent when it runs", () => {
