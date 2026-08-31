@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TranscriptIndexedRange } from "../../lib/transcript-index";
 import {
-  nextBackgroundTranscriptRange,
   transcriptRangeHasLoadedSuffix,
   transcriptRangesContainPayload,
   visibleTranscriptHydrationDemand,
@@ -43,30 +42,6 @@ describe("visible transcript hydration", () => {
         (id) => id === "tail-entry",
       ),
     ).toBe(true);
-  });
-
-  test("background hydration walks backward from the live tail", () => {
-    const loaded = new Set(["below"]);
-    expect(
-      nextBackgroundTranscriptRange(ranges, (id) => loaded.has(id))?.key,
-    ).toBe("visible");
-    loaded.add("visible");
-    expect(
-      nextBackgroundTranscriptRange(ranges, (id) => loaded.has(id))?.key,
-    ).toBe("above");
-    loaded.add("above");
-    expect(nextBackgroundTranscriptRange(ranges, (id) => loaded.has(id))).toBe(
-      null,
-    );
-  });
-
-  test("background hydration finishes a partial tail before older ranges", () => {
-    const partialTail = range("partial-tail", 4, ["loaded", "missing"]);
-    expect(
-      nextBackgroundTranscriptRange([...ranges, partialTail], (id) =>
-        ["below", "loaded"].includes(id),
-      )?.key,
-    ).toBe("partial-tail");
   });
 
   test("settles when every range in the near-visible window is loaded", () => {

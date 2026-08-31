@@ -47,7 +47,6 @@ import {
 } from "./ShippedChangeComposer";
 import { SessionContextMessage } from "./SessionContextMessage";
 import {
-  nextBackgroundTranscriptRange,
   transcriptRangeHasLoadedSuffix,
   transcriptRangesContainPayload,
   visibleTranscriptHydrationDemand,
@@ -228,11 +227,6 @@ const TRAILING_MOUNTED_BLOCKS = 24;
 // upward travel continuous while each prepend stays cheap; the next approach
 // (after the reader climbs through it) asks for more.
 const TOP_APPROACH_ENTRY_BUDGET = 200;
-
-// Background history stays deliberately slower than reader-driven hydration.
-// One range per settled tick lets large sessions fill in without monopolizing
-// the session actor or repeatedly rebuilding the client transcript.
-const BACKGROUND_HYDRATION_DELAY_MS = 1_500;
 
 function renderBlockEntries(block: RenderBlock): TranscriptEntry[] {
   if (block.kind === "turn") return block.items;
@@ -788,33 +782,6 @@ function IndexedTranscriptBlocks(props: Props) {
   }
   atoms = sortIndexedTimelineAtoms(atoms);
   const timeline = groupIndexedReviewLoops(atoms);
-  const backgroundRanges = timeline.flatMap(indexedItemRanges);
-  const backgroundRange = nextBackgroundTranscriptRange(
-    backgroundRanges,
-    (id) => payloadById.has(id),
-  );
-  const backgroundRangeKey = backgroundRange?.key ?? null;
-  const backgroundHydrationAvailable = Boolean(
-    props.onLoadTranscriptRanges && backgroundRangeKey,
-  );
-  const requestBackgroundHydration = useEffectEvent(() => {
-    const next = nextBackgroundTranscriptRange(backgroundRanges, (id) =>
-      payloadById.has(id),
-    );
-    if (next) props.onLoadTranscriptRanges?.([next]);
-  });
-  useEffect(() => {
-    if (!backgroundHydrationAvailable) return;
-    const timer = window.setTimeout(
-      requestBackgroundHydration,
-      BACKGROUND_HYDRATION_DELAY_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, [
-    backgroundHydrationAvailable,
-    backgroundRangeKey,
-    props.transcriptRangeRetryGeneration,
-  ]);
   // Only payload-backed rows occupy scroll space. Unloaded history contributes
   // no estimated placeholders: the scrollable area starts at the loaded tail
   // and grows upward as older ranges hydrate (handleTopApproach below), so

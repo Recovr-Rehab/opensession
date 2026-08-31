@@ -26,18 +26,6 @@ export function transcriptRangeHasLoadedSuffix(
   );
 }
 
-/** Load backward from the live tail so background work stays contiguous. */
-export function nextBackgroundTranscriptRange(
-  ranges: readonly TranscriptIndexedRange[],
-  hasPayload: (entryId: string) => boolean,
-): TranscriptIndexedRange | null {
-  for (let index = ranges.length - 1; index >= 0; index--) {
-    const range = ranges[index];
-    if (range?.entryIds.some((id) => !hasPayload(id))) return range;
-  }
-  return null;
-}
-
 /**
  * Missing payload can move the opening viewport only when it belongs to a row
  * the virtualizer actually reports as visible. Unloaded ranges occupy no
