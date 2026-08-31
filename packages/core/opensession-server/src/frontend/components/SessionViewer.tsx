@@ -6046,7 +6046,9 @@ export function SessionViewer({
                   {(compactHeader || isPhone) && shareAction(true)}
                   <Menu.Separator className={VIEWER_MENU_SEP} />
                   {newSessionAction}
-                  {!workspaceScopedMenu && forkAction}
+                  {/* Fork always applies to the open session, even when the
+                      rest of this menu is scoped to its workspace. */}
+                  {forkAction}
                   {!workspaceScopedMenu && spinOffAction}
                   {!workspaceScopedMenu && transcriptActions}
                   {portalsAction}

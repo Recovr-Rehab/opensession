@@ -106,6 +106,12 @@ test("SessionViewer navigation comes from NavigationContext", async () => {
   expect(viewer).toContain("onOpenSession={openCurrentWorkspace}");
 });
 
+test("fork session stays available inside a workspace", async () => {
+  const { viewer } = await sources();
+  expect(viewer).toContain("                  {forkAction}");
+  expect(viewer).not.toContain("{!workspaceScopedMenu && forkAction}");
+});
+
 test("App passes only SessionViewer navigation availability", async () => {
   const { app } = await sources();
   const viewerStart = app.indexOf("<SessionViewer\n");
