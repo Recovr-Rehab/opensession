@@ -24,7 +24,7 @@
     "check": "bun run format:check && bun run typecheck && bun run lint && scripts/test-unit-isolated.sh && bun run test:snapshots",
     "dev": "bun --hot packages/core/opensession-server/opensession.ts",
     "format": "oxfmt",
-    "format:check": "oxfmt --check",
+    "format:check": "bun scripts/check-format.ts",
     "opensession": "bun scripts/cli.ts",
     "setup": "bun scripts/cli.ts onboard",
     "start": "bun packages/core/opensession-server/opensession.ts",

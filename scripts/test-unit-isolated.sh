@@ -24,5 +24,11 @@ fi
 
 printf 'Running %d unit-test files in isolated processes (%d at a time)\n' \
   "${#tests[@]}" "$jobs"
+# A developer's service shell may carry runtime bypasses used by previews or
+# snapshot fixtures. Unit files that test the default executor and run-host
+# policy must not inherit those process-wide overrides.
 printf '%s\0' "${tests[@]}" | \
-  xargs -0 -n 1 -P "$jobs" bun test --no-orphans --reporter dots
+  xargs -0 -n 1 -P "$jobs" env \
+    -u OPENSESSION_EXECUTOR \
+    -u OPENSESSION_TEST_IN_PROCESS_RUNS \
+    bun test --no-orphans --reporter dots
