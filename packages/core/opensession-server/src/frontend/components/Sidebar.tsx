@@ -5379,6 +5379,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
             )}
           </div>
 
+          {/* ── Automations (one collapsible band, one group per automation) ── */}
           <AutomationsBand
             groups={groups}
             automationOverview={automationOverview}
@@ -5394,6 +5395,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
             renderSession={renderAutomationSession}
           />
 
+          {/* ── Team: independently collapsible active teammates ── */}
           <PeopleBand
             groups={activePersonGroups}
             open={peopleOpen}

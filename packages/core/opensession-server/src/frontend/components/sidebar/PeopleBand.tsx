@@ -100,6 +100,7 @@ export function PeopleBand({
                   onClick={(event) => {
                     const header = event.currentTarget;
                     onToggleGroup(groupKey);
+                    // Keep the toggled heading visible when a long list folds.
                     requestAnimationFrame(() =>
                       header.scrollIntoView({
                         block: "nearest",

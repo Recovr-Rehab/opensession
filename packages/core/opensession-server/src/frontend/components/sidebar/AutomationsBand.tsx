@@ -166,10 +166,10 @@ export function AutomationsBand({
                     step still holds for a collapsed group's report; the
                     heading chevron is what says the group is closed. */}
                 <div className={SIDEBAR_AUTOMATION_RUNS}>
-                  {/* A named automation shows its latest conclusion even while
-                      collapsed: someone asked to hear from it, so it answers
-                      without being opened. House routines stay quiet, or many
-                      of them would each add a line to this band. */}
+                  {/* An automation with an owner reports to someone rather
+                      than being a house routine nobody has taken. Show its
+                      conclusion even while collapsed because someone asked to
+                      hear from it; ownerless routines stay quiet. */}
                   {(groupOpen || !!overview?.owner) && report && (
                     <AutomationReportRow
                       report={report}
