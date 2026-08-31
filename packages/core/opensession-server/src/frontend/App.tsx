@@ -3578,6 +3578,10 @@ export function App({
     ),
   ];
   const openSession = (id: string, created?: UnifiedSession | null) => {
+    // Opening a session means foregrounding its chat tab. Callers inside a
+    // workspace pane can navigate to the already-current id, so navigation
+    // alone would leave Review (or another pane) selected.
+    setActiveViewTab(null);
     const known = sessions.some(
       (session) => session.id === id || session.aliasIds?.includes(id),
     );

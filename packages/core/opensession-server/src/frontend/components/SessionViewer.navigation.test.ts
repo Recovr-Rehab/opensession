@@ -127,4 +127,12 @@ test("App passes only SessionViewer navigation availability", async () => {
   expect(viewerInvocation).toContain(
     "canStartNewSession={!viewerSession.desk && !emptyWorkspaceSession}",
   );
+
+  const openSessionStart = app.indexOf("const openSession =");
+  const openSessionEnd = app.indexOf("\n  };", openSessionStart);
+  expect(openSessionStart).toBeGreaterThanOrEqual(0);
+  expect(openSessionEnd).toBeGreaterThan(openSessionStart);
+  expect(app.slice(openSessionStart, openSessionEnd)).toContain(
+    "setActiveViewTab(null);",
+  );
 });
