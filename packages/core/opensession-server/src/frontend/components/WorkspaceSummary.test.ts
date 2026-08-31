@@ -46,7 +46,7 @@ test("uncommitted work opens Changes without using the separate commit action", 
 test("reviewers stay hidden until a pull request is connected", () => {
   expect(summarySource).toContain("if (!pr) return []");
   expect(summarySource).toContain(
-    "const hasConnectedPr = sessionHasPr(session)",
+    "const hasConnectedPr = sessionHasConnectedPr(session)",
   );
   expect(summarySource).toContain("hidden={!hasConnectedPr}");
 });

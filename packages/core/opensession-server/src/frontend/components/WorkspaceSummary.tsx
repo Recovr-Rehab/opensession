@@ -28,7 +28,7 @@ import { fullTime } from "../lib/time";
 import { commitPrompt } from "../lib/commit-prompt";
 import { errorMessage } from "../lib/error-message";
 import { AGENT_NAME, GITHUB_BOT_LOGINS } from "../lib/brand";
-import { sessionHasPr } from "../lib/session-prs";
+import { sessionHasConnectedPr } from "../lib/session-prs";
 import { getCurrentUser } from "./UserPicker";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { PrStatusBar } from "./PrStatusBar";
@@ -591,7 +591,7 @@ export function WorkspaceSummaryBody({
     revision: refreshTick,
   });
   const pr = prResource.data ?? null;
-  const hasConnectedPr = sessionHasPr(session);
+  const hasConnectedPr = sessionHasConnectedPr(session);
   const git = gitResource.data ?? null;
   const assets = assetsResource.data ?? [];
   const commits = overviewResource.data?.commits ?? [];
