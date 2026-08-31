@@ -171,6 +171,7 @@ import { DeskOverlay } from "./components/DeskOverlay";
 import { sidebarSessionsQuery, useSessions } from "./hooks/useSessions";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useWorkspaceMutations } from "./hooks/useWorkspaceMutations";
+import { useSessionLifecycle } from "./hooks/useSessionLifecycle";
 import { useGithubConnectionState } from "./hooks/useGithubConnectionState";
 import { useHydratedSession } from "./hooks/useHydratedSession";
 import { hasDraft } from "./lib/drafts";
@@ -185,7 +186,6 @@ import { useLargeTitleHandoff } from "./hooks/useLargeTitle";
 import { initAlerts } from "./lib/notify";
 import { registerServiceWorker } from "./lib/push";
 import {
-  archiveSessionApi,
   deleteSessionApi,
   fetchSession,
   renameSessionApi,
@@ -2713,16 +2713,6 @@ export function App({
   // activity first. Grouping is not the workspace id alone — see
   // lib/workspace-archive, which also adopts the sessions a duplicate
   // workspace record holds for the same worktree.
-  /** Un-archive a closed session, back among the workspace's tabs. Shared by
-   *  the strip's history button and the header ⋯ menu that stands in for it. */
-  async function restoreSession(s: UnifiedSession) {
-    await (async () => {
-      await archiveSessionApi(s.id, false);
-    })().catch(async (e) => {
-      console.error("Restore failed:", e);
-    });
-    refresh();
-  }
   const archivedSessions: UnifiedSession[] = workspaceArchivedSessions({
     sessions,
     fetched: workspaceArchive,
@@ -3038,113 +3028,42 @@ export function App({
     rememberArchived,
     dropStalePins,
   });
-
-  // Close a tab = archive the session: it leaves the strip and the active list,
-  // but stays recoverable from Archived. An empty session that never ran has
-  // nothing to recover, so it's deleted outright instead of cluttering
-  // Archived. The local list updates before the request returns so closing
-  // feels instant. Shared by the tab ×, the tab context menu, and ⌘W.
-  const closeSessionNow = async (
-    s: UnifiedSession,
-    preferredNext?: UnifiedSession,
-  ) => {
-    const neverRan = s.source === "opensession" && sessionNeverRan(s);
-    const pendingCreate = neverRan && s.id === pendingSessionId;
-    const wasOpen = currentSession?.id === s.id;
-    // No split bookkeeping here: a closed tab stops being live, so the split
-    // resolves without it, and collapses on its own once a bar is emptied.
-    // Leaving the id in the record means restoring the session later puts it
-    // back in the bar it was closed from.
-    const next = wasOpen
-      ? (preferredNext ?? workspaceSessions.find((c) => c.id !== s.id))
-      : null;
-    // Closing the last session doesn't have to conjure a new one: a workspace
-    // pane (Review, Conversation, Video) renders without a session, so the
-    // strip is left holding just that tab. The foregrounded pane wins, so
-    // closing the session you were reading Review beside stays on Review.
-    const survivingPane =
-      wasOpen && !next && activeWorkspaceId
-        ? (openWsPanes.find((pane) => pane === activeViewTab) ??
-          openWsPanes[0] ??
-          null)
-        : null;
-    const needsNewSessionComposer = wasOpen && !next && !survivingPane;
-    if (pendingCreate) {
-      // The create response owns cleanup from here. Mark it abandoned before
-      // removing the optimistic shell so a late response cannot resurrect it.
-      abandonedSessionCreatesRef.current.add(s.id);
-      clearTimeout(pendingTimer.current);
-      setPendingSessionId(null);
-      setOptimisticSession(null);
-      unstick(s.id);
-    }
-    if (neverRan) {
-      remove(s.id);
-    } else {
-      patch(s.id, { archived: true, archivedReason: "manual" });
-    }
-    if (wasOpen) {
-      if (next) navigate({ view: "session", id: next.id });
-      else if (survivingPane && activeWorkspaceId) {
-        setActiveViewTab(survivingPane);
-        // The pane is already open, so the workspace landing has nothing to
-        // decide: arm its one-shot suppress.
-        suppressWsSeedRef.current = true;
-        navigate({
-          view: "workspace",
-          id: activeWorkspaceId,
-          tab: survivingPane,
-        });
-      }
-    }
-    try {
-      if (neverRan && !pendingCreate) await deleteSessionApi(s.id, false);
-      else if (!neverRan) {
-        await archiveSessionApi(s.id, true);
-        rememberArchived([s.id]);
-      }
-    } catch (e) {
-      console.error("Close failed:", e);
-      if (neverRan) {
-        setHiddenEmptySessionIds((hidden) => {
-          if (!hidden.has(s.id)) return hidden;
-          const next = new Set(hidden);
-          next.delete(s.id);
-          return next;
-        });
-        inject(s);
-      } else {
-        patch(s.id, { archived: false, archivedReason: undefined });
-      }
-      if (wasOpen) navigate({ view: "session", id: s.id });
-      return;
-    }
-    if (wasOpen && needsNewSessionComposer && activeWorkspaceId) {
-      navigate({ view: "workspace", id: activeWorkspaceId });
-      openNewSessionInWorkspace(s, "share");
-    }
-    refresh();
-  };
-  const closeSession = (s: UnifiedSession) =>
-    confirmRunningClose(s, () => void closeSessionNow(s));
-  const deleteSessionFromTab = async (
-    session: UnifiedSession,
-    cleanWorktree: boolean,
-  ) => {
-    const wasOpen = currentSession?.id === session.id;
-    const next = wasOpen
-      ? workspaceSessions.find((candidate) => candidate.id !== session.id)
-      : undefined;
-    await deleteSessionApi(session.id, cleanWorktree);
-    remove(session.id);
-    if (wasOpen) {
-      if (next) navigate({ view: "session", id: next.id });
-      else if (activeWorkspaceId)
-        navigate({ view: "workspace", id: activeWorkspaceId });
-      else goBack();
-    }
-    refresh();
-  };
+  const {
+    closeSessionNow,
+    closeSession,
+    deleteSessionFromTab,
+    restoreSession,
+    archiveSessionFromSidebar,
+    archiveSessionsFromCatchUp,
+    closeSessionRef,
+  } = useSessionLifecycle({
+    route,
+    navigate,
+    goBack,
+    currentSession,
+    workspaceSessions,
+    activeWorkspaceId,
+    openWsPanes,
+    activeViewTab,
+    setActiveViewTab,
+    pendingSessionId,
+    pendingTimer,
+    abandonedSessionCreatesRef,
+    suppressWsSeedRef,
+    setPendingSessionId,
+    setOptimisticSession,
+    setHiddenEmptySessionIds,
+    patch,
+    inject,
+    remove,
+    unstick,
+    refresh,
+    confirmRunningClose,
+    confirmRunningCloses,
+    rememberArchived,
+    dropStalePins,
+    openNewSessionInWorkspace,
+  });
   const selectSessionTab = (next: UnifiedSession) => {
     const empty =
       currentSession &&
@@ -3162,10 +3081,7 @@ export function App({
     setHiddenEmptySessionIds((hidden) => new Set(hidden).add(empty.id));
     void closeSessionNow(empty, next);
   };
-  const closeSessionRef = useRef(closeSession);
-  useLayoutEffect(() => {
-    closeSessionRef.current = closeSession;
-  });
+
   /**
    * Foreground a tab by its strip id — a session or a pane, since the strip
    * holds both in one order. Mirrors what SessionTabs' own onSelect and
@@ -3293,7 +3209,7 @@ export function App({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [showToast, reopenLastArchivedRef]);
+  }, [showToast, reopenLastArchivedRef, closeSessionRef]);
 
   const handleSessionRunningChange = (id: string, isRunning: boolean) => {
     // Keep the existing run-start stamp when the session was already running:
@@ -4400,32 +4316,7 @@ export function App({
                     catchUpActive={route.view === "catchup"}
                     onNextChatAvailableChange={setNextChatAvailable}
                     archivedActive={route.view === "archived"}
-                    onArchive={(s, openNext) => {
-                      const archive = async () => {
-                        const wasOpen =
-                          route.view === "session" && route.id === s.id;
-                        if (wasOpen && !openNext?.()) goBack();
-                        patch(s.id, {
-                          archived: true,
-                          archivedReason: "manual",
-                        });
-                        try {
-                          await archiveSessionApi(s.id, true);
-                          rememberArchived([s.id]);
-                        } catch (e) {
-                          console.error("Archive failed:", e);
-                          patch(s.id, {
-                            archived: false,
-                            archivedReason: undefined,
-                          });
-                          if (wasOpen) navigate({ view: "session", id: s.id });
-                          return;
-                        }
-                        dropStalePins([s]);
-                        refresh();
-                      };
-                      confirmRunningClose(s, () => void archive());
-                    }}
+                    onArchive={archiveSessionFromSidebar}
                     onArchiveWorkspace={archiveWorkspaceFromSidebar}
                     onRename={async (s, title) => {
                       await (async () => {
@@ -4701,25 +4592,7 @@ export function App({
                       workspaces={workspaces}
                       send={send}
                       connected={connected}
-                      onArchive={(sessions) => {
-                        const archive = async () => {
-                          await (async () => {
-                            await Promise.all(
-                              sessions.map((c) =>
-                                archiveSessionApi(c.id, true),
-                              ),
-                            );
-                            // Swiping through the deck archives fast — one entry per
-                            // card keeps ⌘Z an undo of the last swipe, not of the
-                            // whole session.
-                            rememberArchived(sessions.map((c) => c.id));
-                          })().catch(async (e) => {
-                            console.error("Archive failed:", e);
-                          });
-                          refresh();
-                        };
-                        confirmRunningCloses(sessions, () => void archive());
-                      }}
+                      onArchive={archiveSessionsFromCatchUp}
                       onOpenSession={(id) => navigate({ view: "session", id })}
                       onNewWorkspace={() => openPalette()}
                       onExit={leaveDeck}
