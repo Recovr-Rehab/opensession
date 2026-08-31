@@ -12,7 +12,7 @@ const apiSource = await Bun.file(
 
 test("workspace surfaces keep committed and uncommitted work separate", () => {
   expect(apiSource).toContain("commits?: WorkspaceCommit[]");
-  expect(summarySource).toContain("(diffIsCommitted || commits.length > 0)");
+  expect(summarySource).toContain("(diffIsCommitted || hasCommitDetails)");
   expect(summarySource).toContain(">Committed</div>");
   expect(summarySource).toContain(">Uncommitted</div>");
   expect(summarySource).toContain("commits.map(committedRow)");
@@ -22,11 +22,17 @@ test("workspace surfaces keep committed and uncommitted work separate", () => {
   );
 });
 
-test("folded commits open in a nested overlay", () => {
-  expect(summarySource).toContain("<Popover.Root exclusive={false}>");
-  expect(summarySource).toContain('side={embedded ? "bottom" : "left"}');
+test("the Committed section folds open to every PR or workspace commit", () => {
+  expect(summarySource).toContain("const prCommits = pr?.commits ?? []");
+  expect(summarySource).toContain(
+    "const [commitsOpen, setCommitsOpen] = useState(false)",
+  );
+  expect(summarySource).toContain("aria-expanded={commitsOpen}");
+  expect(summarySource).toContain(
+    'title={commitsOpen ? "Hide commits" : "Show all commits"}',
+  );
+  expect(summarySource).toContain("prCommits.map(prCommittedRow)");
   expect(summarySource).toContain("commits.map(committedRow)");
-  expect(summarySource).not.toContain("setCommitsOpen");
 });
 
 test("uncommitted work opens Changes without using the separate commit action", () => {

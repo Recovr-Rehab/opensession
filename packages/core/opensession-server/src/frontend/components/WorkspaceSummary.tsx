@@ -46,7 +46,12 @@ import { Button } from "../ui/button";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
-import type { PrDetails, PrReviewer, UnifiedSession } from "../lib/types";
+import type {
+  PrCommit,
+  PrDetails,
+  PrReviewer,
+  UnifiedSession,
+} from "../lib/types";
 import {
   WS_SUMMARY_ACTION,
   WS_SUMMARY_CARD,
@@ -574,6 +579,8 @@ export function WorkspaceSummaryBody({
   const git = gitResource.data ?? null;
   const assets = assetsResource.data ?? [];
   const commits = overviewResource.data?.commits ?? [];
+  const prCommits = pr?.commits ?? [];
+  const hasCommitDetails = prCommits.length > 0 || commits.length > 0;
   const media = (() => {
     const seen = new Set<string>();
     return [...liveMedia, ...(overviewResource.data?.media ?? [])].filter(
@@ -596,6 +603,7 @@ export function WorkspaceSummaryBody({
     ) ?? null;
   const [prompted, setPrompted] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
+  const [commitsOpen, setCommitsOpen] = useState(false);
   const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
@@ -910,9 +918,26 @@ export function WorkspaceSummaryBody({
     );
   }
 
-  /** A long session can commit dozens of times. Keep the card folded to one
-   *  totals row, then show the individual commits in the same small side
-   *  overlay used for checks rather than stretching the summary itself. */
+  function prCommittedRow(commit: PrCommit) {
+    return (
+      <div
+        key={commit.oid}
+        className={cn(WS_SUMMARY_ROW, "cursor-default")}
+        title={`${commit.messageHeadline} · ${commit.oid.slice(0, 8)} · ${commit.author}`}
+      >
+        <span className={WS_SUMMARY_RAIL}>
+          <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+        </span>
+        <span className={WS_SUMMARY_LABEL}>{commit.messageHeadline}</span>
+        <code className="shrink-0 text-meta text-faint">
+          {commit.oid.slice(0, 7)}
+        </code>
+      </div>
+    );
+  }
+
+  /** A long session can commit dozens of times. Keep the completed-work totals
+   *  folded, then let the section heading reveal every commit in this card. */
   function committedSummaryRow() {
     if (commits.length === 0) return null;
     const stats = commits.reduce(
@@ -925,55 +950,30 @@ export function WorkspaceSummaryBody({
     );
     const label = `${commits.length} commit${commits.length === 1 ? "" : "s"}`;
     return (
-      <Popover.Root exclusive={false}>
-        <Popover.Trigger
-          render={
-            <button
-              type="button"
-              className={WS_SUMMARY_ROW}
-              title={`View ${label}`}
-            >
-              <span className={WS_SUMMARY_RAIL}>
-                <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
-              </span>
-              <span className={WS_SUMMARY_LABEL}>{label}</span>
-              <span
-                className={cn(
-                  WS_SUMMARY_STATE,
-                  "flex items-baseline gap-2 text-dim tabular-nums",
-                )}
-              >
-                <span>
-                  {stats.files} file{stats.files === 1 ? "" : "s"}
-                </span>
-                <span className="text-green">+{stats.additions}</span>
-                <span className="text-red">−{stats.deletions}</span>
-              </span>
-            </button>
-          }
-        />
-        <Popover.Popup
-          portalContainer={
-            typeof document !== "undefined" ? document.body : undefined
-          }
-          side={embedded ? "bottom" : "left"}
-          align="end"
-          sideOffset={10}
-          className="flex max-h-[min(440px,70vh,var(--available-height))] w-[min(380px,calc(100vw-24px))] flex-col overflow-hidden p-0"
+      <button
+        type="button"
+        className={WS_SUMMARY_ROW}
+        onClick={() => setCommitsOpen(true)}
+        aria-expanded={false}
+        title={`View ${label}`}
+      >
+        <span className={WS_SUMMARY_RAIL}>
+          <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+        </span>
+        <span className={WS_SUMMARY_LABEL}>{label}</span>
+        <span
+          className={cn(
+            WS_SUMMARY_STATE,
+            "flex items-baseline gap-2 text-dim tabular-nums",
+          )}
         >
-          <div className="flex items-baseline justify-between gap-2.5 border-b border-divider bg-surface px-3 py-[9px]">
-            <span className="text-label font-semibold text-fg">{label}</span>
-            <span className="inline-flex gap-2 text-meta font-semibold tabular-nums">
-              <span className="text-dim">
-                {stats.files} file{stats.files === 1 ? "" : "s"}
-              </span>
-              <span className="text-green">+{stats.additions}</span>
-              <span className="text-red">−{stats.deletions}</span>
-            </span>
-          </div>
-          <div className="overflow-y-auto p-1">{commits.map(committedRow)}</div>
-        </Popover.Popup>
-      </Popover.Root>
+          <span>
+            {stats.files} file{stats.files === 1 ? "" : "s"}
+          </span>
+          <span className="text-green">+{stats.additions}</span>
+          <span className="text-red">−{stats.deletions}</span>
+        </span>
+      </button>
     );
   }
 
@@ -1355,14 +1355,41 @@ export function WorkspaceSummaryBody({
         )}
       </div>
 
-      {(diffIsCommitted || commits.length > 0) && (
+      {(diffIsCommitted || hasCommitDetails) && (
         <div className={groupClass}>
-          <div className={WS_SUMMARY_SECTION}>Committed</div>
+          {hasCommitDetails ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                WS_SUMMARY_SECTION,
+                "group/committed w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left",
+              )}
+              onClick={() => setCommitsOpen((open) => !open)}
+              aria-expanded={commitsOpen}
+              title={commitsOpen ? "Hide commits" : "Show all commits"}
+            >
+              <span>Committed</span>
+              <IconChevronDown
+                size={14}
+                className={cn(
+                  "shrink-0 transition-transform motion-reduce:transition-none",
+                  commitsOpen && "rotate-180",
+                )}
+              />
+            </Button>
+          ) : (
+            <div className={WS_SUMMARY_SECTION}>Committed</div>
+          )}
           {diffIsCommitted &&
             diffChangeRow(
               `${changedFiles} file${changedFiles === 1 ? "" : "s"} committed`,
             )}
-          {committedSummaryRow()}
+          {commitsOpen
+            ? prCommits.length > 0
+              ? prCommits.map(prCommittedRow)
+              : commits.map(committedRow)
+            : committedSummaryRow()}
         </div>
       )}
 
