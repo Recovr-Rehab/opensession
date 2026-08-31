@@ -247,6 +247,8 @@ export interface HostedRunOpts {
   resumeAttempts?: number;
   lastResumeAt?: string;
   onAskUser?: RunAgentOpts["onAskUser"];
+  /** Reports the engine id even when its live init frame preceded attachment. */
+  onEngineSession?: (engineSessionId: string) => void;
   /** Fences cancellation admitted while the detached host is still launching. */
   shouldCancel?: () => boolean;
   /** A steer arrived too late at the host — queue it so it isn't dropped. */
@@ -647,6 +649,7 @@ async function spawnHostRun(
       }
       handle = new HostHandle(dir, spec, {
         onAskUser: opts.onAskUser,
+        onEngineSession: opts.onEngineSession,
         onSteerFailed: opts.onSteerFailed,
       });
       try {
@@ -659,6 +662,7 @@ async function spawnHostRun(
     launchCompleted = true;
     handle = new HostHandle(dir, spec, {
       onAskUser: opts.onAskUser,
+      onEngineSession: opts.onEngineSession,
       onSteerFailed: opts.onSteerFailed,
     });
     await handle.connectWithWait(20_000);
@@ -955,6 +959,7 @@ class AsyncEventQueue {
 
 export interface HandleCallbacks {
   onAskUser?: RunAgentOpts["onAskUser"];
+  onEngineSession?: (engineSessionId: string) => void;
   onSteerFailed?: (text: string) => void;
 }
 
@@ -1241,6 +1246,9 @@ export class HostHandle {
     if (!id || id === this.engineSessionId) return;
     this.engineSessionId = id;
     addHostRunKey(id, this.ctl);
+    try {
+      this.cb.onEngineSession?.(id);
+    } catch {}
   }
 
   private acceptsSideEffectFrame(frameType: string): boolean {

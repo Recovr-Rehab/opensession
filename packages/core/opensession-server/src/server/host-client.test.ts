@@ -373,6 +373,34 @@ function hello(spec: RunHostSpec, selectedModel: string) {
 }
 
 describe("HostHandle model recovery", () => {
+  test("reports an engine id recovered from the initial host snapshot", () => {
+    const spec: RunHostSpec = {
+      hostId: "rh-workflow-early-init",
+      osSessionId: "os-parent",
+      lifecycle: "auxiliary",
+      transcriptTarget: "none",
+      prompt: "review",
+      cwd: "/tmp",
+    };
+    const reported: string[] = [];
+    const handle = new HostHandle("/tmp/rh-workflow-early-init", spec, {
+      onEngineSession: (id) => reported.push(id),
+    });
+
+    (handle as any).handleMsg({
+      ...hello(spec, "pi/openai/gpt-5.6-sol"),
+      engineSessionId: "pi-before-attach",
+    });
+    (handle as any).handleMsg({
+      ...hello(spec, "pi/openai/gpt-5.6-sol"),
+      engineSessionId: "pi-before-attach",
+    });
+
+    expect(reported).toEqual(["pi-before-attach"]);
+    expect((handle as any).engineSessionId).toBe("pi-before-attach");
+    (handle as any).finish();
+  });
+
   test("reuses a steer id for transcript rows forwarded by an older host", () => {
     const root = mkdtempSync(join(tmpdir(), "host-client-steer-id-test-"));
     roots.push(root);
