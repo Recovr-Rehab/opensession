@@ -26,6 +26,7 @@ import { AssetViewToggle } from "./AssetViewToggle";
 import { openLightbox } from "./MediaLightbox";
 import { fullTime } from "../lib/time";
 import { commitPrompt } from "../lib/commit-prompt";
+import { errorMessage } from "../lib/error-message";
 import { AGENT_NAME, GITHUB_BOT_LOGINS } from "../lib/brand";
 import { getCurrentUser } from "./UserPicker";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
@@ -51,6 +52,7 @@ import type {
   PrDetails,
   PrReviewer,
   UnifiedSession,
+  WSClientMessage,
 } from "../lib/types";
 import {
   WS_SUMMARY_ACTION,
@@ -183,7 +185,7 @@ interface Props {
   /** The worktree is not ready yet, so worktree and PR status stay quiet. */
   workspacePreparing?: boolean;
   /** Prompt the session (Commit) via WS `prompt`. Absent while disconnected. */
-  send?: (msg: any) => void;
+  send?: (msg: WSClientMessage) => void;
   /** Bumped when a webhook or an auto-push reports workspace activity. */
   refreshTick?: number;
   /** Lets the session column make room for the floating card while it is open. */
@@ -766,8 +768,8 @@ export function WorkspaceSummaryBody({
         { revalidate: false },
       );
     })()
-      .catch(async (error: any) => {
-        setReviewError(error?.message || "Couldn't cancel the review");
+      .catch((error: unknown) => {
+        setReviewError(errorMessage(error, "Couldn't cancel the review"));
       })
       .finally(async () => {
         setReviewCancelling(false);
@@ -791,8 +793,8 @@ export function WorkspaceSummaryBody({
         go(() => onOpenSession(result.bksId!, result.session ?? null));
       }
     })()
-      .catch(async (error: any) => {
-        setFixError(error?.message || "Couldn't start Auto-fix");
+      .catch((error: unknown) => {
+        setFixError(errorMessage(error, "Couldn't start Auto-fix"));
       })
       .finally(async () => {
         setFixBusy(false);
@@ -818,10 +820,10 @@ export function WorkspaceSummaryBody({
     const owner = (previous && reviewRequestSessionId) || session.id;
     onReviewChange?.(owner, next);
     setSessionReviewerApi(owner, name, getCurrentUser())
-      .catch((error: any) => {
+      .catch((error: unknown) => {
         setSelectedReview(previous);
         onReviewChange?.(owner, previous);
-        setReviewError(error?.message || "Failed to set reviewer");
+        setReviewError(errorMessage(error, "Failed to set reviewer"));
       })
       .finally(() => setReviewBusy(false));
   }
