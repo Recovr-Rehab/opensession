@@ -94,6 +94,36 @@ describe("buildWorkspaceRows", () => {
     expect(rows[0]?.status).toBe("inprogress");
   });
 
+  test("badge face and jump target come from the same mentioned member", () => {
+    const rows = build({
+      sessions: [
+        session("hero", { workspaceId: "workspace-1" }),
+        session("sibling", {
+          workspaceId: "workspace-1",
+          createdAt: "2026-08-18T12:30:00.000Z",
+        }),
+      ],
+      workspaces: [workspace("workspace-1")],
+      mentionForSession: (id) =>
+        id === "sibling" ? { by: "Grant" } : undefined,
+    });
+
+    expect(rows[0]?.mention).toBe("Grant");
+    expect(rows[0]?.mentionSessionId).toBe("sibling");
+  });
+
+  test("the selected session's mention never marks the row", () => {
+    const rows = build({
+      sessions: [session("hero", { workspaceId: "workspace-1" })],
+      workspaces: [workspace("workspace-1")],
+      selectedSessionId: "hero",
+      mentionForSession: () => ({ by: "Grant" }),
+    });
+
+    expect(rows[0]?.mention).toBeUndefined();
+    expect(rows[0]?.mentionSessionId).toBeUndefined();
+  });
+
   test("includes drafts and excludes non-sidebar session kinds", () => {
     const rows = build({
       sessions: [

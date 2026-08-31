@@ -78,7 +78,7 @@ import {
 import { mobileFilterBtn } from "../lib/app-header-classes";
 import {
   ASK_BAND,
-  activeSubagentsForWorkspace,
+  activeSubagentsByWorkspace,
   isAskWorkspace,
   isScratchWorkspace,
   workspaceMainSession,
@@ -1105,17 +1105,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
 
   const peopleWithAgent = withAgentPerson(people, automationOverview);
 
-  // Child sessions are contextual navigation for the workspace that is open,
-  // not another person/status lane. Derive them from the complete live list so
-  // a teammate or search lens cannot cut a running worker out from under its
-  // selected parent row.
-  const activeWorkspaceSubagents = activeSubagentsForWorkspace(
-    sessions,
-    selectedWorkspaceId,
-  );
-  const activeWorkspaceSubagentIds = new Set(
-    activeWorkspaceSubagents.map(({ session }) => session.id),
-  );
   const selectedSession =
     sessions.find(
       (session) =>
@@ -1132,6 +1121,27 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     selectedWorkspaceId,
   });
   const sorted = sortSidebarSessions(filtered, filter.sort);
+
+  // Child sessions belong to their root workspace, not to whichever session
+  // happens to be selected. Derive every family from the complete live list,
+  // then keep only groups whose root row survives the current lens. That keeps
+  // temporary worker workspaces nested without making a filtered parent make
+  // its children disappear.
+  const visibleWorkspaceIds = new Set(
+    filtered.flatMap((session) =>
+      session.workspaceId ? [session.workspaceId] : [],
+    ),
+  );
+  const activeSubagentsByWorkspaceId = new Map(
+    Array.from(activeSubagentsByWorkspace(sessions)).filter(([workspaceId]) =>
+      visibleWorkspaceIds.has(workspaceId),
+    ),
+  );
+  const activeWorkspaceSubagentIds = new Set(
+    Array.from(activeSubagentsByWorkspaceId.values()).flatMap((items) =>
+      items.map(({ session }) => session.id),
+    ),
+  );
 
   // Team activity is deliberately independent of the workspace lens above it:
   // repo/person/search filters must not make a running teammate disappear from
@@ -2459,8 +2469,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     // their rows carry a full status mark instead of the plain dot.
     const noSectionHeading = rowIsScratch(row);
     const subagents =
-      includeSubagents && row.workspace?.id === selectedWorkspaceId
-        ? activeWorkspaceSubagents
+      includeSubagents && row.workspace?.id
+        ? (activeSubagentsByWorkspaceId.get(row.workspace.id) ?? [])
         : [];
     const workspaceRow = (
       <div
@@ -2746,10 +2756,26 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
             !editing && (
               // Same badge as a session row (SidebarItem): the face of whoever
               // tagged you, with an accent @ so it can't read as a viewer.
+              // Clicking it jumps to the member session the mention lives on —
+              // the row's own click can open a different sibling, and opening
+              // the exact session is what clears the badge (lib/mentions.ts).
               <span
-                className="relative ml-1 flex shrink-0 items-center"
-                title={`${row.mention} mentioned you`}
-                aria-label={`${row.mention} mentioned you`}
+                className="relative ml-1 flex shrink-0 cursor-pointer items-center"
+                title={`${row.mention} mentioned you — open`}
+                aria-label={`${row.mention} mentioned you — open`}
+                onClick={
+                  row.mentionSessionId
+                    ? (e) => {
+                        e.stopPropagation();
+                        if (wsLongPressed.current) return;
+                        const target = row.mentionSessionId;
+                        if (!target) return;
+                        if (row.workspace)
+                          navigation.openWorkspace(row.workspace.id, target);
+                        else navigation.openSession(target);
+                      }
+                    : undefined
+                }
               >
                 <UserAvatar name={row.mention} size={16} className="shrink-0" />
                 <span
