@@ -222,6 +222,7 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   compact single-row iOS toolbar for repository, mode, and model settings. The
   same controls move into a keyboard-aware safe-area row while the prompt is
   focused, with an 8pt gap above the keys and a trailing keyboard-dismiss button.
+  Dragging the editor down dismisses the keyboard before the sheet can move.
   Opening a file with OS from Files or another app starts a fresh composer with
   that file attached. Images use the vision channel; other files upload to the
   session's staged file channel before Start becomes available.

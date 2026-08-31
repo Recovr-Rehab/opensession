@@ -245,6 +245,12 @@ struct NewSessionView: View {
         // This belongs to the outer stack. The editor itself disappears when
         // the recipe library is pushed, which is not an exit from the sheet.
         .onDisappear { parkDraftAfterDismiss() }
+        #if os(iOS)
+        // While the prompt owns the keyboard, a downward drag belongs to the
+        // editor and dismisses the keyboard. Once focus leaves, the sheet's
+        // normal swipe-to-dismiss gesture becomes available again.
+        .interactiveDismissDisabled(promptFocused)
+        #endif
         // The floor belongs to the stack, not to its first screen. A macOS
         // sheet sizes to its content, so applied inside, a push replaced it
         // with a view that asks for nothing and the sheet collapsed to its
@@ -358,6 +364,7 @@ struct NewSessionView: View {
             TextEditor(text: projectedPrompt, selection: $promptSelection)
                 .font(.body)
                 .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboardImmediatelyCompat()
                 .padding(.horizontal, 11)
                 .padding(.top, 8)
                 .focused($promptFocused)
