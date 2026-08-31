@@ -16,6 +16,7 @@ import {
 } from "./model-providers";
 import { stateDir } from "./paths";
 import { piEngineEnabled, piPickerModels } from "./pi-config";
+import { XAI_PROVIDER_ID } from "./xai-oauth";
 // Workspace ("Custom") presets live in the workspace store, so the one thing
 // this module needs from them — a preset's lead model — has to be read there.
 // The import cycle back into this module is inert: workspace-model-presets
@@ -137,6 +138,21 @@ export const DEFAULT_BRIDGE_PICKER_MODELS = [
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
+] as const;
+
+/** Grok models served by the one shared xAI subscription (xai-oauth.ts). They
+ *  are provider-qualified because "grok-*" has no native picker id: the
+ *  provider is neither a bridge nor an api-keyed entry in model-providers.json,
+ *  so it is named explicitly here and in `usable` below.
+ *
+ *  These ids are pi's, not ours. The runtime resolves them straight out of its
+ *  builtin xAI catalog, so an id invented here would pass the picker and then
+ *  fail the turn. */
+export const DEFAULT_XAI_PICKER_MODELS = [
+  "pi/xai/grok-4.6",
+  "pi/xai/grok-4.5",
+  "pi/xai/grok-4.3",
+  "pi/xai/grok-build-0.1",
 ] as const;
 
 export const KNOWN_MODELS: ModelInfo[] = [
@@ -600,6 +616,16 @@ function prettifyModelSlug(slug: string): string {
       : "";
     return `${prefix}GLM-${glm[2]}${suffix}`;
   }
+  // Grok's ids carry the version mid-slug ("grok-composer-2.5-fast"), which the
+  // word/number split below reorders into "Grok Composer Fast 2.5".
+  if (slug.startsWith("grok-")) {
+    return slug
+      .split("-")
+      .map((part) =>
+        /^\d/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1),
+      )
+      .join(" ");
+  }
   // Wafer's ids carry version and tier segments ("DeepSeek-V4-Flash-0731-Fast")
   // that the word/number split below mangles; its catalog names them.
   const wafer = waferModelName(slug);
@@ -668,14 +694,20 @@ export function refreshPickerModels(): void {
     );
     const usable = (id: string) => {
       const provider = id.split("/")[1] || "";
-      return BRIDGE_PROVIDER_IDS.has(provider) || keyed.has(provider);
+      return (
+        BRIDGE_PROVIDER_IDS.has(provider) ||
+        provider === XAI_PROVIDER_ID ||
+        keyed.has(provider)
+      );
     };
     // Subscription-backed models are the normal catalog, not legacy direct-SDK
     // entries. Surface their Pi ids whenever Pi is enabled; the models route
     // filters them to the account providers actually configured on this server.
     const bridgeModels = piEngineEnabled() ? DEFAULT_BRIDGE_PICKER_MODELS : [];
-    const configuredModels = [
+    const xaiModels = piEngineEnabled() ? DEFAULT_XAI_PICKER_MODELS : [];
+    const configuredModels: readonly string[] = [
       ...bridgeModels,
+      ...xaiModels,
       ...piPickerModels(),
       ...configuredPickerModels(),
     ];

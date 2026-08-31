@@ -1,6 +1,7 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { CodexAccount } from "./codex-accounts";
 import type { SeededOpenaiAuth } from "./openai-auth";
+import { XAI_PROVIDER_ID, xaiConnected, xaiCredentialStore } from "./xai-oauth";
 
 export type PiSdk = typeof import("@earendil-works/pi-coding-agent");
 type PiModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
@@ -207,7 +208,13 @@ export async function createPiRuntimeBinding(
 
   await input.beforeRuntimeLoad?.({ ...evidence });
   const sdk = await (deps.loadSdk ?? loadPiSdk)();
-  const credentials = new MemoryCredentialStore();
+  // Grok runs on ONE workspace credential that must survive the turn: pi
+  // refreshes inside the store, so give it a store that writes back to disk
+  // instead of the in-memory one every other provider uses.
+  const credentials =
+    input.providerID === XAI_PROVIDER_ID
+      ? xaiCredentialStore()
+      : new MemoryCredentialStore();
   if (seededOpenaiCredential) {
     const credential = seededOpenaiCredential;
     await credentials.modify("openai-codex", async () => credential);
@@ -292,6 +299,28 @@ export async function createPiRuntimeBinding(
     if (!model) {
       throw new Error(
         `Unknown Anthropic model "${input.modelID}" (could not register it with pi)`,
+      );
+    }
+  } else if (input.providerID === XAI_PROVIDER_ID) {
+    // Nothing is registered here on purpose. pi's builtin xai provider already
+    // carries the endpoint, the model catalog and the openai-responses compat;
+    // the credential store above is the only thing this workspace adds. One
+    // shared subscription means a missing credential is a settings problem for
+    // an admin to fix, never a per-account limit to rotate past.
+    if (!xaiConnected()) {
+      throw new Error(
+        `pi/${XAI_PROVIDER_ID}: no usable Grok credential. ` +
+          "Connect Grok in Settings.",
+      );
+    }
+    model = runtime.getModel(XAI_PROVIDER_ID, input.modelID);
+    if (!model) {
+      throw new Error(
+        `Unknown Grok model "${input.modelID}". Pi's xAI catalog serves ` +
+          `${runtime
+            .getModels(XAI_PROVIDER_ID)
+            .map((candidate) => candidate.id)
+            .join(", ")}.`,
       );
     }
   } else {
