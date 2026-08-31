@@ -90,6 +90,7 @@ interface Harness {
   sessions: Map<string, Partial<SessionSummary>>;
   stamped: Array<{ id: string; depth: number }>;
   cancelled: string[];
+  reparented: Array<{ id: string; parentSessionId?: string }>;
   deliveries: Array<{
     id: string;
     content: string;
@@ -109,6 +110,7 @@ function makeHarness(childId?: string): Harness {
   const sessions = new Map<string, Partial<SessionSummary>>();
   const stamped: Harness["stamped"] = [];
   const cancelled: string[] = [];
+  const reparented: Harness["reparented"] = [];
   const deliveries: Harness["deliveries"] = [];
   const id = childId ?? `bks-test-child-${++uniq}`;
   const control = {
@@ -128,6 +130,15 @@ function makeHarness(childId?: string): Harness {
     cancelSession: (sid: string) => {
       cancelled.push(sid);
       return true;
+    },
+    reparentSession: async (sid: string, parentSessionId?: string) => {
+      reparented.push({ id: sid, parentSessionId });
+      return {
+        ok: true as const,
+        previousParentSessionId: "bks-old-parent",
+        parentSessionId,
+        changed: true,
+      };
     },
     createSession: async (opts: Harness["created"][0]) => {
       created.push(opts);
@@ -151,6 +162,7 @@ function makeHarness(childId?: string): Harness {
     sessions,
     stamped,
     cancelled,
+    reparented,
     deliveries,
   };
 }
@@ -477,6 +489,58 @@ describe("session creator metadata", () => {
     }
   });
 
+  it("exposes reparent_session and forwards attach and detach changes", async () => {
+    const h = makeHarness();
+    registerSessionControl(h.deps.control);
+    const server = createSessionsMcpServer(ctx("bks-caller"));
+    const client = new Client({
+      name: "sessions-tools-test",
+      version: "1.0.0",
+    });
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      const listedTools = await client.listTools();
+      const reparentTool = listedTools.tools.find(
+        (tool) => tool.name === "reparent_session",
+      );
+      expect(reparentTool?.inputSchema.properties).toHaveProperty(
+        "parentSessionId",
+      );
+
+      const attached = await client.callTool({
+        name: "reparent_session",
+        arguments: {
+          id: "bks-child",
+          parentSessionId: "bks-new-parent",
+        },
+      });
+      const attachedText = (
+        attached as { content: Array<{ type: string; text: string }> }
+      ).content[0].text;
+      expect(attachedText).toContain("Reparented `bks-child`");
+      expect(attachedText).toContain("`bks-new-parent`");
+
+      const detached = await client.callTool({
+        name: "reparent_session",
+        arguments: { id: "bks-child", parentSessionId: null },
+      });
+      const detachedText = (
+        detached as { content: Array<{ type: string; text: string }> }
+      ).content[0].text;
+      expect(detachedText).toContain("Removed the parent link");
+      expect(h.reparented).toEqual([
+        { id: "bks-child", parentSessionId: "bks-new-parent" },
+        { id: "bks-child", parentSessionId: undefined },
+      ]);
+    } finally {
+      await client.close();
+      await server.instance.close();
+    }
+  });
+
   it("delegates omitted branch generation to the durable create plan", async () => {
     const h = makeHarness();
     registerSessionControl(h.deps.control);
@@ -497,8 +561,7 @@ describe("session creator metadata", () => {
         (tool) => tool.name === "create_session",
       );
       const branchSchema = createTool?.inputSchema.properties?.branch as
-        | { description?: string }
-        | undefined;
+        { description?: string } | undefined;
       expect(branchSchema?.description).toContain("generated from the prompt");
 
       const result = await client.callTool({

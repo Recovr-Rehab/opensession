@@ -57,6 +57,7 @@ describe("Desk voice Realtime session", () => {
         message: "not used",
       }),
       cancelSession: () => false,
+      reparentSession: async () => ({ ok: false, error: "not used" }),
       createSession: async () => ({
         id: "unused",
         createdBy: "Test",
@@ -66,8 +67,7 @@ describe("Desk voice Realtime session", () => {
 
     const tools = (await buildVoiceSessionConfig("missing-test-session")).tools;
     const listSessions = tools.find((tool) => tool.name === "list_sessions") as
-      | { parameters: { properties: Record<string, unknown> } }
-      | undefined;
+      { parameters: { properties: Record<string, unknown> } } | undefined;
     expect(listSessions?.parameters.properties).toHaveProperty("createdBy");
     expect(
       tools.some((tool) => tool.name === "opensession-admin_list_automations"),

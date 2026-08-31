@@ -64,6 +64,9 @@ function harness(options?: {
         });
       return true;
     },
+    async reparentSession() {
+      return { ok: false, error: "not used" };
+    },
     async createSession(input) {
       creates.push(input);
       const id = `child-${++next}`;

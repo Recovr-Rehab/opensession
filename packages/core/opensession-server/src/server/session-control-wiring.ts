@@ -67,8 +67,10 @@ import {
   getSessionListSnapshotAsync,
   invalidateSessionsCache,
   touchNativeSession,
+  touchNativeSessionStrict,
 } from "./session-cache";
 import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
+import { validateSessionReparent } from "./session-parenting";
 import {
   getSessionControl,
   type CreateSessionOpts,
@@ -622,6 +624,41 @@ registerSessionControl({
         });
       throw error;
     }
+  },
+
+  reparentSession: async (id, parentSessionId) => {
+    const validation = validateSessionReparent(
+      id,
+      parentSessionId,
+      findSession,
+    );
+    if (!validation.ok) return validation;
+
+    const previousParentSessionId = validation.session.parentSessionId;
+    if (previousParentSessionId === parentSessionId) {
+      return {
+        ok: true as const,
+        previousParentSessionId,
+        parentSessionId,
+        changed: false,
+      };
+    }
+
+    // Report receipts and failure-beacon throttles belong to the old parent.
+    // Clear them atomically with the relationship so the new parent can receive
+    // a fresh report without inheriting suppression state.
+    await touchNativeSessionStrict(id, {
+      parentSessionId,
+      lastReportToParentAt: undefined,
+      parentNotifiedAt: undefined,
+    });
+    summaryState.byId.delete(id);
+    return {
+      ok: true as const,
+      previousParentSessionId,
+      parentSessionId,
+      changed: true,
+    };
   },
 
   createSession: async (input: CreateSessionOpts) => {

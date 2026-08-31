@@ -22,11 +22,7 @@ import type { UnifiedSession, TranscriptEntry } from "./types";
  * UI/MCP most cares about — a run paused on an AskUserQuestion, needing a human.
  */
 export type SessionState =
-  | "running"
-  | "waiting_question"
-  | "queued"
-  | "idle"
-  | "archived";
+  "running" | "waiting_question" | "queued" | "idle" | "archived";
 
 /** A pending AskUserQuestion a session is blocked on, surfaced for answering. */
 export interface PendingQuestionView {
@@ -53,6 +49,15 @@ export interface DeliverResult {
   /** True when this request id was already committed by the session owner. */
   duplicate?: boolean;
 }
+
+export type ReparentSessionResult =
+  | {
+      ok: true;
+      previousParentSessionId?: string;
+      parentSessionId?: string;
+      changed: boolean;
+    }
+  | { ok: false; error: string };
 
 /**
  * Where a new session runs, as a caller may ask for it. `true` takes the
@@ -241,6 +246,11 @@ export interface SessionControl {
     id: string,
     opts?: { requestId?: string },
   ): boolean | Promise<boolean>;
+  /** Change a native session's parent link, or remove it when omitted. */
+  reparentSession(
+    id: string,
+    parentSessionId?: string,
+  ): Promise<ReparentSessionResult>;
   /** Create a new session and start its first turn in the background. */
   createSession(opts: CreateSessionOpts): Promise<{
     id: string;
