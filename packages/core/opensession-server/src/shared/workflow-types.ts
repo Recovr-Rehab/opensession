@@ -37,8 +37,9 @@ export const WORKFLOW_LIMITS = {
   maxAgents: 200,
   /** Lifetime write-agent calls per workflow run (worktrees are expensive). */
   maxWriteAgents: 40,
-  /** Per-agent wall clock before the run is failed. */
-  agentTimeoutMs: 15 * 60_000,
+  /** Per-agent wall clock before the run is failed. An agent may use the
+   * workflow's full active-time budget instead of being cut off early. */
+  agentTimeoutMs: 60 * 60_000,
   /** Whole-workflow active wall clock before the worker is terminated. Time
    * spent paused does not consume this allowance. */
   workflowTimeoutMs: 60 * 60_000,
