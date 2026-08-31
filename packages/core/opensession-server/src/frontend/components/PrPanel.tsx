@@ -2,7 +2,6 @@ import { repoLabel } from "../lib/repo-label";
 import { AGENT_NAME } from "../lib/brand";
 import { randomUUID } from "../lib/random-uuid";
 import React, {
-  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -10,13 +9,8 @@ import React, {
   useRef,
 } from "react";
 import type {
-  GitStatusInfo,
-  DiffFileGroup,
   PrCheck,
   PrDetails,
-  PrDiffResponse,
-  ReviewGuideData,
-  CodeFlowResult,
   SessionWalkthrough,
   UnifiedSession,
   WSClientMessage,
@@ -24,19 +18,15 @@ import type {
 } from "../lib/types";
 import { PrSessionsList, prRelatedSessions } from "./PrSessions";
 import { WalkthroughCard } from "./WalkthroughCard";
+import { PrOverviewPage } from "./pr/PrOverviewPage";
+import { PrFilesPage } from "./pr/PrFilesPage";
 import { DiffPanel } from "./DiffPanel";
 import {
   API_BASE,
-  fetchPr,
-  fetchPrDiff,
-  fetchPrCodeFlow,
-  fetchPrDiffGroups,
-  fetchPrReviewThreads,
   fetchPrViewedFiles,
   fetchPrFile,
   setPrFileViewed,
   fetchGitStatus,
-  fetchReviewGuide,
   fetchWorktreeFile,
   saveWorktreeFile,
   submitPrReviewApi,
@@ -45,25 +35,15 @@ import {
   unlinkPrApi,
 } from "../lib/api";
 import {
-  fetchPrPreview,
-  fetchPrPreviewDiff,
-  fetchPrPreviewCodeFlow,
-  fetchPrPreviewGuide,
   submitPrPreviewReviewApi,
   mergePrPreviewApi,
   closePrPreviewApi,
 } from "../lib/api";
-import type { PrReviewThread } from "../lib/api/prs";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
-import {
-  CommentableDiff,
-  type CommentTarget,
-  type PendingComment,
-} from "./CommentableDiff";
-import { SelectionToSession } from "./SelectionToSession";
+import type { CommentTarget, PendingComment } from "./CommentableDiff";
 import { getCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import { renderPrCommentMarkdown } from "../lib/markdown";
@@ -76,7 +56,6 @@ import {
   type PrTarget,
 } from "../lib/pr-focus";
 import { providerFromUrl, prCapabilities } from "../lib/provider";
-import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { WS_SUMMARY_REVIEW_CANVAS_CLEARANCE } from "../lib/workspace-summary-classes";
 import { Textarea } from "../ui/input";
 import { errorMessage } from "../lib/error-message";
@@ -115,13 +94,10 @@ import {
 import { checkClass, isDeployment, summarize } from "../lib/pr-status-derive";
 import { prStatusMark } from "../lib/pr-status";
 import { PR_NO_PR_BAR, PR_REPO_TABS } from "../lib/pr-tone-classes";
-import { formatPrCommentPrompt, stripHtmlComments } from "../lib/pr-prompts";
-import { CheckRow } from "./pr/CheckRow";
+import { stripHtmlComments } from "../lib/pr-prompts";
 import { PrStateIcon } from "./pr/PrStateIcon";
-import { ConversationView } from "./pr/PrViews";
 import { LinkPrControl } from "./pr/LinkPrControl";
 import { PrCard } from "./pr/PrCard";
-import { MergeUndoControl } from "./pr/MergeUndoControl";
 import { StackLinkSection } from "./pr/Stack";
 import { PrStackChip } from "./pr/StackPopover";
 import { ReviewRail } from "./pr/ReviewRail";
@@ -130,28 +106,18 @@ import { ReviewToolbar } from "./pr/ReviewToolbar";
 import { EmptyState, LoadingState } from "../ui/state";
 import { ResponsiveDialog } from "../ui/sheet";
 import { useIsPhone } from "../hooks/useIsPhone";
-import { CodeFlow } from "./CodeFlow";
 import { revealDiffFile } from "../lib/diff-navigation";
-import { PrFileTree } from "./pr/PrFileTree";
-import { reviewDiffLoadPolicy } from "../lib/review-diff";
 import { BrandMark } from "./BrandTile";
 import { useCopy } from "../ui/copy";
 import { useDeferredMergePhase } from "../hooks/useDeferredMerge";
 import { useOptionalSessionSocket } from "../hooks/useSessionSocket";
+import { usePrData } from "../hooks/usePrData";
+import { sectionsWithPatches } from "../lib/pr-review-guide";
 import {
   cancelDeferredMergeByKey,
   deferredMergeKey,
   scheduleDeferredMerge,
 } from "../lib/deferred-merge";
-
-// Re-exported so existing importers of these (formerly local) helpers keep working.
-export {
-  checkClass,
-  isDeployment,
-  formatPrCommentPrompt,
-  CheckRow,
-  PrStateIcon,
-};
 
 type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 
@@ -249,62 +215,6 @@ export interface LinkedPrEntry {
 
 const NO_LINKED_PRS: LinkedPrEntry[] = [];
 
-/** Split a unified diff into per-file chunks keyed by the new-side path. */
-function splitPatchByFile(patch: string): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const part of patch.split(/^(?=diff --git )/m)) {
-    if (!part.startsWith("diff --git ")) continue;
-    const m = part.match(/^diff --git a\/(.+?) b\/(.+)$/m);
-    if (m) map.set(m[2], part);
-  }
-  return map;
-}
-
-/**
- * Pair each guide section with the slice of the unified diff covering its
- * files (so inline commenting keeps working inside the guide). Model paths are
- * matched exactly, then by suffix; files no section claimed come back as a
- * trailing "Everything else" section so guide mode never hides part of a PR.
- */
-export function sectionsWithPatches(guide: ReviewGuideData, patch: string) {
-  const byFile = splitPatchByFile(patch);
-  const unclaimed = new Set(byFile.keys());
-  // A suffix match can only ever pair two paths that end in the same segment,
-  // so bucket the patch's paths by basename once rather than scanning every
-  // one of them per section file.
-  const basename = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-  const byBasename = new Map<string, string[]>();
-  for (const path of byFile.keys()) {
-    const bucket = byBasename.get(basename(path));
-    if (bucket) bucket.push(path);
-    else byBasename.set(basename(path), [path]);
-  }
-  const resolve = (file: string): string | null => {
-    if (byFile.has(file)) return file;
-    for (const path of byBasename.get(basename(file)) ?? [])
-      if (path.endsWith(`/${file}`) || file.endsWith(`/${path}`)) return path;
-    return null;
-  };
-  const out = guide.sections.map((s) => {
-    const chunks: string[] = [];
-    for (const file of s.files) {
-      const path = resolve(file);
-      if (!path || !unclaimed.has(path)) continue;
-      unclaimed.delete(path);
-      chunks.push(byFile.get(path)!);
-    }
-    return { ...s, patch: chunks.join("") };
-  });
-  if (unclaimed.size > 0)
-    out.push({
-      title: "Everything else",
-      explanation: "Changes the guide didn't group into a section.",
-      files: [...unclaimed],
-      patch: [...unclaimed].map((f) => byFile.get(f)!).join(""),
-    });
-  return out;
-}
-
 export function PrPanel({
   sessionId,
   onOpenSession,
@@ -384,8 +294,9 @@ export function PrPanel({
   const loadTargetKey = previewTarget
     ? `preview:${previewTarget.repo}:${previewTarget.branch}`
     : active?.key || sessionId;
-  // Scalars so the loaders below can be useCallback'd on stable values
-  // instead of the per-render preview object.
+  // Scalars rather than the per-render preview object: usePrData takes these
+  // as primitive props, so its effect dependencies only change when the
+  // preview target actually changes.
   const previewRepo = previewTarget?.repo;
   const previewBranch = previewTarget?.branch;
   // `#5528` in a PR body or review comment means a PR in the repo THIS panel is
@@ -393,29 +304,6 @@ export function PrPanel({
   // is on a sibling PR. Only fall back to the surrounding surface's repo.
   const contextRepo = useMarkdownRepo();
   const markdownRepo = previewTarget?.repo || active?.repo || contextRepo;
-  const [pr, setPr] = useState<PrDetails | null>(null);
-  const mergeKey = deferredMergeKey(pr?.url);
-  const mergePhase = useDeferredMergePhase(mergeKey);
-  const merging = mergePhase === "running";
-  const mergeScheduled = mergePhase === "scheduled";
-  const [git, setGit] = useState<GitStatusInfo | null>(null);
-  const [loadedDiff, setDiff] = useState<PrDiffResponse | null>(null);
-  const diff = loadedDiff?.headRefOid === pr?.headRefOid ? loadedDiff : null;
-  const diffOutOfDate = !!loadedDiff && !diff;
-  const diffLoadPolicy = reviewDiffLoadPolicy(
-    diff?.patch.length ?? 0,
-    pr?.changedFiles ?? 0,
-  );
-  const [diffGroups, setDiffGroups] = useState<{
-    oid: string;
-    groups: DiffFileGroup[] | null;
-  } | null>(null);
-  const [diffGroupsLoading, setDiffGroupsLoading] = useState(false);
-  const [diffGroupsRetry, setDiffGroupsRetry] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [diffLoading, setDiffLoading] = useState(true);
-  const [diffError, setDiffError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingComment[]>([]);
   const [reviewing, setReviewing] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -507,22 +395,6 @@ export function PrPanel({
   const organizationSettings = useCodeOrganizationSettings();
   const { grouping, fileListMode, fileOrder, sortDirection, hideReviewed } =
     organizationSettings;
-  // Keyed like the code flow below, so one target's guide never renders under
-  // another's diff and a slow response can't land after the panel moved on.
-  const [guide, setGuide] = useState<{
-    key: string;
-    data: ReviewGuideData;
-  } | null>(null);
-  const [guideLoading, setGuideLoading] = useState(false);
-  const [guideFailed, setGuideFailed] = useState(false);
-  const guideGenerationRef = useRef(0);
-  const [codeFlow, setCodeFlow] = useState<{
-    key: string;
-    data: CodeFlowResult;
-  } | null>(null);
-  const [codeFlowLoading, setCodeFlowLoading] = useState(false);
-  const [codeFlowError, setCodeFlowError] = useState<string | null>(null);
-  const codeFlowGenerationRef = useRef(0);
   // GitHub's per-viewer "Viewed" file state for the shown PR (review canvas
   // checkboxes). Keyed so a stale PR's set never leaks onto the next one.
   const [prViewed, setPrViewed] = useState<{
@@ -534,10 +406,6 @@ export function PrPanel({
   useLayoutEffect(() => {
     prViewedRef.current = prViewed;
   }, [prViewed]);
-  const [reviewThreads, setReviewThreads] = useState<{
-    key: string;
-    threads: PrReviewThread[];
-  } | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   /**
    * The rail collapses on the panel's own width, not the viewport's. In the
@@ -568,389 +436,63 @@ export function PrPanel({
     observer.observe(rootEl);
     return () => observer.disconnect();
   }, [rootEl]);
-  const loadGenerationRef = useRef(0);
-  const activeLoadTargetRef = useRef(loadTargetKey);
-  const loadInFlightRef = useRef<{
-    key: string;
-    promise: Promise<void>;
-  } | null>(null);
-  useLayoutEffect(() => {
-    activeLoadTargetRef.current = loadTargetKey;
-  }, [loadTargetKey]);
   const loadRepo = active?.repo;
   const loadBranch = active?.branch;
   const loadLinked = active?.linked;
-
-  const load = useCallback(
-    (force = false): Promise<void> => {
-      if (loadTargetKey !== activeLoadTargetRef.current) {
-        return Promise.resolve();
-      }
-      const existing = loadInFlightRef.current;
-      if (!force && existing?.key === loadTargetKey) return existing.promise;
-
-      const generation = ++loadGenerationRef.current;
-      setDiffLoading(true);
-      let prSettled = false;
-      let diffSettled = false;
-      let prResult: PrDetails | null = null;
-      let diffResult: PrDiffResponse | null = null;
-      const isCurrent = () =>
-        generation === loadGenerationRef.current &&
-        loadTargetKey === activeLoadTargetRef.current;
-      const commitDiff = () => {
-        if (!isCurrent() || !prSettled || !diffSettled) return;
-        setDiff(
-          diffResult?.headRefOid === prResult?.headRefOid ? diffResult : null,
-        );
-        setDiffLoading(false);
-      };
-
-      const prRequest = (
-        previewRepo && previewBranch
-          ? fetchPrPreview(previewRepo, previewBranch)
-          : fetchPr(sessionId, loadRepo, loadBranch)
-      )
-        .then((data) => {
-          prSettled = true;
-          prResult = data;
-          if (isCurrent()) {
-            setPr(data);
-            setLoadError(null);
-          }
-          commitDiff();
-        })
-        .catch((error) => {
-          prSettled = true;
-          prResult = null;
-          if (isCurrent()) {
-            setLoadError(
-              errorMessage(error, "Failed to load the pull request."),
-            );
-          }
-          commitDiff();
-        })
-        .finally(() => {
-          if (isCurrent()) setLoading(false);
-        });
-      const diffRequest = (
-        previewRepo && previewBranch
-          ? fetchPrPreviewDiff(previewRepo, previewBranch)
-          : fetchPrDiff(sessionId, loadRepo, loadBranch)
-      )
-        .then((data) => {
-          diffSettled = true;
-          diffResult = data;
-          if (isCurrent()) setDiffError(null);
-          commitDiff();
-        })
-        .catch((error) => {
-          diffSettled = true;
-          diffResult = null;
-          if (isCurrent()) {
-            setDiffError(
-              errorMessage(error, "Failed to load pull request changes."),
-            );
-          }
-          commitDiff();
-        });
-      const gitRequest = (
-        previewRepo || loadLinked
-          ? Promise.resolve(null)
-          : fetchGitStatus(sessionId, loadRepo)
-      )
-        .then((data) => {
-          if (isCurrent()) setGit(data);
-        })
-        .catch(() => {
-          if (isCurrent()) setGit(null);
-        });
-      const reviewThreadsRequest = prRequest.then(async () => {
-        if (!prResult) return;
-        try {
-          const threads = await fetchPrReviewThreads(loadRepo, prResult.number);
-          if (isCurrent()) setReviewThreads({ key: loadTargetKey, threads });
-        } catch {
-          // Resolved threads are supporting context and never block the diff.
-        }
-      });
-
-      const promise = Promise.allSettled([
-        prRequest,
-        diffRequest,
-        gitRequest,
-        reviewThreadsRequest,
-      ]).then(() => undefined);
-      loadInFlightRef.current = { key: loadTargetKey, promise };
-      void promise.then(() => {
-        if (loadInFlightRef.current?.promise === promise) {
-          loadInFlightRef.current = null;
-        }
-      });
-      return promise;
-    },
-    [
-      sessionId,
-      loadTargetKey,
-      previewRepo,
-      previewBranch,
-      loadRepo,
-      loadBranch,
-      loadLinked,
-    ],
-  );
-
-  useEffect(() => {
-    setLoading(true);
-    setLoadError(null);
-    setDiffLoading(true);
-    setDiffError(null);
-    setPr(null);
-    setDiff(null);
-    setGit(null);
-    setPending([]);
-    setReviewing(false);
-    setReviewOpen(false);
-    setPrViewed(null);
-    setReviewThreads(null);
-    setCodeFlow(null);
-    setCodeFlowLoading(false);
-    setCodeFlowError(null);
-    codeFlowGenerationRef.current += 1;
-    load();
-    const stopPolling = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
-    return () => {
-      stopPolling();
-      loadGenerationRef.current += 1;
-    };
-  }, [load]);
-
-  // A GitHub webhook reported activity on the shown PR's branch (review, CI,
-  // push, merge) — refetch immediately. Primary targets omit their branch, so
-  // match those through the loaded PR number/head branch instead.
-  // The server invalidated its caches before broadcasting, so this reads
-  // fresh data.
-  const hasLoadedPr = pr !== null;
-  useEffect(() => {
-    if (!addHandler) return;
-    return addHandler((msg) => {
-      if (msg.type !== "pr_updated") return;
-      const branch = previewTarget?.branch ?? active?.branch;
-      const repo = previewTarget?.repo ?? active?.repo;
-      if (
-        msg.repo === repo &&
-        (branch
-          ? msg.branch === branch
-          : !hasLoadedPr ||
-            msg.number === pr?.number ||
-            msg.branch === pr?.headRefName)
-      )
-        void load(true);
-    });
-  }, [
-    addHandler,
-    load,
-    previewTarget?.repo,
-    previewTarget?.branch,
-    active?.repo,
-    active?.branch,
-    hasLoadedPr,
-    pr?.number,
-    pr?.headRefName,
-  ]);
-
-  const loadDiffGroups = useEffectEvent(() => {
-    const files = pr?.files || [];
-    if (!diff?.patch || files.length < 3 || !diffLoadPolicy.groupFiles) {
-      setDiffGroups(null);
-      setDiffGroupsLoading(false);
-      return;
-    }
-    setDiffGroups(null);
-    setDiffGroupsLoading(true);
-    let live = true;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    const retryLater = () => {
-      retryTimer = setTimeout(
-        () => setDiffGroupsRetry((attempt) => attempt + 1),
-        125_000,
-      );
-    };
-    fetchPrDiffGroups(
-      sessionId,
-      files,
-      diff.patch,
-      active?.repo,
-      active?.branch,
-    )
-      .then((result) => {
-        if (!live) return;
-        setDiffGroups({ oid: diff.headRefOid, groups: result.groups });
-        if (!result.groups) retryLater();
-      })
-      .catch(() => {
-        if (!live) return;
-        setDiffGroups({ oid: diff.headRefOid, groups: null });
-        retryLater();
-      })
-      .finally(() => {
-        if (live) setDiffGroupsLoading(false);
-      });
-    return () => {
-      live = false;
-      if (retryTimer) clearTimeout(retryTimer);
-    };
-  });
-  useEffect(
-    () => loadDiffGroups(),
-    [
-      sessionId,
-      active?.repo,
-      active?.branch,
-      diff?.headRefOid,
-      diffLoadPolicy.groupFiles,
-      pr?.files?.length,
-      diffGroupsRetry,
-    ],
-  );
-
-  // A guide belongs to one target's head commit: the key is what makes a
-  // guide from the PR the panel just left read as absent rather than current.
-  const guideKey = diff ? `${loadTargetKey}\0${diff.headRefOid}` : "";
-  const guideRepo = active?.repo;
-  const guideBranch = active?.branch;
-  const loadGuide = useCallback(async () => {
-    if (!guideKey) return;
-    const generation = ++guideGenerationRef.current;
-    const isCurrent = () => generation === guideGenerationRef.current;
-    setGuideLoading(true);
-    setGuideFailed(false);
-    try {
-      const data =
-        previewRepo && previewBranch
-          ? await fetchPrPreviewGuide(previewRepo, previewBranch)
-          : await fetchReviewGuide(sessionId, guideRepo, guideBranch);
-      if (isCurrent()) {
-        if (data) setGuide({ key: guideKey, data });
-        else setGuideFailed(true);
-      }
-    } catch {
-      if (isCurrent()) setGuideFailed(true);
-    }
-    if (isCurrent()) setGuideLoading(false);
-  }, [guideKey, sessionId, previewRepo, previewBranch, guideRepo, guideBranch]);
-
-  const prPatchVersion = diff?.diffVersion || "";
-  const codeFlowKey =
-    diff && prPatchVersion
-      ? `${loadTargetKey}\0${diff.headRefOid}\0${prPatchVersion}`
-      : "";
-  const codeFlowRepo = active?.repo;
-  const codeFlowBranch = active?.branch;
-  const loadCodeFlow = useCallback(async () => {
-    if ((!diff?.patch && !diff?.skippedFiles) || !codeFlowKey) return;
-    const generation = ++codeFlowGenerationRef.current;
-    const isCurrent = () => generation === codeFlowGenerationRef.current;
-    setCodeFlowLoading(true);
-    setCodeFlowError(null);
-    try {
-      const data =
-        previewRepo && previewBranch
-          ? await fetchPrPreviewCodeFlow(previewRepo, previewBranch)
-          : await fetchPrCodeFlow(sessionId, codeFlowRepo, codeFlowBranch);
-      if (!data) {
-        if (isCurrent())
-          setCodeFlowError("Code flow isn't available for this pull request.");
-      } else if (data.diffVersion !== prPatchVersion) {
-        if (isCurrent()) {
-          setCodeFlowError(
-            "The pull request updated while code flow was loading. Try again.",
-          );
-        }
-      } else if (isCurrent()) {
-        setCodeFlow({ key: codeFlowKey, data });
-      }
-    } catch (error) {
-      if (isCurrent())
-        setCodeFlowError(errorMessage(error, "Couldn't load code flow."));
-    }
-    if (isCurrent()) setCodeFlowLoading(false);
-  }, [
-    diff,
-    codeFlowKey,
-    sessionId,
-    prPatchVersion,
-    previewRepo,
-    previewBranch,
-    codeFlowRepo,
-    codeFlowBranch,
-  ]);
-
-  const refreshCodeFlow = async () => {
-    codeFlowGenerationRef.current += 1;
-    setCodeFlow(null);
-    setCodeFlowError(null);
-    setCodeFlowLoading(true);
-    await load(true);
-    setCodeFlowLoading(false);
-  };
-
-  // The guide is generated on demand (the first request per head commit takes
-  // the model a while) — only fetch once the reviewer opens the Guide tab, and
-  // refetch when a new push moves the head commit.
   const showingGuide = page === "files" && codeView === "guide";
   const showingFlow = page === "files" && codeView === "flow";
-  const hasSkippedFiles = !!diff?.skippedFiles;
-  // A different PR or a new head commit is a different guide: drop the in-flight
-  // and failed flags with it, or one failure would disable auto-load for the
-  // rest of the panel's life. The keyed `guide` itself goes stale on its own.
-  useEffect(() => {
-    guideGenerationRef.current += 1;
-    setGuideLoading(false);
-    setGuideFailed(false);
-  }, [guideKey]);
-
-  useEffect(() => {
-    if (!showingGuide || !diff?.patch || !guideKey) return;
-    if (guideLoading || guideFailed) return;
-    if (guide?.key === guideKey) return;
-    void loadGuide();
-  }, [
-    showingGuide,
-    diff?.patch,
-    guideKey,
-    guide,
+  const {
+    pr,
+    git,
+    setGit,
+    diff,
+    diffOutOfDate,
+    diffLoadPolicy,
+    diffGroups,
+    diffGroupsLoading,
+    loading,
+    loadError,
+    diffLoading,
+    diffError,
+    load,
+    retryPr,
+    retryDiff,
+    currentGuide,
     guideLoading,
     guideFailed,
     loadGuide,
-  ]);
-
-  useEffect(() => {
-    if (!showingFlow || codeFlowLoading || codeFlowError) return;
-    if (!diff?.patch && !hasSkippedFiles) {
-      if (diffLoading || diffOutOfDate) return;
-      setCodeView("all");
-      return;
-    }
-    if (codeFlow && codeFlow.key !== codeFlowKey) {
-      setCodeFlowError(
-        "The pull request updated. Refresh code flow to analyze the latest diff.",
-      );
-      return;
-    }
-    if (!codeFlow) void loadCodeFlow();
-  }, [
-    showingFlow,
-    diff?.patch,
-    hasSkippedFiles,
-    diffLoading,
-    diffOutOfDate,
-    codeFlow,
     codeFlowKey,
+    codeFlow,
     codeFlowLoading,
     codeFlowError,
-    loadCodeFlow,
-  ]);
+    prPatchVersion,
+    refreshCodeFlow,
+    resetCodeFlowError,
+    reviewThreads,
+    activeLoadTargetRef,
+  } = usePrData({
+    sessionId,
+    loadTargetKey,
+    previewRepo,
+    previewBranch,
+    loadRepo,
+    loadBranch,
+    loadLinked,
+    addHandler,
+    showingGuide,
+    showingFlow,
+    onCodeViewChange: setCodeView,
+    onTargetReset: () => {
+      setPending([]);
+      setReviewing(false);
+      setReviewOpen(false);
+      setPrViewed(null);
+    },
+  });
+  const mergeKey = deferredMergeKey(pr?.url);
+  const mergePhase = useDeferredMergePhase(mergeKey);
+  const merging = mergePhase === "running";
+  const mergeScheduled = mergePhase === "scheduled";
 
   // Inline comments don't post one-by-one — they accumulate as pending and ship
   // together when the reviewer finishes the review (the provider's native flow).
@@ -1387,7 +929,6 @@ export function PrPanel({
   })();
   const visibleFileOrder = reviewFiles.map((file) => file.path);
 
-  const currentGuide = guide?.key === guideKey ? guide.data : null;
   // Slicing the patch per section walks every byte of it, so it cannot run on
   // renders it has nothing to do with — while the guide is the open lens, that
   // would be once per keystroke in the review summary.
@@ -1542,14 +1083,7 @@ export function PrPanel({
           icon={<IconX size={22} className="text-red" />}
           title="Couldn’t load pull request"
           action={
-            <Button
-              size="sm"
-              onClick={() => {
-                setLoading(true);
-                setLoadError(null);
-                void load(true);
-              }}
-            >
+            <Button size="sm" onClick={retryPr}>
               Try again
             </Button>
           }
@@ -1755,8 +1289,7 @@ export function PrPanel({
             onValueChange={(next) => {
               const key = next as CodeView;
               if (key === "flow" && codeView !== "flow" && codeFlowError) {
-                setCodeFlow(null);
-                setCodeFlowError(null);
+                resetCodeFlowError();
               }
               setCodeView(key);
             }}
@@ -2116,187 +1649,63 @@ export function PrPanel({
         <StackLinkSection pr={pr} sessionId={sessionId} onLinked={load} />
       )}
 
-      <div
-        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]` : "desktop:pt-12"}`}
-      >
-        {page === "files" &&
-          diffSource === "pull-request" &&
-          fileListMode !== "hidden" &&
-          files.length > 0 && (
-            <PrFileTree
-              files={reviewFiles}
-              mode={fileListMode}
-              showFileStats={showFileStats}
-              onOpenFile={scrollToFile}
-            />
-          )}
-
-        <main
-          // Wide review scrolls the toolbar and canvas in one container. File
-          // cards stay in that flow and pass beneath the sticky toolbar.
-          className={`min-w-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
-        >
-          {page === "overview" ? (
-            <SelectionToSession
-              sessionId={sessionId}
-              label={`${provider.changeAbbr} #${pr.number}`}
-              send={send}
-            >
-              <div
-                className={`mx-auto w-full max-w-[1120px] px-6 py-6 phone:px-3 ${railStacked ? "flex flex-col gap-6" : "flex gap-8"}`}
-              >
-                {railStacked && rail}
-                <div className="flex min-w-0 flex-1 flex-col gap-5">
-                  {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
-                  <ConversationView
-                    author={pr.author}
-                    descriptionHtml={bodyHtml}
-                    comments={comments}
-                    provider={provider}
-                    repo={markdownRepo}
-                    onAddToInput={onAddToInput}
-                    pr={pr}
-                  />
-                </div>
-                {!railStacked && !hideWideOverviewRail && rail}
-              </div>
-            </SelectionToSession>
-          ) : (
-            // Keep the review canvas close to the viewport edge. The file
-            // section's own border now carries the shape instead of a wide
-            // gray gutter around it.
-            <div
-              className={`mx-auto max-w-[1500px] px-2 pb-2 phone:px-1 ${compactToolbar ? "pt-0" : "pt-2"}`}
-            >
-              {diffSource === "worktree" ? (
-                <DiffPanel
-                  sessionId={sessionId}
-                  isRunning={sessionRunning}
-                  canSend={!!send && !!editGate}
-                  send={send ?? NOOP_SEND}
-                  repo={activeRepoId}
-                  toolbarTarget={worktreeToolbarTarget}
-                  source="worktree"
-                  onSourceChange={setDiffSource}
-                />
-              ) : codeView === "flow" ? (
-                <CodeFlow
-                  data={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
-                  loading={
-                    codeFlowLoading ||
-                    (codeFlow?.key !== codeFlowKey && !codeFlowError)
-                  }
-                  error={codeFlowError}
-                  onRetry={() => void refreshCodeFlow()}
-                  onOpenLocation={scrollToFile}
-                />
-              ) : !diff?.patch || !diffProps ? (
-                <div className="py-12 text-center text-sm text-faint">
-                  {diffError ? (
-                    <>
-                      <span className="text-red">{diffError}</span>
-                      <button
-                        className="ml-2 border-0 bg-transparent text-link"
-                        onClick={() => {
-                          setDiffLoading(true);
-                          setDiffError(null);
-                          void load(true);
-                        }}
-                      >
-                        Retry
-                      </button>
-                    </>
-                  ) : diffLoading ? (
-                    "Loading pull request changes…"
-                  ) : diffOutOfDate ? (
-                    "The pull request changed while loading. It will refresh automatically."
-                  ) : (
-                    "No text diff is available for this pull request."
-                  )}
-                </div>
-              ) : codeView === "guide" ? (
-                guideLoading || (!currentGuide && !guideFailed) ? (
-                  <>
-                    <div className="mb-4 rounded-sm border border-line bg-panel px-3 py-2 text-xs text-faint">
-                      Writing the review guide… You can review the file diff
-                      while it groups the change by intent.
-                    </div>
-                    <CommentableDiff patch={diff.patch} {...diffProps} />
-                  </>
-                ) : guideFailed ? (
-                  <div className="py-12 text-center text-sm text-faint">
-                    Couldn't generate a guide for this PR.
-                    <button
-                      className="ml-2 border-0 bg-transparent text-link"
-                      onClick={() => void loadGuide()}
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : currentGuide ? (
-                  <>
-                    <div className="mb-7 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
-                      <div className="text-meta font-medium leading-relaxed text-faint">
-                        Review guide
-                      </div>
-                      <div>
-                        <h2 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">
-                          {currentGuide.sections.length} focused review step
-                          {currentGuide.sections.length === 1 ? "" : "s"}
-                        </h2>
-                        <p className="mt-1 max-w-[680px] text-xs leading-relaxed text-dim">
-                          {reviewing
-                            ? "Review the change by intent rather than alphabetically. Comments stay pending until you finish the review."
-                            : "Read the change by intent rather than alphabetically."}
-                        </p>
-                      </div>
-                    </div>
-                    {guideSections.map((section, index, all) => (
-                      <section
-                        id={`review-guide-${index}`}
-                        className="mb-8 scroll-mt-[64px]"
-                        key={`${section.title}-${index}`}
-                      >
-                        <div className="mb-3 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
-                          <div className="text-meta text-faint">
-                            {String(index + 1).padStart(2, "0")} /{" "}
-                            {String(all.length).padStart(2, "0")}
-                          </div>
-                          <div>
-                            <div className="text-item-title font-semibold text-fg">
-                              {section.title}
-                            </div>
-                            <div className="mt-1 text-supporting leading-relaxed text-dim">
-                              {section.explanation}
-                            </div>
-                          </div>
-                        </div>
-                        {section.patch && (
-                          <CommentableDiff
-                            patch={section.patch}
-                            {...diffProps}
-                          />
-                        )}
-                      </section>
-                    ))}
-                  </>
-                ) : null
-              ) : (
-                <CommentableDiff
-                  patch={diff.patch}
-                  {...diffProps}
-                  groups={
-                    grouping === "ai" && diffGroups?.oid === diff.headRefOid
-                      ? diffGroups.groups || undefined
-                      : undefined
-                  }
-                  groupsLoading={grouping === "ai" && diffGroupsLoading}
-                />
-              )}
-            </div>
-          )}
-        </main>
-      </div>
+      {page === "overview" ? (
+        <PrOverviewPage
+          compactToolbar={compactToolbar}
+          reviewing={reviewing}
+          sessionId={sessionId}
+          provider={provider}
+          pr={pr}
+          send={send}
+          railStacked={railStacked}
+          rail={rail}
+          hideWideOverviewRail={hideWideOverviewRail}
+          walkthrough={walkthrough}
+          bodyHtml={bodyHtml}
+          comments={comments}
+          markdownRepo={markdownRepo}
+          onAddToInput={onAddToInput}
+        />
+      ) : (
+        <PrFilesPage
+          compactToolbar={compactToolbar}
+          reviewing={reviewing}
+          diffSource={diffSource}
+          fileListMode={fileListMode}
+          files={files}
+          reviewFiles={reviewFiles}
+          showFileStats={showFileStats}
+          onOpenFile={scrollToFile}
+          sessionId={sessionId}
+          sessionRunning={sessionRunning}
+          canSend={!!send && !!editGate}
+          send={send ?? NOOP_SEND}
+          activeRepoId={activeRepoId}
+          worktreeToolbarTarget={worktreeToolbarTarget}
+          onDiffSourceChange={setDiffSource}
+          codeView={codeView}
+          codeFlowData={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
+          codeFlowLoading={
+            codeFlowLoading || (codeFlow?.key !== codeFlowKey && !codeFlowError)
+          }
+          codeFlowError={codeFlowError}
+          onRetryCodeFlow={() => void refreshCodeFlow()}
+          diff={diff}
+          diffProps={diffProps}
+          diffError={diffError}
+          diffLoading={diffLoading}
+          diffOutOfDate={diffOutOfDate}
+          onRetryDiff={retryDiff}
+          guideLoading={guideLoading}
+          currentGuide={currentGuide}
+          guideFailed={guideFailed}
+          onRetryGuide={() => void loadGuide()}
+          guideSections={guideSections}
+          grouping={grouping}
+          diffGroups={diffGroups}
+          diffGroupsLoading={diffGroupsLoading}
+        />
+      )}
 
       <ResponsiveDialog
         open={sessionsOpen}

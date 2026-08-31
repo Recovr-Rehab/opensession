@@ -9,6 +9,15 @@ const viewerSource = await Bun.file(
 const prPanelSource = await Bun.file(
   new URL("./PrPanel.tsx", import.meta.url),
 ).text();
+const prOverviewPageSource = await Bun.file(
+  new URL("./pr/PrOverviewPage.tsx", import.meta.url),
+).text();
+const prFilesPageSource = await Bun.file(
+  new URL("./pr/PrFilesPage.tsx", import.meta.url),
+).text();
+const prDataSource = await Bun.file(
+  new URL("../hooks/usePrData.ts", import.meta.url),
+).text();
 const diffPanelSource = await Bun.file(
   new URL("./DiffPanel.tsx", import.meta.url),
 ).text();
@@ -196,7 +205,8 @@ test("wide Review keeps its controls stable while page navigation moves", () => 
   expect(prPanelSource).toContain(
     "{(compactToolbar || !phoneLayout) && fileControls}",
   );
-  expect(prPanelSource).toContain('"desktop:pt-12"');
+  expect(prFilesPageSource).toContain('"desktop:pt-12"');
+  expect(prOverviewPageSource).toContain('"desktop:pt-12"');
   expect(summarySource).toContain('aria-label="Pull request pages"');
   expect(summarySource).toContain('onReviewPageChange("overview")');
   expect(summarySource).toContain('onReviewPageChange("files")');
@@ -208,16 +218,34 @@ test("wide Review keeps its controls stable while page navigation moves", () => 
   expect(reviewToolbarSource).toContain("desktop:pb-2");
   expect(reviewToolbarSource).not.toContain("-mb-2.5");
   expect(reviewToolbarSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
-  expect(prPanelSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
-  expect(prPanelSource).toContain(
+  expect(prFilesPageSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
+  expect(prOverviewPageSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
+  expect(prFilesPageSource).toContain(
     "desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]",
   );
-  expect(prPanelSource).toContain(
+  expect(prFilesPageSource).toContain(
+    'compactToolbar ? "overflow-y-visible" : "overflow-y-auto"',
+  );
+  expect(prOverviewPageSource).toContain(
     'compactToolbar ? "overflow-y-visible" : "overflow-y-auto"',
   );
   expect(prPanelSource).toContain("stickyFileHeaders: false");
   expect(prPanelSource).not.toContain("--review-file-header-top");
-  expect(prPanelSource).toContain('${compactToolbar ? "pt-0" : "pt-2"}');
+  expect(prFilesPageSource).toContain('${compactToolbar ? "pt-0" : "pt-2"}');
+});
+
+test("Review data and pages keep their extracted ownership", () => {
+  expect(prPanelSource).toContain("usePrData({");
+  expect(prPanelSource).toContain("<PrOverviewPage");
+  expect(prPanelSource).toContain("<PrFilesPage");
+  expect(prPanelSource).not.toContain("fetchPrPreviewGuide");
+  expect(prPanelSource).not.toContain("fetchPrPreviewCodeFlow");
+  expect(prDataSource).toContain("activeLoadTargetRef");
+  expect(prDataSource).toContain("loadGenerationRef");
+  expect(prDataSource).toContain("guideGenerationRef");
+  expect(prDataSource).toContain("codeFlowGenerationRef");
+  expect(prOverviewPageSource).toContain("<ConversationView");
+  expect(prFilesPageSource).toContain("<CommentableDiff");
 });
 
 test("Review loading and errors stay centered beside the summary", () => {

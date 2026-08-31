@@ -40,7 +40,7 @@ import type {
   UnifiedSession,
   WSClientMessage,
 } from "../lib/types";
-import { formatPrCommentPrompt } from "./PrPanel";
+import { formatPrCommentPrompt } from "../lib/pr-prompts";
 import { renderMarkdown } from "../lib/markdown";
 import { fullTime } from "../lib/time";
 import { errorMessage } from "../lib/error-message";
