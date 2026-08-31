@@ -967,31 +967,34 @@ export function WorkspacePane({
         <Composer
           value={prompt}
           onChange={setPrompt}
-          onSend={handleStart}
-          placeholder={
-            starting ? "Starting…" : "Start a session in this workspace…"
-          }
-          disabled={starting}
-          sendDisabled={
-            starting ||
-            !connected ||
-            isStaging(staging) ||
-            (!prompt.trim() && images.length === 0 && files.length === 0)
-          }
-          sendTitle="Start a session in this workspace (Enter)"
-          models={models}
-          defaultModel={defaultModel}
-          model={model}
-          onModelChange={setModel}
-          modelTitle="Model for this session"
-          images={images}
-          onImagesChange={setImages}
-          files={files}
-          onFilesChange={setFiles}
-          staging={staging}
-          onAddAttachments={addWorkspaceAttachments}
-          onRemovePendingImage={uploads.cancelPendingImage}
-          onRemovePendingFile={uploads.cancelPendingFile}
+          config={{
+            placeholder: starting
+              ? "Starting…"
+              : "Start a session in this workspace…",
+            disabled: starting,
+            sendDisabled:
+              starting ||
+              !connected ||
+              isStaging(staging) ||
+              (!prompt.trim() && images.length === 0 && files.length === 0),
+            sendTitle: "Start a session in this workspace (Enter)",
+            models,
+            defaultModel,
+            model,
+            modelTitle: "Model for this session",
+            images,
+            files,
+            staging,
+          }}
+          actions={{
+            onSend: handleStart,
+            onModelChange: setModel,
+            onImagesChange: setImages,
+            onFilesChange: setFiles,
+            onAddAttachments: addWorkspaceAttachments,
+            onRemovePendingImage: uploads.cancelPendingImage,
+            onRemovePendingFile: uploads.cancelPendingFile,
+          }}
         />
         {startError && (
           <InlineAlert className="mt-2.5">{startError}</InlineAlert>

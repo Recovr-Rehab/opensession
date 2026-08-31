@@ -6934,22 +6934,15 @@ export function SessionViewer({
                       // per session via draftKey). Remount on the tab-bar +
                       // after its persisted draft has been cleared.
                       key={composerResetSeq ?? 0}
-                      draftKey={draftKey}
-                      onSend={handleSend}
                       onTyping={(active) => setTyping(session.id, active)}
-                      images={images}
-                      onImagesChange={setImages}
-                      files={files}
-                      onFilesChange={setFiles}
-                      staging={uploadStaging}
-                      onAddAttachments={addSessionAttachments}
-                      onRemovePendingImage={uploads.cancelPendingImage}
-                      onRemovePendingFile={uploads.cancelPendingFile}
-                      attachmentShortcutActive={focused}
-                      quote={quote}
-                      onQuoteClear={clearQuote}
-                      placeholder={
-                        safety
+                      config={{
+                        draftKey,
+                        images,
+                        files,
+                        staging: uploadStaging,
+                        attachmentShortcutActive: focused,
+                        quote,
+                        placeholder: safety
                           ? "Paused for safety"
                           : settingUpWorkspace
                             ? "Queue while workspace sets up…"
@@ -6963,38 +6956,87 @@ export function SessionViewer({
                                     ? "Queue for when it finishes…"
                                     : isAsk
                                       ? `Ask ${AGENT_NAME}, read-only…`
-                                      : `Ask ${AGENT_NAME}…`
-                      }
-                      disabled={!!safety || (!connected && !!forkFrom)}
-                      sendDisabled={(text) =>
-                        !!safety ||
-                        promoting ||
-                        (!text.trim() &&
-                          images.length === 0 &&
-                          (noteMode || files.length === 0) &&
-                          !forkFrom)
-                      }
-                      // Tints the composer green and names the mode in a chip above
-                      // the field. Only opensession sessions can promote (the
-                      // server owns that rule), so elsewhere the chip keeps the
-                      // label and drops the ✕ rather than offering a dead end.
-                      askMode={isAsk}
-                      onAskModeExit={
-                        isAsk && session.source === "opensession"
-                          ? () => void handlePromote()
-                          : undefined
-                      }
-                      askExitPending={promoting}
-                      // Team notes: the send posts to the transcript for the
-                      // humans reading it, never to the agent.
-                      noteMode={noteMode}
-                      onNoteModeChange={setNoteMode}
-                      busy={isBusy && !forkFrom}
-                      onStop={handleCancel}
-                      stopping={stopRequestedAt != null}
-                      // Bumped by the ⌘. listener above; the composer opens the
-                      // same confirmation Escape does.
-                      stopRequest={stopRequest}
+                                      : `Ask ${AGENT_NAME}…`,
+                        disabled: !!safety || (!connected && !!forkFrom),
+                        sendDisabled: (text) =>
+                          !!safety ||
+                          promoting ||
+                          (!text.trim() &&
+                            images.length === 0 &&
+                            (noteMode || files.length === 0) &&
+                            !forkFrom),
+                        // Tints the composer green and names the mode in a chip above
+                        // the field. Only opensession sessions can promote.
+                        askMode: isAsk,
+                        askExitPending: promoting,
+                        // Team notes post to the human transcript, never to the agent.
+                        noteMode,
+                        busy: isBusy && !forkFrom,
+                        stopping: stopRequestedAt != null,
+                        // Bumped by the ⌘. listener above; the composer opens the
+                        // same confirmation Escape does.
+                        stopRequest,
+                        prefill: composerPrefill,
+                        models,
+                        defaultModel,
+                        model,
+                        modelDisabled:
+                          session.source !== "opensession" &&
+                          session.source !== "slack",
+                        modelTitle:
+                          session.source === "opensession" ||
+                          session.source === "slack"
+                            ? "Switch the model for this session"
+                            : "Set the model from the owning agent (its session file is agent-owned)",
+                        effort,
+                        fastMode,
+                        // Account pinning is a backstage-session affordance. The
+                        // picker filters the combined pool by the active model.
+                        accounts:
+                          session.source === "opensession"
+                            ? accounts
+                            : undefined,
+                        accountId,
+                        goal: currentGoal,
+                        usage,
+                        textareaRef: composerRef,
+                      }}
+                      actions={{
+                        onSend: handleSend,
+                        onImagesChange: setImages,
+                        onFilesChange: setFiles,
+                        onAddAttachments: addSessionAttachments,
+                        onRemovePendingImage: uploads.cancelPendingImage,
+                        onRemovePendingFile: uploads.cancelPendingFile,
+                        onQuoteClear: clearQuote,
+                        onAskModeExit:
+                          isAsk && session.source === "opensession"
+                            ? () => void handlePromote()
+                            : undefined,
+                        onNoteModeChange: setNoteMode,
+                        onStop: handleCancel,
+                        onModelChange: handleModelChange,
+                        onEffortChange: setEffort,
+                        onFastModeChange: setFastMode,
+                        onAccountChange:
+                          session.source === "opensession"
+                            ? handleAccountChange
+                            : undefined,
+                        onSetGoal:
+                          session.source === "opensession"
+                            ? handleSetGoal
+                            : undefined,
+                        mentionFetch: (query) =>
+                          fetchFileMentions(query, session.id),
+                        paletteFetch: (query) =>
+                          fetchMentionSuggestions(
+                            query,
+                            session.id,
+                            getCurrentUser(),
+                          ),
+                        skillsFetch: (query) =>
+                          fetchSkillMentions(query, session.id),
+                      }}
                       // Leaving ask mode is a setting of this session, so it sits in
                       // the composer's "+" with the rest of them. It disappears as
                       // soon as selected; workspace setup reports progress on the
@@ -7037,49 +7079,6 @@ export function SessionViewer({
                         </>
                       )}
                       attached={attachedComposer}
-                      prefill={composerPrefill}
-                      models={models}
-                      defaultModel={defaultModel}
-                      model={model}
-                      onModelChange={handleModelChange}
-                      modelDisabled={
-                        session.source !== "opensession" &&
-                        session.source !== "slack"
-                      }
-                      modelTitle={
-                        session.source === "opensession" ||
-                        session.source === "slack"
-                          ? "Switch the model for this session"
-                          : "Set the model from the owning agent (its session file is agent-owned)"
-                      }
-                      effort={effort}
-                      onEffortChange={setEffort}
-                      fastMode={fastMode}
-                      onFastModeChange={setFastMode}
-                      // Account pinning is a backstage-session affordance. The
-                      // picker filters the combined pool by the active model.
-                      accounts={
-                        session.source === "opensession" ? accounts : undefined
-                      }
-                      accountId={accountId}
-                      onAccountChange={
-                        session.source === "opensession"
-                          ? handleAccountChange
-                          : undefined
-                      }
-                      goal={currentGoal}
-                      onSetGoal={
-                        session.source === "opensession"
-                          ? handleSetGoal
-                          : undefined
-                      }
-                      usage={usage}
-                      mentionFetch={(q) => fetchFileMentions(q, session.id)}
-                      paletteFetch={(q) =>
-                        fetchMentionSuggestions(q, session.id, getCurrentUser())
-                      }
-                      skillsFetch={(q) => fetchSkillMentions(q, session.id)}
-                      textareaRef={composerRef}
                       sendMenu={
                         session.source === "opensession"
                           ? ({ text, disabled, onScheduled }) => (

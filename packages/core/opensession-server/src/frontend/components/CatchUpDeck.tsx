@@ -683,37 +683,40 @@ function CatchUpComposer({
       onPointerDownCapture={(e) => e.stopPropagation()}
     >
       <Composer
-        draftKey={draftKey}
-        onSend={handleSend}
-        placeholder={connected ? "Reply…" : "Not connected"}
-        disabled={!connected}
-        sendDisabled={(text) =>
-          !text.trim() && images.length === 0 && files.length === 0
-        }
-        images={images}
-        onImagesChange={setImages}
-        files={files}
-        onFilesChange={setFiles}
-        models={models}
-        defaultModel={defaultModel}
-        model={model}
-        onModelChange={handleModelChange}
-        modelDisabled={!isNative && target.source !== "slack"}
-        modelTitle={
-          isNative || target.source === "slack"
-            ? "Switch the model for this session"
-            : "Set the model from the owning agent (its session file is agent-owned)"
-        }
-        effort={effort}
-        onEffortChange={setEffort}
-        accounts={isNative ? accounts : undefined}
-        accountId={accountId}
-        onAccountChange={isNative ? handleAccountChange : undefined}
-        goal={currentGoal}
-        onSetGoal={isNative ? handleSetGoal : undefined}
-        mentionFetch={(q) => fetchFileMentions(q, target.id)}
-        paletteFetch={(q) => fetchMentionSuggestions(q, target.id, currentUser)}
-        skillsFetch={(q) => fetchSkillMentions(q, target.id)}
+        config={{
+          draftKey,
+          placeholder: connected ? "Reply…" : "Not connected",
+          disabled: !connected,
+          sendDisabled: (text) =>
+            !text.trim() && images.length === 0 && files.length === 0,
+          images,
+          files,
+          models,
+          defaultModel,
+          model,
+          modelDisabled: !isNative && target.source !== "slack",
+          modelTitle:
+            isNative || target.source === "slack"
+              ? "Switch the model for this session"
+              : "Set the model from the owning agent (its session file is agent-owned)",
+          effort,
+          accounts: isNative ? accounts : undefined,
+          accountId,
+          goal: currentGoal,
+        }}
+        actions={{
+          onSend: handleSend,
+          onImagesChange: setImages,
+          onFilesChange: setFiles,
+          onModelChange: handleModelChange,
+          onEffortChange: setEffort,
+          onAccountChange: isNative ? handleAccountChange : undefined,
+          onSetGoal: isNative ? handleSetGoal : undefined,
+          mentionFetch: (query) => fetchFileMentions(query, target.id),
+          paletteFetch: (query) =>
+            fetchMentionSuggestions(query, target.id, currentUser),
+          skillsFetch: (query) => fetchSkillMentions(query, target.id),
+        }}
       />
     </div>
   );

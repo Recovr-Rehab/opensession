@@ -29,13 +29,19 @@ test("workspace draft composers accept and persist attachments", () => {
   const composerStart = source.lastIndexOf("<Composer");
   const composerEnd = source.indexOf("/>", composerStart);
   const composer = source.slice(composerStart, composerEnd);
+  const configStart = composer.indexOf("config={{");
+  const configEnd = composer.indexOf("actions={{", configStart);
+  const config = composer.slice(configStart, configEnd);
 
   expect(composerStart).toBeGreaterThan(-1);
-  expect(composer).toContain("images={images}");
-  expect(composer).toContain("onImagesChange={setImages}");
-  expect(composer).toContain("files={files}");
-  expect(composer).toContain("onFilesChange={setFiles}");
-  expect(composer).toContain("onAddAttachments={addWorkspaceAttachments}");
+  expect(configStart).toBeGreaterThan(-1);
+  expect(configEnd).toBeGreaterThan(configStart);
+  expect(config).toContain("images,");
+  expect(config).toContain("files,");
+  expect(composer).toContain("actions={{");
+  expect(composer).toContain("onImagesChange: setImages,");
+  expect(composer).toContain("onFilesChange: setFiles,");
+  expect(composer).toContain("onAddAttachments: addWorkspaceAttachments,");
   expect(source).toContain('window.addEventListener("drop", handleDrop, true)');
   expect(source).toContain(
     "saveDraft(draftKey, { text: prompt, images, files })",

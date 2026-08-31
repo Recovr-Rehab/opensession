@@ -9,16 +9,7 @@ import {
   useShortcutKeys,
   useShortcutLabel,
 } from "../hooks/useShortcutBindings";
-import type {
-  ModelOption,
-  FileMention,
-  ProviderAccountOption,
-} from "../lib/api";
-import {
-  splitAttachments,
-  imageFilesFromPaste,
-  type FileAttachment,
-} from "../lib/images";
+import { splitAttachments, imageFilesFromPaste } from "../lib/images";
 import {
   appendImageAttachmentComment,
   deleteImageAttachmentComment,
@@ -33,11 +24,7 @@ import {
   saveDraft,
 } from "../lib/drafts";
 import { appendDictation } from "../lib/dictation";
-import {
-  attachingLabel,
-  isStaging,
-  type StagingCount,
-} from "../lib/attachments";
+import { attachingLabel, isStaging } from "../lib/attachments";
 import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import {
   composerHighlightHtml,
@@ -59,7 +46,6 @@ import { FileChips } from "./FileChips";
 import { QuoteContext } from "./QuoteContext";
 import { PastedTextContext } from "./PastedTextContext";
 import { ComposerContextChip } from "./ComposerContextChip";
-import type { Quote } from "../lib/quotes";
 import {
   composePastedText,
   createPastedTextAttachment,
@@ -132,7 +118,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { motion, AnimatePresence } from "motion/react";
 import { composerMorph } from "../ui/motion";
 import { shortModelLabel } from "./ModelEffortSelect";
-import type { SessionUsage } from "../lib/types";
+import type { ComposerActions, ComposerConfig } from "../lib/composer-types";
 import { ModelRow } from "./composer/ModelRow";
 import { VoiceControl } from "./composer/VoiceControl";
 
@@ -166,10 +152,10 @@ const ComposerPressButton = React.forwardRef<
 interface Props {
   /**
    * Controlled draft text. Omit it (with `onChange`) to let the Composer own
-   * the draft internally — the parent then receives the text via `onSend` and
+   * the draft internally: the parent then receives the text via `onSend` and
    * stops re-rendering on every keystroke (the CommentableDiff draft-text
-   * lesson). In uncontrolled mode the draft clears when `onSend` returns true
-   * (i.e. the message was actually consumed).
+   * lesson). In uncontrolled mode the draft clears when `onSend` returns true,
+   * meaning the message was actually consumed.
    */
   value?: string;
   onChange?: (value: string) => void;
@@ -177,163 +163,20 @@ interface Props {
   onTyping?: (active: boolean) => void;
   /** Reports when dictation owns the input so a host can coordinate nearby UI. */
   onDictationActive?: (active: boolean) => void;
-  /**
-   * Uncontrolled mode only: persist the text draft under this key (lib/drafts)
-   * so it survives the component unmounting — switching to another session,
-   * workspace or view. Restored on mount; cleared when a send is consumed.
-   * Controlled parents own their value and persist it themselves.
-   */
-  draftKey?: string;
-  /** `steer` is set when the send should fold into the running turn right
-   * away — the turn keeps running. Busy sends follow the per-user follow-up
-   * preference (default queue: delivered after the run fully finishes);
-   * ⌘/Ctrl+Enter or Command/Ctrl-click flips to the non-default action. */
-  onSend: (
-    text: string,
-    opts?: { steer?: boolean },
-  ) => boolean | void | Promise<boolean | void>;
-  placeholder?: string;
-  disabled?: boolean;
-  /** Boolean, or a predicate on the current draft (for uncontrolled mode,
-   * where the parent can't read the text). */
-  sendDisabled?: boolean | ((text: string) => boolean);
-  /** Shows on the send button tooltip when busy-queueing. */
-  sendTitle?: string;
-  busy?: boolean;
-  onStop?: () => void;
-  /** A stop was asked for and the turn has not settled yet. The button stays
-   *  live (a second press re-sends the cancel, which is what people already do
-   *  when nothing seems to happen) but reads as acknowledged rather than
-   *  ignored. */
-  stopping?: boolean;
-  /**
-   * Ask for the stop confirmation from outside the composer — the parent bumps
-   * this counter, and each bump opens the same dialog Escape does. A counter
-   * rather than a callback ref because the question is "has one more been
-   * asked for", which a boolean can't say twice in a row.
-   */
-  stopRequest?: number;
-  models: ModelOption[];
-  defaultModel: string;
-  /** Current model id; "" = default. */
-  model: string;
-  onModelChange: (model: string) => void;
-  modelDisabled?: boolean;
-  modelTitle?: string;
-  /**
-   * Reasoning-effort control (stowed as a compact pill, mirroring the new-session
-   * palette). Forward-compatible: threaded through but not yet consumed
-   * server-side. When omitted, the effort pill is hidden.
-   */
-  effort?: string;
-  onEffortChange?: (effort: string) => void;
-  fastMode?: boolean;
-  onFastModeChange?: (fastMode: boolean) => void;
-  /** Pinnable provider accounts + current pin for the model pill's account
-   * submenu. Empty/omitted hides it. */
-  accounts?: ProviderAccountOption[];
-  accountId?: string;
-  onAccountChange?: (accountId: string) => void;
-  /**
-   * Session goal (pinned via /goal, rides along with every prompt). When
-   * `onSetGoal` is wired, a target button lets you set/clear it inline; it lights
-   * up and grows a "Goal" label while a goal is pinned.
-   */
-  goal?: string | null;
-  onSetGoal?: (goal: string | null) => void;
-  /** Conversation usage shown inside the model menu. */
-  usage?: SessionUsage;
-  /** Extra row for the "+" menu, below the built-in ones. Same shape as
-   *  `sendMenu`: render a `composerMenuItem` button and call `close()`
-   *  when it's picked. */
-  menuExtra?: (ctx: { close: () => void }) => React.ReactNode;
+  config: ComposerConfig;
+  actions: ComposerActions;
   /** Content visually attached to the composer above the draft field. */
   attached?: React.ReactNode;
-  /**
-   * One-shot draft injection (e.g. editing a queued message pulls its text
-   * back into the composer). Applied when `seq` changes: appended to a
-   * non-empty draft, otherwise it becomes the draft; the caret lands at the
-   * end. `replace` is for editing an existing queued message, where appending
-   * would accidentally fold a separate draft into that message. Works in both
-   * controlled and uncontrolled modes.
-   */
-  prefill?: { seq: number; text: string; replace?: boolean } | null;
-  /** Optional action rendered inside the "+" menu, e.g. "schedule message". */
-  sendMenu?: (ctx: {
+  /** Extra row for the "+" menu, below the built-in ones. Same shape as
+   * `sendMenu`: render a `composerMenuItem` button and call `close()` when it
+   * is picked. */
+  menuExtra?: (context: { close: () => void }) => React.ReactNode;
+  /** Optional action rendered inside the "+" menu, such as scheduling. */
+  sendMenu?: (context: {
     text: string;
     disabled: boolean;
     onScheduled: () => void;
   }) => React.ReactNode;
-  hint?: string;
-  /** Lets the focused session pane claim the attachment shortcut even when
-   * focus is in the transcript rather than the textarea. */
-  attachmentShortcutActive?: boolean;
-  autoFocus?: boolean;
-  /** Exposes the textarea so parents can focus it (e.g. keyboard shortcuts). */
-  textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
-  /**
-   * Attached images as `data:` URLs. When `onImagesChange` is provided, the
-   * composer accepts pasted/dropped screenshots and renders thumbnails.
-   */
-  images?: string[];
-  onImagesChange?: (images: string[]) => void;
-  /**
-   * Non-image attachments (staged to disk server-side). When `onFilesChange` is
-   * provided, the composer accepts any dropped/picked file, not just images.
-   */
-  files?: FileAttachment[];
-  onFilesChange?: (files: FileAttachment[]) => void;
-  /** Uploads managed by the parent, used when a larger surface shares this
-   * composer's attachment path. Omit both props for Composer-owned staging. */
-  staging?: StagingCount;
-  onAddAttachments?: (picked: FileList | File[]) => void | Promise<void>;
-  onRemovePendingImage?: (index: number) => void;
-  onRemovePendingFile?: (index: number) => void;
-  /** The transcript selection currently attached as ephemeral context. */
-  quote?: Quote | null;
-  onQuoteClear?: () => void;
-  /**
-   * Enables "@"-mention file autocomplete. Given the text typed after the "@",
-   * returns matching files (primary repo + any attached repos). When omitted,
-   * "@" is inert.
-   */
-  mentionFetch?: (query: string) => Promise<FileMention[]>;
-  /** Fast non-file rows for the inline @ palette. */
-  paletteFetch?: (query: string) => Promise<FileMention[]>;
-  /**
-   * Enables "/"-skill autocomplete when the draft starts with "/". Given the
-   * text typed after the "/", returns matching skills/commands. When omitted,
-   * "/" is inert.
-   */
-  skillsFetch?: (query: string) => Promise<FileMention[]>;
-  /**
-   * Note mode (Plain-style internal notes): the send posts a team note the
-   * agent never sees. When `onNoteModeChange` is wired, a Note row appears in
-   * the "+" menu; the composer tints yellow so the mode is unmistakable.
-   */
-  noteMode?: boolean;
-  onNoteModeChange?: (on: boolean) => void;
-  /**
-   * Ask mode: this session can read the checkout but not change it. Washes the
-   * writing surface green and names itself in a chip above the field, which is
-   * the same pair note mode takes.
-   *
-   * The pair is the point. The wash alone could not carry the state: at 7%
-   * green under note mode's 10% yellow the two surfaces were one faint tint
-   * apart (8.6 dE in light, less in dark), and you never see them side by side
-   * to compare, so a tinted composer stopped saying WHICH mode you were in.
-   * With a named chip on both, the wash says something is different and the
-   * chip says what, so neither state can be mistaken for the other.
-   */
-  askMode?: boolean;
-  /**
-   * Leaves ask mode, from the chip's ✕. Cutting a worktree is the server's
-   * call and not every session may promote, so when this is omitted the chip
-   * renders without an exit rather than offering one that fails.
-   */
-  onAskModeExit?: () => void;
-  /** The exit is in flight: the chip says so and its ✕ stops taking clicks. */
-  askExitPending?: boolean;
 }
 
 /**
@@ -480,58 +323,62 @@ export function Composer({
   onChange,
   onTyping,
   onDictationActive,
-  draftKey,
-  onSend,
-  placeholder,
-  disabled,
-  sendDisabled,
-  sendTitle,
-  busy,
-  onStop,
-  stopping,
-  stopRequest,
-  models,
-  defaultModel,
-  model,
-  onModelChange,
-  modelDisabled,
-  modelTitle,
-  effort,
-  onEffortChange,
-  fastMode,
-  onFastModeChange,
-  accounts,
-  accountId,
-  onAccountChange,
-  goal,
-  onSetGoal,
-  usage,
+  config: {
+    draftKey,
+    placeholder,
+    disabled,
+    sendDisabled,
+    sendTitle,
+    busy,
+    stopping,
+    stopRequest,
+    models,
+    defaultModel,
+    model,
+    modelDisabled,
+    modelTitle,
+    effort,
+    fastMode,
+    accounts,
+    accountId,
+    goal,
+    usage,
+    prefill,
+    hint,
+    attachmentShortcutActive,
+    autoFocus,
+    textareaRef: externalRef,
+    images,
+    files,
+    staging,
+    quote,
+    noteMode,
+    askMode,
+    askExitPending,
+  },
+  actions: {
+    onSend,
+    onStop,
+    onModelChange,
+    onEffortChange,
+    onFastModeChange,
+    onAccountChange,
+    onSetGoal,
+    onImagesChange,
+    onFilesChange,
+    onAddAttachments,
+    onRemovePendingImage,
+    onRemovePendingFile,
+    onQuoteClear,
+    mentionFetch,
+    paletteFetch,
+    skillsFetch,
+    onNoteModeChange,
+    onAskModeExit,
+  },
   menuExtra,
   attached,
-  prefill,
   sendMenu,
-  hint,
-  attachmentShortcutActive,
-  autoFocus,
-  textareaRef: externalRef,
-  images,
-  onImagesChange,
-  files,
-  onFilesChange,
-  staging,
-  onAddAttachments,
-  onRemovePendingImage,
-  onRemovePendingFile,
-  quote,
-  onQuoteClear,
-  mentionFetch,
-  paletteFetch,
-  skillsFetch,
-  noteMode,
-  onNoteModeChange,
-  askMode,
-  onAskModeExit,
-  askExitPending,
 }: Props) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef ?? internalRef;
