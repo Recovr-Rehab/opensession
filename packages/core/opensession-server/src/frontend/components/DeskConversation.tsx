@@ -370,9 +370,10 @@ export function DeskConversation({
     });
     return unsubscribe;
   }, [liveTurnStore]);
+  const shouldMaintainEnd = () => followRef.current;
   const relayoutLive = () => {
     const el = bodyRef.current;
-    if (el && followRef.current) el.scrollTop = el.scrollHeight;
+    if (el && shouldMaintainEnd()) el.scrollTop = el.scrollHeight;
   };
 
   // Keep a following reader pinned to the live edge as content lands. With no
@@ -517,6 +518,7 @@ export function DeskConversation({
               live={isRunning}
               sessionId={sessionId}
               liveTurnStore={liveTurnStore}
+              shouldMaintainEnd={shouldMaintainEnd}
               onLayout={relayoutLive}
               onOpenSubagent={onOpenSubagent}
               // The Desk shows the same failure pill as a session, so it

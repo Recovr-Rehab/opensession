@@ -410,6 +410,9 @@ function CardBody({
   const target = replyTarget(card);
   const [entries, setEntries] = useState<TranscriptEntry[] | null>(null);
   const scrollElRef = useRef<HTMLDivElement | null>(null);
+  const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(
+    null,
+  );
   const contentElRef = useRef<HTMLDivElement | null>(null);
   const [nodesVersion, setNodesVersion] = useState(0);
   // These callback refs update state, so their identities must remain stable:
@@ -417,6 +420,7 @@ function CardBody({
   const setScrollEl = useCallback((node: HTMLDivElement | null) => {
     if (scrollElRef.current === node) return;
     scrollElRef.current = node;
+    setScrollElement(node);
     setNodesVersion((version) => version + 1);
   }, []);
   const setContentEl = useCallback((node: HTMLDivElement | null) => {
@@ -425,6 +429,7 @@ function CardBody({
     setNodesVersion((version) => version + 1);
   }, []);
   const pinned = useRef(true);
+  const shouldMaintainEnd = () => pinned.current;
 
   useEffect(() => {
     let alive = true;
@@ -525,7 +530,12 @@ function CardBody({
           ) : entries.length === 0 ? (
             <div className="text-sm text-faint">No messages yet.</div>
           ) : (
-            <TranscriptBlocks entries={entries} owner={card.owner} />
+            <TranscriptBlocks
+              entries={entries}
+              owner={card.owner}
+              scrollElement={scrollElement}
+              shouldMaintainEnd={shouldMaintainEnd}
+            />
           )}
           {/* Live "still working" ticker: while the session we're reading is mid-run,
 					    show a pulsing dot + elapsed clock at the bottom of the transcript so

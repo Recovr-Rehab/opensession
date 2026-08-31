@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   committedTranscriptMeasureKeys,
   didScrollTranscriptTowardHistory,
+  measureTranscriptElement,
   VirtualTranscriptList,
   shouldAdjustTranscriptScroll,
   shouldTransitionTranscriptItemPosition,
@@ -143,10 +144,31 @@ describe("VirtualTranscriptList", () => {
     ).toBe(false);
   });
 
-  test("uses TanStack's native end anchor for prepended history", () => {
+  test("uses native keyed prepend anchoring without a competing end owner", () => {
     expect(source).toContain('anchorTo: "end"');
-    expect(source).toContain("scrollEndThreshold: 120");
+    expect(source).toContain("scrollEndThreshold: -1");
+    expect(source).toContain("this.props.shouldMaintainEnd?.()");
     expect(source).not.toContain("getSnapshotBeforeUpdate");
+  });
+
+  test("remeasures semantic changes through the observed measurement path", () => {
+    const element = {
+      getBoundingClientRect: () => ({
+        x: 0,
+        y: 0,
+        top: 0,
+        right: 0,
+        bottom: 144.4,
+        left: 0,
+        width: 0,
+        height: 144.4,
+        toJSON: () => ({}),
+      }),
+    };
+    expect(measureTranscriptElement(element, undefined)).toBe(144);
+    expect(source).toContain("measureElement: measureTranscriptElement");
+    expect(source).toContain("this.virtualizer.measureElement(node)");
+    expect(source).not.toContain("this.virtualizer.resizeItem(");
   });
 
   test("reaffirms following after measured virtual extent changes", () => {

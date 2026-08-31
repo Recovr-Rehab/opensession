@@ -54,11 +54,25 @@ export interface VirtualTranscriptItem {
   content: React.ReactNode;
 }
 
+export function measureTranscriptElement(
+  element: Pick<HTMLDivElement, "getBoundingClientRect">,
+  entry: ResizeObserverEntry | undefined,
+): number {
+  const borderBox = entry?.borderBoxSize?.[0];
+  return Math.round(
+    borderBox?.blockSize ?? element.getBoundingClientRect().height,
+  );
+}
+
 interface Props {
   items: VirtualTranscriptItem[];
   /** Keep the live-edge tail mounted inside the same virtual coordinate space. */
   trailingMounted: number;
   onVisibleItems?: (items: VirtualTranscriptItem[]) => void;
+  /** Explicit host scroller for transcript surfaces outside SessionViewer. */
+  scrollElement?: HTMLDivElement | null;
+  /** Whether measurement may maintain the live edge in this frame. */
+  shouldMaintainEnd?: () => boolean;
   /** The measured virtual extent changed after commit. Following readers use
    * this to reaffirm the live edge after sparse history finishes measuring. */
   onLayout?: () => void;
@@ -133,7 +147,13 @@ class TranscriptVirtualizer extends React.Component<
   private renderedTotalSize = 0;
   private notifiedTotalSize = -1;
   private containerFor: HTMLDivElement | null = null;
+  private explicitContainerFor: HTMLDivElement | null | undefined;
   private container: HTMLDivElement | null = null;
+  private innerAnchorContainer: HTMLDivElement | null = null;
+  private innerAnchor:
+    | { node: HTMLElement; id: string; top: number }
+    | undefined;
+  private innerAnchorFrame: number | undefined;
   private topApproachContainer: HTMLDivElement | null = null;
   private topApproachCallback: (() => boolean) | undefined;
   private topApproachTimer: number | undefined;
@@ -178,6 +198,7 @@ class TranscriptVirtualizer extends React.Component<
       this.syncTopApproach();
       this.scheduleUnderfilledHistory();
       this.syncNavigation();
+      this.syncInnerAnchor();
       this.scheduleVisibleItems();
       this.notifyLayout();
     });
@@ -187,6 +208,7 @@ class TranscriptVirtualizer extends React.Component<
     this.runCommitLifecycle(() => {
       this.measureCommittedRows(prevProps);
       this.virtualizer._willUpdate();
+      this.restoreInnerAnchor();
       this.scheduleHeadGrowthClear();
       this.syncTopApproach();
       if (
@@ -197,6 +219,7 @@ class TranscriptVirtualizer extends React.Component<
       )
         this.scheduleUnderfilledHistory();
       this.syncNavigation();
+      this.syncInnerAnchor();
       this.scheduleVisibleItems();
       this.notifyLayout();
     });
@@ -206,6 +229,7 @@ class TranscriptVirtualizer extends React.Component<
     this.mounted = false;
     this.mountCleanup?.();
     this.navigationCleanup?.();
+    this.clearInnerAnchor();
     this.clearTopApproach();
     if (this.underfilledHistoryTimer !== undefined)
       window.clearTimeout(this.underfilledHistoryTimer);
@@ -317,10 +341,13 @@ class TranscriptVirtualizer extends React.Component<
     return {
       count: props.items.length,
       getScrollElement: () => this.scrollContainer(),
-      // TanStack's chat mode keeps a stable keyed item in place when older
-      // rows prepend and preserves an already-pinned end through measurements.
+      // TanStack keeps a stable keyed item in place when older rows prepend.
+      // Product-level following includes non-virtual tail rows, selections,
+      // and disclosure intent, so the host is the sole owner of end following.
+      // A negative threshold disables core's independent geometry-only end
+      // correction without disabling keyed prepend anchoring.
       anchorTo: "end",
-      scrollEndThreshold: 120,
+      scrollEndThreshold: -1,
       estimateSize: (index) => {
         const item = props.items[index];
         if (!item) return 96;
@@ -346,6 +373,7 @@ class TranscriptVirtualizer extends React.Component<
       observeElementRect,
       observeElementOffset,
       scrollToFn: elementScroll,
+      measureElement: measureTranscriptElement,
       // Semantic transcript revisions are measured synchronously in
       // componentDidUpdate. ResizeObserver is only the fallback for external
       // geometry changes, so let TanStack coalesce those into the next frame;
@@ -370,24 +398,123 @@ class TranscriptVirtualizer extends React.Component<
       "[data-transcript-key]",
     )) {
       if (!keys.has(node.dataset.transcriptKey ?? "")) continue;
-      const index = Number(node.dataset.index);
-      if (!Number.isInteger(index)) continue;
-      // ResizeObserver reports after the commit. Measuring semantic transcript
-      // changes here lets the virtualizer update its root height and bottom
-      // compensation in the same pre-paint layout phase.
-      this.virtualizer.resizeItem(index, node.getBoundingClientRect().height);
+      // ResizeObserver reports after the commit. Re-running TanStack's own
+      // measurement path here lets it update root height and compensation in
+      // the same pre-paint layout phase. Do not mix resizeItem with
+      // measureElement on the same index: TanStack documents that as
+      // unpredictable because both paths race to own the cached size.
+      this.virtualizer.measureElement(node);
     }
   }
 
   /** The nearest message scroller, cached per root node: `closest` walks the
    * whole ancestor chain and used to run several times on every commit. */
   private scrollContainer(): HTMLDivElement | null {
-    if (this.root !== this.containerFor) {
+    const explicit = this.props.scrollElement;
+    if (
+      this.root !== this.containerFor ||
+      explicit !== this.explicitContainerFor
+    ) {
       this.containerFor = this.root;
+      this.explicitContainerFor = explicit;
       this.container =
-        this.root?.closest<HTMLDivElement>(".viewer-messages") ?? null;
+        explicit ??
+        this.root?.closest<HTMLDivElement>(".viewer-messages") ??
+        null;
     }
     return this.container;
+  }
+
+  private captureInnerAnchor = () => {
+    const container = this.innerAnchorContainer;
+    const root = this.root;
+    if (!container || !root) return;
+    const viewport = container.getBoundingClientRect();
+    let deepest:
+      | { node: HTMLElement; id: string; top: number; bottom: number }
+      | undefined;
+    for (const node of root.querySelectorAll<HTMLElement>(
+      "[data-eid]:not([data-transcript-key])",
+    )) {
+      const id = node.dataset.eid;
+      if (!id) continue;
+      const rect = node.getBoundingClientRect();
+      if (
+        rect.height <= 0 ||
+        rect.bottom <= viewport.top + 1 ||
+        rect.top >= viewport.bottom - 1 ||
+        (deepest && rect.bottom <= deepest.bottom)
+      )
+        continue;
+      deepest = {
+        node,
+        id,
+        top: rect.top - viewport.top,
+        bottom: rect.bottom,
+      };
+    }
+    this.innerAnchor = deepest;
+  };
+
+  private onInnerAnchorScroll = () => {
+    if (this.props.shouldMaintainEnd?.()) return;
+    if (!this.innerAnchor) {
+      this.captureInnerAnchor();
+      return;
+    }
+    if (this.innerAnchorFrame !== undefined) return;
+    this.innerAnchorFrame = requestAnimationFrame(() => {
+      this.innerAnchorFrame = undefined;
+      this.captureInnerAnchor();
+    });
+  };
+
+  private clearInnerAnchor() {
+    this.innerAnchorContainer?.removeEventListener(
+      "scroll",
+      this.onInnerAnchorScroll,
+      true,
+    );
+    if (this.innerAnchorFrame !== undefined)
+      cancelAnimationFrame(this.innerAnchorFrame);
+    this.innerAnchorFrame = undefined;
+    this.innerAnchorContainer = null;
+    this.innerAnchor = undefined;
+  }
+
+  private syncInnerAnchor() {
+    const container = this.scrollContainer();
+    if (container !== this.innerAnchorContainer) {
+      this.clearInnerAnchor();
+      this.innerAnchorContainer = container;
+      container?.addEventListener("scroll", this.onInnerAnchorScroll, {
+        passive: true,
+        capture: true,
+      });
+    }
+    this.captureInnerAnchor();
+  }
+
+  /** Native keyed anchoring owns the structural move first. Grouped rows can
+   * still change internally, and estimate-to-measurement correction may leave
+   * a small residual. Preserve the deepest entry the reader could actually
+   * see, then yield again until the next committed item revision. */
+  private restoreInnerAnchor() {
+    const container = this.scrollContainer();
+    const root = this.root;
+    const anchor = this.innerAnchor;
+    if (!container || !root || !anchor || this.props.shouldMaintainEnd?.())
+      return;
+    const node = anchor.node.isConnected
+      ? anchor.node
+      : [...root.querySelectorAll<HTMLElement>("[data-eid]")].find(
+          (candidate) => candidate.dataset.eid === anchor.id,
+        );
+    if (!node) return;
+    const top =
+      node.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    const delta = top - anchor.top;
+    if (Math.abs(delta) > 0.5) container.scrollTop += delta;
   }
 
   private observeRowNode(key: string, node: HTMLElement) {
@@ -656,12 +783,9 @@ class TranscriptVirtualizer extends React.Component<
       // then the corrected bottom. Shrinks still fall through to the browser's
       // clamp/follow pass; compensating only positive growth avoids pushing a
       // reader past the new end during a turn's final restructure.
-      const scrollEl = instance.scrollElement;
-      const liveEdgeDelta =
-        scrollEl &&
-        scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 120
-          ? delta
-          : undefined;
+      const liveEdgeDelta = this.props.shouldMaintainEnd?.()
+        ? delta
+        : undefined;
       return shouldAdjustTranscriptScroll({
         itemStart: item.start,
         itemEnd: item.end,

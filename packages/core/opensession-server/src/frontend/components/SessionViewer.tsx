@@ -1651,6 +1651,7 @@ export function SessionViewer({
     scrollToLatest,
     leaveLatest,
     endTurn,
+    shouldMaintainEnd,
     relayout,
     suspendEndMaintenance,
     onScroll,
@@ -6568,6 +6569,7 @@ export function SessionViewer({
                         live={isBusy}
                         sessionId={session.id}
                         liveTurnStore={liveTurnStore}
+                        shouldMaintainEnd={shouldMaintainEnd}
                         onLayout={relayout}
                         reviewResult={reviewResult}
                         onEditMessage={editSentMessageInComposer}
