@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
+import { homedir, tmpdir } from "os";
 import { join } from "path";
 import {
   cancelXaiLogin,
@@ -40,6 +47,8 @@ function fakeRuntime(outcome: {
   resolve?: Record<string, unknown>;
   reject?: string;
   announce?: boolean;
+  /** Set false to model a provider that ignores cancellation. */
+  honourSignal?: boolean;
 }) {
   return async () => ({
     login: async (
@@ -61,9 +70,20 @@ function fakeRuntime(outcome: {
       }
       await new Promise((wake) => setTimeout(wake, 1));
       if (outcome.reject) throw new Error(outcome.reject);
+      // pi's real device poller rejects once the signal aborts. A fake that
+      // resolves anyway is how a "cancelled" login still wrote a credential.
+      if (outcome.honourSignal !== false && interaction.signal.aborted) {
+        throw new Error("Login cancelled");
+      }
       return outcome.resolve;
     },
   });
+}
+
+/** Give a background login time to run its completion handler. Used where the
+ *  expected outcome is that it writes NOTHING, so there is no state to poll. */
+async function settleFlows(): Promise<void> {
+  await new Promise((wake) => setTimeout(wake, 25));
 }
 
 /** startXaiLogin returns as soon as the code is announced; the credential is
@@ -75,7 +95,14 @@ async function settle(): Promise<void> {
   }
 }
 
+/** The path a leaked write would land on: what stateDir() resolves to with no
+ *  OPENSESSION_STATE_DIR. A background login outliving its test wrote a real
+ *  credential here once; never again silently. */
+const realStore = join(homedir(), ".opensession", "xai-oauth.json");
+let realStoreExisted = false;
+
 beforeEach(() => {
+  realStoreExisted = existsSync(realStore);
   dir = mkdtempSync(join(tmpdir(), "opensession-xai-"));
   // OPENSESSION_STATE_DIR keeps the legacy flat spelling; stateDir() resolves
   // "xai-oauth.json" to ".opensession-xai-oauth.json" under it.
@@ -85,9 +112,13 @@ beforeEach(() => {
   (globalThis as Record<string, unknown>).__opensessionXaiFlows = new Map();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Let any background login finish while the sandboxed state dir is STILL in
+  // force. Tearing the env down first sends its write to the real store.
+  await new Promise((wake) => setTimeout(wake, 25));
   delete process.env.OPENSESSION_STATE_DIR;
   rmSync(dir, { recursive: true, force: true });
+  expect(existsSync(realStore)).toBe(realStoreExisted);
 });
 
 describe("shared Grok credential", () => {
@@ -291,6 +322,30 @@ describe("device login through pi", () => {
     if ("error" in started) throw new Error(started.error);
     seed();
     disconnectXai();
+    await settleFlows();
+    // The point is the WRITE, not the poll result: polling reports "not
+    // pending" either way, so asserting only that let a completed sign-in
+    // reconnect a workspace an admin had just disconnected.
+    expect(xaiConnected()).toBe(false);
     expect(pollXaiLogin(started.flowId).status).not.toBe("pending");
+  });
+
+  test("a provider that ignores cancellation still cannot reconnect us", async () => {
+    const started = await startXaiLogin(
+      "octocat",
+      fakeRuntime({
+        honourSignal: false,
+        resolve: {
+          type: "oauth",
+          access: "raced",
+          refresh: "raced",
+          expires: Date.now() + 55 * 60_000,
+        },
+      }),
+    );
+    if ("error" in started) throw new Error(started.error);
+    disconnectXai();
+    await settleFlows();
+    expect(xaiConnected()).toBe(false);
   });
 });

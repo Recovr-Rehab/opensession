@@ -313,6 +313,17 @@ export async function startXaiLogin(
       ) {
         throw new Error("xAI returned no usable credential");
       }
+      // The admin cancelled, or disconnected the workspace, while xAI was
+      // still deciding. Aborting the flow has to mean the credential it was
+      // about to produce never lands - the generation guard below only
+      // protects the REFRESH path, and a login mints its own generation, so
+      // without this check a completed sign-in silently reconnects a
+      // workspace that was deliberately disconnected.
+      if (controller.signal.aborted) {
+        const abandoned = flows().get(id);
+        if (abandoned) abandoned.settled = { ok: false, error: "cancelled" };
+        return;
+      }
       writeStore({
         type: "oauth",
         access: value.access,
