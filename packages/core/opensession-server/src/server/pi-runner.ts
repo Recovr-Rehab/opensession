@@ -130,6 +130,7 @@ import {
   toPiModel,
 } from "./models";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
+import { XAI_PROVIDER_ID } from "./xai-oauth";
 import { expandSkillCommand, skillSearchPaths } from "./skill-paths";
 import type { ResolvedWorkspaceModelPreset } from "./workspace-model-presets";
 import type { TranscriptEntry } from "./types";
@@ -1638,9 +1639,12 @@ async function* runPiAttempt(
     ? piDialOracleAgent(resolved.dial.oracleAgent, parsed.providerID)
     : undefined;
   const configuredProvider = modelProviders()[parsed.providerID];
+  // Grok joins anthropic/openai in being credentialed elsewhere: its shared
+  // subscription lives in xai-oauth.ts, never as an apiKey in this config.
   if (
     parsed.providerID !== "anthropic" &&
     parsed.providerID !== "openai" &&
+    parsed.providerID !== XAI_PROVIDER_ID &&
     !configuredProvider?.apiKey
   ) {
     yield {
@@ -2982,7 +2986,9 @@ async function* runPiAttempt(
         .then(({ scheduleShareOpenSessionTrace }) =>
           scheduleShareOpenSessionTrace(journal.osSessionId!, journal.kind),
         )
-        .catch((error) => console.warn("[traces] share schedule failed:", error));
+        .catch((error) =>
+          console.warn("[traces] share schedule failed:", error),
+        );
     }
     yield terminal;
   } catch (e: any) {

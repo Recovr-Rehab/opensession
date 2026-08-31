@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
   __resetPiSdkCacheForTest,
   createPiRuntimeBinding,
@@ -27,6 +30,8 @@ function harness(
     account?: CodexAccount;
     transport?: "inprocess" | "bridge";
     refuseModels?: boolean;
+    /** Models pi already ships for a provider, as [provider, id] pairs. */
+    builtins?: Array<[string, string]>;
   } = {},
 ) {
   const calls: Array<[string, ...any[]]> = [];
@@ -37,6 +42,7 @@ function harness(
   if (options.account?.kind === "api_key") builtin("openai", "gpt-test");
   builtin("anthropic", "claude-test");
   builtin("wafer", "wafer-test");
+  for (const [provider, id] of options.builtins ?? []) builtin(provider, id);
   const runtime = {
     getModel(provider: string, id: string) {
       return models.get(`${provider}/${id}`);
@@ -225,6 +231,84 @@ describe("createPiRuntimeBinding", () => {
       "setRuntimeApiKey",
     ]);
     expect(h.calls.at(-1)).toEqual(["setRuntimeApiKey", "wafer", "wafer-key"]);
+  });
+
+  test("runs Grok on pi's builtin catalog, registering nothing", async () => {
+    // The shared credential is read from disk, not injected, so point state at
+    // a temp dir and seed one. Nothing else about the turn is special: pi's
+    // builtin xai provider already knows the endpoint and the models.
+    const dir = mkdtempSync(join(tmpdir(), "opensession-xai-binding-"));
+    process.env.OPENSESSION_STATE_DIR = dir;
+    writeFileSync(
+      join(dir, ".opensession-xai-oauth.json"),
+      JSON.stringify({
+        type: "oauth",
+        access: "grok-access",
+        refresh: "grok-refresh",
+        expires: Date.now() + 60 * 60_000,
+        generation: "gen-1",
+        connectedAt: Date.now(),
+      }),
+    );
+    try {
+      const h = harness({ builtins: [["xai", "grok-4.5"]] });
+      await createPiRuntimeBinding(input("xai", "grok-4.5", h));
+      // No registerProvider, and no setRuntimeApiKey: a subscription token is
+      // not a runtime api key, and overriding one would defeat pi's refresh.
+      expect(h.calls.map(([name]) => name)).toEqual(["loadSdk", "create"]);
+
+      // The runtime is handed the write-through store, so a refresh pi
+      // performs mid-turn outlives the turn.
+      const [, config] = h.calls[1];
+      expect(await config.credentials.read("xai")).toEqual({
+        type: "oauth",
+        access: "grok-access",
+        refresh: "grok-refresh",
+        expires: expect.any(Number),
+      });
+    } finally {
+      delete process.env.OPENSESSION_STATE_DIR;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses a Grok turn when the workspace has not connected one", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-xai-binding-"));
+    process.env.OPENSESSION_STATE_DIR = dir;
+    try {
+      const h = harness({ builtins: [["xai", "grok-4.5"]] });
+      await expect(
+        createPiRuntimeBinding(input("xai", "grok-4.5", h)),
+      ).rejects.toThrow("Connect Grok in Settings");
+    } finally {
+      delete process.env.OPENSESSION_STATE_DIR;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("names pi's real Grok catalog when the picker asks for a model it has not got", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-xai-binding-"));
+    process.env.OPENSESSION_STATE_DIR = dir;
+    writeFileSync(
+      join(dir, ".opensession-xai-oauth.json"),
+      JSON.stringify({
+        type: "oauth",
+        access: "grok-access",
+        refresh: "grok-refresh",
+        expires: Date.now() + 60 * 60_000,
+        generation: "gen-1",
+        connectedAt: Date.now(),
+      }),
+    );
+    try {
+      const h = harness({ builtins: [["xai", "grok-4.6"]] });
+      await expect(
+        createPiRuntimeBinding(input("xai", "grok-9000", h)),
+      ).rejects.toThrow("Pi's xAI catalog serves grok-4.6");
+    } finally {
+      delete process.env.OPENSESSION_STATE_DIR;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("preserves the unknown-model error after fallback registration fails", async () => {

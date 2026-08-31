@@ -8,6 +8,7 @@ import {
   refreshPickerModels,
   toPiModel,
 } from "./models";
+import { XAI_PROVIDER_ID, xaiStatus } from "./xai-oauth";
 
 export interface PickerPresetRequirement {
   group?: string;
@@ -21,6 +22,9 @@ export function configuredModelProviders(): Set<string> {
   return new Set([
     ...(listAccountsPublic().length ? ["anthropic"] : []),
     ...(listCodexAccountsPublic().length ? ["openai"] : []),
+    // One shared subscription rather than a pool, so "connected" IS the
+    // capacity signal.
+    ...(xaiStatus().connected ? [XAI_PROVIDER_ID] : []),
     ...Object.entries(modelProviders())
       .filter(([, provider]) => !!provider.apiKey)
       .map(([provider]) => provider),
