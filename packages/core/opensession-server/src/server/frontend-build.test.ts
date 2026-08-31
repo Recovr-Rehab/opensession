@@ -27,6 +27,7 @@ import { publishStableFrontendSnapshot } from "./stable-frontend";
 let restore: (() => void) | null = null;
 let scratch: string | null = null;
 const previousDeployState = process.env.OPENSESSION_DEPLOY_STATE;
+const previousGatewayRole = process.env.OPENSESSION_GATEWAY_ROLE;
 afterEach(() => {
   restore?.();
   restore = null;
@@ -35,6 +36,9 @@ afterEach(() => {
   if (previousDeployState === undefined)
     delete process.env.OPENSESSION_DEPLOY_STATE;
   else process.env.OPENSESSION_DEPLOY_STATE = previousDeployState;
+  if (previousGatewayRole === undefined)
+    delete process.env.OPENSESSION_GATEWAY_ROLE;
+  else process.env.OPENSESSION_GATEWAY_ROLE = previousGatewayRole;
 });
 
 function roster() {
@@ -232,6 +236,7 @@ describe("activateFrontendRelease", () => {
       version: "App-old.js|global-old.css|no-tw",
       indexHtml: '<script src="/App-old.js"></script>',
     });
+    process.env.OPENSESSION_GATEWAY_ROLE = "standby";
     await ensureFrontendBuilt();
     expect(
       JSON.parse(readFileSync(join(scratch, "stable-frontend.json"), "utf8")),

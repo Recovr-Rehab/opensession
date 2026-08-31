@@ -530,8 +530,8 @@ export function renderIndexHtml(
 
 /** Point the served bundle at `meta`: render index.html and swap the store
  *  contents in place (never reassigned; routes hold the one reference). */
-function publishStableShell(): void {
-  if (process.env.OPENSESSION_GATEWAY_ROLE === "standby") return;
+function publishStableShell(activated = false): void {
+  if (process.env.OPENSESSION_GATEWAY_ROLE === "standby" && !activated) return;
   const store = frontendStore();
   if (!store.indexHtml || !store.version) return;
   try {
@@ -913,7 +913,8 @@ export function ensureFrontendBuilt(): Promise<void> {
   // store alive while loading the next release. Republish the stable ingress
   // snapshot for that release even though there is nothing left to build.
   if (frontend.version) {
-    publishStableShell();
+    // Standby gateways reach this point only after their activation fence.
+    publishStableShell(true);
     return Promise.resolve();
   }
   if (!g.__opensessionFrontendBuild) {
