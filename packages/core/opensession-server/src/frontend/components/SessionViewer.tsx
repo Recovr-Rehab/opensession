@@ -155,6 +155,7 @@ import {
 } from "./ShippedChangeComposer";
 import { BrandMark } from "./BrandMark";
 import { SessionHeader } from "./session/SessionHeader";
+import { SidePanelHost } from "./session/SidePanelHost";
 import { splitAttachments, type FileAttachment } from "../lib/images";
 import { cropImageRegionFile } from "../lib/image-region-comment";
 import {
@@ -274,7 +275,6 @@ import {
   IconRobot,
   IconMessage,
   IconArrowUpRight,
-  IconStack,
 } from "./icons";
 import { KeepInSidebarIcon } from "./sidebar/KeepInSidebarMark";
 import type { RelatedSession } from "./SessionRelations";
@@ -318,14 +318,6 @@ import {
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
-import {
-  PANEL_BODY,
-  PANEL_TAB,
-  PANEL_TABS,
-  PANEL_INFO_TOP,
-  PANEL_OVERLAY,
-  PANEL_SHELL,
-} from "../lib/session-panel-classes";
 import { TURN_SPACER } from "../lib/app-shell-classes";
 import {
   SESSION_BANNERS,
@@ -7396,196 +7388,106 @@ export function SessionViewer({
         {/* Right region: the Workspace panel. Portaled to an app-level slot so
             it opens as a full-height column beside the left sidebar (not just
             below the session header). */}
-        {(() => {
-          const rightRegion = (
+        <SidePanelHost
+          hidden={hideRightPanel}
+          isPhone={isPhone}
+          available={panelAvailable}
+          open={activePanelOpen}
+          onOpenChange={setActivePanelOpen}
+          portalTarget={rightPanelEl}
+          style={panelStyle}
+          resizeHandle={panelResizeHandle}
+          hasWorkspace={hasWorkspace}
+          page={desktopPanelPage}
+          onPageChange={setDesktopPanelPage}
+          livePortals={livePortals}
+          runningAgents={runningAgents}
+          terminalMounted={panelTerminalMounted}
+          onTerminalMount={() => setPanelTerminalMounted(true)}
+          sessionId={session.id}
+          changes={
             <>
-              {!isPhone && panelAvailable && activePanelOpen && (
-                <div
-                  className={PANEL_OVERLAY}
-                  onClick={() => setActivePanelOpen(false)}
+              <section
+                aria-label="Workspace summary"
+                className="flex flex-col border-b border-divider py-2"
+              >
+                <WorkspaceSummaryBody
+                  session={session}
+                  onOpenPanelTab={(tab) => {
+                    if (tab === "changes") {
+                      desktopChangesRef.current?.scrollIntoView({
+                        block: "start",
+                      });
+                      return;
+                    }
+                    focusPrInReview();
+                  }}
+                  onOpenPr={() => focusPrInReview()}
+                  onOpenStackPr={openPr}
+                  onOpenChecks={() => focusPrInReview(undefined, "checks")}
+                  onOpenAsset={openAssetFromTranscript}
+                  onOpenAssets={openAssets}
+                  onOpenSession={openSession}
+                  onArchive={handleArchive}
+                  reviewRequest={effectiveReview?.req ?? null}
+                  reviewRequestSessionId={effectiveReview?.ownerId}
+                  onReviewChange={onReviewChange}
+                  prReviewRequested={effectiveReview?.prReviewRequested}
+                  running={isRunningLive}
+                  workspacePreparing={workspacePreparing}
+                  send={connected ? send : undefined}
+                  refreshTick={gitRefreshTick}
+                  liveMedia={liveOverviewMedia}
+                  close={() => setActivePanelOpen(false)}
                 />
-              )}
-              {!isPhone && panelAvailable && activePanelOpen ? (
-                <div className={PANEL_SHELL} style={panelStyle}>
-                  {panelResizeHandle}
-                  {hasWorkspace && (
-                    <div className={PANEL_TABS}>
-                      <button
-                        type="button"
-                        aria-pressed={desktopPanelPage === "changes"}
-                        className={cn(
-                          PANEL_TAB,
-                          desktopPanelPage === "changes" && "bg-hover text-fg",
-                        )}
-                        onClick={() => setDesktopPanelPage("changes")}
-                      >
-                        <IconFile size={15} className="shrink-0" />
-                        <span className="@max-[380px]:hidden">Changes</span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={desktopPanelPage === "portals"}
-                        className={cn(
-                          PANEL_TAB,
-                          desktopPanelPage === "portals" && "bg-hover text-fg",
-                        )}
-                        onClick={() => setDesktopPanelPage("portals")}
-                      >
-                        <IconGlobe size={15} className="shrink-0" />
-                        <span className="@max-[380px]:hidden">Portals</span>
-                        {livePortals > 0 && (
-                          <span className="shrink-0 tabular-nums text-faint @max-[380px]:hidden">
-                            {livePortals}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={desktopPanelPage === "agents"}
-                        className={cn(
-                          PANEL_TAB,
-                          desktopPanelPage === "agents" && "bg-hover text-fg",
-                        )}
-                        onClick={() => setDesktopPanelPage("agents")}
-                      >
-                        <IconStack size={15} className="shrink-0" />
-                        <span className="@max-[380px]:hidden">Agents</span>
-                        {runningAgents > 0 && (
-                          <span className="shrink-0 tabular-nums text-yellow @max-[380px]:hidden">
-                            {runningAgents}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={desktopPanelPage === "terminal"}
-                        className={cn(
-                          PANEL_TAB,
-                          desktopPanelPage === "terminal" && "bg-hover text-fg",
-                        )}
-                        onClick={() => {
-                          setPanelTerminalMounted(true);
-                          setDesktopPanelPage("terminal");
-                        }}
-                      >
-                        <IconTerminal size={15} className="shrink-0" />
-                        <span className="@max-[380px]:hidden">Terminal</span>
-                      </button>
-                    </div>
-                  )}
-                  <div className={PANEL_BODY}>
-                    {desktopPanelPage === "changes" ? (
-                      <>
-                        <section
-                          aria-label="Workspace summary"
-                          className="flex flex-col border-b border-divider py-2"
-                        >
-                          <WorkspaceSummaryBody
-                            session={session}
-                            onOpenPanelTab={(tab) => {
-                              if (tab === "changes") {
-                                desktopChangesRef.current?.scrollIntoView({
-                                  block: "start",
-                                });
-                                return;
-                              }
-                              focusPrInReview();
-                            }}
-                            onOpenPr={() => focusPrInReview()}
-                            onOpenStackPr={openPr}
-                            onOpenChecks={() =>
-                              focusPrInReview(undefined, "checks")
-                            }
-                            onOpenAsset={openAssetFromTranscript}
-                            onOpenAssets={openAssets}
-                            onOpenSession={openSession}
-                            onArchive={handleArchive}
-                            reviewRequest={effectiveReview?.req ?? null}
-                            reviewRequestSessionId={effectiveReview?.ownerId}
-                            onReviewChange={onReviewChange}
-                            prReviewRequested={
-                              effectiveReview?.prReviewRequested
-                            }
-                            running={isRunningLive}
-                            workspacePreparing={workspacePreparing}
-                            send={connected ? send : undefined}
-                            refreshTick={gitRefreshTick}
-                            liveMedia={liveOverviewMedia}
-                            close={() => setActivePanelOpen(false)}
-                          />
-                        </section>
-                        <div ref={desktopChangesRef}>
-                          {waitingForWorkspace ? (
-                            <WorkspaceWaiting detail="This takes a moment." />
-                          ) : (
-                            <DiffPanel
-                              sessionId={session.id}
-                              isRunning={isBusy}
-                              canSend={connected && !isBusy && !noEngine}
-                              send={send}
-                              diff={diffState}
-                              showFileList={false}
-                              source={worktreeDiffSource}
-                              onSourceChange={changeWorktreeDiffSource}
-                            />
-                          )}
-                        </div>
-                      </>
-                    ) : desktopPanelPage === "portals" ? (
-                      <PortalsPage
-                        sessionId={session.id}
-                        status={previewStatus}
-                        activePortal={portalTarget}
-                        onBack={() => setActivePanelOpen(false)}
-                        hideHeader
-                        onOpenPortal={openPortal}
-                        onStartPortal={startDeclaredPortal}
-                        onPortalAction={async (name, action) => {
-                          setPreviewStatus(
-                            await portalActionApi(session.id, name, action),
-                          );
-                        }}
-                      />
-                    ) : desktopPanelPage === "agents" ? (
-                      <WorkflowPanel
-                        sessionId={session.id}
-                        runs={workflowRuns}
-                        onAction={workflowAction}
-                        subagents={subagents}
-                        onOpenSubagent={openSubagent}
-                        onOpenSession={openSession}
-                        onBack={() => setActivePanelOpen(false)}
-                        hideHeader
-                      />
-                    ) : null}
-                    {/* Keep terminals mounted while switching panel tabs so their PTYs
-							    survive. Closing the panel still closes its terminals. */}
-                    {hasWorkspace && panelTerminalMounted && (
-                      <div
-                        className={
-                          desktopPanelPage === "terminal"
-                            ? "flex h-full min-h-0 flex-col"
-                            : "hidden"
-                        }
-                      >
-                        <div className="min-h-0 flex-1">
-                          <ShellPanel
-                            sessionId={session.id}
-                            visible={desktopPanelPage === "terminal"}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
+              </section>
+              <div ref={desktopChangesRef}>
+                {waitingForWorkspace ? (
+                  <WorkspaceWaiting detail="This takes a moment." />
+                ) : (
+                  <DiffPanel
+                    sessionId={session.id}
+                    isRunning={isBusy}
+                    canSend={connected && !isBusy && !noEngine}
+                    send={send}
+                    diff={diffState}
+                    showFileList={false}
+                    source={worktreeDiffSource}
+                    onSourceChange={changeWorktreeDiffSource}
+                  />
+                )}
+              </div>
             </>
-          );
-          if (hideRightPanel) return null;
-          return rightPanelEl
-            ? createPortal(rightRegion, rightPanelEl)
-            : rightRegion;
-        })()}
+          }
+          portals={
+            <PortalsPage
+              sessionId={session.id}
+              status={previewStatus}
+              activePortal={portalTarget}
+              onBack={() => setActivePanelOpen(false)}
+              hideHeader
+              onOpenPortal={openPortal}
+              onStartPortal={startDeclaredPortal}
+              onPortalAction={async (name, action) => {
+                setPreviewStatus(
+                  await portalActionApi(session.id, name, action),
+                );
+              }}
+            />
+          }
+          agents={
+            <WorkflowPanel
+              sessionId={session.id}
+              runs={workflowRuns}
+              onAction={workflowAction}
+              subagents={subagents}
+              onOpenSubagent={openSubagent}
+              onOpenSession={openSession}
+              onBack={() => setActivePanelOpen(false)}
+              hideHeader
+            />
+          }
+        />
       </div>
       {/* Portals to the body, so it sits over the whole viewer rather than
 			    inside whichever column opened it. */}

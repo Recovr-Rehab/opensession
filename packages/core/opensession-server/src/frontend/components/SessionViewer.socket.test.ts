@@ -55,20 +55,19 @@ test("SessionViewer receives its socket capabilities from context", async () => 
 });
 
 test("SessionViewer descendants no longer receive socket props", async () => {
-  const [viewer, terminal] = await Promise.all([
+  const [viewer, sidePanelHost, terminal] = await Promise.all([
     source("./SessionViewer.tsx"),
+    source("./session/SidePanelHost.tsx"),
     source("./TerminalPanel.tsx"),
   ]);
   const prPanel = invocation(viewer, "PrPanel");
   expect(prPanel).not.toContain("send=");
   expect(prPanel).not.toContain("addHandler=");
 
-  let shellStart = 0;
-  for (let count = 0; count < 2; count += 1) {
-    const shellPanel = invocation(viewer, "ShellPanel", shellStart);
+  for (const host of [viewer, sidePanelHost]) {
+    const shellPanel = invocation(host, "ShellPanel");
     expect(shellPanel).not.toContain("send=");
     expect(shellPanel).not.toContain("addHandler=");
-    shellStart = viewer.indexOf("<ShellPanel", shellStart) + shellPanel.length;
   }
 
   expect(terminal).toContain(
@@ -80,6 +79,16 @@ test("SessionViewer descendants no longer receive socket props", async () => {
   );
   expect(shellProps).not.toContain("send:");
   expect(shellProps).not.toContain("addHandler:");
+});
+
+test("the side panel shell stays mounted while another panel tab is active", async () => {
+  const sidePanelHost = await source("./session/SidePanelHost.tsx");
+
+  expect(sidePanelHost).toContain("hasWorkspace && terminalMounted");
+  expect(sidePanelHost).toMatch(
+    /page === "terminal"\s*\? "flex h-full min-h-0 flex-col"\s*: "hidden"/,
+  );
+  expect(sidePanelHost).toContain('visible={page === "terminal"}');
 });
 
 test("PrPanel keeps explicit socket injection for other hosts", async () => {
