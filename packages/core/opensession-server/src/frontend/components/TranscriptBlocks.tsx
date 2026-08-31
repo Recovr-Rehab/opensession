@@ -694,6 +694,9 @@ function IndexedTranscriptBlocks(props: Props) {
   const ranges = buildTranscriptRanges(transcriptIndex);
   const payloadById = new Map(entries.map((entry) => [entry.id, entry]));
   const indexedIds = new Set(ranges.flatMap((range) => range.entryIds));
+  let hydratedIndexedEntryCount = 0;
+  for (const id of indexedIds)
+    if (payloadById.has(id)) hydratedIndexedEntryCount++;
   const optimisticIds = new Set(
     (props.optimisticEntries ?? []).map((entry) => entry.id),
   );
@@ -1002,6 +1005,7 @@ function IndexedTranscriptBlocks(props: Props) {
       topGrowthVersion={
         firstRenderedRangePartial ? firstRenderedRangeLoaded : undefined
       }
+      historyGrowthVersion={hydratedIndexedEntryCount}
       onVisibleItems={(visible) => {
         const wanted = visibleTranscriptHydrationDemand(
           hydrationOutline,

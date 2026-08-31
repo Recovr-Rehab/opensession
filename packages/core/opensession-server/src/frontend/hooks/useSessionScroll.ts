@@ -24,10 +24,6 @@ import { recordSessionPerf } from "../lib/session-performance";
 
 // Distance from the bottom (px) that still counts as "at the live edge".
 const STICK_THRESHOLD = 90;
-// Indexed rows can finish virtual measurement several frames after their
-// payload commit. Keep layout-driven scroll events from revoking an existing
-// live-edge decision during that bounded settle; any real gesture cancels it.
-const HYDRATION_LAYOUT_SETTLE_MS = 2_500;
 // Gap left above a pinned turn so a little previous context stays visible.
 const TOP_GAP = 20;
 // How close to the head of the loaded transcript still counts as being at the
@@ -52,9 +48,6 @@ export interface SessionScroll {
   following: boolean;
   /** Live ref of `following` for rAF loops that outrun React renders. */
   followingLive: React.RefObject<boolean>;
-  /** Keep an already-following reader at the live edge after an external-store
-   * transcript commit, unless they gesture away before the commit paints. */
-  maintainLiveEdgeAfterLayout: () => void;
   /** True when content has streamed in below the fold while not following. */
   newBelow: boolean;
   /** True when the latest message is out of view and the return control should show. */
@@ -181,11 +174,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
   // the container itself past clientWidth; overlay scrollbars aren't
   // detectable — those readers re-engage via wheel/touch or the jump button).
   const scrollbarDragRef = useRef(false);
-  // External-store transcript hydration commits outside SessionViewer's own
-  // render lifecycle. Preserve an existing live-edge decision across that
-  // commit, but let any intervening reader gesture cancel the maintenance.
-  const liveEdgeLayoutFrameRef = useRef(0);
-  const liveEdgeLayoutUntilRef = useRef(0);
   // A cached session can mount while intentionally reading history. Its first
   // relayout describes restored content, not content that arrived below it.
   const hasRelayoutRef = useRef(false);
@@ -262,48 +250,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     [clearSpacer, setFollowing],
   );
 
-  const maintainLiveEdgeAfterLayout = useCallback(() => {
-    if (
-      !followingRef.current ||
-      pinnedRef.current ||
-      disclosureSettleRef.current
-    )
-      return;
-    const gestureAtStart = lastGestureRef.current;
-    const touchAtStart = lastTouchRef.current;
-    liveEdgeLayoutUntilRef.current =
-      performance.now() + HYDRATION_LAYOUT_SETTLE_MS;
-    if (liveEdgeLayoutFrameRef.current)
-      cancelAnimationFrame(liveEdgeLayoutFrameRef.current);
-    liveEdgeLayoutFrameRef.current = requestAnimationFrame(() => {
-      liveEdgeLayoutFrameRef.current = 0;
-      const el = containerRef.current;
-      if (
-        !el ||
-        pinnedRef.current ||
-        disclosureSettleRef.current ||
-        selectionWithin(el) ||
-        lastGestureRef.current !== gestureAtStart ||
-        lastTouchRef.current !== touchAtStart ||
-        towardHistoryGestureRef.current
-      )
-        return;
-      // A range hydration can briefly move the bottom before React's parent
-      // layout effect sees it. Restore the decision captured before that
-      // commit, even if its layout-driven scroll event temporarily cleared it.
-      scrollToLatest("auto");
-    });
-  }, [scrollToLatest]);
-
-  useEffect(
-    () => () => {
-      liveEdgeLayoutUntilRef.current = 0;
-      if (liveEdgeLayoutFrameRef.current)
-        cancelAnimationFrame(liveEdgeLayoutFrameRef.current);
-    },
-    [],
-  );
-
   const anchorToTop = useCallback(
     (target: HTMLElement | null, behavior?: ScrollBehavior) => {
       const el = containerRef.current;
@@ -374,7 +320,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
   }, []);
 
   const beginTurn = useCallback(() => {
-    liveEdgeLayoutUntilRef.current = 0;
     pinnedRef.current = true;
     needAnchorRef.current = true;
   }, []);
@@ -384,7 +329,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
   }, [clearSpacer]);
 
   const suspendEndMaintenance = useCallback(() => {
-    liveEdgeLayoutUntilRef.current = 0;
     for (const frame of disclosureSettleFramesRef.current)
       cancelAnimationFrame(frame);
     disclosureSettleFramesRef.current = [];
@@ -524,25 +468,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
       scrollbarDragRef.current ||
       now - lastGestureRef.current < 1000 ||
       now - lastTouchRef.current < 6000;
-    // A hydrated virtual row can replace its estimate several frames after the
-    // payload commit. That delayed geometry change is not reader intent. Keep
-    // an already-following reader pinned until the bounded settle expires;
-    // wheel, touch, scrollbar, and explicit history navigation all cancel it.
-    if (
-      !atEdge &&
-      followingRef.current &&
-      now < liveEdgeLayoutUntilRef.current &&
-      !gestured &&
-      !towardHistoryGestureRef.current &&
-      !pinnedRef.current &&
-      !disclosureSettleRef.current &&
-      el &&
-      !selectionWithin(el)
-    ) {
-      el.scrollTop = el.scrollHeight;
-      updateEdges(true);
-      return;
-    }
     // Mid-settle positions carry no reader intent (same rule as autoFlight):
     // the fold's growth moves scrollTop without the reader touching anything.
     if (disclosureSettleRef.current && !gestured) return;
@@ -570,7 +495,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     if (!el) return;
     const markGesture = () => {
       autoFlightRef.current = 0;
-      liveEdgeLayoutUntilRef.current = 0;
       disclosureSettleRef.current = false;
       lastGestureRef.current = performance.now();
     };
@@ -718,7 +642,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     spacerRef,
     following,
     followingLive: followingRef,
-    maintainLiveEdgeAfterLayout,
     newBelow,
     showScrollToBottom,
     atTop,

@@ -69,6 +69,9 @@ interface Props {
   topGrowthKey?: string | null;
   /** Loaded-row count while the head range is partial. */
   topGrowthVersion?: number;
+  /** Count of indexed payload rows hydrated into the outline. An increase only
+   * adds history above the existing loaded window. */
+  historyGrowthVersion?: number;
   /** Range children reuse the renderer without nesting another virtualizer. */
   enabled?: boolean;
   /** Session identity for the measured-height cache. */
@@ -147,7 +150,12 @@ class TranscriptVirtualizer extends React.Component<
   private scheduledHeadGrowthGeneration = 0;
   private headGrowthTimer: number | undefined;
   private renderedGrowth:
-    | { key: string; version: number | undefined }
+    | {
+        key: string;
+        version: number | undefined;
+        historyVersion: number | undefined;
+        items: VirtualTranscriptItem[];
+      }
     | undefined;
   /** Every block key this adapter instance has ever mounted. The first build
    *  seeds it (opening a session is not an arrival); afterwards, a tail key
@@ -184,38 +192,55 @@ class TranscriptVirtualizer extends React.Component<
    * of forced layout: the unconditional scrollHeight read that used to live in
    * every componentDidUpdate was the largest non-idle self-time entry in
    * history-scroll profiles. */
-  getSnapshotBeforeUpdate(prevProps: Omit<Props, "enabled">): number | null {
+  getSnapshotBeforeUpdate(
+    prevProps: Omit<Props, "enabled">,
+  ): TranscriptBottomAnchor | null {
     const growthKey = this.props.topGrowthKey ?? this.props.items[0]?.key ?? "";
-    if (!growthKey) return null;
     const previousKey = prevProps.topGrowthKey ?? prevProps.items[0]?.key ?? "";
     const prependedRange =
+      Boolean(growthKey) &&
       growthKey !== previousKey &&
       this.props.items.some((item) => item.key === previousKey);
     const completedPartialRange =
+      Boolean(growthKey) &&
       growthKey === previousKey &&
       prevProps.topGrowthVersion !== undefined &&
       this.props.topGrowthVersion !== prevProps.topGrowthVersion;
-    if (!prependedRange && !completedPartialRange) return null;
-    return this.scrollContainer()?.scrollHeight ?? null;
+    const hydratedHistory =
+      this.props.historyGrowthVersion !== undefined &&
+      this.props.historyGrowthVersion !== prevProps.historyGrowthVersion;
+    if (!prependedRange && !completedPartialRange && !hydratedHistory)
+      return null;
+    const container = this.scrollContainer();
+    return container
+      ? transcriptBottomAnchor(
+          container.scrollHeight,
+          container.scrollTop,
+          container.clientHeight,
+        )
+      : null;
   }
 
   componentDidUpdate(
     prevProps: Omit<Props, "enabled">,
     _prevState: AdapterState,
-    snapshot: number | null,
+    snapshot: TranscriptBottomAnchor | null,
   ) {
     this.runCommitLifecycle(() => {
       this.measureCommittedRows(prevProps);
       this.virtualizer._willUpdate();
       this.scheduleHeadGrowthClear();
       if (snapshot !== null) {
-        // Height gained by this commit's own mutation goes back on scrollTop
-        // before paint, holding the reader's place while history grows above.
+        // Indexed hydration only adds rows above the loaded window. Restore the
+        // exact pre-commit distance from the bottom instead of inferring an
+        // offset delta from whichever estimates happened to render first.
         const container = this.scrollContainer();
-        if (container) {
-          const delta = container.scrollHeight - snapshot;
-          if (delta > 0) container.scrollTop += delta;
-        }
+        if (container)
+          container.scrollTop = transcriptScrollTopForBottomAnchor(
+            container.scrollHeight,
+            container.clientHeight,
+            snapshot,
+          );
       }
       this.syncTopApproach();
       if (
@@ -245,12 +270,35 @@ class TranscriptVirtualizer extends React.Component<
 
   private prepareHeadGrowth(props: Omit<Props, "enabled">) {
     const key = props.topGrowthKey ?? props.items[0]?.key ?? "";
-    const next = { key, version: props.topGrowthVersion };
+    const next = {
+      key,
+      version: props.topGrowthVersion,
+      historyVersion: props.historyGrowthVersion,
+      items: props.items,
+    };
     const previous = this.renderedGrowth;
     this.renderedGrowth = next;
     if (!previous || !key) return;
 
     let added = false;
+    if (
+      next.historyVersion !== undefined &&
+      next.historyVersion !== previous.historyVersion
+    ) {
+      const changedKeys = committedTranscriptMeasureKeys(
+        previous.items,
+        props.items,
+      );
+      for (const item of props.items) {
+        if (
+          item.animatePositionChanges === false &&
+          changedKeys.has(item.key)
+        ) {
+          this.headGrowthKeys.add(item.key);
+          added = true;
+        }
+      }
+    }
     if (key !== previous.key) {
       const previousIndex = props.items.findIndex(
         (item) => item.key === previous.key,
@@ -764,6 +812,28 @@ class TranscriptVirtualizer extends React.Component<
     this.rendering = false;
     return result;
   }
+}
+
+export interface TranscriptBottomAnchor {
+  distanceFromBottom: number;
+}
+
+export function transcriptBottomAnchor(
+  scrollHeight: number,
+  scrollTop: number,
+  clientHeight: number,
+): TranscriptBottomAnchor {
+  return {
+    distanceFromBottom: Math.max(0, scrollHeight - scrollTop - clientHeight),
+  };
+}
+
+export function transcriptScrollTopForBottomAnchor(
+  scrollHeight: number,
+  clientHeight: number,
+  anchor: TranscriptBottomAnchor,
+): number {
+  return Math.max(0, scrollHeight - clientHeight - anchor.distanceFromBottom);
 }
 
 export function committedTranscriptMeasureKeys(
