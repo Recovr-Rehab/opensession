@@ -48,6 +48,7 @@ __pycache__/
 # Session captures, reviews, previews, worktrees, and generated deliverables.
 # The OS1 icon source and its build scripts are intentional tracked examples.
 .artifacts/
+/artifacts/verification/
 .capture/
 .captures/
 .hero-check/
@@ -103,6 +104,8 @@ deploy/sandbox/microvm/.cache-busybox-source.tar.bz2
 !.agents/skills/control-ui/**
 !.agents/skills/audit-codebase/
 !.agents/skills/audit-codebase/**
+!.agents/skills/verify-opensession/
+!.agents/skills/verify-opensession/**
 !.agents/skills/bro/
 !.agents/skills/bro/**
 !.agents/skills/react-devtools/
