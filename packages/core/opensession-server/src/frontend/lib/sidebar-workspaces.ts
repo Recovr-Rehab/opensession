@@ -1,4 +1,4 @@
-import { sessionPrRefs } from "./session-prs";
+import { prLinksMatch, sessionPrRefs } from "./session-prs";
 import type { UnifiedSession, Workspace } from "./types";
 
 export function isScratchWorkspace(
@@ -91,9 +91,35 @@ export interface ActiveWorkspaceSubagent {
   depth: number;
 }
 
-/** An open PR still makes an idle worker part of its parent's unfinished work. */
+/** An open PR still makes an idle worker part of unfinished work. */
 export function sessionHasOpenPr(session: UnifiedSession): boolean {
   return sessionPrRefs(session).some((pr) => (pr.state ?? "OPEN") === "OPEN");
+}
+
+/**
+ * Whether an idle child owns open PR work that its root session does not.
+ *
+ * Discovery projects a workspace PR onto every session sharing that branch.
+ * That must not revive old inline review or research children as unfinished
+ * sidebar work. A child only stays nested after it becomes idle when it carries
+ * an open PR distinct from every PR already carried by the root session.
+ */
+function sessionHasOwnOpenPr(
+  session: UnifiedSession,
+  root: UnifiedSession,
+): boolean {
+  const rootPrs = sessionPrRefs(root);
+  return sessionPrRefs(session).some(
+    (pr) =>
+      (pr.state ?? "OPEN") === "OPEN" &&
+      !rootPrs.some(
+        (rootPr) =>
+          (!!pr.url && prLinksMatch(pr.url, rootPr.url)) ||
+          (pr.repo === rootPr.repo &&
+            ((pr.number !== undefined && pr.number === rootPr.number) ||
+              (!!pr.branch && pr.branch === rootPr.branch))),
+      ),
+  );
 }
 
 /**
@@ -149,15 +175,7 @@ export function activeSubagentsByWorkspace(
 
   const groups = new Map<string, ActiveWorkspaceSubagent[]>();
   for (const session of byId.values()) {
-    if (
-      !session.parentSessionId ||
-      session.archived ||
-      (!session.isRunning &&
-        !session.waitingForInput &&
-        (session.queuedCount ?? 0) === 0 &&
-        !sessionHasOpenPr(session))
-    )
-      continue;
+    if (!session.parentSessionId || session.archived) continue;
 
     let parentId: string | undefined = session.parentSessionId;
     let root: UnifiedSession | undefined;
@@ -179,6 +197,11 @@ export function activeSubagentsByWorkspace(
       parentId = parent.parentSessionId;
     }
     if (!root?.workspaceId) continue;
+    const active =
+      !!session.isRunning ||
+      !!session.waitingForInput ||
+      (session.queuedCount ?? 0) > 0;
+    if (!active && !sessionHasOwnOpenPr(session, root)) continue;
 
     const items = groups.get(root.workspaceId) ?? [];
     items.push({ session, depth });
@@ -201,6 +224,16 @@ export function activeSubagentsForWorkspace(
 ): ActiveWorkspaceSubagent[] {
   if (!workspaceId) return [];
   return activeSubagentsByWorkspace(sessions).get(workspaceId) ?? [];
+}
+
+/** Expand child rows only beneath the workspace that is currently selected. */
+export function subagentsForSelectedWorkspace(
+  groups: ReadonlyMap<string, ActiveWorkspaceSubagent[]>,
+  workspaceId: string | null | undefined,
+  selectedWorkspaceId: string | null | undefined,
+): ActiveWorkspaceSubagent[] {
+  if (!workspaceId || workspaceId !== selectedWorkspaceId) return [];
+  return groups.get(workspaceId) ?? [];
 }
 
 /** The root session a workspace row should open, never one of its subagents. */

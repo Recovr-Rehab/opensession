@@ -6,7 +6,7 @@ import { listMentions } from "./mentions";
 import { getPins } from "./pins";
 import { getSnoozes } from "./snoozes";
 import { userMatchesAny } from "./shared/user-mappings";
-import type { UnifiedSession } from "./types";
+import type { SessionPrRef, UnifiedSession } from "./types";
 import { getWorkspace, type Workspace } from "./workspaces";
 
 export interface SidebarSessionScope {
@@ -260,12 +260,57 @@ function groupNeedsAttention(
   );
 }
 
-/** An idle worker with an open PR still belongs to its parent's unfinished work. */
-function sessionHasOpenPr(session: SidebarScopeSession): boolean {
-  if (session.prs?.some((pr) => (pr.state ?? "OPEN") === "OPEN")) return true;
-  return (
-    (session.prNumber !== undefined || !!session.prUrl) &&
-    (session.prState ?? "OPEN") === "OPEN"
+type PrIdentity = Pick<SessionPrRef, "repo" | "branch" | "url" | "number">;
+
+function openPrIdentities(session: SidebarScopeSession): PrIdentity[] {
+  const refs = (session.prs || []).filter(
+    (pr) => (pr.state ?? "OPEN") === "OPEN",
+  );
+  if (
+    (session.prNumber === undefined && !session.prUrl) ||
+    (session.prState ?? "OPEN") !== "OPEN"
+  )
+    return refs;
+  return [
+    ...refs,
+    {
+      repo: session.repo || "repository",
+      branch: session.branch || "",
+      url: session.prUrl,
+      number: session.prNumber,
+    },
+  ];
+}
+
+function prIdentitiesMatch(a: PrIdentity, b: PrIdentity): boolean {
+  if (a.url && b.url && a.url === b.url) return true;
+  if (a.repo.toLowerCase() !== b.repo.toLowerCase()) return false;
+  if (a.number !== undefined && b.number !== undefined)
+    return a.number === b.number;
+  return !!a.branch && !!b.branch && a.branch === b.branch;
+}
+
+/** Keep an idle child only when it owns PR work absent from its ancestors. */
+function sessionHasOwnOpenPr(
+  session: SidebarScopeSession,
+  byId: ReadonlyMap<string, SidebarScopeSession>,
+): boolean {
+  const childPrs = openPrIdentities(session);
+  if (childPrs.length === 0) return false;
+
+  const ancestorPrs: PrIdentity[] = [];
+  const seen = new Set([session.id]);
+  let parentId = session.parentSessionId;
+  while (parentId && !seen.has(parentId)) {
+    seen.add(parentId);
+    const parent = byId.get(parentId);
+    if (!parent) break;
+    ancestorPrs.push(...openPrIdentities(parent));
+    parentId = parent.parentSessionId;
+  }
+  return childPrs.some(
+    (childPr) =>
+      !ancestorPrs.some((ancestorPr) => prIdentitiesMatch(childPr, ancestorPr)),
   );
 }
 
@@ -302,14 +347,14 @@ export function scopeSessionsForSidebar<T extends SidebarScopeSession>(
 ): T[] {
   const selectedIds = new Set<string>();
   const selectedGroupKeys = new Set<string>();
+  const byId = new Map<string, T>();
+  for (const session of sessions) {
+    byId.set(session.id, session);
+    for (const alias of session.aliasIds || []) byId.set(alias, session);
+  }
   if (scope.selectedWorkspaceId)
     selectedGroupKeys.add(`workspace:${scope.selectedWorkspaceId}`);
   if (scope.selectedSessionId) {
-    const byId = new Map<string, T>();
-    for (const session of sessions) {
-      byId.set(session.id, session);
-      for (const alias of session.aliasIds || []) byId.set(alias, session);
-    }
     let selected = byId.get(scope.selectedSessionId);
     const seen = new Set<string>();
     while (selected && !seen.has(selected.id)) {
@@ -337,7 +382,7 @@ export function scopeSessionsForSidebar<T extends SidebarScopeSession>(
         (session.isRunning ||
           session.waitingForInput ||
           (session.queuedCount || 0) > 0 ||
-          sessionHasOpenPr(session)) &&
+          sessionHasOwnOpenPr(session, byId)) &&
         !selectedIds.has(session.id)
       ) {
         selectedIds.add(session.id);

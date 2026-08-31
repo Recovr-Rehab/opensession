@@ -7,6 +7,7 @@ import {
   sessionSharesSelectedSidebarGroup,
   sidebarWorkspaceIdForSession,
   spawnedSessionBelongsInSidebar,
+  subagentsForSelectedWorkspace,
   workspaceMainSession,
   workspaceRowOwnsSelection,
   workspaceRowOwnsSession,
@@ -243,8 +244,12 @@ describe("activeSubagentsForWorkspace", () => {
     expect(activeSubagentsByWorkspace(sessions).has("ws-child")).toBe(false);
   });
 
-  test("keeps idle workers nested while their PR is open", () => {
-    const parent = session("parent", { workspaceId: "ws-parent" });
+  test("keeps idle workers nested only while they own an open PR", () => {
+    const parent = session("parent", {
+      workspaceId: "ws-parent",
+      prUrl: "https://github.com/tellahq/example/pull/99",
+      prState: "OPEN",
+    });
     const open = session("open", {
       workspaceId: "ws-worker",
       parentSessionId: "parent",
@@ -263,6 +268,20 @@ describe("activeSubagentsForWorkspace", () => {
         },
       ],
     });
+    const inherited = session("inline-review", {
+      workspaceId: "ws-parent",
+      parentSessionId: "parent",
+      prs: [
+        {
+          repo: "tellahq/example",
+          branch: "parent-branch",
+          source: "discovered",
+          state: "OPEN",
+          url: "https://github.com/tellahq/example/pull/99",
+          number: 99,
+        },
+      ],
+    });
     const merged = session("merged", {
       parentSessionId: "parent",
       prUrl: "https://github.com/tellahq/example/pull/3",
@@ -271,10 +290,25 @@ describe("activeSubagentsForWorkspace", () => {
 
     expect(
       activeSubagentsForWorkspace(
-        [parent, open, projectedOpen, merged],
+        [parent, open, projectedOpen, inherited, merged],
         "ws-parent",
       ).map(({ session }) => session.id),
     ).toEqual(["projected-open", "open"]);
+  });
+
+  test("expands child rows only for the selected root workspace", () => {
+    const child = session("child", {
+      parentSessionId: "parent",
+      isRunning: true,
+    });
+    const groups = new Map([["ws-parent", [{ session: child, depth: 1 }]]]);
+
+    expect(
+      subagentsForSelectedWorkspace(groups, "ws-parent", "ws-other"),
+    ).toEqual([]);
+    expect(
+      subagentsForSelectedWorkspace(groups, "ws-parent", "ws-parent"),
+    ).toEqual([{ session: child, depth: 1 }]);
   });
 
   test("does not nest a selected worker beneath its own temporary workspace", () => {

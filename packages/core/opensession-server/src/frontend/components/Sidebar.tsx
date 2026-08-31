@@ -81,6 +81,7 @@ import {
   activeSubagentsByWorkspace,
   isAskWorkspace,
   isScratchWorkspace,
+  subagentsForSelectedWorkspace,
   workspaceMainSession,
   workspaceRowOwnsSelection,
 } from "../lib/sidebar-workspaces";
@@ -2468,10 +2469,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     // have no project, and they sit above the bands rather than in one), so
     // their rows carry a full status mark instead of the plain dot.
     const noSectionHeading = rowIsScratch(row);
-    const subagents =
-      includeSubagents && row.workspace?.id
-        ? (activeSubagentsByWorkspaceId.get(row.workspace.id) ?? [])
-        : [];
+    const subagents = includeSubagents
+      ? subagentsForSelectedWorkspace(
+          activeSubagentsByWorkspaceId,
+          row.workspace?.id,
+          selectedWorkspaceId,
+        )
+      : [];
     const workspaceRow = (
       <div
         key={row.key}

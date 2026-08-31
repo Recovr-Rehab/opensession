@@ -229,6 +229,8 @@ describe("scopeSessionsForSidebar", () => {
         workspaceId: "ws-worker",
         parentSessionId: "parent",
         startedBy: "Grace",
+        prUrl: "https://github.com/tellahq/example/pull/99",
+        prState: "OPEN",
       }),
       session("worker-sibling", {
         workspaceId: "ws-worker",
@@ -240,6 +242,21 @@ describe("scopeSessionsForSidebar", () => {
         startedBy: "Grace",
         prUrl: "https://github.com/tellahq/example/pull/1",
         prState: "OPEN",
+      }),
+      session("inline-review", {
+        workspaceId: "ws-inline-review",
+        parentSessionId: "worker",
+        startedBy: "Grace",
+        prs: [
+          {
+            repo: "example",
+            branch: "parent-branch",
+            source: "discovered",
+            state: "OPEN",
+            url: "https://github.com/tellahq/example/pull/99",
+            number: 99,
+          },
+        ],
       }),
       session("merged-worker", {
         workspaceId: "ws-merged",
