@@ -23,8 +23,7 @@ import {
   recordSessionPerf,
   scheduleTranscriptDomNodeSample,
 } from "../lib/session-performance";
-import { AGENT_NAME, DEFAULT_DOC_TITLE, sessionSourceName } from "../lib/brand";
-import { brandLogo } from "../brand-logos";
+import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { withQuotes, type Quote } from "../lib/quotes";
 import {
   absoluteLink,
@@ -155,6 +154,7 @@ import {
   type SlackSent,
 } from "./ShippedChangeComposer";
 import { BrandMark } from "./BrandMark";
+import { SessionHeader } from "./session/SessionHeader";
 import { splitAttachments, type FileAttachment } from "../lib/images";
 import { cropImageRegionFile } from "../lib/image-region-comment";
 import {
@@ -250,7 +250,6 @@ import {
   IconTrash,
   IconArchive,
   IconCheck,
-  IconChevronDown,
   IconPlus,
   IconPencil,
   IconArrowDown,
@@ -278,9 +277,7 @@ import {
   IconStack,
 } from "./icons";
 import { KeepInSidebarIcon } from "./sidebar/KeepInSidebarMark";
-import { SessionRelations, type RelatedSession } from "./SessionRelations";
-import { SOURCE_CHIP, sourceChipTone } from "../lib/source-chip-classes";
-import { sessionWasAgentStarted } from "../lib/sidebar-placement";
+import type { RelatedSession } from "./SessionRelations";
 import { Button } from "../ui/button";
 import { SessionQueue } from "./SessionQueue";
 import { deriveSessionQueue, type QueueReceipt } from "../lib/session-queue";
@@ -290,7 +287,6 @@ import {
   TopBarAction,
   TopBarActions,
   TopBarBack,
-  TopBarLeading,
   TopBarTitle,
 } from "../ui/top-bar";
 import { cn } from "../ui/cn";
@@ -322,7 +318,6 @@ import {
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
-import { OverflowFadeText } from "../ui/overflow-fade-text";
 import {
   PANEL_BODY,
   PANEL_TAB,
@@ -350,12 +345,6 @@ import {
   TRANSCRIPT_PILL_TOP,
   VIEWER_ACTION_ROW,
   VIEWER_ACTION_ROW_WITH_SCROLL,
-  VIEWER_BRANCH,
-  VIEWER_BRANCH_EDITABLE,
-  VIEWER_BRANCH_RENAME,
-  VIEWER_CRUMB_UP,
-  VIEWER_HEADER,
-  VIEWER_HEADER_ACTIONS,
   VIEWER_INPUT,
   VIEWER_MENU_SEP,
   VIEWER_MESSAGES,
@@ -368,7 +357,6 @@ import {
   VIEWER_SUGGESTIONS_ROW,
   VIEWER_SUGGESTIONS_ROW_INLINE,
   VIEWER_SUMMARY_STEP,
-  VIEWER_TITLE,
   INFO_CONTENT,
   INFO_HERO,
   INFO_NAME,
@@ -5848,453 +5836,206 @@ export function SessionViewer({
             </Menu.Root>
           );
           const header = (
-            <TopBar className={VIEWER_HEADER} ref={headerRef}>
-              <TopBarLeading className={VIEWER_TITLE}>
-                {!session.desk &&
-                  session.worktreeDir &&
-                  hasWorkspace &&
-                  // Repo-less sessions get a static tile instead of the repo
-                  // switch/attach menu: scratch names the feed it came from,
-                  // an Ask session with the repo turned off says so.
-                  (session.repoLess ? (
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <span
-                        className="flex min-w-0 items-center gap-1.5 text-label font-medium text-dim"
-                        title={
-                          session.mode === "scratch"
-                            ? "Scratch session · no repo"
-                            : "Ask session · no repo"
-                        }
-                      >
-                        {session.mode === "scratch" ? (
-                          <RepoTile
-                            name={session.externalRefs?.[0]?.kind || "scratch"}
-                          />
-                        ) : (
-                          <IconEye size={16} className="shrink-0 text-faint" />
-                        )}
-                        <span className="truncate">
-                          {session.mode === "scratch"
-                            ? session.externalRefs?.[0]?.kind || "scratch"
-                            : "No repo"}
-                        </span>
-                      </span>
-                      <IconChevronDown
-                        size={18}
-                        className="shrink-0 -rotate-90 text-faint"
-                      />
-                    </span>
-                  ) : (
-                    <RepoBar
-                      sessionId={session.id}
-                      primaryRepo={session.repo || "repository"}
-                      branch={session.branch}
-                      initialAttached={session.attachedRepos || []}
-                    />
-                  ))}
-                {/* A worker session sits UNDER the session that spawned it, so the
-					    bar reads repo > session > worker and the middle crumb is the way
-					    back up. It replaces the "worker of …" chip that used to trail the
-					    title while a temporary tab said the same thing again in the strip. */}
-                {parentSession && openSession && (
-                  <>
-                    <button
-                      type="button"
-                      className={cn(VIEWER_BRANCH, VIEWER_CRUMB_UP)}
-                      onClick={() => openSession(parentSession.id)}
-                      title={`Back to ${workspaceName || parentSession.title}`}
-                    >
-                      {workspaceName || parentSession.title}
-                    </button>
-                    <IconChevronDown
-                      size={18}
-                      className="-mx-1 shrink-0 -rotate-90 text-faint"
-                      aria-hidden="true"
-                    />
-                  </>
-                )}
-                {session.archived && (
-                  <Tooltip label="Unarchive session" side="bottom">
-                    <Button
-                      variant="ghost"
-                      size="md"
-                      className="shrink-0 text-dim"
-                      icon={<IconArchive size={20} aria-hidden />}
-                      disabled={archiving}
-                      onClick={() => void handleArchive()}
-                    >
-                      {archiving ? "Unarchiving…" : "Unarchive"}
-                    </Button>
-                  </Tooltip>
-                )}
-                {renameDraft !== null ? (
-                  <input
-                    className={VIEWER_BRANCH_RENAME}
-                    value={renameDraft}
-                    autoFocus
-                    onChange={(e) => setRenameDraft(e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                    onBlur={commitRename}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitRename();
-                      else if (e.key === "Escape") setRenameDraft(null);
-                      e.stopPropagation();
-                    }}
-                  />
-                ) : (
-                  <OverflowFadeText
-                    className={`${VIEWER_BRANCH} ${onRename ? VIEWER_BRANCH_EDITABLE : ""}`}
-                    title={
-                      parentSession
-                        ? onRename
-                          ? `${session.title} · double-click to rename`
-                          : session.title
-                        : workspaceName
-                          ? `${session.title} · double-click to rename the workspace`
-                          : onRename
-                            ? "Double-click to rename"
-                            : session.title
-                    }
-                    onDoubleClick={
-                      onRename
-                        ? () =>
-                            setRenameDraft(
-                              parentSession
-                                ? session.title
-                                : workspaceName || session.title,
-                            )
-                        : undefined
-                    }
-                  >
-                    {parentSession
-                      ? session.title
-                      : workspaceName || session.title}
-                  </OverflowFadeText>
-                )}
-                {/* Where the session came FROM, as a quiet mark AFTER the name. It
-					    used to be a tinted pill at the head of the row, which made the
-					    loudest thing in the bar a fact you read once — and put it in
-					    front of the repo, where it read as part of the path. Origins
-					    with a brand mark draw it in the same faint ink as the
-					    automation and sandbox glyphs beside it; the rest keep the
-					    worded chip. Ask mode isn't an origin — it's a mode you can
-					    change — so it rides the composer toolbar next to the model
-					    pill instead, where the switch is one click from where you're
-					    typing. "opensession" is the default origin (web UI): as a chip
-					    it's noise, and for backstage-repo sessions it read as the repo
-					    said twice. */}
-                {session.source !== "opensession" &&
-                  (brandLogo(session.source) ? (
-                    <span
-                      className="flex shrink-0 items-center text-faint"
-                      title={`From ${sessionSourceName(session.source)}`}
-                      aria-label={`From ${sessionSourceName(session.source)}`}
-                      role="img"
-                    >
-                      <BrandMark name={session.source} size={14} />
-                    </span>
-                  ) : (
-                    <span
-                      className={cn(
-                        SOURCE_CHIP,
-                        sourceChipTone(session.source),
-                      )}
-                    >
-                      {session.source}
-                    </span>
-                  ))}
-                {/* A quiet robot after the title says the opening turn came from an
-					    agent action. Named automation runs link to their settings; report
-					    tasks and delegated sessions keep the same mark without pretending
-					    they are owned by that automation. */}
-                {session.automation ? (
-                  <Tooltip
-                    label={`Automation · ${session.automation}`}
-                    side="bottom"
-                  >
-                    <a
-                      href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
-                      className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover hover:text-fg"
-                      aria-label={`Open ${session.automation} automation settings`}
-                    >
-                      <IconRobot size={18} />
-                    </a>
-                  </Tooltip>
-                ) : sessionWasAgentStarted(session) ? (
-                  <span
-                    className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center text-faint"
-                    role="img"
-                    aria-label="Started by an agent"
-                    title="Started by an agent"
-                  >
-                    <IconRobot size={18} />
-                  </span>
-                ) : null}
-                {/* Sandbox badge: this session's runs execute inside an isolated
-					    container (docker/daytona/e2b). Renders nothing for host sessions
-					    — purely from session fields, no container polling. */}
-                <SandboxBadge
-                  sessionId={session.id}
-                  sandbox={session.sandbox}
-                  runner={session.runner}
-                />
-                {/* The parent edge is the crumb before the title; this is the other
-					    direction, the workers this session delegated to. */}
-                {openSession && !!workerSessions?.length && (
-                  <SessionRelations
-                    workers={workerSessions}
-                    models={models}
-                    onOpen={openSession}
-                  />
-                )}
-                {/* This workspace's own controls, at the end of its own cluster: the
-					    ⋯ menu, then the lone-session "+ New tab". The menu used to sit at
-					    the far right of the bar, a whole header away from the thing it
-					    acts on and mixed in with the status controls; here it reads as
-					    belonging to the name, and the right end is left to say what the
-					    workspace is doing. The two are 32px ghost squares, so they take
-					    the icon cluster's own 2px gap rather than the row's 10px and read
-					    as one pair, and the pair is pulled in a little because each
-					    button already pads its own glyph. */}
-                {!isPhone && (
-                  <div className="-ml-1 flex flex-none items-center gap-0.5">
-                    {overflowMenu}
-                    {/* With no tab strip on screen the affordance to spawn a sibling
-							    session lives here beside the title (⌘⌥N does the same). The
-							    moment the strip appears, whether from a second session, an
-							    open view tab like Review, or a split, its own + takes over
-							    and this disappears, so the two never stack. Phone keeps this
-							    sibling-session action in More. Rendered AS the Button
-							    primitive, like the ⋯ beside it and the side-panel control at
-							    the other end of the bar, so the 32px square, radius, hover
-							    wash and press scale match by construction rather than by
-							    hand-matching a chip. */}
-                    {/* Not on a worker: its header is a level below the workspace, and
-							    a new tab belongs to the session above it. */}
-                    {!session.desk &&
-                      openNewSession &&
-                      !tabStripVisible &&
-                      !parentSession &&
-                      workspaceSessions?.length === 1 && (
-                        <Tooltip
-                          label="New tab in this workspace"
-                          shortcut={newSiblingKeys ?? undefined}
-                        >
-                          <Button
-                            variant="ghost"
-                            size="md"
-                            className="flex-none rounded-control"
-                            onClick={(event) => {
-                              const animate =
-                                event.detail > 0 &&
-                                !window.matchMedia(
-                                  "(prefers-reduced-motion: reduce)",
-                                ).matches;
-                              const rect = animate
-                                ? event.currentTarget.getBoundingClientRect()
-                                : null;
-                              void openNewSession(
-                                "share",
-                                rect
-                                  ? {
-                                      left: rect.left,
-                                      top: rect.top,
-                                      width: rect.width,
-                                      height: rect.height,
-                                    }
-                                  : undefined,
-                              );
-                            }}
-                            aria-label="New tab"
-                            // 22, the standard standalone step the ⋯ and side-panel
-                            // glyphs use. IconPlus now draws the set's 14.5 span, so
-                            // it lands at their size and weight without a bump.
-                            icon={<IconPlus size={22} />}
-                          />
-                        </Tooltip>
-                      )}
-                  </div>
-                )}
-              </TopBarLeading>
-              <TopBarActions
-                className={VIEWER_HEADER_ACTIONS}
-                ref={headerActionsRef}
-              >
-                {!isPhone && secondaryActions(false)}
-                {!isPhone && keepInSidebarAction(false)}
-                {/* Whoever ELSE has the session open, right before Share. Your
+            <SessionHeader
+              session={session}
+              hasWorkspace={hasWorkspace}
+              workspaceName={workspaceName}
+              parentSession={parentSession}
+              workerSessions={workerSessions}
+              models={models}
+              openSession={openSession}
+              archiving={archiving}
+              onArchive={() => void handleArchive()}
+              renameDraft={renameDraft}
+              onRenameDraftChange={setRenameDraft}
+              onCommitRename={commitRename}
+              onCancelRename={() => setRenameDraft(null)}
+              canRename={Boolean(onRename)}
+              menu={overflowMenu}
+              isPhone={isPhone}
+              openNewSession={openNewSession}
+              tabStripVisible={tabStripVisible}
+              workspaceSessionCount={workspaceSessions?.length}
+              newSiblingKeys={newSiblingKeys}
+              headerRef={headerRef}
+              headerActionsRef={headerActionsRef}
+              topbarEl={topbarEl}
+              headerActionsEl={headerActionsEl}
+              actions={
+                <>
+                  {!isPhone && secondaryActions(false)}
+                  {!isPhone && keepInSidebarAction(false)}
+                  {/* Whoever ELSE has the session open, right before Share. Your
 					    own face used to sit here too, which meant every session
 					    you opened showed a face permanently — the one thing a
 					    presence pile must never do, since it reads as somebody
 					    standing behind you. You know you're here; this row is for
 					    the people you can't see. (The native app has always
 					    filtered its own name out — this matches it.) */}
-                {!isPhone && others.length > 0 && (
-                  <div
-                    className={VIEWER_PRESENCE}
-                    title={`Viewing: ${others.join(", ")}`}
-                  >
-                    {dedupeViewers(others).map((v, index, viewers) => (
-                      <UserAvatar
-                        key={v.name}
-                        name={v.name}
-                        size={24}
-                        className={VIEWER_PRESENCE_AVATAR}
-                        style={facepileAvatarStyle(
-                          index,
-                          viewers.length,
-                          "var(--bg)",
-                        )}
-                      />
-                    ))}
-                  </div>
-                )}
-                {/* Share rides inline when there's room, else collapses into the ⋯
+                  {!isPhone && others.length > 0 && (
+                    <div
+                      className={VIEWER_PRESENCE}
+                      title={`Viewing: ${others.join(", ")}`}
+                    >
+                      {dedupeViewers(others).map((v, index, viewers) => (
+                        <UserAvatar
+                          key={v.name}
+                          name={v.name}
+                          size={24}
+                          className={VIEWER_PRESENCE_AVATAR}
+                          style={facepileAvatarStyle(
+                            index,
+                            viewers.length,
+                            "var(--bg)",
+                          )}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {/* Share rides inline when there's room, else collapses into the ⋯
 					    menu so it never crowds the title. It sits before Workspace so
 					    the Workspace toggle stays rightmost. On phones the secondary
 					    controls fold in too. */}
-                {!compactHeader && !isPhone && shareAction(false)}
-                {/* Phones portal this menu into the action bar above the composer. */}
-                {isPhone &&
-                  !infoPageOpen &&
-                  mobileActionMenuEl &&
-                  createPortal(overflowMenu, mobileActionMenuEl)}
-                {/* Code-workspace testing affordances dock immediately left of the
+                  {!compactHeader && !isPhone && shareAction(false)}
+                  {/* Phones portal this menu into the action bar above the composer. */}
+                  {isPhone &&
+                    !infoPageOpen &&
+                    mobileActionMenuEl &&
+                    createPortal(overflowMenu, mobileActionMenuEl)}
+                  {/* Code-workspace testing affordances dock immediately left of the
 					    side-panel toggle. The local preview launcher lives in the ⋯ menu;
 					    the globe rides here only while nothing else is showing it. The
 					    panel carries it in its PR row, the summary card as a row of its
 					    own, so it is never in two places at once. */}
-                {!isPhone && !showReview && !panelOpen && !summaryVisible && (
-                  <StagingLink
-                    session={session}
-                    variant="header"
-                    refreshTick={gitRefreshTick}
-                  />
-                )}
-                {/* Panel closed → surface the PR chip + its primary action (Merge/
+                  {!isPhone && !showReview && !panelOpen && !summaryVisible && (
+                    <StagingLink
+                      session={session}
+                      variant="header"
+                      refreshTick={gitRefreshTick}
+                    />
+                  )}
+                  {/* Panel closed → surface the PR chip + its primary action (Merge/
 					    Push/Resolve) inline, grouped with the globe directly left of
 					    the side-panel toggle. Review owns that action in its own header,
 					    so the global copy steps out while Review is open. So does the
 					    summary card below, which says the same three things in rows with
 					    room for the rest of them. */}
-                {!isPhone &&
-                  hasRepoWork &&
-                  !workspacePreparing &&
-                  !panelOpen &&
-                  !showReview &&
-                  !summaryVisible && (
-                    <PrStatusBar
-                      sessionId={session.id}
-                      repo={session.repo || undefined}
-                      archived={session.archived}
-                      prs={session.prs}
-                      send={connected ? send : undefined}
-                      onOpenPrTab={focusPrInReview}
-                      onOpenChecksTab={() =>
-                        focusPrInReview(undefined, "checks")
-                      }
+                  {!isPhone &&
+                    hasRepoWork &&
+                    !workspacePreparing &&
+                    !panelOpen &&
+                    !showReview &&
+                    !summaryVisible && (
+                      <PrStatusBar
+                        sessionId={session.id}
+                        repo={session.repo || undefined}
+                        archived={session.archived}
+                        prs={session.prs}
+                        send={connected ? send : undefined}
+                        onOpenPrTab={focusPrInReview}
+                        onOpenChecksTab={() =>
+                          focusPrInReview(undefined, "checks")
+                        }
+                        onArchive={handleArchive}
+                        variant="header"
+                        running={isRunningLive}
+                        refreshTick={gitRefreshTick}
+                      />
+                    )}
+                  {/* The compact Workspace summary keeps the card's quiet row grammar.
+					    Detailed comments, files and tools open in the full side panel. */}
+                  {!isPhone && hasRepoWork && !activePanelOpen && (
+                    <WorkspaceSummary
+                      session={session}
+                      anchor={headerActionsRef}
+                      // Changes opens beside the card. Review rows go to the full Review
+                      // canvas now that the side panel contains tools only.
+                      onOpenPanelTab={(tab) => {
+                        if (tab === "changes") {
+                          setDesktopPanelPage("changes");
+                          setActivePanelOpen(true);
+                        } else {
+                          openReview?.();
+                        }
+                      }}
+                      onOpenPr={() => focusPrInReview()}
+                      onOpenStackPr={openPr}
+                      onOpenChecks={() => focusPrInReview(undefined, "checks")}
+                      onOpenAsset={openAssetFromTranscript}
+                      onOpenAssets={openAssets}
+                      onOpenSession={openSession}
                       onArchive={handleArchive}
-                      variant="header"
+                      // Already resolved across the workspace's sessions (the
+                      // request may live on a sibling), and already folded
+                      // together with a GitHub review that completes it.
+                      reviewRequest={effectiveReview?.req ?? null}
+                      reviewRequestSessionId={effectiveReview?.ownerId}
+                      onReviewChange={onReviewChange}
+                      prReviewRequested={effectiveReview?.prReviewRequested}
                       running={isRunningLive}
+                      workspacePreparing={workspacePreparing}
+                      send={connected ? send : undefined}
                       refreshTick={gitRefreshTick}
+                      onOpenChange={setSummaryOpen}
+                      tabStripVisible={tabStripVisible}
+                      reviewMode={showReview}
+                      reviewPage={reviewPage}
+                      onReviewPageChange={setReviewPage}
+                      // Too narrow for both, and the card gets out of the way
+                      // until someone asks for it from the same button.
+                      hasRoom={summaryHasRoom}
                     />
                   )}
-                {/* The compact Workspace summary keeps the card's quiet row grammar.
-					    Detailed comments, files and tools open in the full side panel. */}
-                {!isPhone && hasRepoWork && !activePanelOpen && (
-                  <WorkspaceSummary
-                    session={session}
-                    anchor={headerActionsRef}
-                    // Changes opens beside the card. Review rows go to the full Review
-                    // canvas now that the side panel contains tools only.
-                    onOpenPanelTab={(tab) => {
-                      if (tab === "changes") {
-                        setDesktopPanelPage("changes");
-                        setActivePanelOpen(true);
-                      } else {
-                        openReview?.();
-                      }
-                    }}
-                    onOpenPr={() => focusPrInReview()}
-                    onOpenStackPr={openPr}
-                    onOpenChecks={() => focusPrInReview(undefined, "checks")}
-                    onOpenAsset={openAssetFromTranscript}
-                    onOpenAssets={openAssets}
-                    onOpenSession={openSession}
-                    onArchive={handleArchive}
-                    // Already resolved across the workspace's sessions (the
-                    // request may live on a sibling), and already folded
-                    // together with a GitHub review that completes it.
-                    reviewRequest={effectiveReview?.req ?? null}
-                    reviewRequestSessionId={effectiveReview?.ownerId}
-                    onReviewChange={onReviewChange}
-                    prReviewRequested={effectiveReview?.prReviewRequested}
-                    running={isRunningLive}
-                    workspacePreparing={workspacePreparing}
-                    send={connected ? send : undefined}
-                    refreshTick={gitRefreshTick}
-                    onOpenChange={setSummaryOpen}
-                    tabStripVisible={tabStripVisible}
-                    reviewMode={showReview}
-                    reviewPage={reviewPage}
-                    onReviewPageChange={setReviewPage}
-                    // Too narrow for both, and the card gets out of the way
-                    // until someone asks for it from the same button.
-                    hasRoom={summaryHasRoom}
-                  />
-                )}
-                {/* Phones have no workspace panel and no status strip, so the PR
+                  {/* Phones have no workspace panel and no status strip, so the PR
 					    state had nowhere to show: you had to open the info page to
 					    learn whether checks were red. One toned chip in the bar's
 					    right slot says the number and the state in its colour, and
 					    tapping it opens Review on that PR. Only when the session
 					    actually has one: a chip that says "no PR" is chrome. */}
-                {isPhone && phonePr && (
-                  <button
-                    type="button"
-                    className={prPhoneChipClass(refTone(phonePr))}
-                    title={refLabel(phonePr)}
-                    aria-label={refLabel(phonePr)}
-                    onClick={() =>
-                      focusPrInReview({
-                        repo: phonePr.repo,
-                        branch: phonePr.branch,
-                      })
-                    }
-                  >
-                    {refChipText(phonePr, session.repo || undefined)}
-                  </button>
-                )}
-                {!isPhone && panelAvailable && (
-                  <Tooltip label="Toggle workspace panel">
-                    <Button
-                      variant="ghost"
-                      size="md"
-                      // No height/width overrides: the primitive's icon-only box is
-                      // already the 32px square the ⋯ and share buttons use.
-                      // text-dim, not text-faint: the share and ⋯ buttons beside it
-                      // are dim, and a lighter ink made this read as disabled.
-                      // No negative margin after the ⋯ either: that -4px pull dated
-                      // from when both were narrow padded controls, and now that all
-                      // three are equal squares it just made this gap 4px where the
-                      // share → ⋯ one is the row's 8px.
-                      className="rounded-control text-dim hover:bg-hover hover:text-fg phone:order-2 phone:h-[38px] phone:min-h-[38px] phone:w-[38px] phone:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:text-accent"
-                      onClick={() => setActivePanelOpen(!activePanelOpen)}
-                      aria-label="Toggle side panel"
-                      // Iconic sidebar-right glyph — reads as "right side panel".
-                      // Passed as `icon` (not children) so the primitive uses its
-                      // icon-only square; as a child it counts as a label and gets
-                      // the text button's px-3, which made it 50px wide.
-                      icon={<IconSidebarRight size={22} />}
-                    />
-                  </Tooltip>
-                )}
-              </TopBarActions>
-            </TopBar>
+                  {isPhone && phonePr && (
+                    <button
+                      type="button"
+                      className={prPhoneChipClass(refTone(phonePr))}
+                      title={refLabel(phonePr)}
+                      aria-label={refLabel(phonePr)}
+                      onClick={() =>
+                        focusPrInReview({
+                          repo: phonePr.repo,
+                          branch: phonePr.branch,
+                        })
+                      }
+                    >
+                      {refChipText(phonePr, session.repo || undefined)}
+                    </button>
+                  )}
+                  {!isPhone && panelAvailable && (
+                    <Tooltip label="Toggle workspace panel">
+                      <Button
+                        variant="ghost"
+                        size="md"
+                        // No height/width overrides: the primitive's icon-only box is
+                        // already the 32px square the ⋯ and share buttons use.
+                        // text-dim, not text-faint: the share and ⋯ buttons beside it
+                        // are dim, and a lighter ink made this read as disabled.
+                        // No negative margin after the ⋯ either: that -4px pull dated
+                        // from when both were narrow padded controls, and now that all
+                        // three are equal squares it just made this gap 4px where the
+                        // share → ⋯ one is the row's 8px.
+                        className="rounded-control text-dim hover:bg-hover hover:text-fg phone:order-2 phone:h-[38px] phone:min-h-[38px] phone:w-[38px] phone:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:text-accent"
+                        onClick={() => setActivePanelOpen(!activePanelOpen)}
+                        aria-label="Toggle side panel"
+                        // Iconic sidebar-right glyph — reads as "right side panel".
+                        // Passed as `icon` (not children) so the primitive uses its
+                        // icon-only square; as a child it counts as a label and gets
+                        // the text button's px-3, which made it 50px wide.
+                        icon={<IconSidebarRight size={22} />}
+                      />
+                    </Tooltip>
+                  )}
+                </>
+              }
+            />
           );
-          // Phones: the whole header rides in the top bar's right slot (the
-          // title row is CSS-hidden there — the centered bar title replaces
-          // it), giving one iOS-style nav bar instead of a second chrome row.
           const phoneInfoPage =
             isPhone && infoPageOpen
               ? createPortal(
@@ -6538,15 +6279,9 @@ export function SessionViewer({
                   document.body,
                 )
               : null;
-          const placedHeader =
-            isPhone && headerActionsEl
-              ? createPortal(header, headerActionsEl)
-              : topbarEl
-                ? createPortal(header, topbarEl)
-                : header;
           return (
             <>
-              {placedHeader}
+              {header}
               {phoneInfoPage}
             </>
           );
