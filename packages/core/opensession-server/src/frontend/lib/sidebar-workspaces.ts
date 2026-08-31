@@ -50,6 +50,51 @@ export function spawnedSessionBelongsInSidebar(
   return !session.spawnedBy || needsAttention || claimed;
 }
 
+export function sessionShipsDirectlyToMain(
+  session: { repo?: string; branch?: string | null },
+  directToMainBranches: Readonly<Record<string, string>>,
+): boolean {
+  const defaultBranch = session.repo
+    ? directToMainBranches[session.repo]
+    : undefined;
+  return (
+    !!defaultBranch && (!session.branch || session.branch === defaultBranch)
+  );
+}
+
+/** Whether every real session in this row uses a shared main checkout. */
+export function workspaceRowShipsDirectlyToMain(
+  row: {
+    sessions: readonly Pick<UnifiedSession, "repo" | "branch">[];
+    workspace?: { branch?: string | null; prNumber?: number } | null;
+  },
+  workspaceRepo: string,
+  directToMainBranches: Readonly<Record<string, string>>,
+): boolean {
+  const workspaceHasCodeTarget =
+    !!row.workspace?.branch || row.workspace?.prNumber !== undefined;
+  if (!workspaceHasCodeTarget) {
+    const repoSessions = row.sessions.filter((session) => !!session.repo);
+    if (
+      repoSessions.length > 0 &&
+      repoSessions.every((session) =>
+        sessionShipsDirectlyToMain(session, directToMainBranches),
+      )
+    )
+      return true;
+  }
+
+  return sessionShipsDirectlyToMain(
+    {
+      repo: workspaceRepo,
+      branch:
+        row.workspace?.branch ||
+        row.sessions.find((session) => session.repo === workspaceRepo)?.branch,
+    },
+    directToMainBranches,
+  );
+}
+
 /**
  * Whether a session belongs to the sidebar row that is currently open.
  *

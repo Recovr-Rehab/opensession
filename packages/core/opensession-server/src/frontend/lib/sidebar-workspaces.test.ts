@@ -11,6 +11,7 @@ import {
   workspaceMainSession,
   workspaceRowOwnsSelection,
   workspaceRowOwnsSession,
+  workspaceRowShipsDirectlyToMain,
 } from "./sidebar-workspaces";
 import type { UnifiedSession } from "./types";
 
@@ -76,6 +77,56 @@ describe("isAskWorkspace", () => {
       isAskWorkspace([{ mode: "ask", repoLess: true }, { mode: "code" }]),
     ).toBe(false);
     expect(isAskWorkspace([])).toBe(false);
+  });
+});
+
+describe("workspaceRowShipsDirectlyToMain", () => {
+  const directToMainBranches = { opensession: "main" };
+
+  test("uses the sessions when a bare workspace names another repo", () => {
+    expect(
+      workspaceRowShipsDirectlyToMain(
+        {
+          workspace: {},
+          sessions: [
+            session("shared-main", { repo: "opensession", branch: "main" }),
+          ],
+        },
+        "tella-fusion",
+        directToMainBranches,
+      ),
+    ).toBe(true);
+  });
+
+  test("keeps an explicit workspace branch authoritative", () => {
+    expect(
+      workspaceRowShipsDirectlyToMain(
+        {
+          workspace: { branch: "feature" },
+          sessions: [
+            session("shared-main", { repo: "opensession", branch: "main" }),
+          ],
+        },
+        "tella-fusion",
+        directToMainBranches,
+      ),
+    ).toBe(false);
+  });
+
+  test("requires every repo-backed session to ship directly", () => {
+    expect(
+      workspaceRowShipsDirectlyToMain(
+        {
+          workspace: {},
+          sessions: [
+            session("shared-main", { repo: "opensession", branch: "main" }),
+            session("feature", { repo: "tella-fusion", branch: "feature" }),
+          ],
+        },
+        "tella-fusion",
+        directToMainBranches,
+      ),
+    ).toBe(false);
   });
 });
 

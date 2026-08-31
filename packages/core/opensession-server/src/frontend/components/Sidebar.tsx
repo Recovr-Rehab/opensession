@@ -80,10 +80,12 @@ import {
   ASK_BAND,
   isAskWorkspace,
   isScratchWorkspace,
+  sessionShipsDirectlyToMain,
   subagentsByWorkspace,
   subagentsForSelectedWorkspace,
   workspaceMainSession,
   workspaceRowOwnsSelection,
+  workspaceRowShipsDirectlyToMain,
 } from "../lib/sidebar-workspaces";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import {
@@ -3108,15 +3110,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     repo: string | undefined,
     branch: string | null | undefined,
   ) {
-    const defaultBranch = repo ? directToMainBranches[repo] : undefined;
-    return !!defaultBranch && (!branch || branch === defaultBranch);
+    return sessionShipsDirectlyToMain({ repo, branch }, directToMainBranches);
   }
   function rowShipsDirectlyToMain(row: WsRow) {
-    const repo = wsRowRepo(row);
-    const branch =
-      row.workspace?.branch ||
-      row.sessions.find((session) => session.repo === repo)?.branch;
-    return shipsDirectlyToMain(repo, branch);
+    return workspaceRowShipsDirectlyToMain(
+      row,
+      wsRowRepo(row),
+      directToMainBranches,
+    );
   }
   const rowIsScratch = (row: WsRow) => isScratchWorkspace(row.sessions);
   // Repo-less Ask workspaces get their own band above the projects. Checked
