@@ -228,16 +228,21 @@ describe("LocalExecutor", () => {
     });
     if (spawned.outcome.kind !== "process")
       throw new Error("unexpected outcome");
-    await Bun.sleep(50);
-    const status = await execute(executor, {
-      kind: "process.status",
-      processId: spawned.outcome.processId,
-    });
-    expect(
-      status.events
-        ?.flatMap((event) => (event.kind === "text" ? [event.data] : []))
-        .join(""),
-    ).toBe("€");
+    const output: string[] = [];
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const status = await execute(executor, {
+        kind: "process.status",
+        processId: spawned.outcome.processId,
+      });
+      output.push(
+        ...(status.events?.flatMap((event) =>
+          event.kind === "text" ? [event.data] : [],
+        ) ?? []),
+      );
+      if (output.join("") === "€") break;
+      await Bun.sleep(10);
+    }
+    expect(output.join("")).toBe("€");
   });
 
   test("resumes buffering after a truncation backlog is observed", async () => {

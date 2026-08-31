@@ -177,6 +177,10 @@ export function localRunHostsSupported(
   systemdBooted = existsSync("/run/systemd/system"),
   commandLookup: (command: string) => string | null = Bun.which,
 ): boolean {
+  // Hermetic end-to-end fixtures have scratch state but no matching privileged
+  // run-host installation. They exercise the same runner in-process instead of
+  // reaching the live VPS executor or fixed helper.
+  if (process.env.OPENSESSION_TEST_IN_PROCESS_RUNS === "1") return false;
   return (
     platform === "linux" &&
     systemdBooted &&

@@ -423,6 +423,8 @@ describe("session kernel actor service", () => {
         responseTimeoutMs: 700,
         databasePath: join(stateDir, "sessions", "session-kernel.sqlite"),
       });
+      // rpc() caches the prior incarnation after its first handshake.
+      serviceEpoch = undefined;
       await expect(
         client.callAsync(
           { t: "store", method: "creationState", args: ["after-restart"] },
@@ -754,7 +756,8 @@ describe("session kernel actor service", () => {
       result: {
         result: {
           kind: "deliver",
-          promptEntryId: "large-entry",
+          // A one-item batch keeps the queued receipt's durable identity.
+          promptEntryId: "large",
           items: [{ id: "large", content }],
         },
       },

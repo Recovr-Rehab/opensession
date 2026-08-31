@@ -264,6 +264,20 @@ describe("local run-host capability", () => {
     expect(localRunHostsSupported("linux", true, () => null)).toBe(false);
   });
 
+  test("keeps hermetic fixtures off the live run-host installation", () => {
+    const previous = process.env.OPENSESSION_TEST_IN_PROCESS_RUNS;
+    process.env.OPENSESSION_TEST_IN_PROCESS_RUNS = "1";
+    try {
+      expect(localRunHostsSupported("linux", true, () => "/usr/bin/tool")).toBe(
+        false,
+      );
+    } finally {
+      if (previous === undefined)
+        delete process.env.OPENSESSION_TEST_IN_PROCESS_RUNS;
+      else process.env.OPENSESSION_TEST_IN_PROCESS_RUNS = previous;
+    }
+  });
+
   test("keeps a fresh host out of the boot recovery claim", async () => {
     const hostId = `rh-${crypto.randomUUID()}`;
     const osSessionId = `os-${crypto.randomUUID()}`;
