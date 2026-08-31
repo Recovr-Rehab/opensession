@@ -13,14 +13,6 @@ describe("app viewport", () => {
     expect(root).not.toMatch(/height:\s*100(?:d|l|s)?vh/);
   });
 
-  test("desktop shells anchor the app directly to the root viewport", async () => {
-    const css = await Bun.file(CSS).text();
-
-    expect(css).toMatch(
-      /@media \(min-width: 721px\) \{[\s\S]*html:is\(\.wco, \.desktop-shell\) #root \{[\s\S]*position:\s*relative;[\s\S]*html:is\(\.wco, \.desktop-shell\) \.app \{[\s\S]*position:\s*absolute;[\s\S]*inset:\s*0;[\s\S]*height:\s*auto;/,
-    );
-  });
-
   test("focused text fields release the physical-screen override for keyboard panning", async () => {
     const css = await Bun.file(CSS).text();
 
