@@ -4563,6 +4563,7 @@ export function SessionViewer({
   // of the surrounding chrome.
   const headerRef = useRef<HTMLDivElement>(null);
   const headerActionsRef = useRef<HTMLDivElement>(null);
+  const desktopChangesRef = useRef<HTMLDivElement>(null);
   const [headerW, setHeaderW] = useState(0);
   // Whether the header's workspace-summary card is up. The transcript and
   // composer shift out from under it while it is, and the header's own PR
@@ -7739,20 +7740,62 @@ export function SessionViewer({
                   )}
                   <div className={PANEL_BODY}>
                     {desktopPanelPage === "changes" ? (
-                      waitingForWorkspace ? (
-                        <WorkspaceWaiting detail="This takes a moment." />
-                      ) : (
-                        <DiffPanel
-                          sessionId={session.id}
-                          isRunning={isBusy}
-                          canSend={connected && !isBusy && !noEngine}
-                          send={send}
-                          diff={diffState}
-                          showFileList={false}
-                          source={worktreeDiffSource}
-                          onSourceChange={changeWorktreeDiffSource}
-                        />
-                      )
+                      <>
+                        <section
+                          aria-label="Workspace summary"
+                          className="flex flex-col border-b border-divider py-2"
+                        >
+                          <WorkspaceSummaryBody
+                            session={session}
+                            onOpenPanelTab={(tab) => {
+                              if (tab === "changes") {
+                                desktopChangesRef.current?.scrollIntoView({
+                                  block: "start",
+                                });
+                                return;
+                              }
+                              focusPrInReview();
+                            }}
+                            onOpenPr={() => focusPrInReview()}
+                            onOpenStackPr={openPr}
+                            onOpenChecks={() =>
+                              focusPrInReview(undefined, "checks")
+                            }
+                            onOpenAsset={openAssetFromTranscript}
+                            onOpenAssets={openAssets}
+                            onOpenSession={openSession}
+                            onArchive={handleArchive}
+                            reviewRequest={effectiveReview?.req ?? null}
+                            reviewRequestSessionId={effectiveReview?.ownerId}
+                            onReviewChange={onReviewChange}
+                            prReviewRequested={
+                              effectiveReview?.prReviewRequested
+                            }
+                            running={isRunningLive}
+                            workspacePreparing={workspacePreparing}
+                            send={connected ? send : undefined}
+                            refreshTick={gitRefreshTick}
+                            liveMedia={liveOverviewMedia}
+                            close={() => setActivePanelOpen(false)}
+                          />
+                        </section>
+                        <div ref={desktopChangesRef}>
+                          {waitingForWorkspace ? (
+                            <WorkspaceWaiting detail="This takes a moment." />
+                          ) : (
+                            <DiffPanel
+                              sessionId={session.id}
+                              isRunning={isBusy}
+                              canSend={connected && !isBusy && !noEngine}
+                              send={send}
+                              diff={diffState}
+                              showFileList={false}
+                              source={worktreeDiffSource}
+                              onSourceChange={changeWorktreeDiffSource}
+                            />
+                          )}
+                        </div>
+                      </>
                     ) : desktopPanelPage === "portals" ? (
                       <PortalsPage
                         sessionId={session.id}

@@ -23,5 +23,5 @@ test("PR status stays hidden until a new workspace is ready", () => {
 
   expect(
     viewerSource.match(/workspacePreparing=\{workspacePreparing\}/g),
-  ).toHaveLength(2);
+  ).toHaveLength(3);
 });
