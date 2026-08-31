@@ -517,7 +517,7 @@ export function DeskConversation({
               live={isRunning}
               sessionId={sessionId}
               liveTurnStore={liveTurnStore}
-              onLiveLayout={relayoutLive}
+              onLayout={relayoutLive}
               onOpenSubagent={onOpenSubagent}
               // The Desk shows the same failure pill as a session, so it
               // offers the same one press out of it. Gated like handleSend.

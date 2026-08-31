@@ -6568,7 +6568,7 @@ export function SessionViewer({
                         live={isBusy}
                         sessionId={session.id}
                         liveTurnStore={liveTurnStore}
-                        onLiveLayout={relayout}
+                        onLayout={relayout}
                         reviewResult={reviewResult}
                         onEditMessage={editSentMessageInComposer}
                         // Same gate the composer sends under: a busy session

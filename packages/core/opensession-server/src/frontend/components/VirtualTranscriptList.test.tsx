@@ -149,6 +149,14 @@ describe("VirtualTranscriptList", () => {
     expect(source).not.toContain("getSnapshotBeforeUpdate");
   });
 
+  test("reaffirms following after measured virtual extent changes", () => {
+    expect(source).toContain("this.renderedTotalSize = totalSize");
+    expect(source).toContain(
+      "if (this.renderedTotalSize === this.notifiedTotalSize) return",
+    );
+    expect(source).toContain("this.props.onLayout?.()");
+  });
+
   test("keeps positive live-edge growth pinned in the measurement frame", () => {
     expect(
       shouldAdjustTranscriptScroll({

@@ -230,7 +230,7 @@ function TranscriptMotionPlayer({
           live={state.busy}
           sessionId=""
           liveTurnStore={liveTurnStore}
-          onLiveLayout={relayout}
+          onLayout={relayout}
         />
         <AnimatePresence initial={false}>
           {state.busy && (

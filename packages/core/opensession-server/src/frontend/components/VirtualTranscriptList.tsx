@@ -59,6 +59,9 @@ interface Props {
   /** Keep the live-edge tail mounted inside the same virtual coordinate space. */
   trailingMounted: number;
   onVisibleItems?: (items: VirtualTranscriptItem[]) => void;
+  /** The measured virtual extent changed after commit. Following readers use
+   * this to reaffirm the live edge after sparse history finishes measuring. */
+  onLayout?: () => void;
   /** Fired when the reader climbs near the top of what is mounted, so a
    * caller loading history incrementally can hydrate the next page. Returns
    * whether more history remains available for an underfilled viewport. */
@@ -127,6 +130,8 @@ class TranscriptVirtualizer extends React.Component<
   private navigationContainer: HTMLDivElement | null = null;
   private navigationItems: VirtualTranscriptItem[] | null = null;
   private visibleTimer: number | undefined;
+  private renderedTotalSize = 0;
+  private notifiedTotalSize = -1;
   private containerFor: HTMLDivElement | null = null;
   private container: HTMLDivElement | null = null;
   private topApproachContainer: HTMLDivElement | null = null;
@@ -174,6 +179,7 @@ class TranscriptVirtualizer extends React.Component<
       this.scheduleUnderfilledHistory();
       this.syncNavigation();
       this.scheduleVisibleItems();
+      this.notifyLayout();
     });
   }
 
@@ -192,6 +198,7 @@ class TranscriptVirtualizer extends React.Component<
         this.scheduleUnderfilledHistory();
       this.syncNavigation();
       this.scheduleVisibleItems();
+      this.notifyLayout();
     });
   }
 
@@ -206,6 +213,12 @@ class TranscriptVirtualizer extends React.Component<
     if (this.headGrowthTimer !== undefined)
       window.clearTimeout(this.headGrowthTimer);
     this.rowObserver?.disconnect();
+  }
+
+  private notifyLayout() {
+    if (this.renderedTotalSize === this.notifiedTotalSize) return;
+    this.notifiedTotalSize = this.renderedTotalSize;
+    this.props.onLayout?.();
   }
 
   private prepareHeadGrowth(props: Omit<Props, "enabled">) {
@@ -661,6 +674,7 @@ class TranscriptVirtualizer extends React.Component<
     };
     const virtualItems = this.virtualizer.getVirtualItems();
     const totalSize = this.virtualizer.getTotalSize();
+    this.renderedTotalSize = totalSize;
     // Tail-arrival detection runs here, in the imperative adapter, because
     // "mounted by the previous build" is virtualizer knowledge: the function
     // component above is compiler-managed and may re-render without a new

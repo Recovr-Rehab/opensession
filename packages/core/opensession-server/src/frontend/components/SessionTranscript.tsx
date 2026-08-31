@@ -20,8 +20,8 @@ type TranscriptBlocksProps = React.ComponentProps<typeof TranscriptBlocks>;
 type SessionTranscriptProps = Omit<TranscriptBlocksProps, "sessionId"> & {
   sessionId: string;
   liveTurnStore: LiveTurnStore;
-  /** Re-measure the host scroll region after the live bubble DOM commits. */
-  onLiveLayout?: () => void;
+  /** Re-measure the host scroll region after transcript geometry commits. */
+  onLayout?: () => void;
 };
 
 /**
@@ -32,16 +32,16 @@ type SessionTranscriptProps = Omit<TranscriptBlocksProps, "sessionId"> & {
 export const SessionTranscript = function SessionTranscript({
   sessionId,
   liveTurnStore,
-  onLiveLayout,
+  onLayout,
   ...blocks
 }: SessionTranscriptProps) {
   return (
     <>
-      <TranscriptBlocks {...blocks} sessionId={sessionId} />
+      <TranscriptBlocks {...blocks} sessionId={sessionId} onLayout={onLayout} />
       <StreamingMessage
         store={liveTurnStore}
         sessionId={sessionId}
-        onLayout={onLiveLayout}
+        onLayout={onLayout}
       />
     </>
   );

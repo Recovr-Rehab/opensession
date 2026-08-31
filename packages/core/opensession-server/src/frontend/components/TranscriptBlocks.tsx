@@ -116,6 +116,8 @@ interface Props {
   onLoadTranscriptRanges?: (ranges: TranscriptIndexedRange[]) => void;
   /** Fired once the opening viewport renders from real payload. */
   onVisibleRangesSettled?: () => void;
+  /** Reaffirm live-edge following after virtual measurements commit. */
+  onLayout?: () => void;
   /** Indexed range rows reuse this renderer without nesting a virtualizer. */
   virtualize?: boolean;
   /** Stable outer range identity for the one work turn rendered inside it. */
@@ -327,6 +329,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   virtualize = true,
   turnMountScope,
   onVisibleRangesSettled,
+  onLayout,
 }: Props) {
   // Top level only (nested per-range instances pass virtualize={false} and are
   // suppressed): without an outline every block renders real content, so the
@@ -641,6 +644,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       trailingMounted={TRAILING_MOUNTED_BLOCKS}
       enabled={virtualize}
       sizeCacheKey={sessionId}
+      onLayout={onLayout}
     />
   );
 };
@@ -968,6 +972,7 @@ function IndexedTranscriptBlocks(props: Props) {
       items={items}
       trailingMounted={TRAILING_MOUNTED_BLOCKS}
       sizeCacheKey={props.sessionId}
+      onLayout={props.onLayout}
       onTopApproach={handleTopApproach}
       topApproachGeneration={props.transcriptRangeRetryGeneration}
       topGrowthKey={firstRenderedRangeKey}
