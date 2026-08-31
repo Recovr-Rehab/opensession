@@ -1,4 +1,7 @@
-import type { ActiveWorkspaceSubagent } from "../../lib/sidebar-workspaces";
+import {
+  sessionHasOpenPr,
+  type ActiveWorkspaceSubagent,
+} from "../../lib/sidebar-workspaces";
 import {
   SIDEBAR_HOVER_LAYER,
   SIDEBAR_RAIL,
@@ -9,16 +12,19 @@ import {
 import type { UnifiedSession } from "../../lib/types";
 import { cn } from "../../ui/cn";
 import { IconArrowTurnDownRight } from "../icons";
+import { WsPrStatusMark } from "./HoverCards";
 import { SIDEBAR_ROW_TITLE } from "./SidebarItem";
 import type { CSSProperties } from "react";
 
 function stateLabel(session: UnifiedSession): string {
   if (session.waitingForInput) return "Waiting for input";
   if (session.isRunning) return "Running";
-  return "Queued";
+  if ((session.queuedCount ?? 0) > 0) return "Queued";
+  if (sessionHasOpenPr(session)) return "PR open";
+  return "Idle";
 }
 
-/** Active workers nested directly under their selected workspace row. */
+/** Active or awaiting-merge workers nested under their selected workspace. */
 export function ActiveSubagentRows({
   items,
   selectedId,
@@ -34,6 +40,11 @@ export function ActiveSubagentRows({
       {items.map(({ session, depth }) => {
         const selected = session.id === selectedId;
         const label = stateLabel(session);
+        const showPrStatus =
+          !session.waitingForInput &&
+          !session.isRunning &&
+          (session.queuedCount ?? 0) === 0 &&
+          sessionHasOpenPr(session);
         return (
           <button
             type="button"
@@ -65,18 +76,22 @@ export function ActiveSubagentRows({
               <IconArrowTurnDownRight size={16} />
             </span>
             <span className={SIDEBAR_ROW_TITLE}>{session.title}</span>
-            <span
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                session.waitingForInput
-                  ? SIDEBAR_STATUS_DOT.waiting
-                  : session.isRunning
-                    ? SIDEBAR_STATUS_DOT.running
-                    : "bg-yellow",
-              )}
-              aria-hidden="true"
-              title={label}
-            />
+            {showPrStatus ? (
+              <WsPrStatusMark sessions={[session]} size={16} />
+            ) : (
+              <span
+                className={cn(
+                  "size-1.5 shrink-0 rounded-full",
+                  session.waitingForInput
+                    ? SIDEBAR_STATUS_DOT.waiting
+                    : session.isRunning
+                      ? SIDEBAR_STATUS_DOT.running
+                      : "bg-yellow",
+                )}
+                aria-hidden="true"
+                title={label}
+              />
+            )}
           </button>
         );
       })}

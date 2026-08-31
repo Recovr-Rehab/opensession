@@ -1,3 +1,4 @@
+import { sessionPrRefs } from "./session-prs";
 import type { UnifiedSession, Workspace } from "./types";
 
 export function isScratchWorkspace(
@@ -90,6 +91,11 @@ export interface ActiveWorkspaceSubagent {
   depth: number;
 }
 
+/** An open PR still makes an idle worker part of its parent's unfinished work. */
+export function sessionHasOpenPr(session: UnifiedSession): boolean {
+  return sessionPrRefs(session).some((pr) => (pr.state ?? "OPEN") === "OPEN");
+}
+
 /**
  * The workspace whose sidebar row provides context for an open session.
  *
@@ -125,13 +131,14 @@ export function sidebarWorkspaceIdForSession(
 }
 
 /**
- * Active child sessions owned by one open workspace.
+ * Active or awaiting-merge child sessions owned by one open workspace.
  *
  * `parentSessionId` is the relationship. A worker can carry the parent's
  * workspace, mint a temporary workspace of its own, or omit one, so workspace
  * equality alone is not enough: seed the family from sessions in the selected
- * workspace, then follow child edges. The returned rows remain live while a
- * worker is running, blocked on a question, or has queued work to deliver.
+ * workspace, then follow child edges. The returned rows remain nested while a
+ * worker is running, blocked on a question, has queued work to deliver, or has
+ * an open PR that still belongs to the parent's unfinished work.
  */
 export function activeSubagentsForWorkspace(
   sessions: readonly UnifiedSession[],
@@ -190,7 +197,8 @@ export function activeSubagentsForWorkspace(
         !session.archived &&
         (session.isRunning ||
           !!session.waitingForInput ||
-          (session.queuedCount ?? 0) > 0),
+          (session.queuedCount ?? 0) > 0 ||
+          sessionHasOpenPr(session)),
     )
     .map((session) => ({ session, depth: depthOf(session) }))
     .sort(

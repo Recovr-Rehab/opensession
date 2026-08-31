@@ -238,7 +238,15 @@ describe("scopeSessionsForSidebar", () => {
         workspaceId: "ws-nested",
         parentSessionId: "worker",
         startedBy: "Grace",
-        isRunning: true,
+        prUrl: "https://github.com/tellahq/example/pull/1",
+        prState: "OPEN",
+      }),
+      session("merged-worker", {
+        workspaceId: "ws-merged",
+        parentSessionId: "worker",
+        startedBy: "Grace",
+        prUrl: "https://github.com/tellahq/example/pull/2",
+        prState: "MERGED",
       }),
       session("unrelated", {
         workspaceId: "ws-unrelated",

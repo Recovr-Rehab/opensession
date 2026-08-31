@@ -235,6 +235,40 @@ describe("activeSubagentsForWorkspace", () => {
     ]);
   });
 
+  test("keeps idle workers nested while their PR is open", () => {
+    const parent = session("parent", { workspaceId: "ws-parent" });
+    const open = session("open", {
+      workspaceId: "ws-worker",
+      parentSessionId: "parent",
+      prUrl: "https://github.com/tellahq/example/pull/1",
+      prState: "OPEN",
+    });
+    const projectedOpen = session("projected-open", {
+      parentSessionId: "parent",
+      prs: [
+        {
+          repo: "tellahq/example",
+          branch: "fix",
+          source: "primary",
+          state: "OPEN",
+          url: "https://github.com/tellahq/example/pull/2",
+        },
+      ],
+    });
+    const merged = session("merged", {
+      parentSessionId: "parent",
+      prUrl: "https://github.com/tellahq/example/pull/3",
+      prState: "MERGED",
+    });
+
+    expect(
+      activeSubagentsForWorkspace(
+        [parent, open, projectedOpen, merged],
+        "ws-parent",
+      ).map(({ session }) => session.id),
+    ).toEqual(["projected-open", "open"]);
+  });
+
   test("does not nest a selected worker beneath its own temporary workspace", () => {
     const worker = session("worker", {
       workspaceId: "ws-worker",

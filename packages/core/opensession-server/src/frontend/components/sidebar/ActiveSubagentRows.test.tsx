@@ -87,6 +87,25 @@ describe("ActiveSubagentRows", () => {
     expect(html).toContain("Worker nested, subagent, Running");
   });
 
+  test("shows PR status for an idle worker awaiting merge", () => {
+    const worker = session("pr", {
+      isRunning: false,
+      prUrl: "https://github.com/tellahq/example/pull/1",
+      prState: "OPEN",
+    });
+    const html = renderToStaticMarkup(
+      <ActiveSubagentRows
+        items={[{ session: worker, depth: 1 }]}
+        selectedId={null}
+        onSelect={() => {}}
+      />,
+    );
+
+    expect(html).toContain("Worker pr, subagent, PR open");
+    expect(html).toContain('title="PR open"');
+    expect(html).toContain("text-green");
+  });
+
   test("opens the exact child session", () => {
     const child = session("child");
     let opened: UnifiedSession | null = null;

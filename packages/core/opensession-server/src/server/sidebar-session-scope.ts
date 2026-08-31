@@ -260,6 +260,15 @@ function groupNeedsAttention(
   );
 }
 
+/** An idle worker with an open PR still belongs to its parent's unfinished work. */
+function sessionHasOpenPr(session: SidebarScopeSession): boolean {
+  if (session.prs?.some((pr) => (pr.state ?? "OPEN") === "OPEN")) return true;
+  return (
+    (session.prNumber !== undefined || !!session.prUrl) &&
+    (session.prState ?? "OPEN") === "OPEN"
+  );
+}
+
 /** The global team-activity window appended to every scoped sidebar response. */
 export function sessionIsRecentTeamActivity(
   session: UnifiedSession,
@@ -327,7 +336,8 @@ export function scopeSessionsForSidebar<T extends SidebarScopeSession>(
         selectedIds.has(session.parentSessionId) &&
         (session.isRunning ||
           session.waitingForInput ||
-          (session.queuedCount || 0) > 0) &&
+          (session.queuedCount || 0) > 0 ||
+          sessionHasOpenPr(session)) &&
         !selectedIds.has(session.id)
       ) {
         selectedIds.add(session.id);
