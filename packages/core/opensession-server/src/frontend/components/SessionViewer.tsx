@@ -6733,6 +6733,14 @@ export function SessionViewer({
                                   setInfoPageOpen(false);
                                   openSubagent(agentId, label);
                                 }}
+                                onOpenSession={
+                                  openSession
+                                    ? (id) => {
+                                        setInfoPageOpen(false);
+                                        openSession(id);
+                                      }
+                                    : undefined
+                                }
                               />
                             </div>
                           )}
@@ -7989,6 +7997,7 @@ export function SessionViewer({
                         onAction={workflowAction}
                         subagents={subagents}
                         onOpenSubagent={openSubagent}
+                        onOpenSession={openSession}
                         onBack={() => setActivePanelOpen(false)}
                         hideHeader
                       />
