@@ -227,7 +227,7 @@ import {
   WorkspaceWaiting,
 } from "./session-viewer/busy-indicators";
 import { AskCard } from "./AskCard";
-import { PrPanel } from "./PrPanel";
+import { PrPanel, type PrReviewPage } from "./PrPanel";
 import { PrStatusBar } from "./PrStatusBar";
 
 import { ConversationPane } from "./ConversationPane";
@@ -972,6 +972,9 @@ export function SessionViewer({
   const [reviewFocus, setReviewFocus] = useState<PrFocus | undefined>(
     undefined,
   );
+  // Wide Review moves this navigation into the standing workspace summary.
+  // Keep the page in the host so the summary and review canvas cannot diverge.
+  const [reviewPage, setReviewPage] = useState<PrReviewPage>("files");
   const focusPrInReview = useCallback(
     (ref?: { repo: string; branch: string }, view?: "checks") => {
       if (ref || view)
@@ -6459,6 +6462,8 @@ export function SessionViewer({
                     onOpenChange={setSummaryOpen}
                     tabStripVisible={tabStripVisible}
                     reviewMode={showReview}
+                    reviewPage={reviewPage}
+                    onReviewPageChange={setReviewPage}
                     // Too narrow for both, and the card gets out of the way
                     // until someone asks for it from the same button.
                     hasRoom={summaryHasRoom}
@@ -7085,6 +7090,8 @@ export function SessionViewer({
                 hideWideOverviewRail
                 linkable
                 walkthrough={session.walkthrough}
+                page={reviewPage}
+                onPageChange={setReviewPage}
                 compactToolbar={summaryVisible}
                 flushToolbarTop={!tabStripVisible}
               />
