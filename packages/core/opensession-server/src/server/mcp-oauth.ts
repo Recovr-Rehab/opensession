@@ -25,7 +25,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { randomBytes, createHash } from "crypto";
 import { configuredServer, productName } from "./config";
 import { statePath } from "./paths";
-import { resolveTeammate } from "./shared/user-mappings";
+import { gitIdentityFor } from "./shared/user-mappings";
 
 const STORE_PATH = statePath(".opensession-mcp-oauth.json");
 
@@ -325,7 +325,7 @@ export async function startMcpOauthFlow(
   serverUrl: string,
   forUser?: string,
 ): Promise<{ url: string }> {
-  const teamName = forUser ? resolveTeammate(forUser)?.name : undefined;
+  const teamName = forUser ? gitIdentityFor(forUser)?.name : undefined;
   if (forUser && !teamName)
     throw new Error(`"${forUser}" doesn't resolve to a configured teammate`);
   const preset = oauthPresetFor(name);
@@ -579,7 +579,7 @@ export function mcpUserGrantHeader(
   user?: string,
 ): string | undefined {
   if (!user) return undefined;
-  const teamName = resolveTeammate(user)?.name;
+  const teamName = gitIdentityFor(user)?.name;
   if (!teamName) return undefined;
   return grantHeader(name, { kind: "user", teamName });
 }
@@ -755,7 +755,7 @@ export function removeMcpOauthGrant(name: string, forUser?: string): boolean {
   const auth = store[name];
   if (!auth) return false;
   if (forUser) {
-    const teamName = resolveTeammate(forUser)?.name;
+    const teamName = gitIdentityFor(forUser)?.name;
     if (!teamName || !auth.users?.[teamName]) return false;
     delete auth.users[teamName];
   } else {
@@ -854,7 +854,7 @@ export async function saveManualMcpGrant(
 ): Promise<void> {
   await validateManualMcpToken(name, token);
   const teamName = opts.forUser
-    ? resolveTeammate(opts.forUser)?.name
+    ? gitIdentityFor(opts.forUser)?.name
     : undefined;
   if (opts.forUser && !teamName)
     throw new Error(
