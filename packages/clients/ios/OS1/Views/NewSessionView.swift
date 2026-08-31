@@ -103,6 +103,7 @@ struct NewSessionView: View {
     /// keeps it alive across the layout changes a long dictation causes.
     @State private var dictation = Dictation()
     @State private var sessionProjection = ComposerSessionProjectionState()
+    @State private var promptSelection: TextSelection?
     @FocusState private var promptFocused: Bool
 
     /// Remembered only for restoring Code after switching this composer to
@@ -369,11 +370,7 @@ struct NewSessionView: View {
 
     private var editor: some View {
         ZStack(alignment: .topLeading) {
-            TextEditor(text: sessionProjection.binding(
-                $prompt,
-                titleGeneration: TranscriptLinks.shared.generation,
-                refreshTitles: !promptFocused
-            ))
+            TextEditor(text: projectedPrompt, selection: $promptSelection)
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 11)
@@ -395,12 +392,34 @@ struct NewSessionView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, placeholderTopPadding)
             }
+            VStack {
+                Spacer(minLength: 0)
+                ComposerMentionPalette(
+                    text: projectedPrompt.wrappedValue,
+                    selection: promptSelection,
+                    scope: ComposerMentionScope(repo: repo)
+                ) { edit in
+                    projectedPrompt.wrappedValue = edit.text
+                    promptSelection = edit.selection
+                    promptFocused = true
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 64)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         #if os(iOS)
         .contentShape(Rectangle())
         .onTapGesture { promptFocused = true }
         #endif
+    }
+
+    private var projectedPrompt: Binding<String> {
+        sessionProjection.binding(
+            $prompt,
+            titleGeneration: TranscriptLinks.shared.generation,
+            refreshTitles: !promptFocused
+        )
     }
 
     /// Offered only while the prompt is empty, under the placeholder it

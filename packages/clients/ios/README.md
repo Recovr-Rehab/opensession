@@ -207,6 +207,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   The floating glass composer uses a
   progressive material fade so transcript content recedes cleanly beneath it;
   its full surface focuses the field and keeps a comfortable keyboard gap.
+  Typing `@` in either this input or the new-session prompt opens the same
+  inline people, tools, workspaces, sessions, and files palette as the web UI.
 - **Dictation** — the composer's mic (first of the trailing controls, ahead of
   stop, every session) is speech to text, not a call: `Dictation.swift` runs
   `SFSpeechRecognizer` over an `AVAudioEngine` tap and streams the utterance

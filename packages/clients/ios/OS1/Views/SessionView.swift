@@ -2956,6 +2956,7 @@ private struct SessionInputBar: View {
     /// a long dictation does — state living in the button would die mid-word.
     @State private var dictation = Dictation()
     @State private var sessionProjection = ComposerSessionProjectionState()
+    @State private var inputSelection: TextSelection?
     /// Notes are one-message context: they post straight to the team and never
     /// enter the engine or busy-message queue.
     @State private var noteMode = false
@@ -3086,6 +3087,16 @@ private struct SessionInputBar: View {
                 )
             }
             #endif
+
+            ComposerMentionPalette(
+                text: projectedDraft.wrappedValue,
+                selection: inputSelection,
+                scope: ComposerMentionScope(sessionId: viewModel.session.id)
+            ) { edit in
+                projectedDraft.wrappedValue = edit.text
+                inputSelection = edit.selection
+                inputFocused = true
+            }
 
             VStack(spacing: 0) {
                 if hasQueueItems {
@@ -3637,11 +3648,8 @@ private struct SessionInputBar: View {
                 }
 
                 TextField(
-                    text: sessionProjection.binding(
-                        $viewModel.draft,
-                        titleGeneration: TranscriptLinks.shared.generation,
-                        refreshTitles: !inputFocused
-                    ),
+                    text: projectedDraft,
+                    selection: $inputSelection,
                     prompt: Text(composerPlaceholder).foregroundStyle(
                         noteMode ? OS1VisualStyle.notePlaceholder : OS1VisualStyle.textFaint
                     ),
@@ -3831,6 +3839,14 @@ private struct SessionInputBar: View {
                 isSingleRow && !inputFocused && !hasQueueItems ? 8 : 0
             )
         #endif
+    }
+
+    private var projectedDraft: Binding<String> {
+        sessionProjection.binding(
+            $viewModel.draft,
+            titleGeneration: TranscriptLinks.shared.generation,
+            refreshTitles: !inputFocused
+        )
     }
 
     /// The composer's "+": attachments plus the session-level actions
