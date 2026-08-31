@@ -1910,6 +1910,7 @@ export function SessionViewer({
     spacerRef,
     followingLive,
     following,
+    maintainLiveEdgeAfterLayout,
     showScrollToBottom,
     atTop,
     scrollToLatest,
@@ -3045,6 +3046,10 @@ export function SessionViewer({
           );
           if (!found) break;
           transcriptViewStore.mergeRange(msg.entries);
+          // Range hydration updates the transcript's external store. Preserve
+          // an existing live-edge decision through that separate React commit;
+          // a genuine reader gesture before paint still cancels the correction.
+          maintainLiveEdgeAfterLayout();
           const [key, request] = found;
           clearTimeout(request.timer);
           if (msg.complete) {
@@ -7424,6 +7429,7 @@ export function SessionViewer({
                       defaultMessage={slackComposer.message}
                       initialScreenshots={slackComposer.images}
                       defaultChannel={slackComposer.channel}
+                      draftId={slackComposer.id}
                       status={slackComposerStatus}
                       reconnectRequired={slackComposerReconnect}
                       loadChannels={() => fetchSlackChannels(session.id)}

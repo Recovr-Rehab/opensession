@@ -48,6 +48,9 @@ export interface SessionScroll {
   following: boolean;
   /** Live ref of `following` for rAF loops that outrun React renders. */
   followingLive: React.RefObject<boolean>;
+  /** Keep an already-following reader at the live edge after an external-store
+   * transcript commit, unless they gesture away before the commit paints. */
+  maintainLiveEdgeAfterLayout: () => void;
   /** True when content has streamed in below the fold while not following. */
   newBelow: boolean;
   /** True when the latest message is out of view and the return control should show. */
@@ -174,6 +177,10 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
   // the container itself past clientWidth; overlay scrollbars aren't
   // detectable — those readers re-engage via wheel/touch or the jump button).
   const scrollbarDragRef = useRef(false);
+  // External-store transcript hydration commits outside SessionViewer's own
+  // render lifecycle. Preserve an existing live-edge decision across that
+  // commit, but let any intervening reader gesture cancel the maintenance.
+  const liveEdgeLayoutFrameRef = useRef(0);
   // A cached session can mount while intentionally reading history. Its first
   // relayout describes restored content, not content that arrived below it.
   const hasRelayoutRef = useRef(false);
@@ -248,6 +255,45 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
       setFollowing(true);
     },
     [clearSpacer, setFollowing],
+  );
+
+  const maintainLiveEdgeAfterLayout = useCallback(() => {
+    if (
+      !followingRef.current ||
+      pinnedRef.current ||
+      disclosureSettleRef.current
+    )
+      return;
+    const gestureAtStart = lastGestureRef.current;
+    const touchAtStart = lastTouchRef.current;
+    if (liveEdgeLayoutFrameRef.current)
+      cancelAnimationFrame(liveEdgeLayoutFrameRef.current);
+    liveEdgeLayoutFrameRef.current = requestAnimationFrame(() => {
+      liveEdgeLayoutFrameRef.current = 0;
+      const el = containerRef.current;
+      if (
+        !el ||
+        pinnedRef.current ||
+        disclosureSettleRef.current ||
+        selectionWithin(el) ||
+        lastGestureRef.current !== gestureAtStart ||
+        lastTouchRef.current !== touchAtStart ||
+        towardHistoryGestureRef.current
+      )
+        return;
+      // A range hydration can briefly move the bottom before React's parent
+      // layout effect sees it. Restore the decision captured before that
+      // commit, even if its layout-driven scroll event temporarily cleared it.
+      scrollToLatest("auto");
+    });
+  }, [scrollToLatest]);
+
+  useEffect(
+    () => () => {
+      if (liveEdgeLayoutFrameRef.current)
+        cancelAnimationFrame(liveEdgeLayoutFrameRef.current);
+    },
+    [],
   );
 
   const anchorToTop = useCallback(
@@ -642,6 +688,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     spacerRef,
     following,
     followingLive: followingRef,
+    maintainLiveEdgeAfterLayout,
     newBelow,
     showScrollToBottom,
     atTop,
