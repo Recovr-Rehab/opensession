@@ -2151,6 +2151,7 @@ export function PrPanel({
                     author={pr.author}
                     descriptionHtml={bodyHtml}
                     comments={comments}
+                    provider={provider}
                     repo={markdownRepo}
                     onAddToInput={onAddToInput}
                     pr={pr}
