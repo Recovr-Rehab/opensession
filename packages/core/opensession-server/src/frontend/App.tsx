@@ -27,6 +27,7 @@ import React, {
 } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
+import { EffectRegistryProvider } from "./components/EffectRegistryProvider";
 import { MotionConfig } from "motion/react";
 import { AppShell } from "./components/AppShell";
 import { NavigationProvider } from "./components/NavigationProvider";
@@ -339,13 +340,15 @@ const SPLASH_EXIT_MS = 400;
 
 class MissingWorkspaceSessionSourceError extends Error {}
 
-export function App({
-  serviceWorker = true,
-  initialTeamViewing = [],
-}: {
+interface AppProps {
   serviceWorker?: boolean;
   initialTeamViewing?: Array<{ user: string; sessionId: string }>;
-} = {}) {
+}
+
+function AppContent({
+  serviceWorker = true,
+  initialTeamViewing = [],
+}: AppProps = {}) {
   // The worker-parent bridge has to exist before routing initializes. Session
   // hydration happens later, and every Back entry point reads its latest value.
   const currentSessionRef = useRef<UnifiedSession | null>(null);
@@ -4905,6 +4908,14 @@ export function App({
     <NavigationProvider actions={navigationActions}>
       {content}
     </NavigationProvider>
+  );
+}
+
+export function App(props: AppProps = {}) {
+  return (
+    <EffectRegistryProvider>
+      <AppContent {...props} />
+    </EffectRegistryProvider>
   );
 }
 
