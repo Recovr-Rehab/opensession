@@ -143,6 +143,7 @@ import {
   SESSIONS_DIR,
 } from "./session-cache";
 import { markRecapPendingIfUnwatched } from "./recap";
+import { scheduleSessionHistoryIndex } from "./session-index";
 import { broadcastToSession, sessionWatchers } from "./ws-hub";
 import { getWorkspace } from "./workspaces";
 import {
@@ -220,7 +221,16 @@ if (
       projectionId: projection.projectionId,
       runGeneration: projection.runGeneration,
     });
-    if (decision === "missing" || decision === "completed") return;
+    if (decision === "missing") return;
+    if (decision === "completed") {
+      // A crash can settle the outcome before it durably schedules history
+      // indexing. Replaying the completed effect repairs that narrow gap.
+      await scheduleSessionHistoryIndex(
+        item.sessionId,
+        projection.projectionId,
+      );
+      return;
+    }
     if (decision === "wait")
       throw new SessionEffectDeferredError(
         "Earlier turn outcome is still pending",
@@ -241,6 +251,9 @@ if (
       throw new Error(
         "Turn outcome projection ownership changed before settlement",
       );
+    // The timer is the durable push into history. Its handler reads only this
+    // session after the outcome mailbox has been released.
+    await scheduleSessionHistoryIndex(item.sessionId, projection.projectionId);
   });
   interruptExecutorGlobal.__opensessionTurnOutcomeProjectionExecutorRegistered = true;
 }
