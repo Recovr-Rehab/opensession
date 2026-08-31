@@ -41,6 +41,12 @@ export interface VirtualTranscriptItem {
    * Used only to select the handful of rows that need a synchronous
    * post-commit measurement. */
   measureVersion?: readonly unknown[];
+  /** False for indexed ranges whose payload arrives in read-only hydration
+   * slices. Those rows are appearing from history, not arriving live. */
+  animateArrival?: boolean;
+  /** False when position changes represent hydration rather than a live
+   * semantic insert. */
+  animatePositionChanges?: boolean;
   estimateSize: number;
   /** Keep the estimate until sparse payload content is available to measure. */
   measure?: boolean;
@@ -736,8 +742,7 @@ class TranscriptVirtualizer extends React.Component<
                 "absolute left-0 top-0 w-full",
                 item.className,
                 // Live machine rows glide when their measured position moves.
-                // User rows stay fixed: their optimistic-to-durable identity
-                // handoff can arrive seconds later and must not visibly move.
+                // Indexed transcript slices opt out: hydration is not arrival.
                 virtualItem.index >=
                   Math.max(
                     0,
@@ -793,7 +798,8 @@ export function shouldTransitionTranscriptItemPosition(
 ): boolean {
   // A prompt may move when its optimistic row becomes a durable transcript
   // range. That identity handoff must be visually inert, not a delayed glide.
-  return !item.arrivalAliases?.length;
+  // Indexed range payload slices likewise fill history rather than arrive live.
+  return item.animatePositionChanges !== false && !item.arrivalAliases?.length;
 }
 
 export function transcriptViewportNeedsHistory(

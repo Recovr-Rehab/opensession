@@ -925,6 +925,12 @@ function IndexedTranscriptBlocks(props: Props) {
         measureVersion: transcriptMeasureVersion(
           item.kind === "entry" ? [item.entry] : itemEntries,
         ),
+        // A transcript_range may add several payload slices to this existing
+        // outline row. That is history becoming available, not a live arrival:
+        // it must not slide settled work or runner notices below it. Loose
+        // entries are the live/optimistic atoms outside those durable ranges.
+        animateArrival: item.kind === "entry",
+        animatePositionChanges: item.kind === "entry",
         estimateSize,
         measure: true,
         content:

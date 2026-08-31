@@ -3,7 +3,11 @@ type TranscriptArrivalEntry = TranscriptEntryIdentity & {
   type: string;
   sourceMessageIds?: string[];
 };
-type TranscriptArrivalItem = { arrivalAliases?: string[] };
+type TranscriptArrivalItem = {
+  entryIds: string[];
+  arrivalAliases?: string[];
+  animateArrival?: boolean;
+};
 
 /** Keep one React/virtualizer identity while a locally-created user row receives
  * its durable transcript id. For a batched row, the first source owns the
@@ -29,13 +33,22 @@ export function transcriptArrivalAliases(
   return aliases.size ? [...aliases] : undefined;
 }
 
-/** A new outer block is reconciliation rather than an arrival when one of its
- * optimistic aliases was already painted. */
+/** A new outer block is reconciliation rather than an arrival when it contains
+ * an entry that was already painted, or when one of its optimistic aliases was
+ * already painted. Transcript/index refreshes can rebuild a range under a new
+ * block key without adding any conversation content; the durable entry ids are
+ * the stable identity across that rebuild. */
 export function shouldAnimateTranscriptItemArrival(
   item: TranscriptArrivalItem,
   mountedEntryIds: ReadonlySet<string>,
 ): boolean {
-  return !item.arrivalAliases?.some((alias) => mountedEntryIds.has(alias));
+  return (
+    item.animateArrival !== false &&
+    !(
+      item.entryIds.some((id) => mountedEntryIds.has(id)) ||
+      item.arrivalAliases?.some((alias) => mountedEntryIds.has(alias))
+    )
+  );
 }
 
 /**

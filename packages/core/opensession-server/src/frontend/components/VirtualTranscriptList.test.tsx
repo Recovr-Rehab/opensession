@@ -106,6 +106,12 @@ describe("VirtualTranscriptList", () => {
         arrivalAliases: ["outbox-prompt"],
       }),
     ).toBe(false);
+    expect(
+      shouldTransitionTranscriptItemPosition({
+        ...item(0),
+        animatePositionChanges: false,
+      }),
+    ).toBe(false);
   });
 
   test("synchronously remeasures new and extended semantic rows", () => {

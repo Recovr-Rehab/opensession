@@ -61,7 +61,10 @@ describe("optimistic transcript identity", () => {
   });
 
   test("does not animate a durable block over its mounted optimistic alias", () => {
-    const durable = { arrivalAliases: ["outbox-client-prompt"] };
+    const durable = {
+      entryIds: ["durable-prompt"],
+      arrivalAliases: ["outbox-client-prompt"],
+    };
     expect(
       shouldAnimateTranscriptItemArrival(
         durable,
@@ -71,6 +74,33 @@ describe("optimistic transcript identity", () => {
     expect(
       shouldAnimateTranscriptItemArrival(durable, new Set(["older-entry"])),
     ).toBe(true);
+  });
+
+  test("does not animate a refreshed block that retains a painted entry", () => {
+    const refreshed = {
+      entryIds: ["worked-step", "retry-notice"],
+    };
+    expect(
+      shouldAnimateTranscriptItemArrival(
+        refreshed,
+        new Set(["worked-step", "retry-notice"]),
+      ),
+    ).toBe(false);
+    expect(
+      shouldAnimateTranscriptItemArrival(refreshed, new Set(["older-entry"])),
+    ).toBe(true);
+  });
+
+  test("does not animate a newly hydrated transcript slice", () => {
+    expect(
+      shouldAnimateTranscriptItemArrival(
+        {
+          entryIds: ["worked-step", "retry-notice"],
+          animateArrival: false,
+        },
+        new Set(),
+      ),
+    ).toBe(false);
   });
 });
 
