@@ -6410,6 +6410,7 @@ export function SessionViewer({
 					    room for the rest of them. */}
                 {!isPhone &&
                   hasRepoWork &&
+                  !workspacePreparing &&
                   !panelOpen &&
                   !showReview &&
                   !summaryVisible && (
@@ -6460,6 +6461,7 @@ export function SessionViewer({
                     onReviewChange={onReviewChange}
                     prReviewRequested={effectiveReview?.prReviewRequested}
                     running={isRunningLive}
+                    workspacePreparing={workspacePreparing}
                     send={connected ? send : undefined}
                     refreshTick={gitRefreshTick}
                     onOpenChange={setSummaryOpen}
@@ -6720,6 +6722,7 @@ export function SessionViewer({
                                 effectiveReview?.prReviewRequested
                               }
                               running={isRunningLive}
+                              workspacePreparing={workspacePreparing}
                               send={connected ? send : undefined}
                               refreshTick={gitRefreshTick}
                               liveMedia={liveOverviewMedia}

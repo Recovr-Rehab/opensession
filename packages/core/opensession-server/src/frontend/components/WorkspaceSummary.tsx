@@ -180,6 +180,8 @@ interface Props {
   prReviewRequested?: string[];
   /** Live run state, so the PR block refetches the moment a turn ends. */
   running?: boolean;
+  /** The worktree is not ready yet, so worktree and PR status stay quiet. */
+  workspacePreparing?: boolean;
   /** Prompt the session (Commit) via WS `prompt`. Absent while disconnected. */
   send?: (msg: any) => void;
   /** Bumped when a webhook or an auto-push reports workspace activity. */
@@ -521,6 +523,7 @@ export function WorkspaceSummaryBody({
   onReviewChange,
   prReviewRequested,
   running,
+  workspacePreparing,
   send,
   refreshTick,
   close,
@@ -535,11 +538,16 @@ export function WorkspaceSummaryBody({
   // Pictures or rows. One preference, shared with the Workspace panel's own
   // Assets section, so the same folder is not drawn two ways in one window.
   const [assetView, setAssetView] = useAssetViewMode();
+  // `session` follows the session-list poll; the viewer's explicit value follows
+  // the workspace_status socket event and wins when it is available.
+  const workspaceIsPreparing =
+    workspacePreparing ?? Boolean(session.workspacePreparing);
   const prResource = useSessionPrResource(
     session.id,
     session.repo || undefined,
     undefined,
     {
+      enabled: !workspaceIsPreparing,
       refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
       revision: refreshTick,
     },
@@ -548,6 +556,7 @@ export function WorkspaceSummaryBody({
     session.id,
     session.repo || undefined,
     {
+      enabled: !workspaceIsPreparing,
       refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
       revision: refreshTick,
     },
@@ -571,7 +580,9 @@ export function WorkspaceSummaryBody({
   // A PR already carries line totals, so only fetch the much larger worktree
   // patch when there is no PR (or its revalidation failed without stale data).
   const diffResource = useSessionDiffResource(session.id, {
-    enabled: prResource.data === null || Boolean(prResource.error),
+    enabled:
+      !workspaceIsPreparing &&
+      (prResource.data === null || Boolean(prResource.error)),
     refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
     revision: refreshTick,
   });
@@ -1000,36 +1011,38 @@ export function WorkspaceSummaryBody({
       <div className={cn(prGroupClass, "ws-summary-pr-group")}>
         {/* Which PR, where it stands, and the one thing to do about it. The
 				    strip owns all three; this card only says where they go. */}
-        <PrStatusBar
-          variant="summary"
-          sessionId={session.id}
-          repo={session.repo || undefined}
-          archived={session.archived}
-          prs={session.prs}
-          send={send}
-          running={running}
-          refreshTick={refreshTick}
-          onOpenPrTab={() => go(onOpenPr)}
-          onOpenStackPr={
-            onOpenStackPr
-              ? (repo, branch) => go(() => onOpenStackPr(repo, branch))
-              : undefined
-          }
-          onOpenChecksTab={() => go(onOpenChecks)}
-          onArchive={onArchive ? () => go(onArchive) : undefined}
-        >
-          {/* The PR's preview deploy, inside the band with the rest of that
-				    PR's state rather than as a loose row under it. It is the globe
-				    the header carries while this card is shut: the header stands
-				    down when the card is up, the same way it does for the workspace
-				    panel, so the deploy is in exactly one place at a time. Renders
-				    nothing when the PR has no preview. */}
-          <StagingLink
-            session={session}
+        {!workspaceIsPreparing && (
+          <PrStatusBar
             variant="summary"
+            sessionId={session.id}
+            repo={session.repo || undefined}
+            archived={session.archived}
+            prs={session.prs}
+            send={send}
+            running={running}
             refreshTick={refreshTick}
-          />
-        </PrStatusBar>
+            onOpenPrTab={() => go(onOpenPr)}
+            onOpenStackPr={
+              onOpenStackPr
+                ? (repo, branch) => go(() => onOpenStackPr(repo, branch))
+                : undefined
+            }
+            onOpenChecksTab={() => go(onOpenChecks)}
+            onArchive={onArchive ? () => go(onArchive) : undefined}
+          >
+            {/* The PR's preview deploy, inside the band with the rest of that
+				      PR's state rather than as a loose row under it. It is the globe
+				      the header carries while this card is shut: the header stands
+				      down when the card is up, the same way it does for the workspace
+				      panel, so the deploy is in exactly one place at a time. Renders
+				      nothing when the PR has no preview. */}
+            <StagingLink
+              session={session}
+              variant="summary"
+              refreshTick={refreshTick}
+            />
+          </PrStatusBar>
+        )}
       </div>
 
       {reviewMode && reviewPage && onReviewPageChange && (
