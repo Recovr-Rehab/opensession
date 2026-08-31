@@ -100,16 +100,10 @@ import {
   composerTextareaPaddingMinimized,
   composerToolbar,
   composerToolbarMinimized,
-  composerToolbarPill,
   composerToolbarScrollDivider,
-  composerToolbarSelect,
 } from "../lib/composer-classes";
 import { noAutofill } from "../lib/composer-autofill";
-import {
-  paletteIconBtn,
-  paletteIconBtnRound,
-  palettePill,
-} from "../lib/palette-classes";
+import { paletteIconBtn, paletteIconBtnRound } from "../lib/palette-classes";
 import { askSurface, noteSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
@@ -126,7 +120,6 @@ import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { useDefaultModelPreference } from "../hooks/useDefaultModelPreference";
 import { isApple } from "../lib/platform";
 import { matchesShortcut } from "../lib/shortcuts";
-import { VoiceInput } from "./VoiceInput";
 import {
   getBusySendPrefs,
   onBusySendChanged,
@@ -137,9 +130,11 @@ import { getVimModePref, onVimModeChanged } from "../lib/vim-pref";
 import { useVimMode } from "../hooks/useVimMode";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { motion, AnimatePresence } from "motion/react";
-import { composerMorph, composerChipMotion } from "../ui/motion";
-import { ModelEffortSelect, shortModelLabel } from "./ModelEffortSelect";
+import { composerMorph } from "../ui/motion";
+import { shortModelLabel } from "./ModelEffortSelect";
 import type { SessionUsage } from "../lib/types";
+import { ModelRow } from "./composer/ModelRow";
+import { VoiceControl } from "./composer/VoiceControl";
 
 type ComposerPressButtonProps = Omit<
   React.ComponentPropsWithoutRef<"button">,
@@ -2113,87 +2108,46 @@ export function Composer({
               composerToolbarSelect). It stays out of the resting phone pill
               because that state is minimized, but returns when the installed
               PWA composer expands. */}
-          <AnimatePresence initial={false}>
-            {!minimized && (
-              <motion.div
-                key="model-effort"
-                layout="position"
-                {...composerChipMotion}
-                className={composerToolbarSelect}
-              >
-                <ModelEffortSelect
-                  className={cn(palettePill, composerToolbarPill)}
-                  // The pill is where the effort chords are worth naming: they
-                  // step what it displays. Appended to the native title the
-                  // trigger already carries, so a reader who hovers the thing
-                  // they would otherwise click finds them.
-                  title={
-                    (modelTitle ||
-                      "Model and reasoning effort for this session") +
-                    (effortDownLabel && effortUpLabel
-                      ? `\n${effortDownLabel} / ${effortUpLabel} steps the effort`
-                      : "")
-                  }
-                  models={models}
-                  defaultModel={defaultModel}
-                  model={model}
-                  onModelChange={onModelChange}
-                  preferredDefaultModel={preferredDefaultModel}
-                  onSetAsDefault={setPreferredDefaultModel}
-                  modelDisabled={modelDisabled}
-                  modelTitle={modelTitle}
-                  effort={effort}
-                  onEffortChange={onEffortChange}
-                  fastMode={fastMode}
-                  onFastModeChange={onFastModeChange}
-                  accounts={accounts}
-                  accountId={accountId}
-                  onAccountChange={onAccountChange}
-                  usage={usage}
-                  showUsage
-                  disabled={disabled}
-                  onOpenChange={setModelMenuOpen}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <ModelRow
+            minimized={minimized}
+            models={models}
+            defaultModel={defaultModel}
+            model={model}
+            onModelChange={onModelChange}
+            preferredDefaultModel={preferredDefaultModel}
+            onSetAsDefault={setPreferredDefaultModel}
+            modelDisabled={modelDisabled}
+            modelTitle={modelTitle}
+            effort={effort}
+            onEffortChange={onEffortChange}
+            fastMode={fastMode}
+            onFastModeChange={onFastModeChange}
+            accounts={accounts}
+            accountId={accountId}
+            onAccountChange={onAccountChange}
+            usage={usage}
+            disabled={disabled}
+            effortDownLabel={effortDownLabel}
+            effortUpLabel={effortUpLabel}
+            onOpenChange={setModelMenuOpen}
+          />
 
           {/* Wrapper around the dictation mic — gives Motion a layout box so it
               glides between rows during the morph without disturbing either. */}
-          <motion.div
-            layout="position"
-            transition={composerMorph}
-            layoutDependency={minimized}
-            className={cn(
-              "pwa-composer-dictation inline-flex shrink-0 items-center",
-              minimized && "order-3",
-            )}
-          >
-            {/* The mic is one of the resting pill's circles, so it takes the
-                round variant with the "+" — that pairing used to come from a
-                `.composer.composer-min .palette-icon-btn` descendant rule. */}
-            <VoiceInput
-              className={composerIconButtonClass}
-              shortcutActive={!!attachmentShortcutActive || focused}
-              cancelClassName={addButtonClass}
-              cancelFromPlus
-              onText={insertDictation}
-              onTextSend={sendDictation}
-              editTargetRef={textareaRef}
-              overlayTargetRef={voiceOverlayRef}
-              overlayStyle={dictationSurfaceStyle}
-              onActiveChange={handleDictationActive}
-              // The bar covers the whole composer, so it takes the composer's
-              // own corner. The resting phone pill is included, which is a
-              // capsule rather than the expanded box's radius.
-              overlayClassName={
-                minimized
-                  ? "rounded-[999px] phone:pl-2 phone:pr-0.5 phone:pb-1"
-                  : "rounded-[var(--composer-radius)]"
-              }
-              disabled={disabled}
-            />
-          </motion.div>
+          <VoiceControl
+            minimized={minimized}
+            className={composerIconButtonClass}
+            shortcutActive={!!attachmentShortcutActive}
+            focused={focused}
+            cancelClassName={addButtonClass}
+            onText={insertDictation}
+            onTextSend={sendDictation}
+            textareaRef={textareaRef}
+            overlayTargetRef={voiceOverlayRef}
+            overlayStyle={dictationSurfaceStyle}
+            onActiveChange={handleDictationActive}
+            disabled={disabled}
+          />
 
           {busy && onStop && (
             <Tooltip
