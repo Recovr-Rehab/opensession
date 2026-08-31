@@ -54,6 +54,14 @@ export function TranscriptMotionLab({
         ? makeTranscriptHydrationScenario()
         : makeTranscriptMotionScenario(seed);
 
+  useEffect(() => {
+    const splash = document.getElementById("splash");
+    if (!splash) return;
+    splash.classList.add("splash-hide");
+    const removal = window.setTimeout(() => splash.remove(), 400);
+    return () => window.clearTimeout(removal);
+  }, []);
+
   return (
     <main
       className="flex h-dvh min-h-0 flex-col bg-surface text-fg"

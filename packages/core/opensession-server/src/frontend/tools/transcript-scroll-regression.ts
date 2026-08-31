@@ -13,6 +13,7 @@ import {
   closeCdpTarget,
   releaseCdpBrowser,
 } from "../../../../../../scripts/lib/cdp-browser";
+import { localAutomationToken } from "../../../../../../scripts/lib/local-auth";
 
 type Snapshot = {
   event: number;
@@ -152,6 +153,7 @@ try {
 
     try {
       await send("Page.enable");
+      await send("Network.enable");
       await send("Runtime.enable");
       await send("Emulation.setDeviceMetricsOverride", {
         width: viewport.width,
@@ -161,9 +163,18 @@ try {
         screenWidth: viewport.width,
         screenHeight: viewport.height,
       });
+      const token = localAutomationToken();
+      if (token)
+        await send("Network.setCookie", {
+          name: "opensession_auth",
+          value: token,
+          url: APP,
+          path: "/",
+        });
       await send("Page.navigate", {
         url: `${APP}/__fixtures/transcript-motion?profile=hydration`,
       });
+      await send("Page.bringToFront");
       const deadline = performance.now() + 20_000;
       while (performance.now() < deadline) {
         const ready = await evaluate<boolean>(
@@ -172,6 +183,19 @@ try {
         if (ready) break;
         await Bun.sleep(40);
       }
+      await settle();
+      // Production can have a one-time announcement dialog above every route.
+      // Dismiss it so wheel input reaches the isolated fixture itself.
+      await send("Input.dispatchKeyEvent", {
+        type: "rawKeyDown",
+        key: "Escape",
+        code: "Escape",
+      });
+      await send("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: "Escape",
+        code: "Escape",
+      });
       await settle();
 
       let current = await snapshot();
@@ -200,10 +224,30 @@ try {
       }
       const followingSteps = current.event;
 
-      const rect = await evaluate<{ x: number; y: number }>(`(() => {
-        const rect = document.querySelector("[data-transcript-motion-scroller]").getBoundingClientRect();
-        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-      })()`);
+      let rect: { x: number; y: number } | null = null;
+      const gestureDeadline = performance.now() + 30_000;
+      while (!rect && performance.now() < gestureDeadline) {
+        rect = await evaluate<{ x: number; y: number } | null>(`(() => {
+          const scroller = document.querySelector("[data-transcript-motion-scroller]");
+          const rect = scroller.getBoundingClientRect();
+          for (const xRatio of [0.2, 0.5, 0.8]) {
+            for (const yRatio of [0.2, 0.5, 0.8]) {
+              const x = rect.left + rect.width * xRatio;
+              const y = rect.top + rect.height * yRatio;
+              if (document.elementFromPoint(x, y)?.closest("[data-transcript-motion-scroller]") === scroller)
+                return { x, y };
+            }
+          }
+          return null;
+        })()`);
+        if (!rect) await Bun.sleep(100);
+      }
+      assert(rect, "fixture remained obstructed for 30 seconds");
+      await send("Input.dispatchMouseEvent", {
+        type: "mouseMoved",
+        x: rect.x,
+        y: rect.y,
+      });
       await send("Input.dispatchMouseEvent", {
         type: "mouseWheel",
         x: rect.x,
@@ -215,7 +259,7 @@ try {
       current = await snapshot();
       assert(
         current.bottomGap > 100,
-        "reader gesture did not leave the live edge",
+        `reader gesture did not leave the live edge: ${JSON.stringify(current)}`,
       );
       assert(current.anchorId, "reader has no visible transcript anchor");
 
