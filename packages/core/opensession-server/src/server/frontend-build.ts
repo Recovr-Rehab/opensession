@@ -908,7 +908,14 @@ export function preloadPreparedFrontend(): void {
 }
 
 export function ensureFrontendBuilt(): Promise<void> {
-  if (!frontend || frontend.version) return Promise.resolve();
+  if (!frontend) return Promise.resolve();
+  // A coordinated gateway handoff keeps this process and its built frontend
+  // store alive while loading the next release. Republish the stable ingress
+  // snapshot for that release even though there is nothing left to build.
+  if (frontend.version) {
+    publishStableShell();
+    return Promise.resolve();
+  }
   if (!g.__opensessionFrontendBuild) {
     g.__opensessionFrontendBuild = (async () => {
       // Compiled binary: the bundle is baked in, no source tree or Tailwind

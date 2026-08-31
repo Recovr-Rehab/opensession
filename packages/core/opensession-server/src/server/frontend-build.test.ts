@@ -14,6 +14,7 @@ import {
   activeFrontendReleaseRoot,
   bundleVersion,
   editorName,
+  ensureFrontendBuilt,
   frontendDistFile,
   frontendInputsHash,
   isPrebuiltFrontend,
@@ -225,5 +226,15 @@ describe("activateFrontendRelease", () => {
       version,
     });
     expect(await frontendDistFile("Settings-old.js")?.exists()).toBe(true);
+
+    publishStableFrontendSnapshot(scratch, {
+      releaseRoot: previousRoot,
+      version: "App-old.js|global-old.css|no-tw",
+      indexHtml: '<script src="/App-old.js"></script>',
+    });
+    await ensureFrontendBuilt();
+    expect(
+      JSON.parse(readFileSync(join(scratch, "stable-frontend.json"), "utf8")),
+    ).toMatchObject({ releaseRoot, version });
   });
 });
