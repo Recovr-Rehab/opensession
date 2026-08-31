@@ -99,6 +99,20 @@ function visibleTop(el: HTMLElement): number {
   return Math.max(rectTop, vv.offsetTop);
 }
 
+export function shouldDisengageTranscriptFollowing({
+  atEdge,
+  following,
+  gestured,
+}: {
+  atEdge: boolean;
+  following: boolean;
+  gestured: boolean;
+}): boolean {
+  // Native virtual anchoring and browser clamps emit ordinary scroll events
+  // while layout is between heights. Position alone is not reader intent.
+  return following && !atEdge && gestured;
+}
+
 function latestMessageVisible(container: HTMLElement): boolean {
   const els = container.querySelectorAll<HTMLElement>(".msg");
   const latest = els[els.length - 1];
@@ -480,7 +494,14 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
       updateEdges(false);
       return;
     }
-    if (!atEdge && followingRef.current) setFollowing(false);
+    if (
+      shouldDisengageTranscriptFollowing({
+        atEdge,
+        following: followingRef.current,
+        gestured,
+      })
+    )
+      setFollowing(false);
     else if (atEdge && !followingRef.current && gestured) setFollowing(true);
     updateEdges(followingRef.current);
   }, [distanceFromBottom, setFollowing, updateEdges]);
