@@ -25,8 +25,8 @@ describe("buildRunInstructions", () => {
       "For PRs outside the current primary repository, write `<repo>#<number>`, never bare `#<number>`.",
     );
     expect(prompt).toContain(
-      "Set the exact root-relative route, including its query string, so Preview and staging links open the feature you changed.",
+      "If it contains an object ID, use one that exists in staging, never a local fixture. Verify the resulting staging URL opens the feature you changed.",
     );
-    expect(prompt.length).toBeLessThan(900);
+    expect(prompt.length).toBeLessThan(1_000);
   });
 });

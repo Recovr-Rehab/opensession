@@ -171,7 +171,8 @@ export function buildRunInstructions(input: {
     parts.push(
       "## Preview links\nFor a user-facing web change, call `opensession-portals` " +
         "`set_portal_path` without a name before finishing. Set the exact root-relative " +
-        "route, including its query string, so Preview and staging links open the feature you changed.",
+        "route, including its query string. If it contains an object ID, use one that exists " +
+        "in staging, never a local fixture. Verify the resulting staging URL opens the feature you changed.",
     );
   }
 
