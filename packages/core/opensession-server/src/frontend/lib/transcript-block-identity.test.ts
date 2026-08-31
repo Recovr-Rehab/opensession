@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   newTailBlockKeys,
+  shouldAnimateTranscriptEntryPosition,
   shouldAnimateTranscriptItemArrival,
   transcriptArrivalAliases,
   transcriptEntryMountKey,
@@ -9,6 +10,22 @@ import {
 } from "./transcript-block-identity";
 
 const entry = (id: string) => ({ id });
+
+describe("transcript decorations", () => {
+  test("keeps live and durable model switches out of position motion", () => {
+    expect(
+      shouldAnimateTranscriptEntryPosition(entry("model-switch-live-1")),
+    ).toBe(false);
+    expect(
+      shouldAnimateTranscriptEntryPosition(
+        entry("model-switch-2026-08-31T14:00:00Z"),
+      ),
+    ).toBe(false);
+    expect(shouldAnimateTranscriptEntryPosition(entry("retry-notice"))).toBe(
+      true,
+    );
+  });
+});
 
 describe("transcript turn identity", () => {
   test("keeps the mounted component when live steps append", () => {

@@ -10,6 +10,7 @@ import {
   type TranscriptIndexedRange,
 } from "../lib/transcript-index";
 import {
+  shouldAnimateTranscriptEntryPosition,
   transcriptArrivalAliases,
   transcriptEntryMountKey,
   turnMountKey,
@@ -944,7 +945,9 @@ function IndexedTranscriptBlocks(props: Props) {
         // it must not slide settled work or runner notices below it. Loose
         // entries are the live/optimistic atoms outside those durable ranges.
         animateArrival: item.kind === "entry",
-        animatePositionChanges: item.kind === "entry",
+        animatePositionChanges:
+          item.kind === "entry" &&
+          shouldAnimateTranscriptEntryPosition(item.entry),
         estimateSize,
         measure: true,
         content:
