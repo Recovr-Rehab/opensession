@@ -8,7 +8,6 @@ import React, {
 import { createPortal } from "react-dom";
 import type {
   UnifiedSession,
-  Workspace,
   SupportThread,
   FeedDescriptor,
   FeedItem,
@@ -17,16 +16,10 @@ import {
   SIDEBAR_ATTN_COUNT,
   SIDEBAR_BAND_CHEVRON,
   SIDEBAR_BAND_CHEVRON_COLLAPSED,
-  SIDEBAR_BAND_LABEL,
-  SIDEBAR_BAND_TOGGLE,
-  SIDEBAR_BAND_TOGGLE_INSET,
-  SIDEBAR_AUTO_COG,
-  SIDEBAR_AUTOMATION_RUNS,
   SIDEBAR_GROUP,
   SIDEBAR_GROUP_CHEVRON,
   SIDEBAR_GROUP_CHEVRON_COLLAPSED,
   SIDEBAR_GROUP_COUNT,
-  SIDEBAR_GROUP_DOT,
   SIDEBAR_GROUP_HEADER,
   SIDEBAR_GROUP_HEADER_INSET,
   SIDEBAR_GROUP_NAME,
@@ -39,7 +32,6 @@ import {
   SIDEBAR_HEADER_BTN_PHONE,
   SIDEBAR_HEADER_ROW,
   SIDEBAR_HOVER_LAYER,
-  SIDEBAR_INDEPENDENT_SCROLL,
   SIDEBAR_INDEPENDENT_SECTION,
   SIDEBAR_LANE_DROP_HOVER,
   SIDEBAR_LANE_EMPTY,
@@ -68,7 +60,6 @@ import {
   SIDEBAR_WS_ACTION,
   SIDEBAR_WS_ACTIONS,
   SIDEBAR_WS_ACTIONS_HOVER,
-  SIDEBAR_WS_ACTIONS_TOUCH,
   SIDEBAR_WS_FACE,
   SIDEBAR_WS_FACES,
   SIDEBAR_WS_ROW,
@@ -163,8 +154,6 @@ import {
   IconMoon,
   IconFilter,
   IconX,
-  IconSliders,
-  IconCheck,
   IconInbox,
   IconPlus,
   IconRobot,
@@ -176,7 +165,6 @@ import {
   IconTrash,
   IconChart,
   IconFile,
-  IconGlobe,
   IconListCircles,
   IconMessages,
   IconFeed,
@@ -186,7 +174,7 @@ import {
 import { Button } from "../ui/button";
 import { useConfirm } from "../ui/confirm";
 import { Tooltip } from "../ui/tooltip";
-import { ContextMenu, MENU_ICON, Menu } from "../ui/menu";
+import { ContextMenu, MENU_ICON } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import { RowCardPopup } from "./SidebarRowCards";
@@ -234,7 +222,6 @@ import {
 } from "../lib/sidebar-feeds";
 import {
   PLAIN_ID,
-  SUPPORT_SURFACE_OPTIONS,
   setSupportSurface,
   supportSurfaceOf,
 } from "../lib/support-surface";
@@ -290,7 +277,6 @@ import {
 } from "../lib/sidebar-swipe";
 import {
   MINE_STATUS_META,
-  type Group,
   type GroupBand,
   type MineStatus,
   type OpenNextSidebarItem,
@@ -311,7 +297,8 @@ import {
 import { AutoCreatedMark } from "./sidebar/AutoCreatedMark";
 import { KeepInSidebarMark } from "./sidebar/KeepInSidebarMark";
 import { OriginMark } from "./sidebar/OriginMark";
-import { AutomationReportRow } from "./sidebar/AutomationReportRow";
+import { AutomationsBand } from "./sidebar/AutomationsBand";
+import { PeopleBand } from "./sidebar/PeopleBand";
 import { SubagentRows } from "./sidebar/SubagentRows";
 import { DraftRow } from "./sidebar/DraftRow";
 import { WorkspaceDraftIndicator } from "./sidebar/WorkspaceDraftIndicator";
@@ -1192,14 +1179,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   const automationRowSelected = (session: UnifiedSession) =>
     session.id === selectedId && !selectionBelongsToWorkspaceRow;
 
-  /** An automation group is keyed by name; its report comes from the overview. */
-  const latestReportFor = (name: string) =>
-    automationOverview.get(name)?.latestReport;
-
-  /** Someone owns it, rather than it being a house routine nobody has taken. */
-  const reportsToSomeone = (name: string) =>
-    !!automationOverview.get(name)?.owner;
-
   // ── Hidden rows ─────────────────────────────────────────────────────────
   // "Hide from my sidebar" is the personal counterpart to Archive: archiving
   // is global (archive.ts), so it's the wrong tool when a teammate is still
@@ -1492,6 +1471,64 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         onOpen={() => navigation.openPrItem(item)}
         onClose={() => void closePrRow(item)}
         closing={closingPrUrls.has(item.pr.url)}
+      />
+    );
+  }
+
+  function renderAutomationSession(session: UnifiedSession) {
+    const pin = sessionPinState(session);
+    return (
+      <SidebarItem
+        key={session.id}
+        session={session}
+        selected={automationRowSelected(session)}
+        unread={
+          session.id !== selectedId &&
+          isUnread(session.id, session.lastActivity, reads)
+        }
+        mention={
+          session.id !== selectedId ? mentionFor(session.id)?.by : undefined
+        }
+        mine={
+          !!session.startedBy &&
+          !session.automation &&
+          session.startedBy.toLowerCase() === currentUser.toLowerCase()
+        }
+        onClick={() => openSidebarSession(session)}
+        onArchive={(current) => archiveWithNext(session, current)}
+        pinned={pin.pinned}
+        onTogglePin={pin.toggle}
+        shipsDirectlyToMain={shipsDirectlyToMain(session.repo, session.branch)}
+        onRename={(title) => onRename(session, title)}
+        onSetStatus={(status) => onSetStatus([session], status)}
+      />
+    );
+  }
+
+  function renderPersonSession(session: UnifiedSession) {
+    const pin = sessionPinState(session);
+    return (
+      <SidebarItem
+        key={session.id}
+        session={session}
+        selected={session.id === selectedId}
+        unread={
+          session.id !== selectedId &&
+          isUnread(session.id, session.lastActivity, reads)
+        }
+        mention={
+          session.id !== selectedId ? mentionFor(session.id)?.by : undefined
+        }
+        mine={false}
+        showOwner={false}
+        alwaysShowAddToSidebar
+        onClick={() => openSidebarSession(session)}
+        onArchive={(current) => archiveWithNext(session, current)}
+        pinned={pin.pinned}
+        onTogglePin={pin.toggle}
+        shipsDirectlyToMain={shipsDirectlyToMain(session.repo, session.branch)}
+        onRename={(title) => onRename(session, title)}
+        onSetStatus={(status) => onSetStatus([session], status)}
       />
     );
   }
@@ -2178,7 +2215,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     return list;
   }
   const automationsOpen = bandOpen("automations");
-  const visibleAutomationGroups = automationsOpen ? groups : [];
   const peopleOpen = bandOpen("people");
   function toggleBand(band: GroupBand | "tools" | "workspaces") {
     const key = `collapsed:band:${band}`;
@@ -5343,353 +5379,29 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
             )}
           </div>
 
-          {/* ── Automations (one collapsible band, one group per automation) ── */}
-          {groups.length > 0 && (
-            <div
-              className={cn(
-                SIDEBAR_INDEPENDENT_SECTION,
-                "mt-2",
-                activePersonGroups.length > 0 ? "pb-2" : "pb-7",
-              )}
-            >
-              <div
-                className={cn(
-                  SIDEBAR_BAND_LABEL,
-                  // A band heading carries no leading mark, so on phones it
-                  // takes the 8px a 22px glyph spends on its own padding
-                  // before the ink starts — see the toggle's inset below.
-                  "py-0 pl-0 pr-2 desktop:pr-0",
-                  SIDEBAR_STICKY_BAND,
-                  SIDEBAR_STICKY_BAND_ROW,
-                  SIDEBAR_STUCK_BACKING,
-                )}
-                data-sticky-head
-              >
-                <button
-                  className={cn(SIDEBAR_BAND_TOGGLE, SIDEBAR_BAND_TOGGLE_INSET)}
-                  onClick={() => toggleBand("automations")}
-                  title={
-                    automationsOpen
-                      ? "Collapse automations"
-                      : "Expand automations"
-                  }
-                >
-                  <span className="min-w-0 truncate">Automations</span>
-                  {/* The count sits right after the heading, not pinned to the
-								    far right; any future action can still be pushed there
-								    with ml-auto. */}
-                  <span className={SIDEBAR_GROUP_COUNT}>
-                    {groups.reduce(
-                      (n, g) => n + (g.totalItems || g.items.length),
-                      0,
-                    )}
-                  </span>
-                  <IconChevronDown
-                    className={cn(
-                      SIDEBAR_BAND_CHEVRON,
-                      "group-hover/band:visible group-hover/band:text-dim",
-                      !automationsOpen && SIDEBAR_BAND_CHEVRON_COLLAPSED,
-                    )}
-                    size={18}
-                    style={{
-                      transform: automationsOpen ? "none" : "rotate(-90deg)",
-                    }}
-                  />
-                </button>
-              </div>
-              {visibleAutomationGroups.length > 0 && (
-                <div className={SIDEBAR_INDEPENDENT_SCROLL}>
-                  {visibleAutomationGroups.map((group) => {
-                    const open = isOpen(group.key);
-                    return (
-                      <React.Fragment key={group.key}>
-                        <button
-                          className={cn(
-                            SIDEBAR_GROUP_HEADER,
-                            SIDEBAR_GROUP_HEADER_INSET,
-                            SIDEBAR_HEADER_ROW,
-                          )}
-                          onClick={() => toggleGroup(group.key)}
-                        >
-                          {/* The dot is 7px but the header's leading column is a
-											    rail, so its name lands where every other one does. */}
-                          <span className={SIDEBAR_RAIL}>
-                            {group.dotColor && (
-                              <span
-                                className={SIDEBAR_GROUP_DOT}
-                                style={{ backgroundColor: group.dotColor }}
-                              />
-                            )}
-                          </span>
-                          <span className={SIDEBAR_GROUP_NAME}>
-                            {group.label}
-                          </span>
-                          {/* The count belongs to the name, not to the end of
-											    the row: an automation heading titles the runs
-											    under it, so it reads "iOS parity check, 5" the
-											    way every band above it does. Pinned right it read
-											    as a column of its own, and it had to disappear on
-											    hover to hand the slot to the settings glyph. */}
-                          <span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
-                            {group.totalItems || group.items.length}
-                          </span>
-                          {/* Collapsed, the chevron shows at rest, as it does
-											    on every other heading in the sidebar: a closed
-											    automation still lists its latest report, so
-											    without it nothing said whether the rows under
-											    the heading were all of them or one of eight. */}
-                          <IconChevronDown
-                            className={cn(
-                              SIDEBAR_GROUP_CHEVRON,
-                              !open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-                            )}
-                            size={22}
-                            style={{
-                              transform: open ? "none" : "rotate(-90deg)",
-                            }}
-                          />
-                          {/* The sliders glyph that jumps to this automation in
-											    Settings, alone at the end of the row (span, not
-											    button, since we're inside the header button). Its
-											    target is the row's full height, so the click can
-											    land anywhere along the end of the row. */}
-                          <span
-                            role="button"
-                            className={SIDEBAR_AUTO_COG}
-                            title="Automation settings"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigation.openAutomation(group.label);
-                            }}
-                          >
-                            <IconSliders size={20} />
-                          </span>
-                        </button>
-                        {/* The automation's own work, a step inside its
-										    heading. See SIDEBAR_AUTOMATION_RUNS. The step
-										    means "belongs to the heading above", so it holds
-										    for a collapsed group's report too; what says the
-										    group is CLOSED is the heading's own chevron. */}
-                        <div className={SIDEBAR_AUTOMATION_RUNS}>
-                          {/* What the automation last concluded, above the runs
-										    that produced it: the runs are named by their
-										    timestamp, so without this the band says an
-										    automation ran and never what it found.
-										    An automation someone is named on shows this even
-										    collapsed: you asked to hear from it, so it
-										    answers without being opened. The house routines
-										    stay quiet, or thirty of them would each add a
-										    line to a band you scroll past. */}
-                          {(open || reportsToSomeone(group.label)) &&
-                            latestReportFor(group.label) && (
-                              <AutomationReportRow
-                                report={latestReportFor(group.label)!}
-                                onOpen={() => {
-                                  const overview = automationOverview.get(
-                                    group.label,
-                                  );
-                                  if (overview?.latestReport)
-                                    navigation.openReports({
-                                      automationId: overview.id,
-                                      reportId: overview.latestReport.id,
-                                    });
-                                }}
-                              />
-                            )}
-                          {open &&
-                            (group.totalItems || group.items.length) >
-                              group.items.length && (
-                              <div className="px-4 pb-1 pt-0.5 text-meta tabular-nums text-faint">
-                                Latest {group.items.length} of{" "}
-                                {group.totalItems} runs
-                              </div>
-                            )}
-                          {group.items
-                            .filter(() => open)
-                            .map((s) => {
-                              const pin = sessionPinState(s);
-                              return (
-                                <SidebarItem
-                                  key={s.id}
-                                  session={s}
-                                  selected={automationRowSelected(s)}
-                                  unread={
-                                    s.id !== selectedId &&
-                                    isUnread(s.id, s.lastActivity, reads)
-                                  }
-                                  mention={
-                                    s.id !== selectedId
-                                      ? mentionFor(s.id)?.by
-                                      : undefined
-                                  }
-                                  mine={
-                                    !!s.startedBy &&
-                                    !s.automation &&
-                                    s.startedBy.toLowerCase() ===
-                                      currentUser.toLowerCase()
-                                  }
-                                  onClick={() => openSidebarSession(s)}
-                                  onArchive={(current) =>
-                                    archiveWithNext(s, current)
-                                  }
-                                  pinned={pin.pinned}
-                                  onTogglePin={pin.toggle}
-                                  shipsDirectlyToMain={shipsDirectlyToMain(
-                                    s.repo,
-                                    s.branch,
-                                  )}
-                                  onRename={(title) => onRename(s, title)}
-                                  onSetStatus={(st) => onSetStatus([s], st)}
-                                />
-                              );
-                            })}
-                        </div>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+          <AutomationsBand
+            groups={groups}
+            automationOverview={automationOverview}
+            open={automationsOpen}
+            hasPeople={activePersonGroups.length > 0}
+            isGroupOpen={isOpen}
+            onToggleBand={() => toggleBand("automations")}
+            onToggleGroup={toggleGroup}
+            onOpenAutomation={(name) => navigation.openAutomation(name)}
+            onOpenReport={(automationId, reportId) =>
+              navigation.openReports({ automationId, reportId })
+            }
+            renderSession={renderAutomationSession}
+          />
 
-          {/* ── People: teammates with a running or just-finished session. Each
-			    member is an independent, open-by-default disclosure so a busy
-			    teammate can be folded without hiding everybody else. ── */}
-          {activePersonGroups.length > 0 && (
-            <div className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2 pb-7")}>
-              <div
-                className={cn(
-                  SIDEBAR_BAND_LABEL,
-                  "py-0 pl-0 pr-2 desktop:pr-0",
-                  SIDEBAR_STICKY_BAND,
-                  SIDEBAR_STICKY_BAND_ROW,
-                  SIDEBAR_STUCK_BACKING,
-                )}
-                data-sticky-head
-              >
-                <button
-                  className={cn(SIDEBAR_BAND_TOGGLE, SIDEBAR_BAND_TOGGLE_INSET)}
-                  onClick={() => toggleBand("people")}
-                  title={peopleOpen ? "Collapse team" : "Expand team"}
-                  aria-expanded={peopleOpen}
-                >
-                  <span className="min-w-0 truncate">Team</span>
-                  <span className={SIDEBAR_GROUP_COUNT}>
-                    {activePersonGroups.reduce(
-                      (count, group) => count + group.activeSessions.length,
-                      0,
-                    )}
-                  </span>
-                  <IconChevronDown
-                    className={cn(
-                      SIDEBAR_BAND_CHEVRON,
-                      "group-hover/band:visible group-hover/band:text-dim",
-                      !peopleOpen && SIDEBAR_BAND_CHEVRON_COLLAPSED,
-                    )}
-                    size={18}
-                    style={{
-                      transform: peopleOpen ? "none" : "rotate(-90deg)",
-                    }}
-                  />
-                </button>
-              </div>
-              {peopleOpen && (
-                <div className={SIDEBAR_INDEPENDENT_SCROLL}>
-                  {activePersonGroups.map((group) => {
-                    const groupKey = `person:${group.key}`;
-                    const personOpen = isOpen(groupKey);
-                    return (
-                      <React.Fragment key={group.key}>
-                        <button
-                          className={cn(
-                            SIDEBAR_GROUP_HEADER,
-                            SIDEBAR_GROUP_HEADER_INSET,
-                            SIDEBAR_HEADER_ROW,
-                          )}
-                          onClick={(event) => {
-                            const header = event.currentTarget;
-                            toggleGroup(groupKey);
-                            requestAnimationFrame(() =>
-                              header.scrollIntoView({
-                                block: "nearest",
-                                inline: "nearest",
-                              }),
-                            );
-                          }}
-                          aria-expanded={personOpen}
-                          title={`${personOpen ? "Collapse" : "Expand"} ${group.label}'s sessions`}
-                        >
-                          <span className={SIDEBAR_RAIL}>
-                            <UserAvatar name={group.label} size={20} />
-                          </span>
-                          <span className={SIDEBAR_GROUP_NAME}>
-                            {group.label}
-                          </span>
-                          <span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
-                            {group.activeSessions.length}
-                          </span>
-                          <IconChevronDown
-                            className={cn(
-                              SIDEBAR_GROUP_CHEVRON,
-                              !personOpen && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-                            )}
-                            size={22}
-                            style={{
-                              transform: personOpen ? "none" : "rotate(-90deg)",
-                            }}
-                          />
-                        </button>
-                        {personOpen && (
-                          <div className={SIDEBAR_AUTOMATION_RUNS}>
-                            {group.activeSessions.map((session) => {
-                              const pin = sessionPinState(session);
-                              return (
-                                <SidebarItem
-                                  key={session.id}
-                                  session={session}
-                                  selected={session.id === selectedId}
-                                  unread={
-                                    session.id !== selectedId &&
-                                    isUnread(
-                                      session.id,
-                                      session.lastActivity,
-                                      reads,
-                                    )
-                                  }
-                                  mention={
-                                    session.id !== selectedId
-                                      ? mentionFor(session.id)?.by
-                                      : undefined
-                                  }
-                                  mine={false}
-                                  showOwner={false}
-                                  alwaysShowAddToSidebar
-                                  onClick={() => openSidebarSession(session)}
-                                  onArchive={(current) =>
-                                    archiveWithNext(session, current)
-                                  }
-                                  pinned={pin.pinned}
-                                  onTogglePin={pin.toggle}
-                                  shipsDirectlyToMain={shipsDirectlyToMain(
-                                    session.repo,
-                                    session.branch,
-                                  )}
-                                  onRename={(title) => onRename(session, title)}
-                                  onSetStatus={(status) =>
-                                    onSetStatus([session], status)
-                                  }
-                                />
-                              );
-                            })}
-                          </div>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+          <PeopleBand
+            groups={activePersonGroups}
+            open={peopleOpen}
+            isGroupOpen={isOpen}
+            onToggleBand={() => toggleBand("people")}
+            onToggleGroup={toggleGroup}
+            renderSession={renderPersonSession}
+          />
 
           {/* Archived closes the sidebar, below every section rather than inside
 			    the workspace list. It is the end of the list, so anything ordered
