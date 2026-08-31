@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  activeSubagentsByWorkspace,
   activeSubagentsForWorkspace,
   isAskWorkspace,
   isScratchWorkspace,
@@ -223,6 +224,7 @@ describe("activeSubagentsForWorkspace", () => {
         isRunning: true,
         createdAt: "2026-08-18T10:00:02Z",
       }),
+      session("other-root", { workspaceId: "ws-2" }),
     ];
 
     expect(
@@ -233,6 +235,12 @@ describe("activeSubagentsForWorkspace", () => {
       ["child", 1],
       ["grandchild", 2],
     ]);
+    expect(
+      activeSubagentsByWorkspace(sessions)
+        .get("ws-1")
+        ?.map(({ session }) => session.id),
+    ).toEqual(["child", "grandchild"]);
+    expect(activeSubagentsByWorkspace(sessions).has("ws-child")).toBe(false);
   });
 
   test("keeps idle workers nested while their PR is open", () => {

@@ -131,81 +131,76 @@ export function sidebarWorkspaceIdForSession(
 }
 
 /**
- * Active or awaiting-merge child sessions owned by one open workspace.
+ * Active or awaiting-merge child sessions grouped under their root workspace.
  *
- * `parentSessionId` is the relationship. A worker can carry the parent's
- * workspace, mint a temporary workspace of its own, or omit one, so workspace
- * equality alone is not enough: seed the family from sessions in the selected
- * workspace, then follow child edges. The returned rows remain nested while a
- * worker is running, blocked on a question, has queued work to deliver, or has
- * an open PR that still belongs to the parent's unfinished work.
+ * A worker can mint a temporary workspace of its own, but `parentSessionId`
+ * remains the sidebar relationship. Resolve every live child to its highest
+ * known ancestor so changing the selected session cannot turn that temporary
+ * workspace back into a top-level row.
  */
-export function activeSubagentsForWorkspace(
+export function activeSubagentsByWorkspace(
   sessions: readonly UnifiedSession[],
-  workspaceId: string | null | undefined,
-): ActiveWorkspaceSubagent[] {
-  if (!workspaceId) return [];
-
+): Map<string, ActiveWorkspaceSubagent[]> {
   // The live session list should already be unique. Keeping the last copy of
   // a duplicate makes this helper defensive against an optimistic list merge
   // without ever rendering the same child twice.
   const byId = new Map<string, UnifiedSession>();
   for (const session of sessions) byId.set(session.id, session);
 
-  const family = new Set<string>();
-  const childrenByParent = new Map<string, string[]>();
+  const groups = new Map<string, ActiveWorkspaceSubagent[]>();
   for (const session of byId.values()) {
-    if (session.workspaceId === workspaceId) family.add(session.id);
-    if (session.parentSessionId) {
-      const children = childrenByParent.get(session.parentSessionId) ?? [];
-      children.push(session.id);
-      childrenByParent.set(session.parentSessionId, children);
-    }
-  }
-  const queue = Array.from(family);
-  for (let i = 0; i < queue.length; i++) {
-    for (const childId of childrenByParent.get(queue[i]) ?? []) {
-      if (family.has(childId)) continue;
-      family.add(childId);
-      queue.push(childId);
-    }
-  }
+    if (
+      !session.parentSessionId ||
+      session.archived ||
+      (!session.isRunning &&
+        !session.waitingForInput &&
+        (session.queuedCount ?? 0) === 0 &&
+        !sessionHasOpenPr(session))
+    )
+      continue;
 
-  const depthOf = (session: UnifiedSession): number => {
-    let depth = 1;
-    let parentId = session.parentSessionId;
+    let parentId: string | undefined = session.parentSessionId;
+    let root: UnifiedSession | undefined;
+    let depth = 0;
     const seen = new Set([session.id]);
-    while (parentId && family.has(parentId) && !seen.has(parentId)) {
-      seen.add(parentId);
+    while (parentId) {
+      if (seen.has(parentId)) {
+        root = undefined;
+        break;
+      }
       const parent = byId.get(parentId);
-      if (!parent?.parentSessionId) break;
+      if (!parent) {
+        root = undefined;
+        break;
+      }
+      seen.add(parent.id);
+      root = parent;
       depth++;
       parentId = parent.parentSessionId;
     }
-    return depth;
-  };
+    if (!root?.workspaceId) continue;
 
-  return Array.from(byId.values())
-    .filter(
-      (session) =>
-        family.has(session.id) &&
-        !!session.parentSessionId &&
-        // A scoped response can briefly contain a selected worker before its
-        // parent group arrives. Do not treat that worker as a child of its own
-        // temporary workspace: a nested row requires its parent in the family.
-        family.has(session.parentSessionId) &&
-        !session.archived &&
-        (session.isRunning ||
-          !!session.waitingForInput ||
-          (session.queuedCount ?? 0) > 0 ||
-          sessionHasOpenPr(session)),
-    )
-    .map((session) => ({ session, depth: depthOf(session) }))
-    .sort(
+    const items = groups.get(root.workspaceId) ?? [];
+    items.push({ session, depth });
+    groups.set(root.workspaceId, items);
+  }
+
+  for (const items of groups.values())
+    items.sort(
       (a, b) =>
         (a.session.createdAt || "").localeCompare(b.session.createdAt || "") ||
         a.session.id.localeCompare(b.session.id),
     );
+  return groups;
+}
+
+/** Active or awaiting-merge children owned by one workspace row. */
+export function activeSubagentsForWorkspace(
+  sessions: readonly UnifiedSession[],
+  workspaceId: string | null | undefined,
+): ActiveWorkspaceSubagent[] {
+  if (!workspaceId) return [];
+  return activeSubagentsByWorkspace(sessions).get(workspaceId) ?? [];
 }
 
 /** The root session a workspace row should open, never one of its subagents. */
