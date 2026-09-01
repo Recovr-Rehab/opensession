@@ -503,7 +503,13 @@ class TranscriptVirtualizer extends React.Component<
     const container = this.scrollContainer();
     const root = this.root;
     const anchor = this.innerAnchor;
-    if (!container || !root || !anchor || this.props.shouldMaintainEnd?.())
+    if (
+      !container ||
+      !root ||
+      !anchor ||
+      this.props.shouldMaintainEnd?.() ||
+      !shouldRestoreTranscriptInnerAnchor(this.innerAnchorFrame !== undefined)
+    )
       return;
     const node = anchor.node.isConnected
       ? anchor.node
@@ -927,6 +933,17 @@ export function didScrollTranscriptTowardHistory(
     nextOffset <= viewportHeight &&
     nextOffset <= previousOffset + 0.5
   );
+}
+
+export function shouldRestoreTranscriptInnerAnchor(
+  readerAnchorCapturePending: boolean,
+): boolean {
+  // A pending frame means a scroll event moved the reader after this child
+  // coordinate was captured. Let that frame record the new viewport instead
+  // of restoring the stale one over the gesture. TanStack's synchronous keyed
+  // compensation does not schedule this reader-capture frame, so prepend
+  // residuals still get corrected before paint.
+  return !readerAnchorCapturePending;
 }
 
 export function shouldAdjustTranscriptScroll({

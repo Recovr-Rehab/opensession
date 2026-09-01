@@ -151,11 +151,6 @@ struct SessionView: View {
     /// their position when its delayed response finally arrives.
     @State private var prependRequestInteraction: Int?
     @State private var scrollInteractionGeneration = 0
-    /// Reaching the history loader during an active drag records demand, but
-    /// waits for the gesture to finish before starting the request. Otherwise
-    /// the prepend restore can programmatically claim the same scroll view
-    /// while the reader's finger or momentum is still moving it.
-    @State private var earlierHistoryDemanded = false
     /// Lets the generic new-output observer distinguish a history page from a
     /// real tail append, regardless of modifier callback ordering.
     @State private var lastDisplayHistoryPrependSeq = 0
@@ -559,9 +554,6 @@ struct SessionView: View {
                         }
                         if readerScrollActive != readerPhase {
                             readerScrollActive = readerPhase
-                        }
-                        if phase == .idle {
-                            requestDemandedEarlierHistory(readerScrollActive: false)
                         }
                         if phase == .idle, readerMovedTowardHistory {
                             let atRestingBottom = TranscriptScroll.isNearBottom(
@@ -1141,26 +1133,11 @@ struct SessionView: View {
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
-        .onAppear {
-            earlierHistoryDemanded = true
-            requestDemandedEarlierHistory(readerScrollActive: readerScrollActive)
-        }
-        .onDisappear { earlierHistoryDemanded = false }
-    }
-
-    private func requestDemandedEarlierHistory(readerScrollActive: Bool) {
-        guard TranscriptScroll.shouldRequestEarlierHistory(
-            demanded: earlierHistoryDemanded,
-            readerScrollActive: readerScrollActive,
-            canLoadEarlier: viewModel.canLoadEarlier,
-            loadingEarlier: viewModel.loadingEarlier
-        ) else { return }
-        requestEarlier()
+        .onAppear { requestEarlier() }
     }
 
     private func requestEarlier() {
         guard viewModel.canLoadEarlier, !viewModel.loadingEarlier else { return }
-        earlierHistoryDemanded = false
         cancelPrependRestore()
         prependRequestInteraction = scrollInteractionGeneration
         viewModel.loadEarlier()

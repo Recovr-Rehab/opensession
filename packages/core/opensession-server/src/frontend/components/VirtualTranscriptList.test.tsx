@@ -7,6 +7,7 @@ import {
   measureTranscriptElement,
   VirtualTranscriptList,
   shouldAdjustTranscriptScroll,
+  shouldRestoreTranscriptInnerAnchor,
   shouldTransitionTranscriptItemPosition,
   transcriptOverscan,
   transcriptViewportNeedsHistory,
@@ -82,6 +83,11 @@ describe("VirtualTranscriptList", () => {
     expect(didScrollTranscriptTowardHistory(0, 0, 745, 6_226)).toBe(true);
     expect(didScrollTranscriptTowardHistory(0, 500, 745, 6_226)).toBe(false);
     expect(didScrollTranscriptTowardHistory(0, 0, 745, 900)).toBe(false);
+  });
+
+  test("does not restore while reader movement awaits a fresh anchor", () => {
+    expect(shouldRestoreTranscriptInnerAnchor(false)).toBe(true);
+    expect(shouldRestoreTranscriptInnerAnchor(true)).toBe(false);
   });
 
   test("keeps TanStack's ordinary measurement anchoring semantics", () => {
