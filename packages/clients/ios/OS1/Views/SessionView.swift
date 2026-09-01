@@ -2995,7 +2995,7 @@ private struct SessionInputBar: View {
     /// Read for the Mac send menu's key hints only. See `BusySendHints`.
     @AppStorage("os1.composer.busySendMod") private var busySendMod = "steer"
     @AppStorage("os1.composer.replySuggestions") private var showReplySuggestions = true
-    @AppStorage("os1.composer.nextChatButton") private var showNextChatButton = false
+    @AppStorage("os1.composer.nextChatButton") private var showNextChatButton = true
     /// Matches the transcript column cap so the bar centers with it.
     let contentMaxWidth: CGFloat
     let horizontalInset: CGFloat
