@@ -382,8 +382,16 @@ function jsonSchemaToZod(schema: any): z.ZodTypeAny {
 export const PASSTHROUGH_MCP = "oc";
 export const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
 
+/** Primary switch: an empty `tools` list removes every SDK built-in from the
+ *  model's context, including ones added by SDK bumps after the denylist
+ *  below was written (CronCreate, ScheduleWakeup, Monitor, ...). Without it a
+ *  new built-in leaks into context, the model calls it, and the client
+ *  answers "Tool X not found". */
+export const SDK_BUILTIN_TOOLS: string[] = [];
+
 /** Built-in SDK tools the bridge must never let run — the client owns all
- *  execution. (The PreToolUse hook blocks everything as backstop.) */
+ *  execution. Belt-and-braces under `SDK_BUILTIN_TOOLS`; the PreToolUse hook
+ *  blocks everything as a final backstop. */
 export const DISALLOWED_BUILTINS = [
   "Bash",
   "Edit",
@@ -679,6 +687,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
         settingSources: [],
         mcpServers: mcpServers as any,
         strictMcpConfig: true,
+        tools: SDK_BUILTIN_TOOLS,
         disallowedTools: DISALLOWED_BUILTINS,
         allowedTools: requestTools.map((t) => `${PASSTHROUGH_PREFIX}${t.name}`),
         pathToClaudeCodeExecutable: CLAUDE_CODE_BIN,
