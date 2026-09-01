@@ -103,16 +103,21 @@ export function xaiConnected(): boolean {
 
 /** Drop the shared credential and abandon any login still in flight, so a
  *  device flow an admin walked away from cannot land on top of a disconnect. */
-export function disconnectXai(): boolean {
+export async function disconnectXai(): Promise<boolean> {
   for (const flow of flows().values()) flow.controller.abort();
   flows().clear();
-  try {
-    if (!existsSync(storePath())) return false;
-    unlinkSync(storePath());
-    return true;
-  } catch {
-    return false;
-  }
+  // Through the same lock as every write: otherwise an unlink can land between
+  // a refresh reading the generation and writing it back, and the credential
+  // comes back from the dead.
+  return withStoreLock(async () => {
+    try {
+      if (!existsSync(storePath())) return false;
+      unlinkSync(storePath());
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 // ── Serialization ───────────────────────────────────────────────────────────
@@ -152,26 +157,34 @@ function lockPath(): string {
 
 function takeFileLock(): boolean {
   const deadline = Date.now() + LOCK_WAIT_MS;
-  for (;;) {
+  // EVERY path through this loop must reach the deadline check. An earlier
+  // version continued straight back to the top when statSync also failed - a
+  // missing parent directory then span this synchronously, forever, on the
+  // credential path.
+  while (Date.now() <= deadline) {
     try {
       closeSync(openSync(lockPath(), "wx", 0o600));
       return true;
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") {
+        // Not contention: the directory is missing or unwritable. Locking is
+        // best effort, so say so once and let the caller proceed rather than
+        // spinning against a condition that will not clear.
+        return false;
+      }
       try {
         // A holder that died leaves its lock behind; reap it rather than
         // stalling every future refresh on this box.
-        const age = Date.now() - statSync(lockPath()).mtimeMs;
-        if (age > LOCK_STALE_MS) {
+        if (Date.now() - statSync(lockPath()).mtimeMs > LOCK_STALE_MS) {
           unlinkSync(lockPath());
-          continue;
         }
       } catch {
-        continue;
+        // The holder released it between our open and our stat. Retry.
       }
-      if (Date.now() > deadline) return false;
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
     }
   }
+  return false;
 }
 
 function dropFileLock(): void {
@@ -180,9 +193,27 @@ function dropFileLock(): void {
   } catch {}
 }
 
+function lockHeld(): boolean {
+  return (
+    (globalThis as typeof globalThis & { __opensessionXaiLockHeld?: boolean })
+      .__opensessionXaiLockHeld === true
+  );
+}
+
+function setLockHeld(held: boolean): void {
+  (
+    globalThis as typeof globalThis & { __opensessionXaiLockHeld?: boolean }
+  ).__opensessionXaiLockHeld = held;
+}
+
 /** Run a read-modify-write against the shared credential with nothing else
  *  touching it. */
 async function withStoreLock<T>(run: () => Promise<T>): Promise<T> {
+  // Re-entrant by design: disconnectXai takes this lock, and it is also
+  // reachable from inside a modify() callback. The chain guarantees only one
+  // holder is ever running, so seeing the flag set means WE are that holder -
+  // and waiting on ourselves would simply deadlock.
+  if (lockHeld()) return run();
   const previous = chain();
   let release!: () => void;
   const mine = new Promise<void>((resolve) => (release = resolve));
@@ -194,9 +225,11 @@ async function withStoreLock<T>(run: () => Promise<T>): Promise<T> {
       "[xai] could not take the credential lock in time; proceeding unlocked",
     );
   }
+  setLockHeld(true);
   try {
     return await run();
   } finally {
+    setLockHeld(false);
     if (held) dropFileLock();
     release();
   }

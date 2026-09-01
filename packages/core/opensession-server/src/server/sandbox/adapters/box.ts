@@ -501,16 +501,25 @@ function boxSshArgs(target: BoxSshTarget, command: string): string[] {
   ];
 }
 
-/** Box's HTTP command plane threw rather than running the command. A real
- * command never exits with this, so it stays distinguishable from a verdict. */
-export const BOX_COMMAND_PLANE_EXIT = 125;
+/** A result the transport never delivered to the box. `transport` is set by the
+ * layer that knows - the command plane throwing, rather than a process exiting -
+ * because every exit code is a value some real command may legitimately return;
+ * 125 in particular is an ordinary shell exit. 255 and 124 stay heuristics
+ * because ssh genuinely reports its own failures that way and the adapter
+ * substitutes 124 for its own timeout. */
+export interface BoxExecOutcome {
+  exitCode: number;
+  transport?: boolean;
+}
 
-/** ssh's own failure code, the timeout boxSshExec substitutes for one, and the
- * command plane failing to run anything at all. None of the three says
- * anything about the sandbox filesystem. */
-export function boxSshTransportFailed(exitCode: number): boolean {
+export function boxSshTransportFailed(
+  outcome: number | BoxExecOutcome,
+): boolean {
+  if (typeof outcome === "number") return outcome === 255 || outcome === 124;
   return (
-    exitCode === 255 || exitCode === 124 || exitCode === BOX_COMMAND_PLANE_EXIT
+    outcome.transport === true ||
+    outcome.exitCode === 255 ||
+    outcome.exitCode === 124
   );
 }
 
@@ -532,7 +541,7 @@ export function reusedBoxLaneOutcome(
  * has actually carried a command, so a racing lane degrades to Box's HTTP
  * command plane instead of failing every exec against the box. */
 export async function boxSshLaneSettles(
-  probe: () => Promise<{ exitCode: number }>,
+  probe: (timeoutMs: number) => Promise<{ exitCode: number }>,
   attempts = 3,
   delayMs = 1_500,
   budgetMs = 25_000,
@@ -540,14 +549,17 @@ export async function boxSshLaneSettles(
 ): Promise<boolean> {
   // The lane is an optimisation over a command plane that already works, so it
   // may not cost a session start three full ssh timeouts to find that out.
+  // Each probe gets only the time REMAINING - a budget that merely gates the
+  // start of an attempt is still one whole ssh timeout short of a bound.
   const deadline = now() + budgetMs;
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (attempt > 0) {
       if (now() >= deadline) return false;
       await new Promise((wake) => setTimeout(wake, delayMs));
     }
-    if ((await probe()).exitCode === 0) return true;
-    if (now() >= deadline) return false;
+    const remaining = deadline - now();
+    if (remaining <= 0) return false;
+    if ((await probe(remaining)).exitCode === 0) return true;
   }
   return false;
 }
@@ -768,6 +780,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     } catch (error) {
       return {
         exitCode: 1,
+        transport: true,
         stdout: "",
         stderr: error instanceof Error ? error.message : String(error),
       };
@@ -783,7 +796,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
         const viaSsh = await boxSshExec(ssh, shell, timeoutMs);
         // Do NOT retry over the command plane here: the box may have run this
         // already. Drop the lane so the NEXT call goes over HTTP.
-        if (boxSshTransportFailed(viaSsh.exitCode)) dropBoxSshLane(boxId);
+        if (boxSshTransportFailed(viaSsh)) dropBoxSshLane(boxId);
         return viaSsh;
       }
       // Keep short probes on Box's reliable synchronous endpoint. Long setup
@@ -798,7 +811,8 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
         );
       } catch (error) {
         return {
-          exitCode: BOX_COMMAND_PLANE_EXIT,
+          exitCode: 1,
+          transport: true,
           stdout: "",
           stderr: error instanceof Error ? error.message : String(error),
         };
@@ -815,7 +829,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
           detached,
           opts?.timeoutMs ?? 30_000,
         );
-        if (boxSshTransportFailed(result.exitCode)) dropBoxSshLane(boxId);
+        if (boxSshTransportFailed(result)) dropBoxSshLane(boxId);
         if (result.exitCode !== 0)
           throw new Error(
             result.stderr.trim() || "Box SSH background launch failed",
@@ -834,9 +848,18 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
         try {
           return await boxSshWriteFile(ssh, path, content);
         } catch (error) {
-          // A write that failed in transport leaves a lane nothing should keep
-          // choosing; the native file API below is the durable path.
-          dropBoxSshLane(boxId);
+          // Only a transport failure condemns the lane. A permission, path or
+          // disk error is the box answering, and answering means the lane works.
+          const outcome = error as { exitCode?: number; transport?: boolean };
+          if (
+            typeof outcome?.exitCode !== "number" ||
+            boxSshTransportFailed({
+              exitCode: outcome.exitCode,
+              transport: outcome.transport,
+            })
+          ) {
+            dropBoxSshLane(boxId);
+          }
           throw error;
         }
       }
@@ -905,7 +928,11 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       if (!runtimeHomeReady) await ensureRuntimeHome();
       try {
         const target = await installBoxSshTarget(cfg, box);
-        if (await boxSshLaneSettles(() => boxSshExec(target, "true", 20_000))) {
+        if (
+          await boxSshLaneSettles((budget) =>
+            boxSshExec(target, "true", Math.min(20_000, budget)),
+          )
+        ) {
           boxSshTargets().set(boxId, target);
         } else {
           dropBoxSshLane(boxId);
@@ -1045,7 +1072,16 @@ export async function boxSshTarget(sandboxId: string): Promise<BoxSshTarget> {
   // why there is no terminal - handing back an unproven target only moves the
   // failure into the user's session.
   const target = await installBoxSshTarget(cfg, box);
-  if (!(await boxSshLaneSettles(() => boxSshExec(target, "true", 20_000)))) {
+  // ensureStarted has already spent a settle budget on this box; a terminal may
+  // not spend a second full one on top of it.
+  if (
+    !(await boxSshLaneSettles(
+      (budget) => boxSshExec(target, "true", Math.min(20_000, budget)),
+      2,
+      1_500,
+      10_000,
+    ))
+  ) {
     throw new Error(
       `box ${sandboxId} is not accepting SSH sessions yet; try the terminal again in a moment`,
     );
@@ -1660,13 +1696,14 @@ export function boxRuntimeHomeFailure(probe: {
   exitCode: number;
   stdout: string;
   stderr: string;
+  transport?: boolean;
 }): string {
   const detail = (probe.stderr || probe.stdout)
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 200);
   const suffix = detail ? `: ${detail}` : "";
-  return boxSshTransportFailed(probe.exitCode)
+  return boxSshTransportFailed(probe)
     ? `Box runtime home check could not reach the sandbox (exit ${probe.exitCode})${suffix}`
     : `Box did not preserve /home/ubuntu as the durable canonical home${suffix}`;
 }

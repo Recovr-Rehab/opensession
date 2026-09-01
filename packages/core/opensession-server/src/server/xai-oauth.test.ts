@@ -143,11 +143,11 @@ describe("shared Grok credential", () => {
     expect(xaiConnected()).toBe(false);
   });
 
-  test("disconnect removes the credential and answers whether it did", () => {
+  test("disconnect removes the credential and answers whether it did", async () => {
     seed();
-    expect(disconnectXai()).toBe(true);
+    expect(await disconnectXai()).toBe(true);
     expect(xaiConnected()).toBe(false);
-    expect(disconnectXai()).toBe(false);
+    expect(await disconnectXai()).toBe(false);
   });
 });
 
@@ -189,7 +189,7 @@ describe("credential store handed to a turn", () => {
     const store = xaiCredentialStore();
     await store.modify(XAI_PROVIDER_ID, async () => {
       // The admin disconnects while xAI is answering the refresh.
-      disconnectXai();
+      await disconnectXai();
       return {
         type: "oauth",
         access: "late-access",
@@ -392,7 +392,7 @@ describe("device login through pi", () => {
     );
     if ("error" in started) throw new Error(started.error);
     seed();
-    disconnectXai();
+    await disconnectXai();
     await settleFlows();
     // The point is the WRITE, not the poll result: polling reports "not
     // pending" either way, so asserting only that let a completed sign-in
@@ -415,7 +415,7 @@ describe("device login through pi", () => {
       }),
     );
     if ("error" in started) throw new Error(started.error);
-    disconnectXai();
+    await disconnectXai();
     await settleFlows();
     expect(xaiConnected()).toBe(false);
   });

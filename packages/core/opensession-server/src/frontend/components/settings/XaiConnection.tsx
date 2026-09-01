@@ -167,7 +167,13 @@ export function XaiConnectionCard({
  * the person completes it on another device while this panel waits. Nothing
  * here ever holds a token — the server keeps it and never returns it.
  */
-export function XaiConnectionSection() {
+export function XaiConnectionSection({
+  onChanged,
+}: {
+  /** Connecting or disconnecting changes the models a run can pick, so the
+   *  surfaces that keep a model list alongside this one refresh through here. */
+  onChanged?: () => void;
+} = {}) {
   const [status, setStatus] = useState<XaiStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flow, setFlow] = useState<XaiDeviceFlow | null>(null);
@@ -202,7 +208,10 @@ export function XaiConnectionSection() {
       if (result.status === "pending") return;
       setFlow(null);
       if (result.status === "error") setError(result.error);
-      else await load();
+      else {
+        await load();
+        onChanged?.();
+      }
     } catch {
       // Keep polling. A transient failure does not end the device flow.
     }
@@ -249,6 +258,7 @@ export function XaiConnectionSection() {
     try {
       await disconnectXai();
       await load();
+      onChanged?.();
     } catch (cause) {
       setError(errorMessage(cause, "Could not disconnect Grok"));
     }

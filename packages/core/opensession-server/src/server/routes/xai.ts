@@ -75,7 +75,7 @@ export async function handleXaiRoutes(
   if (path === "/api/xai/disconnect" && req.method === "POST") {
     const forbidden = requireWorkspaceAdmin(ctx);
     if (forbidden) return forbidden;
-    return Response.json({ ok: disconnectXai() });
+    return Response.json({ ok: await disconnectXai() });
   }
 
   return undefined;

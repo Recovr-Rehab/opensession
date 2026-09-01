@@ -13,6 +13,7 @@ import { TeamSection } from "./SetupTeam";
 import { OrganizationProfileSection } from "./settings/GeneralPanel";
 import { IngressPanel } from "./settings/IngressPanel";
 import { ProviderAccountsSection } from "./settings/ModelAccounts";
+import { XaiConnectionSection } from "./settings/XaiConnection";
 import { ModelProvidersPanel } from "./ModelProviders";
 import { ModelDefaultsSection } from "./Models";
 import { IconCheck } from "./icons";
@@ -248,6 +249,10 @@ export function SetupPanel({
             >
               <ModelDefaultsSection key={aiRevision} />
               <ProviderAccountsSection onChanged={refreshAi} />
+              {/* Same order as Settings -> Providers: subscription-backed
+                  accounts, then the one shared subscription, then the
+                  api-keyed providers. */}
+              <XaiConnectionSection onChanged={refreshAi} />
               <ModelProvidersPanel />
             </SetupPageSection>
 

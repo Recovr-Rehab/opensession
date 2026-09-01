@@ -10,7 +10,6 @@ import {
   boxResumePrimeCommand,
   boxRuntimeHomeFailure,
   boxSnapshotSaveIsRecoverable,
-  BOX_COMMAND_PLANE_EXIT,
   boxSshLaneSettles,
   boxSshTransportFailed,
   reusedBoxLaneOutcome,
@@ -260,13 +259,25 @@ describe("Box command plane failures", () => {
     // exec's catch used to return 1 for any thrown command-plane error, which
     // boxRuntimeHomeFailure then reported as a filesystem verdict - the same
     // misdiagnosis, arriving over the other transport.
-    expect(boxSshTransportFailed(BOX_COMMAND_PLANE_EXIT)).toBe(true);
+    expect(boxSshTransportFailed({ exitCode: 1, transport: true })).toBe(true);
     expect(
       boxRuntimeHomeFailure({
-        exitCode: BOX_COMMAND_PLANE_EXIT,
+        exitCode: 1,
+        transport: true,
         stdout: "",
         stderr: "box_direct_failed",
       }),
     ).toContain("could not reach the sandbox");
+  });
+
+  test("an ordinary exit is never mistaken for a lost connection", () => {
+    // 125 was briefly used as the marker for a command plane that threw. It is
+    // a perfectly ordinary shell exit, so a command returning it would have
+    // condemned a healthy lane.
+    for (const exitCode of [1, 2, 125, 126, 127]) {
+      expect(boxSshTransportFailed({ exitCode })).toBe(false);
+    }
+    expect(boxSshTransportFailed({ exitCode: 255 })).toBe(true);
+    expect(boxSshTransportFailed({ exitCode: 124 })).toBe(true);
   });
 });
