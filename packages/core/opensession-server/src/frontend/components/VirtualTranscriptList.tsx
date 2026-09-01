@@ -822,6 +822,12 @@ class TranscriptVirtualizer extends React.Component<
       // then the corrected bottom. Shrinks still fall through to the browser's
       // clamp/follow pass; compensating only positive growth avoids pushing a
       // reader past the new end during a turn's final restructure.
+      // One owner per commit. While a reader anchor is held, the entry at
+      // the viewport top goes back where it was after the rows commit, from
+      // the DOM itself. A size-based guess here (a spanning row measured for
+      // the first time, a grouped row growing below the reader) would only
+      // be undone by that settle: two writes in one frame instead of one.
+      if (this.heldAnchor) return false;
       const liveEdgeDelta = this.props.shouldMaintainEnd?.()
         ? delta
         : undefined;
