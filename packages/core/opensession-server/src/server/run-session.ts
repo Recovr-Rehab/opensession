@@ -58,7 +58,12 @@ import {
 import { cacheMissNotice } from "@tellahq/opensession-protocol/notices";
 import { RESTART_QUEUE_NOTICE_MESSAGE } from "@tellahq/opensession-protocol/session";
 import { dropSandboxPreviewRoutes } from "./preview";
-import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
+import {
+  wrapContext,
+  stripContext,
+  isContextOnly,
+  withPromptAttribution,
+} from "./prompt-context";
 import { takeVoiceHandoff } from "./desk-voice";
 import {
   activeRunRecords,
@@ -2491,6 +2496,13 @@ async function runSessionPromptInner(
   // rule in engineSessionPatch, so both live together in sessions.ts.
   const engineSessionId = engineSessionIdFor(session, provider);
 
+  // A teammate sending into someone else's session needs explicit attribution:
+  // bare transcript turns belong to the session owner. Apply it before durable
+  // intake so the sender stays correct even when setup or engine launch fails.
+  // Multi-message queue drains arrive pre-attributed, and context-only turns
+  // are nobody's message; withPromptAttribution leaves both unchanged.
+  let prompt = withPromptAttribution(content, user, session.startedBy);
+
   // Durable intake (2026-07-24, bks-019f93ea): persist the user's message to
   // the transcript store NOW, before the worktree/title/engine-spawn awaits,
   // so a process death anywhere in the run path can no longer lose it. The
@@ -2504,7 +2516,7 @@ async function runSessionPromptInner(
     await storeAppendUserLineEarly(
       sessionId,
       transcriptLineUser(
-        content,
+        prompt,
         durablePromptEntryId,
         undefined,
         images,
@@ -2656,23 +2668,6 @@ async function runSessionPromptInner(
       });
       cwd = repo.repo;
     }
-  }
-  let prompt = content;
-  // A teammate sending into someone else's idle session gets the same
-  // "[Name] " attribution the steer path already applies — without it the
-  // message lands bare in the transcript and the viewer credits it to the
-  // session owner (startedBy). The owner's own turns stay bare (the common
-  // case), automation runs pass no user, and multi-message queue drains
-  // arrive pre-attributed — don't double-prefix those. A prompt that is ONLY
-  // injected context (the auto-continue nudge) is nobody's message: attributing
-  // it left a bare "[auto-continue] " stub as the whole transcript entry.
-  if (
-    user &&
-    user !== session.startedBy &&
-    !isContextOnly(content) &&
-    !content.startsWith(`[${user}] `)
-  ) {
-    prompt = `[${user}] ${prompt}`;
   }
   // Bridge a cross-provider engine switch (computed above) so the incoming
   // engine continues the conversation instead of starting blank. Fenced so the

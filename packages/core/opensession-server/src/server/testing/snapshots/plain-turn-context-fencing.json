@@ -126,7 +126,7 @@
   ],
   "transcript": [
     {
-      "content": "summarize what we learned",
+      "content": "[Teammate] summarize what we learned",
       "seq": 1,
       "type": "user"
     },
