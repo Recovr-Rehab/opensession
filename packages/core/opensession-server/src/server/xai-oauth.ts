@@ -15,7 +15,14 @@
  * disconnected cannot resurrect the credential it replaced.
  */
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { existsSync, readFileSync, unlinkSync } from "fs";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+} from "fs";
 import { randomUUID } from "crypto";
 import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
@@ -108,6 +115,93 @@ export function disconnectXai(): boolean {
   }
 }
 
+// ── Serialization ───────────────────────────────────────────────────────────
+
+/** pi's CredentialStore contract requires "mutual exclusion per provider id,
+ *  cross-process too where the backing store supports it", and it runs the
+ *  network refresh INSIDE modify(). Without that, two turns whose token expires
+ *  together both POST the same refresh_token; xAI rotates, so one persists a
+ *  token the other has already invalidated and the shared workspace credential
+ *  dies until an admin signs in again.
+ *
+ *  In-process chaining is what actually serializes this deployment's turns. The
+ *  lock file is for a second server sharing the state dir; it is best-effort by
+ *  design — after the wait it proceeds anyway, because blocking a turn forever
+ *  is worse than the narrow race it is protecting against. */
+const LOCK_STALE_MS = 30_000;
+const LOCK_WAIT_MS = 10_000;
+
+function chain(): Promise<void> {
+  const g = globalThis as typeof globalThis & {
+    __opensessionXaiLockChain?: Promise<void>;
+  };
+  return (g.__opensessionXaiLockChain ??= Promise.resolve());
+}
+
+function setChain(next: Promise<void>): void {
+  (
+    globalThis as typeof globalThis & {
+      __opensessionXaiLockChain?: Promise<void>;
+    }
+  ).__opensessionXaiLockChain = next;
+}
+
+function lockPath(): string {
+  return `${storePath()}.lock`;
+}
+
+function takeFileLock(): boolean {
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      closeSync(openSync(lockPath(), "wx", 0o600));
+      return true;
+    } catch {
+      try {
+        // A holder that died leaves its lock behind; reap it rather than
+        // stalling every future refresh on this box.
+        const age = Date.now() - statSync(lockPath()).mtimeMs;
+        if (age > LOCK_STALE_MS) {
+          unlinkSync(lockPath());
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() > deadline) return false;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+}
+
+function dropFileLock(): void {
+  try {
+    unlinkSync(lockPath());
+  } catch {}
+}
+
+/** Run a read-modify-write against the shared credential with nothing else
+ *  touching it. */
+async function withStoreLock<T>(run: () => Promise<T>): Promise<T> {
+  const previous = chain();
+  let release!: () => void;
+  const mine = new Promise<void>((resolve) => (release = resolve));
+  setChain(previous.then(() => mine));
+  await previous.catch(() => undefined);
+  const held = takeFileLock();
+  if (!held) {
+    console.warn(
+      "[xai] could not take the credential lock in time; proceeding unlocked",
+    );
+  }
+  try {
+    return await run();
+  } finally {
+    if (held) dropFileLock();
+    release();
+  }
+}
+
 // ── The write-through credential store handed to a per-turn runtime ─────────
 
 /** pi's own CredentialStore type, derived from the SDK so this stays a
@@ -117,17 +211,28 @@ export type PiCredentialStore = NonNullable<
 >;
 type PiCredential = Awaited<ReturnType<PiCredentialStore["read"]>>;
 
+export interface XaiStoreOptions {
+  /** Aborting this refuses every write through this store. A device login runs
+   *  against a store bound to its own flow, so cancelling the flow stops the
+   *  credential pi is about to persist rather than racing it afterwards. */
+  signal?: AbortSignal;
+  /** Recorded on a credential this store creates, for the Settings card. */
+  connectedBy?: string;
+}
+
 /**
- * A credential store for one turn: the shared xAI credential is read from and
- * written back to disk, every other provider stays in memory.
+ * A credential store for one turn or one login: the shared xAI credential is
+ * read from and written back to disk, every other provider stays in memory.
  *
- * The generation stamp is the whole safety property. pi refreshes inside
- * `modify`, so a refresh can complete after an admin has disconnected or
- * replaced the credential. Re-reading the file and persisting only when the
- * generation still matches means a stale winner drops its write instead of
- * reviving a credential nobody is using any more.
+ * `modify` is the ONLY write path, as pi's contract says it is. pi persists a
+ * login through it and refreshes through it, so both go through the same lock,
+ * the same abort check and the same generation check. A refresh that finishes
+ * after an admin disconnected or reconnected finds a different generation and
+ * drops its write instead of resurrecting a credential nobody is using.
  */
-export function xaiCredentialStore(): PiCredentialStore {
+export function xaiCredentialStore(
+  options: XaiStoreOptions = {},
+): PiCredentialStore {
   const memory = new Map<string, PiCredential>();
   return {
     async read(id: string) {
@@ -156,43 +261,70 @@ export function xaiCredentialStore(): PiCredentialStore {
         if (next !== undefined) memory.set(id, next);
         return memory.get(id);
       }
-      const before = readStore();
-      const next = await fn(before ? piCredential(before) : undefined);
-      if (next === undefined) return before ? piCredential(before) : undefined;
-      if (
-        next.type !== "oauth" ||
-        typeof next.access !== "string" ||
-        typeof next.refresh !== "string" ||
-        typeof next.expires !== "number"
-      ) {
-        // Not something this store can persist. Leave the stored credential
-        // alone rather than overwriting a working token with an api-key entry.
-        return before ? piCredential(before) : undefined;
-      }
-      const current = readStore();
-      if (!before || !current || current.generation !== before.generation) {
-        // Disconnected or replaced while this refresh was in flight. Two turns
-        // refreshing at the same instant can still both write; they write the
-        // same rotation, and a shared subscription has no per-turn identity to
-        // lock against, so the generation stamp guards the case that actually
-        // loses data - a write landing after a disconnect.
-        return current ? piCredential(current) : undefined;
-      }
-      const merged: XaiStoredCredential = {
-        ...before,
-        access: next.access,
-        refresh: next.refresh,
-        expires: next.expires,
-      };
-      writeStore(merged);
-      return piCredential(merged);
+      return withStoreLock(async () => {
+        const before = readStore();
+        const next = await fn(before ? piCredential(before) : undefined);
+        const keep = () => {
+          const now = readStore();
+          return now ? piCredential(now) : undefined;
+        };
+        if (next === undefined) return keep();
+        if (
+          next.type !== "oauth" ||
+          typeof next.access !== "string" ||
+          typeof next.refresh !== "string" ||
+          typeof next.expires !== "number"
+        ) {
+          // Not something this store can persist. Leave the stored credential
+          // alone rather than overwriting a working token with an api-key entry.
+          return keep();
+        }
+        // The admin cancelled this login, or disconnected the workspace, while
+        // xAI was still answering. pi commits its own write before login()
+        // resolves, so refusing here is the only place that can stop it.
+        if (options.signal?.aborted) return keep();
+        const current = readStore();
+        if (before) {
+          if (!current || current.generation !== before.generation)
+            return keep();
+          const merged: XaiStoredCredential = {
+            ...before,
+            access: next.access,
+            refresh: next.refresh,
+            expires: next.expires,
+          };
+          writeStore(merged);
+          return piCredential(merged);
+        }
+        // Nothing was stored: this is a first connect. A new generation makes
+        // every refresh still in flight against the credential this replaces
+        // decline to write.
+        if (current) return keep();
+        const created: XaiStoredCredential = {
+          type: "oauth",
+          access: next.access,
+          refresh: next.refresh,
+          expires: next.expires,
+          generation: randomUUID(),
+          connectedAt: Date.now(),
+          connectedBy: options.connectedBy,
+        };
+        writeStore(created);
+        return piCredential(created);
+      });
     },
     async delete(id: string) {
       if (id !== XAI_PROVIDER_ID) {
         memory.delete(id);
         return;
       }
-      disconnectXai();
+      // Only the stored credential. Aborting live device logins is an admin
+      // action (disconnectXai), not something a pi-side logout should do.
+      await withStoreLock(async () => {
+        try {
+          if (existsSync(storePath())) unlinkSync(storePath());
+        } catch {}
+      });
     },
   };
 }
@@ -250,7 +382,10 @@ export interface XaiLoginStarted {
  */
 export async function startXaiLogin(
   connectedBy?: string,
-  loadRuntime: () => Promise<{
+  loadRuntime: (
+    signal: AbortSignal,
+    connectedBy?: string,
+  ) => Promise<{
     login: (
       providerId: string,
       type: "oauth",
@@ -263,14 +398,14 @@ export async function startXaiLogin(
   }> = defaultLoginRuntime,
 ): Promise<XaiLoginStarted | { error: string }> {
   pruneFlows();
+  const controller = new AbortController();
   let runtime;
   try {
-    runtime = await loadRuntime();
+    runtime = await loadRuntime(controller.signal, connectedBy);
   } catch (error) {
     return { error: describe(error) };
   }
 
-  const controller = new AbortController();
   let announce: (started: XaiLoginStarted) => void = () => undefined;
   let fail: (error: Error) => void = () => undefined;
   const announced = new Promise<XaiLoginStarted>((resolve, reject) => {
@@ -301,44 +436,19 @@ export async function startXaiLogin(
         });
       },
     })
-    .then((credential) => {
-      const value = credential as {
-        access?: unknown;
-        refresh?: unknown;
-        expires?: unknown;
-      };
-      if (
-        typeof value?.access !== "string" ||
-        typeof value?.refresh !== "string"
-      ) {
-        throw new Error("xAI returned no usable credential");
-      }
-      // The admin cancelled, or disconnected the workspace, while xAI was
-      // still deciding. Aborting the flow has to mean the credential it was
-      // about to produce never lands - the generation guard below only
-      // protects the REFRESH path, and a login mints its own generation, so
-      // without this check a completed sign-in silently reconnects a
-      // workspace that was deliberately disconnected.
-      if (controller.signal.aborted) {
-        const abandoned = flows().get(id);
-        if (abandoned) abandoned.settled = { ok: false, error: "cancelled" };
+    .then(() => {
+      // No write here. pi persists the credential through the store above,
+      // which is the only write path and already applied the lock, the abort
+      // check and the generation check. Writing again would be a second,
+      // unserialized path - which is exactly how a cancelled reconnect used to
+      // replace a live credential.
+      const flow = flows().get(id);
+      if (!xaiConnected()) {
+        if (flow) {
+          flow.settled = { ok: false, error: "The Grok sign-in was cancelled" };
+        }
         return;
       }
-      writeStore({
-        type: "oauth",
-        access: value.access,
-        refresh: value.refresh,
-        expires:
-          typeof value.expires === "number"
-            ? value.expires
-            : Date.now() + 55 * 60_000,
-        // A new generation on every connect: refreshes still in flight against
-        // the credential this one replaces will decline to write.
-        generation: randomUUID(),
-        connectedAt: Date.now(),
-        connectedBy,
-      });
-      const flow = flows().get(id);
       if (flow) flow.settled = { ok: true };
     })
     .catch((error: unknown) => {
@@ -375,10 +485,12 @@ export function pollXaiLogin(flowId: string): XaiPollResult {
   pruneFlows();
   const flow = flows().get(flowId);
   if (!flow) {
-    // A flow that completed and was already collected still leaves evidence.
-    return xaiConnected()
-      ? { status: "connected", state: xaiStatus() }
-      : { status: "error", error: "That Grok login is no longer in progress" };
+    // Deliberately not "connected": a credential may exist because someone
+    // else connected one. This flow's own outcome is simply no longer known.
+    return {
+      status: "error",
+      error: "That Grok login is no longer in progress",
+    };
   }
   if (!flow.settled) return { status: "pending" };
   flows().delete(flowId);
@@ -396,10 +508,10 @@ export function cancelXaiLogin(flowId: string): boolean {
   return true;
 }
 
-async function defaultLoginRuntime() {
+async function defaultLoginRuntime(signal: AbortSignal, connectedBy?: string) {
   const sdk = await import("@earendil-works/pi-coding-agent");
   const runtime = await sdk.ModelRuntime.create({
-    credentials: xaiCredentialStore(),
+    credentials: xaiCredentialStore({ signal, connectedBy }),
     modelsPath: null,
   });
   return runtime as unknown as Awaited<

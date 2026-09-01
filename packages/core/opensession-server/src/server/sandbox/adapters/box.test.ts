@@ -10,6 +10,7 @@ import {
   boxResumePrimeCommand,
   boxRuntimeHomeFailure,
   boxSnapshotSaveIsRecoverable,
+  BOX_COMMAND_PLANE_EXIT,
   boxSshLaneSettles,
   boxSshTransportFailed,
   reusedBoxLaneOutcome,
@@ -214,5 +215,58 @@ describe("Box reused SSH lane", () => {
     expect(reusedBoxLaneOutcome(124)).toBe("degrade");
     // A real non-zero from the check itself IS a verdict about the home path.
     expect(reusedBoxLaneOutcome(1)).toBe("fail");
+  });
+});
+
+describe("Box lane settling budget", () => {
+  test("stops probing once the budget is spent, however many attempts remain", async () => {
+    // The lane is an optimisation over a command plane that already works, so
+    // three full ssh timeouts is not a price a session start may pay.
+    let clock = 0;
+    let calls = 0;
+    const settled = await boxSshLaneSettles(
+      async () => {
+        calls += 1;
+        clock += 20_000; // each probe burns its whole ssh timeout
+        return { exitCode: 255 };
+      },
+      3,
+      0,
+      25_000,
+      () => clock,
+    );
+    expect(settled).toBe(false);
+    expect(calls).toBe(2);
+  });
+
+  test("a slow but working first attempt still adopts the lane", async () => {
+    let clock = 0;
+    const settled = await boxSshLaneSettles(
+      async () => {
+        clock += 19_000;
+        return { exitCode: 0 };
+      },
+      3,
+      0,
+      25_000,
+      () => clock,
+    );
+    expect(settled).toBe(true);
+  });
+});
+
+describe("Box command plane failures", () => {
+  test("a plane that never ran the command is transport, not a home verdict", () => {
+    // exec's catch used to return 1 for any thrown command-plane error, which
+    // boxRuntimeHomeFailure then reported as a filesystem verdict - the same
+    // misdiagnosis, arriving over the other transport.
+    expect(boxSshTransportFailed(BOX_COMMAND_PLANE_EXIT)).toBe(true);
+    expect(
+      boxRuntimeHomeFailure({
+        exitCode: BOX_COMMAND_PLANE_EXIT,
+        stdout: "",
+        stderr: "box_direct_failed",
+      }),
+    ).toContain("could not reach the sandbox");
   });
 });

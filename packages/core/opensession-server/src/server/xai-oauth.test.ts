@@ -41,8 +41,11 @@ function seed(overrides: Record<string, unknown> = {}): void {
   );
 }
 
-/** A ModelRuntime stand-in: announces a device code, then settles how the
- *  test says. Keeps pi's real network flow out of the suite. */
+/** A ModelRuntime stand-in. It persists through the credential store inside
+ *  login(), exactly as pi's Models.login does (`credentials.modify(id, () =>
+ *  credential)` before login() resolves) - a fake that skipped that step is why
+ *  a cancelled reconnect could replace a live credential while the suite stayed
+ *  green. */
 function fakeRuntime(outcome: {
   resolve?: Record<string, unknown>;
   reject?: string;
@@ -50,34 +53,39 @@ function fakeRuntime(outcome: {
   /** Set false to model a provider that ignores cancellation. */
   honourSignal?: boolean;
 }) {
-  return async () => ({
-    login: async (
-      _providerId: string,
-      _type: "oauth",
-      interaction: {
-        signal: AbortSignal;
-        prompt: (p: unknown) => Promise<string>;
-        notify: (event: Record<string, unknown>) => void;
+  return async (signal: AbortSignal, connectedBy?: string) => {
+    const store = xaiCredentialStore({ signal, connectedBy });
+    return {
+      login: async (
+        _providerId: string,
+        _type: "oauth",
+        interaction: {
+          signal: AbortSignal;
+          prompt: (p: unknown) => Promise<string>;
+          notify: (event: Record<string, unknown>) => void;
+        },
+      ) => {
+        if (outcome.announce !== false) {
+          interaction.notify({
+            type: "device_code",
+            userCode: "ABCD-EFGH",
+            verificationUri: "https://x.ai/device?code=ABCD-EFGH",
+            expiresInSeconds: 600,
+          });
+        }
+        await new Promise((wake) => setTimeout(wake, 1));
+        if (outcome.reject) throw new Error(outcome.reject);
+        if (outcome.honourSignal !== false && interaction.signal.aborted) {
+          throw new Error("Login cancelled");
+        }
+        await store.modify(
+          XAI_PROVIDER_ID,
+          async () => outcome.resolve as never,
+        );
+        return outcome.resolve;
       },
-    ) => {
-      if (outcome.announce !== false) {
-        interaction.notify({
-          type: "device_code",
-          userCode: "ABCD-EFGH",
-          verificationUri: "https://x.ai/device?code=ABCD-EFGH",
-          expiresInSeconds: 600,
-        });
-      }
-      await new Promise((wake) => setTimeout(wake, 1));
-      if (outcome.reject) throw new Error(outcome.reject);
-      // pi's real device poller rejects once the signal aborts. A fake that
-      // resolves anyway is how a "cancelled" login still wrote a credential.
-      if (outcome.honourSignal !== false && interaction.signal.aborted) {
-        throw new Error("Login cancelled");
-      }
-      return outcome.resolve;
-    },
-  });
+    };
+  };
 }
 
 /** Give a background login time to run its completion handler. Used where the
@@ -246,7 +254,12 @@ describe("device login through pi", () => {
     await settle();
     const polled = pollXaiLogin(started.flowId);
     expect(polled.status).toBe("connected");
+    // Written by pi's persist through the store - the single write path - and
+    // stamped with the connector this flow was started for.
     expect(xaiStatus().connectedBy).toBe("octocat");
+    expect(
+      JSON.parse(readFileSync(storePath, "utf-8")).generation,
+    ).toBeTruthy();
     expect(JSON.parse(readFileSync(storePath, "utf-8")).access).toBe(
       "fresh-access",
     );
@@ -290,7 +303,7 @@ describe("device login through pi", () => {
     expect("error" in started).toBe(true);
   });
 
-  test("cancelling stops the flow and forgets it", async () => {
+  test("cancelling stops the flow, forgets it, and writes nothing", async () => {
     const started = await startXaiLogin(
       "octocat",
       fakeRuntime({
@@ -305,6 +318,64 @@ describe("device login through pi", () => {
     if ("error" in started) throw new Error(started.error);
     expect(cancelXaiLogin(started.flowId)).toBe(true);
     expect(cancelXaiLogin(started.flowId)).toBe(false);
+    await settleFlows();
+    // The bookkeeping above passed while the credential was being written
+    // anyway. Assert the thing that actually matters.
+    expect(xaiConnected()).toBe(false);
+  });
+
+  test("cancelling a RECONNECT leaves the live credential untouched", async () => {
+    // The dangerous case: something IS stored, so pi's persist finds a
+    // credential to overwrite rather than a first connect to create.
+    seed();
+    const started = await startXaiLogin(
+      "octocat",
+      fakeRuntime({
+        honourSignal: false,
+        resolve: {
+          type: "oauth",
+          access: "cancelled-reconnect",
+          refresh: "cancelled-reconnect",
+          expires: Date.now() + 55 * 60_000,
+        },
+      }),
+    );
+    if ("error" in started) throw new Error(started.error);
+    expect(cancelXaiLogin(started.flowId)).toBe(true);
+    await settleFlows();
+    expect(JSON.parse(readFileSync(storePath, "utf-8")).access).toBe(
+      "stored-access",
+    );
+  });
+
+  test("two concurrent refreshes do not interleave into a torn credential", async () => {
+    seed();
+    // Both stores read the same generation, which is exactly the case the
+    // generation stamp cannot resolve on its own - only serialization can.
+    const a = xaiCredentialStore();
+    const b = xaiCredentialStore();
+    const rotate = (
+      store: ReturnType<typeof xaiCredentialStore>,
+      tag: string,
+    ) =>
+      store.modify(XAI_PROVIDER_ID, async (current) => {
+        await new Promise((wake) => setTimeout(wake, 5));
+        return {
+          type: "oauth",
+          access: `${tag}-from-${(current as { access: string }).access}`,
+          refresh: `${tag}-refresh`,
+          expires: Date.now() + 60 * 60_000,
+        } as never;
+      });
+    await Promise.all([rotate(a, "first"), rotate(b, "second")]);
+    const onDisk = JSON.parse(readFileSync(storePath, "utf-8"));
+    // Whoever ran second must have SEEN the first one's write, not the
+    // credential both started from.
+    expect(onDisk.access).not.toBe("first-from-stored-access");
+    expect(
+      onDisk.access === "second-from-first-from-stored-access" ||
+        onDisk.access === "first-from-second-from-stored-access",
+    ).toBe(true);
   });
 
   test("disconnecting abandons a login still in flight", async () => {
