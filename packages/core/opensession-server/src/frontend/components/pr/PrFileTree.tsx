@@ -144,7 +144,7 @@ export function PrFileTree({
       ref={rootRef}
       id="pr-file-tree"
       aria-label="Changed files"
-      className="sticky top-[var(--review-file-tree-top,0px)] mb-2 ml-2 mt-[var(--review-file-tree-gap,8px)] flex max-h-[calc(100dvh-var(--review-file-tree-top,0px)-16px)] min-h-0 shrink-0 flex-col rounded-lg border border-line bg-surface desktop:max-h-[calc(100dvh-var(--desktop-header-h)-var(--review-file-tree-top,0px)-16px)]"
+      className="sticky top-[var(--review-file-tree-top,0px)] mb-2 ml-2 mt-[var(--review-file-tree-gap,8px)] flex max-h-[calc(100dvh-var(--review-file-tree-top,0px)-16px)] min-h-0 shrink-0 flex-col rounded-lg bg-surface smooth-shadow-ring-sm desktop:max-h-[calc(100dvh-var(--desktop-header-h)-var(--review-file-tree-top,0px)-16px)]"
       style={{
         width: renderedWidth,
         maxWidth: `calc(100% - ${MIN_DIFF_WIDTH}px)`,

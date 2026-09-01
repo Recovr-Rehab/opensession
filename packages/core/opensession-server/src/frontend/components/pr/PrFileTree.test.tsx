@@ -31,6 +31,20 @@ describe("PrFileTree", () => {
     expect(html).toContain('aria-orientation="vertical"');
   });
 
+  test("uses the same quiet ring as the review chrome", () => {
+    const html = renderToStaticMarkup(
+      <PrFileTree
+        files={[{ path: "src/index.ts", additions: 3, deletions: 1 }]}
+        mode="flat"
+        showFileStats
+        onOpenFile={() => {}}
+      />,
+    );
+
+    expect(html).toContain("smooth-shadow-ring-sm");
+    expect(html).not.toContain("rounded-lg border border-line bg-surface");
+  });
+
   test("renders a flat file list with change counts", () => {
     const html = renderToStaticMarkup(
       <PrFileTree
