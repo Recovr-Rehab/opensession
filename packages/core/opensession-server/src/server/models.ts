@@ -130,6 +130,7 @@ export function normalizeModelEffort(
 }
 
 export const DEFAULT_BRIDGE_PICKER_MODELS = [
+  "claude-fable-5-1",
   "claude-fable-5",
   "claude-opus-5",
   "claude-sonnet-5",
@@ -141,10 +142,16 @@ export const DEFAULT_BRIDGE_PICKER_MODELS = [
 
 export const KNOWN_MODELS: ModelInfo[] = [
   {
+    id: "claude-fable-5-1",
+    provider: "claude",
+    label: "Claude Fable 5.1",
+    aliases: ["fable", "fable5.1"],
+  },
+  {
     id: "claude-fable-5",
     provider: "claude",
     label: "Claude Fable 5",
-    aliases: ["fable"],
+    aliases: ["fable5"],
   },
   {
     id: "claude-opus-5",
@@ -717,6 +724,7 @@ const CODEX_MODEL_ORDER = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
  * primary, so the human is asked — the safe default).
  */
 const FALLBACK_TIER: Record<string, number> = {
+  "claude-fable-5-1": 3,
   "claude-fable-5": 3,
   "gpt-5.6-sol": 3,
   "claude-opus-5": 3,
@@ -1290,6 +1298,7 @@ export function modelLabel(model?: string | null): string {
 // only context ceilings here for the live context-fill gauge.
 
 const CONTEXT_WINDOWS: Record<string, number> = {
+  "claude-fable-5-1": 1_000_000,
   "claude-fable-5": 1_000_000,
   "claude-opus-5": 1_000_000,
   "claude-opus-4-8": 1_000_000,

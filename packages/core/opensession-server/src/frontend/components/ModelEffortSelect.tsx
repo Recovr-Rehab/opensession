@@ -30,6 +30,7 @@ export const EFFORTS = [
 ];
 
 const PRIMARY_MODEL_IDS = [
+  "claude-fable-5-1",
   "claude-fable-5",
   "claude-opus-5",
   "claude-sonnet-5",
@@ -210,6 +211,7 @@ const MODEL_TAIL_ORDER = [
   "low",
   "fable",
   "sol",
+  "claude-fable-5-1",
   "claude-fable-5",
   "claude-opus-5",
   "claude-opus-4-8",

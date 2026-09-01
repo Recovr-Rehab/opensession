@@ -36,6 +36,7 @@ engine and dispatch id `routeModel()` returns for it.
 
 | Model id | Label | Engine | Dispatched as |
 | --- | --- | --- | --- |
+| `claude-fable-5-1` | Claude Fable 5.1 | pi | `pi/anthropic/claude-fable-5-1` |
 | `claude-fable-5` | Claude Fable 5 | pi | `pi/anthropic/claude-fable-5` |
 | `claude-opus-5` | Claude Opus 5 | pi | `pi/anthropic/claude-opus-5` |
 | `claude-opus-4-8` | Claude Opus 4.8 | pi | `pi/anthropic/claude-opus-4-8` |
