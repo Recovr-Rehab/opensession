@@ -2,6 +2,10 @@ import { BASE_PATH, stripBasePath } from "./lib/base";
 import { DEFAULT_REPO_ID, PRODUCT_NAME } from "./lib/brand";
 import type { NavigationActions } from "./lib/navigation";
 import {
+  setPendingSessionContext,
+  takePendingSessionContext,
+} from "./lib/pending-session-context";
+import {
   onSessionTitleResolutionRequested,
   retrySessionTitleResolution,
   setKnownRepos,
@@ -2889,8 +2893,12 @@ function AppContent({
     mode: "share" | "stack" | "ask",
     side: SplitSide | null = null,
     morphOrigin?: NewTabMorphOrigin,
+    contextSourceId?: string,
   ) => {
     if (emptyWorkspaceSession) {
+      if (contextSourceId) {
+        setPendingSessionContext(emptyWorkspaceSession.id, contextSourceId);
+      }
       setActiveViewTab(null);
       navigate({ view: "session", id: emptyWorkspaceSession.id });
       return;
@@ -2941,6 +2949,9 @@ function AppContent({
     // before routing so its persisted workspace suffix cannot keep winning.
     setActiveViewTab(null);
     const optimisticId = newClientSessionId();
+    if (contextSourceId) {
+      setPendingSessionContext(optimisticId, contextSourceId);
+    }
     siblingCreateRef.current = optimisticId;
     await (async () => {
       const id = await createNewSessionFrom(
@@ -2958,6 +2969,7 @@ function AppContent({
         });
     })()
       .catch(async (error) => {
+        takePendingSessionContext(optimisticId);
         if (error instanceof MissingWorkspaceSessionSourceError) {
           openSessionlessWorkspaceComposer();
         } else {
@@ -3926,6 +3938,8 @@ function AppContent({
     openDraft,
     openNewSessionInWorkspace: (mode, origin) =>
       handleNewSession(mode, null, origin),
+    duplicateSession: (sourceSessionId) =>
+      handleNewSession("share", null, undefined, sourceSessionId),
     startNewChat: (session, prompt) =>
       openNewSessionInWorkspace(session, "share", prompt),
     openPrefilledSession,

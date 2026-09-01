@@ -291,6 +291,7 @@ import { toast } from "../ui/toast";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { onTranscriptDisclosure } from "../lib/transcript-disclosures";
 import { takePendingSessionFork } from "../lib/pending-session-fork";
+import { takePendingSessionContext } from "../lib/pending-session-context";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged } from "../lib/lanes";
 import { ownedBy } from "../lib/sidebar-lanes";
@@ -2447,7 +2448,9 @@ export function SessionViewer({
   // workspace sessions the user can attach as context — selected ids ride the
   // first send as `contextSessions` and the server inlines a fenced transcript
   // digest of each. One-shot: cleared once a send consumes them.
-  const [contextSessions, setContextSessions] = useState<string[]>([]);
+  const [contextSessions, setContextSessions] = useState<string[]>(() =>
+    takePendingSessionContext(session.id),
+  );
 
   // Subscribe to WebSocket messages
   const subscribeToSession = useEffectEvent(() => {
@@ -3605,9 +3608,16 @@ export function SessionViewer({
   // still fork as a new sibling with a transcript handoff.
   const canForkSession = session.source === "opensession" && !!session.ran;
 
-  const handleFork = useCallback((messageId?: string) => {
-    setForkFrom(messageId ? { kind: "message", messageId } : { kind: "tip" });
-  }, []);
+  const handleFork = useCallback(
+    (messageId?: string) => {
+      if (!messageId) {
+        void navigation.duplicateSession(session.id);
+        return;
+      }
+      setForkFrom({ kind: "message", messageId });
+    },
+    [navigation, session.id],
+  );
 
   // "Continue" under a failed run's notice. An ordinary prompt, so it steers,
   // notices and broadcasts like anything else a person sends — the failure
