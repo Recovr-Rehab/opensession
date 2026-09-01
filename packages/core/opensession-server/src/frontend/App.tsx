@@ -127,11 +127,8 @@ import { useSubagentTabs } from "./hooks/useSubagentTabs";
 import { useOnDemandViewTabs } from "./hooks/useOnDemandViewTabs";
 import { useNewSessionPalette } from "./hooks/useNewSessionPalette";
 import { settingsPaletteActions } from "./lib/settings-sections";
-import {
-  SessionTabs,
-  type NewTabMorphOrigin,
-  type ViewTab,
-} from "./components/SessionTabs";
+import { SessionTabs } from "./components/SessionTabs";
+import type { NewTabMorphOrigin, ViewTab } from "./lib/session-tabs-types";
 import { SessionSplit, type SplitSide } from "./components/SessionSplit";
 import { RestartOverlay } from "./components/RestartOverlay";
 import { MediaLightboxHost } from "./components/MediaLightbox";
@@ -2634,81 +2631,85 @@ function AppContent({
     ).map((tab) => (side ? { ...tab, active: tab.id === barActive } : tab));
     return (
       <SessionTabs
-        tabs={barSessions}
-        archived={archivedSessions}
-        activeId={
-          barActive && barSessions.some((session) => session.id === barActive)
-            ? barActive
-            : null
-        }
-        inSplit={!!side}
-        showHistory={side !== "left"}
-        colors={tabColors}
-        viewers={tabViewers}
-        onSelect={selectSessionTab}
-        onSetColor={(key, color) => setTabColors(setTabColor(key, color))}
-        tabOrder={stripTabIds}
-        onReorderTabs={(ids) => saveTabOrder(tabOrderKey, mergeBarOrder(ids))}
-        onSplitDrag={(id, point) => {
-          setSplitDropSide(id && point ? splitSideAt(id, point) : null);
+        content={{
+          sessions: barSessions,
+          archivedSessions,
+          activeSessionId:
+            barActive && barSessions.some((session) => session.id === barActive)
+              ? barActive
+              : null,
+          colors: tabColors,
+          viewers: tabViewers,
+          order: stripTabIds,
+          views: barViews,
         }}
-        onSplitDrop={(id, point) => {
-          const target = splitSideAt(id, point);
-          setSplitDropSide(null);
-          if (!target) return false;
-          moveTabToSide(id, target);
-          return true;
+        layout={{
+          inSplit: !!side,
+          showHistory: side !== "left",
+          moveAcrossSide: side ? otherSide(side) : undefined,
+          emptySessionId: emptyWorkspaceSession?.id,
+          morphingSessionId: newTabMorph?.id,
+          morphOrigin: newTabMorph?.origin,
         }}
-        onMoveAcross={
-          side ? (id) => moveTabToSide(id, otherSide(side)) : undefined
-        }
-        moveAcrossSide={side ? otherSide(side) : undefined}
-        viewTabs={barViews}
-        onSelectView={selectViewTab}
-        onCloseView={(id) => {
-          if (id.startsWith("subagent:"))
-            closeSubagentTab(id.slice("subagent:".length));
-          else if (id.startsWith("staging:")) closeStagingTab();
-          else if (id.startsWith("assets:")) closeAssetsTab();
-          else if (id.startsWith("terminal:")) closeTerminalTab();
-          else if (id.startsWith("preview:")) closePreviewTab();
-          else if (id.startsWith("portal:")) closePortalTab();
-          else {
-            const closingTab = id.startsWith("conversation:")
-              ? ("conversation" as const)
-              : id.startsWith("video:")
-                ? ("video" as const)
-                : ("review" as const);
-            if (closingTab === "conversation") closeConversationTab();
-            else if (closingTab === "video") closeVideoTab();
-            else closeReviewTab();
-            // A workspace always shows something: closing its last pane
-            // while every session is closed reopens one, and its
-            // navigation stands in for dropping the tab suffix.
-            if (!reopenSessionAfterPaneClose(closingTab))
-              dropPaneUrlSuffix(closingTab);
-          }
+        actions={{
+          selectSession: selectSessionTab,
+          setColor: (key, color) => setTabColors(setTabColor(key, color)),
+          reorder: (ids) => saveTabOrder(tabOrderKey, mergeBarOrder(ids)),
+          previewSplit: (id, point) => {
+            setSplitDropSide(id && point ? splitSideAt(id, point) : null);
+          },
+          dropIntoSplit: (id, point) => {
+            const target = splitSideAt(id, point);
+            setSplitDropSide(null);
+            if (!target) return false;
+            moveTabToSide(id, target);
+            return true;
+          },
+          moveAcross: side
+            ? (id) => moveTabToSide(id, otherSide(side))
+            : undefined,
+          selectView: selectViewTab,
+          closeView: (id) => {
+            if (id.startsWith("subagent:"))
+              closeSubagentTab(id.slice("subagent:".length));
+            else if (id.startsWith("staging:")) closeStagingTab();
+            else if (id.startsWith("assets:")) closeAssetsTab();
+            else if (id.startsWith("terminal:")) closeTerminalTab();
+            else if (id.startsWith("preview:")) closePreviewTab();
+            else if (id.startsWith("portal:")) closePortalTab();
+            else {
+              const closingTab = id.startsWith("conversation:")
+                ? ("conversation" as const)
+                : id.startsWith("video:")
+                  ? ("video" as const)
+                  : ("review" as const);
+              if (closingTab === "conversation") closeConversationTab();
+              else if (closingTab === "video") closeVideoTab();
+              else closeReviewTab();
+              // A workspace always shows something: closing its last pane
+              // while every session is closed reopens one, and its
+              // navigation stands in for dropping the tab suffix.
+              if (!reopenSessionAfterPaneClose(closingTab))
+                dropPaneUrlSuffix(closingTab);
+            }
+          },
+          newSession:
+            barSessions.some((session) => session.desk) || emptyWorkspaceSession
+              ? undefined
+              : (mode, origin) => handleNewSession(mode, side, origin),
+          rename: async (id, title) => {
+            await (async () => {
+              await renameSessionApi(id, title);
+            })().catch(async (e) => {
+              console.error("Rename failed:", e);
+            });
+            refresh();
+          },
+          close: closeSession,
+          delete: deleteSessionFromTab,
+          toast: showToast,
+          restore: restoreSession,
         }}
-        onNewSession={
-          barSessions.some((session) => session.desk) || emptyWorkspaceSession
-            ? undefined
-            : (mode, origin) => handleNewSession(mode, side, origin)
-        }
-        emptySessionId={emptyWorkspaceSession?.id}
-        morphingSessionId={newTabMorph?.id}
-        morphOrigin={newTabMorph?.origin}
-        onRename={async (id, title) => {
-          await (async () => {
-            await renameSessionApi(id, title);
-          })().catch(async (e) => {
-            console.error("Rename failed:", e);
-          });
-          refresh();
-        }}
-        onClose={closeSession}
-        onDelete={deleteSessionFromTab}
-        onToast={showToast}
-        onRestore={restoreSession}
       />
     );
   }

@@ -95,7 +95,7 @@ import { InlineAlert } from "../ui/state";
 import { duration, ease } from "../ui/motion";
 import { mainSession } from "../lib/landing-session";
 import { sessionCarriesPr } from "../lib/session-prs";
-import type { NewTabMorphOrigin } from "./SessionTabs";
+import type { NewTabMorphOrigin } from "../lib/session-tabs-types";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import {
   workspaceSummaryOpen,

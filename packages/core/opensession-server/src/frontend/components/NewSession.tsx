@@ -66,10 +66,8 @@ import {
 import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
 import { fallbackBranchName } from "../lib/workspace-draft";
 import { newSessionDefaultRepo } from "../lib/new-session-repo";
-import {
-  NewSessionPrompt,
-  type NewSessionPromptHandle,
-} from "./NewSessionPrompt";
+import { NewSessionPrompt } from "./NewSessionPrompt";
+import type { NewSessionPromptHandle } from "../lib/new-session-prompt-types";
 import { ComposerContextChip } from "./ComposerContextChip";
 import {
   IconPaperclip,
@@ -1775,42 +1773,47 @@ export function NewSession({
           {/* Prompt. It owns the draft: see NewSessionPrompt for why the text
             does not live in this component. */}
           <NewSessionPrompt
-            initialText={initialPrompt}
-            textareaRef={promptRef}
-            valueRef={promptText}
-            handle={promptHandle}
-            repo={repo}
-            mcpServers={selectedMcpServers}
-            // Ask sessions read and explain; they never touch the code. Asking
-            // "what to work on" in that mode invites a prompt the session
-            // cannot carry out.
-            placeholder={
-              mode === "ask"
-                ? "What do you want to find out?"
-                : "What do you want to work on?"
-            }
-            disabled={busy}
-            images={images}
-            files={files}
-            staging={staging}
-            onRemovePendingImage={uploads.cancelPendingImage}
-            onRemovePendingFile={uploads.cancelPendingFile}
-            onRemoveImage={(i) => {
-              removeDraftImage(DRAFT_KEY, i);
-              adoptDraftAttachments();
+            config={{
+              initialText: initialPrompt,
+              repo,
+              mcpServers: selectedMcpServers,
+              // Ask sessions read and explain; they never touch the code. Asking
+              // "what to work on" in that mode invites a prompt the session
+              // cannot carry out.
+              placeholder:
+                mode === "ask"
+                  ? "What do you want to find out?"
+                  : "What do you want to work on?",
+              disabled: busy,
+              images,
+              files,
+              staging,
+              sendKey,
+              canCreate,
             }}
-            onRemoveFile={(i) => {
-              removeDraftFile(DRAFT_KEY, i);
-              adoptDraftAttachments();
+            refs={{
+              textarea: promptRef,
+              value: promptText,
+              handle: promptHandle,
             }}
-            onAddAttachments={(picked) => void addAttachments(picked)}
-            sendKey={sendKey}
-            canCreate={canCreate}
-            onCreate={handleCreate}
-            onHasTextChange={setHasPromptText}
-            onDraftSettled={setSettledPrompt}
-            onEdgesChange={handlePromptEdges}
-            onMentionOpenChange={setMentionOpen}
+            actions={{
+              removePendingImage: uploads.cancelPendingImage,
+              removePendingFile: uploads.cancelPendingFile,
+              removeImage: (index) => {
+                removeDraftImage(DRAFT_KEY, index);
+                adoptDraftAttachments();
+              },
+              removeFile: (index) => {
+                removeDraftFile(DRAFT_KEY, index);
+                adoptDraftAttachments();
+              },
+              addAttachments: (picked) => void addAttachments(picked),
+              create: handleCreate,
+              changeHasText: setHasPromptText,
+              settleDraft: setSettledPrompt,
+              changeEdges: handlePromptEdges,
+              changeMentionOpen: setMentionOpen,
+            }}
           />
 
           {status.kind === "failed" && (
@@ -2104,20 +2107,26 @@ export function NewSession({
               {/* Always visible — on phones too, so a non-default (dumber) model
                 is never silently in effect. */}
               <ModelEffortSelect
-                className={MODEL_PILL}
-                title="Model and reasoning effort"
-                models={models}
-                defaultModel={defaultModel}
-                model={model}
-                onModelChange={setModel}
-                effort={effort}
-                onEffortChange={setEffort}
-                fastMode={fastMode}
-                onFastModeChange={setFastMode}
-                accounts={accounts}
-                accountId={accountId}
-                onAccountChange={setAccountId}
-                disabled={busy}
+                selection={{
+                  models,
+                  defaultModel,
+                  model,
+                  effort,
+                  fastMode,
+                  accounts,
+                  accountId,
+                }}
+                appearance={{
+                  className: MODEL_PILL,
+                  title: "Model and reasoning effort",
+                  disabled: busy,
+                }}
+                actions={{
+                  changeModel: setModel,
+                  changeEffort: setEffort,
+                  changeFastMode: setFastMode,
+                  changeAccount: setAccountId,
+                }}
               />
               <VoiceInput
                 className={FOOTER_ICON_BTN}

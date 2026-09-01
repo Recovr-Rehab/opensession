@@ -69,13 +69,13 @@ test("the new composer uses the shared model settings component with every axis"
   const picker = source.slice(pickerStart, pickerEnd);
 
   expect(pickerStart).toBeGreaterThan(-1);
-  expect(picker).toContain("effort={effort}");
-  expect(picker).toContain("onEffortChange={setEffort}");
-  expect(picker).toContain("fastMode={fastMode}");
-  expect(picker).toContain("onFastModeChange={setFastMode}");
-  expect(picker).toContain("accounts={accounts}");
-  expect(picker).toContain("accountId={accountId}");
-  expect(picker).toContain("onAccountChange={setAccountId}");
+  expect(picker).toContain("effort,");
+  expect(picker).toContain("changeEffort: setEffort");
+  expect(picker).toContain("fastMode,");
+  expect(picker).toContain("changeFastMode: setFastMode");
+  expect(picker).toContain("accounts,");
+  expect(picker).toContain("accountId,");
+  expect(picker).toContain("changeAccount: setAccountId");
 });
 
 test("the new session payload persists fast mode", async () => {
