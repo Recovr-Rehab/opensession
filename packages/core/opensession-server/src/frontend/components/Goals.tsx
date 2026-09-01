@@ -1,6 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import { BASE_PATH } from "../lib/base";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useEffectEvent, useState } from "react";
 import {
   fetchGoals,
   fetchGoal,
@@ -73,6 +73,7 @@ const STATUS_COLOR: Record<GoalStatus, string> = {
 export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -81,27 +82,30 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
   useEffect(() => {
     fetchModels()
       .then((m) => setDefaultModel(m.default))
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setModelLoadError(errorMessage(cause, "Could not load models")),
+      );
   }, []);
 
-  const load = useCallback(async () => {
+  const load = async () => {
     try {
       setGoals(await fetchGoals());
-    } catch (cause) {
+    } catch (cause: unknown) {
       setError(errorMessage(cause, "Could not load goals"));
     }
     setLoading(false);
-  }, []);
+  };
+  const loadForEffect = useEffectEvent(() => load());
 
   useEffect(() => {
     document.title = docTitle("Goals");
-    load();
-    const id = setInterval(load, 10000);
+    void loadForEffect();
+    const id = setInterval(() => void loadForEffect(), 10000);
     return () => {
       clearInterval(id);
       document.title = DEFAULT_DOC_TITLE;
     };
-  }, [load]);
+  }, []);
 
   // The routed selection — matched by id, or by name for deep-links.
   const sel = selectedId
@@ -136,7 +140,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
     try {
       await action();
       setTimeout(load, refreshDelay);
-    } catch (cause) {
+    } catch (cause: unknown) {
       setError(errorMessage(cause, "Could not update goal"));
     }
   }
@@ -190,6 +194,14 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
           {error && (
             <InlineAlert className="mb-3" onDismiss={() => setError(null)}>
               {error}
+            </InlineAlert>
+          )}
+          {modelLoadError && (
+            <InlineAlert
+              className="mb-3"
+              onDismiss={() => setModelLoadError(null)}
+            >
+              {modelLoadError}
             </InlineAlert>
           )}
 
@@ -548,7 +560,10 @@ function GoalLedger({ id }: { id: string }) {
       .then((g) => {
         if (alive) setLedger(g.ledger || "(ledger is empty)");
       })
-      .catch(() => alive && setLedger("(failed to load ledger)"));
+      .catch((cause: unknown) => {
+        if (alive)
+          setLedger(`(${errorMessage(cause, "Failed to load ledger")})`);
+      });
     return () => {
       alive = false;
     };
@@ -630,6 +645,7 @@ function GoalForm({
   const [defaultModel, setDefaultModel] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [optionLoadError, setOptionLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([fetchModels(), fetchRepos()])
@@ -645,7 +661,11 @@ function GoalForm({
             "",
         );
       })
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setOptionLoadError(
+          errorMessage(cause, "Could not load models and repositories"),
+        ),
+      );
   }, []);
 
   async function handleSave() {
@@ -673,7 +693,7 @@ function GoalForm({
         await createGoalApi({ ...payload, createdBy: getCurrentUser() });
       }
       onSaved();
-    } catch (cause) {
+    } catch (cause: unknown) {
       setError(errorMessage(cause, "Could not save goal"));
       setSaving(false);
     }
@@ -802,6 +822,11 @@ function GoalForm({
       </FieldGrid>
 
       {error && <InlineAlert>{error}</InlineAlert>}
+      {optionLoadError && (
+        <InlineAlert onDismiss={() => setOptionLoadError(null)}>
+          {optionLoadError}
+        </InlineAlert>
+      )}
 
       <SettingsFormActions>
         <Button variant="soft" onClick={onClose} disabled={saving}>

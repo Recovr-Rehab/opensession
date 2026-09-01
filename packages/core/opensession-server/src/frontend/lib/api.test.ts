@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  fetchProviderAccounts,
   fetchRepos,
   fetchReads,
   fetchSessionsSnapshot,
@@ -24,6 +25,44 @@ test("read marks load from the current user's API namespace", async () => {
     "bks-1": "2026-08-11T10:00:00.000Z",
   });
   expect(url).toBe("/api/reads?user=Ada%20Lovelace");
+});
+
+test("provider account loading reports a failed pool and keeps the other pool", async () => {
+  const failures: unknown[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    if (String(input).endsWith("/claude-accounts")) {
+      return Response.json(
+        { error: "Claude accounts unavailable" },
+        { status: 502 },
+      );
+    }
+    return Response.json({
+      accounts: [
+        {
+          id: "codex-1",
+          name: "Codex account",
+          owner: "Ada",
+          usable: true,
+        },
+      ],
+    });
+  }) as unknown as typeof fetch;
+
+  await expect(
+    fetchProviderAccounts({
+      onPoolError: (cause) => failures.push(cause),
+    }),
+  ).resolves.toEqual([
+    {
+      id: "codex-1",
+      name: "Codex account",
+      provider: "codex",
+      owner: "Ada",
+      usable: true,
+    },
+  ]);
+  expect(failures).toHaveLength(1);
+  expect(failures[0]).toBeInstanceOf(Error);
 });
 
 test("repository loading recovers from transient server failures", async () => {

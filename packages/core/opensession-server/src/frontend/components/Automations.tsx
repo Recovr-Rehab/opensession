@@ -1,5 +1,5 @@
 import { BASE_PATH } from "../lib/base";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useEffectEvent, useState } from "react";
 import {
   fetchAutomations,
   createAutomationApi,
@@ -113,14 +113,20 @@ const EVENT_OPTIONS: Array<{ key: string; label: string }> = [
 ];
 
 /** Claude and Codex accounts for provider-aware automation pins. */
-function useProviderAccounts(): ProviderAccountOption[] {
+function useProviderAccounts() {
   const [accounts, setAccounts] = useState<ProviderAccountOption[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
-    fetchProviderAccounts()
+    fetchProviderAccounts({
+      onPoolError: (cause) =>
+        setLoadError(errorMessage(cause, "Could not load provider accounts")),
+    })
       .then(setAccounts)
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setLoadError(errorMessage(cause, "Could not load provider accounts")),
+      );
   }, []);
-  return accounts;
+  return { accounts, loadError, setLoadError };
 }
 
 export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
@@ -130,13 +136,20 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   );
   const toggleRequest = React.useRef(0);
   const [defaultModel, setDefaultModel] = useState("");
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const providerAccounts = useProviderAccounts();
+  const {
+    accounts: providerAccounts,
+    loadError: providerAccountsError,
+    setLoadError: setProviderAccountsError,
+  } = useProviderAccounts();
 
   useEffect(() => {
     fetchModels()
       .then((m) => setDefaultModel(m.default))
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setModelLoadError(errorMessage(cause, "Could not load models")),
+      );
   }, []);
   // The modal is create-only; editing happens inline in the detail drawer.
   const [showModal, setShowModal] = useState(false);
@@ -146,7 +159,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   // Leaving/changing the selection always drops back to the read view.
   useEffect(() => setEditMode(false), [selectedId]);
 
-  const load = useCallback(async () => {
+  const load = async () => {
     try {
       const next = await fetchAutomations();
       setAutomations(
@@ -158,21 +171,22 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
         }),
       );
       setLoading(false);
-    } catch (error) {
-      setError(errorMessage(error, "Could not load automations"));
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not load automations"));
       setLoading(false);
     }
-  }, []);
+  };
+  const loadForEffect = useEffectEvent(() => load());
 
   useEffect(() => {
     document.title = docTitle("Automations");
-    load();
-    const id = setInterval(load, 10000);
+    void loadForEffect();
+    const id = setInterval(() => void loadForEffect(), 10000);
     return () => {
       clearInterval(id);
       document.title = DEFAULT_DOC_TITLE;
     };
-  }, [load]);
+  }, []);
 
   // The routed selection — matched by id, or by name for sidebar deep-links.
   const sel = selectedId
@@ -222,7 +236,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
       if (pendingToggles.current.get(a.id)?.request === request) {
         pendingToggles.current.delete(a.id);
       }
-    } catch (error) {
+    } catch (cause: unknown) {
       if (pendingToggles.current.get(a.id)?.request !== request) return;
       pendingToggles.current.delete(a.id);
       setAutomations((current) =>
@@ -232,7 +246,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
             : automation,
         ),
       );
-      setError(errorMessage(error, "Could not update automation"));
+      setError(errorMessage(cause, "Could not update automation"));
     }
   }
 
@@ -242,8 +256,8 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
       await deleteAutomationApi(automation.id);
       if (sel?.id === automation.id) onSelect("");
       void load();
-    } catch (error) {
-      setError(errorMessage(error, "Could not delete automation"));
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not delete automation"));
     }
   }
 
@@ -251,8 +265,8 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
     try {
       await runAutomationApi(automation.id);
       setTimeout(load, 800);
-    } catch (error) {
-      setError(errorMessage(error, "Could not run automation"));
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not run automation"));
     }
   }
 
@@ -260,8 +274,8 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
     try {
       await retriggerAutomationApi(sessionId);
       setTimeout(load, 800);
-    } catch (error) {
-      setError(errorMessage(error, "Could not retrigger automation"));
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not retrigger automation"));
     }
   }
 
@@ -302,6 +316,16 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
 
           {error && (
             <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
+          )}
+          {modelLoadError && (
+            <InlineAlert onDismiss={() => setModelLoadError(null)}>
+              {modelLoadError}
+            </InlineAlert>
+          )}
+          {providerAccountsError && (
+            <InlineAlert onDismiss={() => setProviderAccountsError(null)}>
+              {providerAccountsError}
+            </InlineAlert>
           )}
 
           {loading ? (
@@ -1161,6 +1185,9 @@ function TypeChooser({
   ) => void;
 }) {
   const [templates, setTemplates] = useState<AutomationTemplate[]>([]);
+  const [templateLoadError, setTemplateLoadError] = useState<string | null>(
+    null,
+  );
   const [description, setDescription] = useState("");
   const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1168,7 +1195,11 @@ function TypeChooser({
   useEffect(() => {
     fetchAutomationTemplates()
       .then(setTemplates)
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setTemplateLoadError(
+          errorMessage(cause, "Could not load automation templates"),
+        ),
+      );
   }, []);
 
   async function handleDraft() {
@@ -1177,8 +1208,8 @@ function TypeChooser({
     setError(null);
     try {
       onPick(await draftAutomationApi(description), "classic");
-    } catch (error) {
-      setError(errorMessage(error, "Could not draft automation"));
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not draft automation"));
       setDrafting(false);
     }
   }
@@ -1204,6 +1235,11 @@ function TypeChooser({
         />
         {error && (
           <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
+        )}
+        {templateLoadError && (
+          <InlineAlert onDismiss={() => setTemplateLoadError(null)}>
+            {templateLoadError}
+          </InlineAlert>
         )}
         <div className="flex justify-end">
           <Button
@@ -1272,6 +1308,7 @@ function McpPicker({
     Array<{ name: string; status: string }>
   >([]);
   const [search, setSearch] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchConnections()
@@ -1283,7 +1320,9 @@ function McpPicker({
           })),
         ),
       )
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setLoadError(errorMessage(cause, "Could not load MCP servers")),
+      );
   }, []);
 
   const all = value === undefined;
@@ -1319,6 +1358,11 @@ function McpPicker({
           Manage MCPs
         </a>
       </div>
+      {loadError && (
+        <InlineAlert onDismiss={() => setLoadError(null)}>
+          {loadError}
+        </InlineAlert>
+      )}
       <div className="bg-surface rounded-panel overflow-hidden">
         <div className="flex items-center gap-2 border-b border-divider px-3 py-2">
           {/* Chrome-less on purpose: the picker's own panel is the surface, so
@@ -1903,7 +1947,12 @@ function AutomationForm({
   const sandbox = false;
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
-  const providerAccounts = useProviderAccounts();
+  const [optionLoadError, setOptionLoadError] = useState<string | null>(null);
+  const {
+    accounts: providerAccounts,
+    loadError: providerAccountsError,
+    setLoadError: setProviderAccountsError,
+  } = useProviderAccounts();
 
   useEffect(() => {
     fetchModels()
@@ -1911,12 +1960,17 @@ function AutomationForm({
         setModels(m.models);
         setDefaultModel(m.default);
       })
-      .catch(() => {});
-    // Only to name the workspace an automation files under; a failure leaves
-    // the picker on "No workspace" rather than blocking the form.
+      .catch((cause: unknown) =>
+        setOptionLoadError(errorMessage(cause, "Could not load models")),
+      );
     fetchWorkspaces()
       .then(setWorkspaces)
-      .catch(() => {});
+      .catch((cause: unknown) => {
+        // A workspace assignment is optional and "No workspace" remains a
+        // valid value, so keep the rest of the form usable while naming the
+        // failed list load.
+        setOptionLoadError(errorMessage(cause, "Could not load workspaces"));
+      });
   }, []);
   const effectiveModel = model || defaultModel;
   const accountProvider = models.find(
@@ -1997,8 +2051,8 @@ function AutomationForm({
         });
       }
       onSaved();
-    } catch (error) {
-      setError(errorMessage(error, "Could not save automation"));
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not save automation"));
       setSaving(false);
     }
   }
@@ -2274,6 +2328,16 @@ function AutomationForm({
 
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
+      )}
+      {optionLoadError && (
+        <InlineAlert onDismiss={() => setOptionLoadError(null)}>
+          {optionLoadError}
+        </InlineAlert>
+      )}
+      {providerAccountsError && (
+        <InlineAlert onDismiss={() => setProviderAccountsError(null)}>
+          {providerAccountsError}
+        </InlineAlert>
       )}
 
       <div className={FORM_ACTIONS}>

@@ -95,9 +95,9 @@ interface ProviderAccountRecord {
   kind?: unknown;
 }
 
-export async function fetchProviderAccounts(): Promise<
-  ProviderAccountOption[]
-> {
+export async function fetchProviderAccounts(options?: {
+  onPoolError?: (cause: unknown) => void;
+}): Promise<ProviderAccountOption[]> {
   const fetchPool = async (provider: "claude" | "codex", path: string) => {
     try {
       const data = await request<{ accounts?: ProviderAccountRecord[] }>(path);
@@ -110,7 +110,11 @@ export async function fetchProviderAccounts(): Promise<
         usable: account.usable !== false,
         kind: typeof account.kind === "string" ? account.kind : undefined,
       }));
-    } catch {
+    } catch (cause: unknown) {
+      options?.onPoolError?.(cause);
+      // Account pins are optional because automatic pool selection remains
+      // valid. Keep accounts from the other provider available when one pool
+      // cannot load.
       return [];
     }
   };
