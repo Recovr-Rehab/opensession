@@ -33,6 +33,7 @@ import { join } from "path";
 import {
   MAX_PI_SDK_SESSIONS,
   PI_PASSTHROUGH_BLOCK_REASON,
+  PI_SDK_MAX_TURNS,
   buildPiAnthropicModels,
   buildPiAnthropicProvider,
   IMAGE_ONLY_PROMPT,
@@ -44,6 +45,7 @@ import {
   sdkPromptContent,
   turnImages,
   rememberSdkTurn,
+  recoverCappedSdkStopReason,
   shouldDeferClaudeText,
   usageFromSdkResult,
   type PiCatalogModel,
@@ -627,6 +629,17 @@ describe("images survive the turn", () => {
 });
 
 describe("Pi passthrough durable checkpoint", () => {
+  test("caps ordinary passthrough at the durable tool boundary", () => {
+    expect(PI_SDK_MAX_TURNS).toBe(1);
+  });
+
+  test("recovers capped tool handoffs and reports content-only caps as truncated", () => {
+    expect(recoverCappedSdkStopReason("error_max_turns", 1, 0)).toBe("toolUse");
+    expect(recoverCappedSdkStopReason("error_max_turns", 0, 1)).toBe("length");
+    expect(recoverCappedSdkStopReason("error_max_turns", 0, 0)).toBeUndefined();
+    expect(recoverCappedSdkStopReason("success", 1, 1)).toBeUndefined();
+  });
+
   test("uses Meridian's explicit model-facing stop instruction", () => {
     expect(PI_PASSTHROUGH_BLOCK_REASON).toContain(
       "This tool call has been forwarded to the client for execution.",

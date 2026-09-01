@@ -34,10 +34,11 @@
  *  - The request's tools become no-op SDK-MCP passthrough tools; a PreToolUse
  *    hook captures {id, name, input} and blocks with Meridian's explicit stop
  *    instruction. Once every denial reaches the iterator, Pi receives its
- *    terminal toolUse event immediately while the provider suppresses and
- *    drains the hidden SDK digest to a canonical result. Only then is the
- *    tool-bearing assistant UUID published as resumable. The next Pi step
- *    waits for that per-session drain and resumes there with real results.
+ *    terminal toolUse event immediately. `maxTurns: 1` prevents the discarded,
+ *    billed digest turn while still letting the SDK emit the terminal
+ *    `error_max_turns` result that durably commits the checkpoint. Only then is
+ *    the tool-bearing assistant UUID published as resumable. The next Pi step
+ *    waits for that terminal drain and resumes there with real results.
  *  - Text/thinking stream token-level via `includePartialMessages` stream
  *    events; if the CLI ever yields no stream events, whole assistant
  *    messages fall back to one delta per text block on arrival — still
@@ -131,8 +132,8 @@ import {
 } from "./anthropic-bridge";
 import { markExhausted, type ClaudeAccount } from "./claude-accounts";
 import {
+  coalesceCompleteToolResultContinuation,
   createEarlyStopTracker,
-  isCompleteToolResultContinuation,
   noteAssistantMessage,
   noteUserContent,
   settledToolCallAssistantUuid,
@@ -272,14 +273,28 @@ type PiStreamEvent =
 
 /** Meridian's model-facing denial. It is never part of Pi's transcript: once
  *  the visible tool batch settles, the provider closes Pi's stream and drains
- *  the SDK's digest branch invisibly to its canonical result. */
+ *  only the SDK's capped terminal result. */
 export const PI_PASSTHROUGH_BLOCK_REASON =
   "This tool call has been forwarded to the client for execution. " +
   "The result will be delivered in a future turn. " +
   "Do not retry, do not call additional tools, and do not generate further text. End your turn now.";
 
-/** The SDK still needs room for its hidden digest after the visible tool turn. */
-export const PI_SDK_MAX_TURNS = 8;
+/** Stop at the client-owned tool handoff. The SDK still emits its terminal
+ *  `error_max_turns` result and flushes the transcript, but it never starts the
+ *  discarded, billed digest turn. Ported from rynfar/meridian#860. */
+export const PI_SDK_MAX_TURNS = 1;
+
+/** Recover the two usable outcomes from the SDK's capped terminal result. */
+export function recoverCappedSdkStopReason(
+  subtype: unknown,
+  capturedToolCalls: number,
+  contentBlocks: number,
+): "toolUse" | "length" | undefined {
+  if (subtype !== "error_max_turns") return undefined;
+  if (capturedToolCalls > 0) return "toolUse";
+  if (contentBlocks > 0) return "length";
+  return undefined;
+}
 
 // ── pi messages → the bridge's Anthropic wire shape ──────────────────────────
 
@@ -407,7 +422,7 @@ export interface PiSdkSessionState {
   accountId: string;
   /** Durable assistant boundary for a visible passthrough tool turn. When set,
    *  the next exact tool-result continuation resumes here rather than after
-   *  the hidden SDK digest branch. */
+   *  the SDK's capped terminal result. */
   passthroughToolCallAssistantUuid?: string;
   passthroughToolCallIds?: string[];
   lastUsedAt: number;
@@ -486,7 +501,9 @@ export function resumedToolResults(
     blocks.push(...message.content);
   }
   const merged = [{ role: "user", content: blocks }];
-  return isCompleteToolResultContinuation(merged, expectedIds) ? blocks : null;
+  return coalesceCompleteToolResultContinuation(merged, expectedIds)
+    ? blocks
+    : null;
 }
 
 /** Meridian's continuation decision, factored pure for tests. A checkpointed
@@ -871,8 +888,8 @@ async function* runSdkAttempt(
     account = picked;
 
     // Pi can begin executing a visible tool call while the preceding SDK query
-    // invisibly drains its digest. Serialize only this session boundary so the
-    // follow-up cannot read the mapping before its checkpoint is durable.
+    // drains its capped terminal result. Serialize only this session boundary
+    // so the follow-up cannot read the mapping before its checkpoint is durable.
     await piSdkCanonicalDrains().get(storeKey);
 
     // Continuation planning happens with the account known: a stored SDK
@@ -944,6 +961,7 @@ async function* runSdkAttempt(
     let sdkSessionId: string | undefined;
     let sdkUsage: Record<string, number> | undefined;
     let reachedResult = false;
+    let cappedStopReason: "toolUse" | "length" | undefined;
     let checkpoint:
       | { assistantUuid: string; toolCallIds: string[] }
       | undefined;
@@ -1133,8 +1151,8 @@ async function* runSdkAttempt(
             releaseHeldDenies();
           }
           // Pi has already received its terminal toolUse event. Continue only
-          // the bookkeeping needed to reach the SDK's canonical result; every
-          // digest token and block remains invisible.
+          // the bookkeeping needed to receive the SDK's capped terminal result.
+          // maxTurns=1 prevents another model request from starting.
           if (clientDone) {
             if (ev.type === "message_start") {
               turnGenerating = true;
@@ -1343,17 +1361,17 @@ async function* runSdkAttempt(
           sdkSessionId = String(m.session_id || "") || sdkSessionId;
           if (deferredAccountUnavailable)
             throw new Error(deferredAccountUnavailable);
-          // error_max_turns WITH captures is a SUCCESS (the bridge's fix):
-          // models that answer a blocked call by trying the next tool burn a
-          // turn per call and can blow the cap before ending cleanly — the
-          // captures are the whole point. Only a capture-less max-turns (the
-          // model never called a tool) stays an error.
-          const maxTurnsWithCaptures =
-            m.subtype === "error_max_turns" && captured.length > 0;
-          if (
-            (m.is_error || m.subtype !== "success") &&
-            !maxTurnsWithCaptures
-          ) {
+          // maxTurns=1 makes error_max_turns the normal passthrough handoff:
+          // the terminal result proves the SDK flushed the tool checkpoint,
+          // so preserve it and resume from the assistant UUID next turn. A
+          // capped turn with visible content but no tool is truncated rather
+          // than failed, matching Meridian's honest max_tokens degradation.
+          cappedStopReason = recoverCappedSdkStopReason(
+            m.subtype,
+            captured.length,
+            partial.content.length,
+          );
+          if ((m.is_error || m.subtype !== "success") && !cappedStopReason) {
             const detail =
               (typeof m.result === "string" && m.result) ||
               partial.content
@@ -1414,7 +1432,8 @@ async function* runSdkAttempt(
 
     const usage = usageFromSdkResult(model, sdkUsage);
     partial.usage = usage;
-    const stopReason: "toolUse" | "stop" = captured.length ? "toolUse" : "stop";
+    const stopReason: "toolUse" | "stop" | "length" =
+      cappedStopReason ?? (captured.length ? "toolUse" : "stop");
     const message: PiAssistantMessageShape = {
       ...partial,
       stopReason,
