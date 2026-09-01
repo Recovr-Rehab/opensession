@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import {
   fetchProviderAccounts,
   fetchRepos,
+  fetchWorkspaces,
   fetchReads,
   fetchSessionsSnapshot,
   fetchWorkspaceArchivedSessions,
@@ -63,6 +64,35 @@ test("provider account loading reports a failed pool and keeps the other pool", 
   ]);
   expect(failures).toHaveLength(1);
   expect(failures[0]).toBeInstanceOf(Error);
+});
+
+test("workspace loading reports a failure while preserving its empty fallback", async () => {
+  const failures: unknown[] = [];
+  globalThis.fetch = (async () =>
+    Response.json(
+      { error: "Workspaces unavailable" },
+      { status: 502 },
+    )) as unknown as typeof fetch;
+
+  await expect(
+    fetchWorkspaces({ onError: (cause) => failures.push(cause) }),
+  ).resolves.toEqual([]);
+  expect(failures).toHaveLength(1);
+  expect(failures[0]).toBeInstanceOf(Error);
+});
+
+test("repository loading rejects after transient retries are exhausted", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    return Response.json(
+      { error: "Repositories unavailable" },
+      { status: 502 },
+    );
+  }) as unknown as typeof fetch;
+
+  await expect(fetchRepos()).rejects.toThrow("Repositories unavailable");
+  expect(calls).toBe(4);
 });
 
 test("repository loading recovers from transient server failures", async () => {

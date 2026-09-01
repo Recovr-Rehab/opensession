@@ -645,13 +645,20 @@ function GoalForm({
   const [defaultModel, setDefaultModel] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [optionLoadError, setOptionLoadError] = useState<string | null>(null);
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
+  const [repoLoadError, setRepoLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchModels(), fetchRepos()])
-      .then(([m, repoItems]) => {
-        setModels(m.models);
-        setDefaultModel(m.default);
+    fetchModels()
+      .then((catalog) => {
+        setModels(catalog.models);
+        setDefaultModel(catalog.default);
+      })
+      .catch((cause: unknown) =>
+        setModelLoadError(errorMessage(cause, "Could not load models")),
+      );
+    fetchRepos()
+      .then((repoItems) => {
         if (repoItems.length) setRepos(repoItems);
         setRepo(
           (current) =>
@@ -662,9 +669,7 @@ function GoalForm({
         );
       })
       .catch((cause: unknown) =>
-        setOptionLoadError(
-          errorMessage(cause, "Could not load models and repositories"),
-        ),
+        setRepoLoadError(errorMessage(cause, "Could not load repositories")),
       );
   }, []);
 
@@ -822,9 +827,14 @@ function GoalForm({
       </FieldGrid>
 
       {error && <InlineAlert>{error}</InlineAlert>}
-      {optionLoadError && (
-        <InlineAlert onDismiss={() => setOptionLoadError(null)}>
-          {optionLoadError}
+      {modelLoadError && (
+        <InlineAlert onDismiss={() => setModelLoadError(null)}>
+          {modelLoadError}
+        </InlineAlert>
+      )}
+      {repoLoadError && (
+        <InlineAlert onDismiss={() => setRepoLoadError(null)}>
+          {repoLoadError}
         </InlineAlert>
       )}
 

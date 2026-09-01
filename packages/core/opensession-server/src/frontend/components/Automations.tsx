@@ -1947,7 +1947,10 @@ function AutomationForm({
   const sandbox = false;
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
-  const [optionLoadError, setOptionLoadError] = useState<string | null>(null);
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(
+    null,
+  );
   const {
     accounts: providerAccounts,
     loadError: providerAccountsError,
@@ -1961,16 +1964,12 @@ function AutomationForm({
         setDefaultModel(m.default);
       })
       .catch((cause: unknown) =>
-        setOptionLoadError(errorMessage(cause, "Could not load models")),
+        setModelLoadError(errorMessage(cause, "Could not load models")),
       );
-    fetchWorkspaces()
-      .then(setWorkspaces)
-      .catch((cause: unknown) => {
-        // A workspace assignment is optional and "No workspace" remains a
-        // valid value, so keep the rest of the form usable while naming the
-        // failed list load.
-        setOptionLoadError(errorMessage(cause, "Could not load workspaces"));
-      });
+    fetchWorkspaces({
+      onError: (cause) =>
+        setWorkspaceLoadError(errorMessage(cause, "Could not load workspaces")),
+    }).then(setWorkspaces);
   }, []);
   const effectiveModel = model || defaultModel;
   const accountProvider = models.find(
@@ -2329,9 +2328,14 @@ function AutomationForm({
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
-      {optionLoadError && (
-        <InlineAlert onDismiss={() => setOptionLoadError(null)}>
-          {optionLoadError}
+      {modelLoadError && (
+        <InlineAlert onDismiss={() => setModelLoadError(null)}>
+          {modelLoadError}
+        </InlineAlert>
+      )}
+      {workspaceLoadError && (
+        <InlineAlert onDismiss={() => setWorkspaceLoadError(null)}>
+          {workspaceLoadError}
         </InlineAlert>
       )}
       {providerAccountsError && (
