@@ -19,12 +19,16 @@ import {
   useSessionAssetsResource,
   useSessionDiffResource,
   useSessionGitResource,
+  useSessionPrDiffResource,
   useSessionPrResource,
   useWorkspaceOverviewResource,
 } from "../hooks/useApiResources";
+import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
+import { FileDiff } from "@pierre/diffs/react";
 import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
 import { useAssetViewMode } from "../lib/asset-view-mode";
 import { AssetViewToggle } from "./AssetViewToggle";
+import { useResolvedTheme } from "./CodeHighlight";
 import { openLightbox } from "../lib/media-lightbox";
 import { fullTime } from "../lib/time";
 import { commitPrompt } from "../lib/commit-prompt";
@@ -241,6 +245,14 @@ type OpenCommitDetails =
 type CommitRowTarget =
   | { kind: "workspace"; commit: WorkspaceCommit }
   | { kind: "pr"; commit: PrCommit };
+
+type SummaryChangeFile = {
+  key: string;
+  path: string;
+  additions: number;
+  deletions: number;
+  meta?: FileDiffMetadata;
+};
 
 type ReviewLine = {
   key: string;
@@ -548,6 +560,8 @@ export function WorkspaceSummaryBody({
   // Pictures or rows. One preference, shared with the Workspace panel's own
   // Assets section, so the same folder is not drawn two ways in one window.
   const [assetView, setAssetView] = useAssetViewMode();
+  const [changesOpen, setChangesOpen] = useState(false);
+  const diffTheme = useResolvedTheme();
   // `session` follows the session-list poll; the viewer's explicit value follows
   // the workspace_status socket event and wins when it is available.
   const workspaceIsPreparing =
@@ -597,6 +611,17 @@ export function WorkspaceSummaryBody({
     revision: refreshTick,
   });
   const pr = prResource.data ?? null;
+  // File names come with the PR summary. Its much larger patch waits until the
+  // person opens Changes, when it can power the per-file hover previews.
+  const prDiffResource = useSessionPrDiffResource(
+    session.id,
+    session.repo || undefined,
+    undefined,
+    {
+      enabled: changesOpen && Boolean(pr),
+      revision: `${pr?.headRefOid || ""}\0${refreshTick || 0}`,
+    },
+  );
   const hasConnectedPr = sessionHasConnectedPr(session);
   const git = gitResource.data ?? null;
   const assets = assetsResource.data ?? [];
@@ -625,7 +650,6 @@ export function WorkspaceSummaryBody({
       { additions: 0, deletions: 0, files: 0 },
     ) ?? null;
   const [prompted, setPrompted] = useState(false);
-  const [changesOpen, setChangesOpen] = useState(false);
   const [commitsOpen, setCommitsOpen] = useState(false);
   const [openCommit, setOpenCommit] = useState<OpenCommitDetails | null>(null);
   const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
@@ -653,11 +677,54 @@ export function WorkspaceSummaryBody({
   // state to show. Keep a real PR or feature-branch diff unchanged.
   const showDiffChanges =
     changedFiles > 0 && !(git?.sharedCheckout && commits.length > 0);
-  // A PR diff is committed by definition. Without a PR, an ahead branch with
-  // no dirty files is also wholly committed. Mixed work stays labelled
-  // "Changes" rather than pretending its line totals belong to one state.
-  const diffIsCommitted =
-    showDiffChanges && Boolean(pr || ((git?.ahead ?? 0) > 0 && dirty === 0));
+  const changeFiles = (() => {
+    if (pr) {
+      const byPath = new Map<string, FileDiffMetadata>();
+      const patchIsCurrent =
+        !pr.headRefOid || prDiffResource.data?.headRefOid === pr.headRefOid;
+      const patch = patchIsCurrent ? prDiffResource.data?.patch || "" : "";
+      if (patch.trim()) {
+        try {
+          for (const parsedPatch of parsePatchFiles(patch)) {
+            for (const file of parsedPatch.files) byPath.set(file.name, file);
+          }
+        } catch {
+          // A truncated or malformed patch still leaves the file list useful.
+        }
+      }
+      return (pr.files ?? []).map((file) => ({
+        key: file.path,
+        path: file.path,
+        additions: file.additions,
+        deletions: file.deletions,
+        meta: byPath.get(file.path),
+      }));
+    }
+
+    const files: SummaryChangeFile[] = [];
+    for (const repo of diffResource.data?.repos ?? []) {
+      const byPath = new Map<string, FileDiffMetadata>();
+      if (repo.diff.rawPatch.trim()) {
+        try {
+          for (const parsedPatch of parsePatchFiles(repo.diff.rawPatch)) {
+            for (const file of parsedPatch.files) byPath.set(file.name, file);
+          }
+        } catch {
+          // Keep names and line totals when this repo's patch cannot be parsed.
+        }
+      }
+      for (const file of repo.diff.files) {
+        files.push({
+          key: `${repo.repo}\0${file.path}`,
+          path: file.path,
+          additions: file.additions,
+          deletions: file.deletions,
+          meta: byPath.get(file.path),
+        });
+      }
+    }
+    return files;
+  })();
 
   /** Route somewhere else and get out of the way. A card that stayed open
    *  over the thing it just opened would have to be dismissed by hand. */
@@ -865,19 +932,87 @@ export function WorkspaceSummaryBody({
       .finally(() => setReviewBusy(false));
   }
 
+  function fileChangeRow(file: SummaryChangeFile) {
+    const slash = file.path.lastIndexOf("/");
+    const directory = slash >= 0 ? file.path.slice(0, slash + 1) : "";
+    const filename = slash >= 0 ? file.path.slice(slash + 1) : file.path;
+    const path = (
+      <span className="flex min-w-0 flex-1 items-baseline text-left text-label">
+        {directory && <span className="truncate text-dim">{directory}</span>}
+        <span className="max-w-full shrink-0 truncate text-fg">{filename}</span>
+      </span>
+    );
+    const stats = (
+      <span className="inline-flex shrink-0 items-center gap-1 text-meta font-semibold tabular-nums">
+        {file.additions > 0 && (
+          <span className="text-green">+{file.additions}</span>
+        )}
+        {file.deletions > 0 && (
+          <span className="text-red">−{file.deletions}</span>
+        )}
+      </span>
+    );
+    const options = {
+      diffStyle: "unified" as const,
+      disableFileHeader: true,
+      overflow: "scroll" as const,
+      enableLineSelection: false,
+      theme: diffTheme === "light" ? "pierre-light" : "pierre-dark",
+      themeType: diffTheme,
+    };
+
+    return (
+      <Popover.Root key={file.key} exclusive={false}>
+        <Popover.Trigger
+          openOnHover={Boolean(file.meta)}
+          delay={200}
+          closeDelay={90}
+          type="button"
+          className="mx-2 flex min-h-7 w-[calc(100%_-_16px)] min-w-0 items-center gap-1.5 rounded-row px-2 text-left transition-colors hover:bg-hover focus-ring"
+          onClick={() => go(() => onOpenPanelTab("changes"))}
+          aria-label={`${file.path} · open in Changes`}
+        >
+          <span className={WS_SUMMARY_RAIL} aria-hidden />
+          {path}
+          {stats}
+        </Popover.Trigger>
+        {file.meta && (
+          <Popover.Popup
+            portalContainer={
+              typeof document !== "undefined" ? document.body : undefined
+            }
+            side={embedded ? "top" : "left"}
+            align="start"
+            sideOffset={10}
+            elevation="lg"
+            className="flex max-h-[min(720px,82vh,var(--available-height))] w-[min(720px,calc(100vw-24px))] flex-col overflow-hidden bg-panel px-3 py-2.5"
+          >
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="mb-2 flex min-w-0 items-baseline justify-between gap-2">
+                {path}
+                {stats}
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto text-label">
+                <FileDiff
+                  fileDiff={file.meta}
+                  options={options}
+                  disableWorkerPool
+                />
+              </div>
+            </div>
+          </Popover.Popup>
+        )}
+      </Popover.Root>
+    );
+  }
+
   function diffChangeRow(label: string) {
     return (
       <>
         <button
           className={WS_SUMMARY_ROW}
-          // Review already owns the full Files canvas. Keep the summary in
-          // place and reveal its filenames here; elsewhere open Changes.
-          onClick={() =>
-            reviewMode
-              ? setChangesOpen((open) => !open)
-              : onOpenPanelTab("changes")
-          }
-          aria-expanded={reviewMode ? changesOpen : undefined}
+          onClick={() => setChangesOpen((open) => !open)}
+          aria-expanded={changesOpen}
         >
           <span className={WS_SUMMARY_RAIL}>
             <IconFile size={20} className={WS_SUMMARY_ICON} />
@@ -887,38 +1022,16 @@ export function WorkspaceSummaryBody({
             <span className="text-green">+{additions}</span>{" "}
             <span className="text-red">−{deletions}</span>
           </span>
-          {reviewMode && (
-            <IconChevronDown
-              size={14}
-              className={cn(
-                "shrink-0 text-faint transition-transform motion-reduce:transition-none",
-                changesOpen && "rotate-180",
-              )}
-            />
-          )}
+          <IconChevronDown
+            size={14}
+            className={cn(
+              "shrink-0 text-faint transition-transform motion-reduce:transition-none",
+              changesOpen && "rotate-180",
+            )}
+          />
         </button>
-        {reviewMode && changesOpen && pr?.files?.length ? (
-          <div className="pb-1">
-            {pr.files.map((file) => (
-              <div
-                key={file.path}
-                className="mx-2 flex min-h-7 min-w-0 items-center gap-1.5 px-2 text-label text-dim"
-              >
-                <span className={WS_SUMMARY_RAIL} aria-hidden />
-                <span className={WS_SUMMARY_LABEL} title={file.path}>
-                  {file.path}
-                </span>
-                <span className={WS_SUMMARY_COUNT}>
-                  {file.additions > 0 && (
-                    <span className="text-green">+{file.additions}</span>
-                  )}{" "}
-                  {file.deletions > 0 && (
-                    <span className="text-red">−{file.deletions}</span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
+        {changesOpen && changeFiles.length > 0 ? (
+          <div className="pb-1">{changeFiles.map(fileChangeRow)}</div>
         ) : null}
       </>
     );
@@ -1534,38 +1647,30 @@ export function WorkspaceSummaryBody({
         )}
       </div>
 
-      {(diffIsCommitted || hasCommitDetails) && (
+      {hasCommitDetails && (
         <div className={groupClass}>
-          {hasCommitDetails ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                WS_SUMMARY_SECTION,
-                "w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left hover:bg-transparent hover:text-faint active:scale-100",
-              )}
-              onClick={() => setCommitsOpen((open) => !open)}
-              aria-expanded={commitsOpen}
-            >
-              <span className="flex items-baseline gap-1.5">
-                <span>Committed</span>
-                <span className="text-meta tabular-nums">{commitCount}</span>
-              </span>
-              <IconChevronRight
-                size={14}
-                className={cn(
-                  "shrink-0 transition-transform motion-reduce:transition-none",
-                  commitsOpen && "rotate-90",
-                )}
-              />
-            </Button>
-          ) : (
-            <div className={WS_SUMMARY_SECTION}>Committed</div>
-          )}
-          {diffIsCommitted &&
-            diffChangeRow(
-              `${changedFiles} file${changedFiles === 1 ? "" : "s"} committed`,
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              WS_SUMMARY_SECTION,
+              "w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left hover:bg-transparent hover:text-faint active:scale-100",
             )}
+            onClick={() => setCommitsOpen((open) => !open)}
+            aria-expanded={commitsOpen}
+          >
+            <span className="flex items-baseline gap-1.5">
+              <span>Committed</span>
+              <span className="text-meta tabular-nums">{commitCount}</span>
+            </span>
+            <IconChevronRight
+              size={14}
+              className={cn(
+                "shrink-0 transition-transform motion-reduce:transition-none",
+                commitsOpen && "rotate-90",
+              )}
+            />
+          </Button>
           {commitsOpen
             ? prCommits.length > 0
               ? prCommits.map(prCommittedRow)
@@ -1574,7 +1679,7 @@ export function WorkspaceSummaryBody({
         </div>
       )}
 
-      {showDiffChanges && !diffIsCommitted && (
+      {showDiffChanges && (
         <div className={groupClass}>
           <div className={WS_SUMMARY_SECTION}>Changes</div>
           {diffChangeRow(
