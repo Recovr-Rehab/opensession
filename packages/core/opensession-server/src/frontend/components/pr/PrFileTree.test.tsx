@@ -31,7 +31,7 @@ describe("PrFileTree", () => {
     expect(html).toContain('aria-orientation="vertical"');
   });
 
-  test("uses the same quiet ring as the review chrome", () => {
+  test("uses the same surface as the workspace summary", () => {
     const html = renderToStaticMarkup(
       <PrFileTree
         files={[{ path: "src/index.ts", additions: 3, deletions: 1 }]}
@@ -41,8 +41,12 @@ describe("PrFileTree", () => {
       />,
     );
 
+    expect(html).toContain("bg-popup-glass");
     expect(html).toContain("smooth-shadow-ring-sm");
-    expect(html).not.toContain("rounded-lg border border-line bg-surface");
+    expect(html).toContain("[border-radius:calc(18px*var(--rf))]!");
+    expect(html).toContain("[corner-shape:squircle]");
+    expect(html).not.toContain("rounded-lg");
+    expect(html).not.toContain("shadow-[inset_0_-1px_0_var(--divider)]");
   });
 
   test("renders a flat file list with change counts", () => {
