@@ -148,10 +148,14 @@ import {
 } from "./github-credential";
 import { defaultRepo } from "../config";
 import type { SessionPrRef, UnifiedSession } from "../types";
-import { shareWorkspacePrRefs } from "../session-pr-target";
+import {
+  projectWorkspacePrRefs,
+  shareWorkspacePrRefs,
+} from "../session-pr-target";
 import {
   indexedSessions,
   indexedSidebarSessions,
+  indexedWorkspaceMemberSessions,
   indexedWorkspaceSessions,
 } from "../session-list-store";
 import {
@@ -1977,7 +1981,14 @@ export async function handleSessionsRoutes(
       if (!session)
         return Response.json({ error: "Session not found" }, { status: 404 });
       const signals = await sessionListRuntimeSignals();
-      return Response.json(enrichSession(session, signals), {
+      const enriched = enrichSession(session, signals);
+      const detail = enriched.workspaceId
+        ? projectWorkspacePrRefs(
+            enriched,
+            indexedWorkspaceMemberSessions(enriched.workspaceId),
+          )
+        : enriched;
+      return Response.json(detail, {
         headers: { "Cache-Control": "private, no-cache" },
       });
     }

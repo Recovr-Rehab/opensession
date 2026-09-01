@@ -175,3 +175,30 @@ export function shareWorkspacePrRefs(sessions: UnifiedSession[]): void {
     }
   }
 }
+
+/**
+ * Add a workspace projection to one authoritative session without mutating it.
+ *
+ * Detail and PR routes load one session actor, while workspace PRs come from
+ * the bounded materialized workspace index. Include the indexed copy of the
+ * same session: it may carry derived footer PRs that are intentionally absent
+ * from the durable actor record.
+ */
+export function projectWorkspacePrRefs(
+  session: UnifiedSession,
+  workspaceSessions: readonly UnifiedSession[],
+): UnifiedSession {
+  if (!session.workspaceId) return session;
+  const projected: UnifiedSession = {
+    ...session,
+    ...(session.prs ? { prs: [...session.prs] } : {}),
+  };
+  const members = workspaceSessions
+    .filter((candidate) => candidate.workspaceId === session.workspaceId)
+    .map((candidate) => ({
+      ...candidate,
+      ...(candidate.prs ? { prs: [...candidate.prs] } : {}),
+    }));
+  shareWorkspacePrRefs([projected, ...members]);
+  return projected;
+}

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { sessionPrBranch, shareWorkspacePrRefs } from "./session-pr-target";
+import {
+  projectWorkspacePrRefs,
+  sessionPrBranch,
+  shareWorkspacePrRefs,
+} from "./session-pr-target";
 import type { UnifiedSession } from "./types";
 import type { Workspace } from "./workspaces";
 
@@ -88,6 +92,39 @@ describe("shareWorkspacePrRefs", () => {
 
     expect(first.prs).toEqual([pr, { ...secondPr, source: "discovered" }]);
     expect(second.prs).toEqual([secondPr, { ...pr, source: "discovered" }]);
+  });
+
+  test("projects indexed sibling PRs onto one authoritative detail row", () => {
+    const detail = {
+      id: "os-detail",
+      workspaceId: "ws-one",
+      repo: "tella-fusion",
+      branch: "parent-branch",
+    } as UnifiedSession;
+    const indexedDetail = {
+      ...detail,
+      prs: [
+        {
+          repo: "opensession",
+          branch: "footer-pr",
+          source: "discovered" as const,
+          number: 122,
+        },
+      ],
+    };
+    const sibling = {
+      id: "os-sibling",
+      workspaceId: "ws-one",
+      prs: [pr],
+    } as UnifiedSession;
+
+    const projected = projectWorkspacePrRefs(detail, [indexedDetail, sibling]);
+
+    expect(projected.prs).toEqual([
+      { ...indexedDetail.prs[0], source: "discovered" },
+      { ...pr, source: "discovered" },
+    ]);
+    expect(detail.prs).toBeUndefined();
   });
 
   test("does not leak PRs across workspaces", () => {
