@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { IconCheck } from "../icons";
 import { fetchFeeds, type RepoInfo } from "../../lib/api";
+import { errorMessage } from "../../lib/error-message";
 import {
   ACCENT_THEME_OPTIONS,
   getAccentTheme,
@@ -64,6 +65,7 @@ import {
   SettingsSection,
 } from "../../ui/settings";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
+import { InlineAlert } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { usePeople } from "../../lib/people";
 import { useCurrentUser } from "../UserPicker";
@@ -471,6 +473,9 @@ export function SidebarItemsSection() {
     readHiddenSidebarTools,
   );
   const [sidebarFeeds, setSidebarFeeds] = useState<FeedDescriptor[]>([]);
+  const [sidebarFeedsError, setSidebarFeedsError] = useState<string | null>(
+    null,
+  );
   const [hiddenSidebarFeeds, setHiddenSidebarFeeds] = useState(
     readHiddenSidebarFeeds,
   );
@@ -480,7 +485,12 @@ export function SidebarItemsSection() {
       .then((feeds) => {
         if (alive) setSidebarFeeds(feeds);
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (alive)
+          setSidebarFeedsError(
+            errorMessage(error, "Failed to load sidebar sources"),
+          );
+      });
     return () => {
       alive = false;
     };
@@ -503,6 +513,7 @@ export function SidebarItemsSection() {
   return (
     <>
       <SettingsGroupLabel>Show in sidebar</SettingsGroupLabel>
+      {sidebarFeedsError && <InlineAlert>{sidebarFeedsError}</InlineAlert>}
       <SettingCard>
         {/* Support is one decision, not two switches. Its tool and its
 				    sidebar band are the same queue reached two ways, so they are

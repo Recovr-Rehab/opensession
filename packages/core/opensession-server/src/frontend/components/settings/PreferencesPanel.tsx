@@ -10,13 +10,13 @@ import {
   fetchPersonalOutputStyle,
   fetchPersonalPrompt,
   fetchRepos,
+  request,
   savePersonalOutputStyle,
   savePersonalPrompt,
   type ModelOption,
   type PersonalOutputStyle,
   type RepoInfo,
 } from "../../lib/api";
-import { BASE_PATH } from "../../lib/base";
 import { errorMessage } from "../../lib/error-message";
 import {
   getBusySendPrefs,
@@ -132,10 +132,11 @@ function DeskVoiceApiKeyRow() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${BASE_PATH}/api/desk/voice/status`)
-      .then((response) => response.json())
+    request<DeskVoiceStatus>("/desk/voice/status", {
+      label: "Failed to load voice settings",
+    })
       .then(setStatus)
-      .catch((error) =>
+      .catch((error: unknown) =>
         setError(errorMessage(error, "Failed to load voice settings")),
       );
   }, []);
@@ -144,19 +145,14 @@ function DeskVoiceApiKeyRow() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${BASE_PATH}/api/desk/voice/key`, {
+      const status = await request<DeskVoiceStatus>("/desk/voice/key", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: value }),
+        body: { apiKey: value },
+        label: "Failed to save the API key",
       });
-      const body = await res.json();
-      if (res.ok) {
-        setStatus(body);
-        setApiKey("");
-      } else {
-        setError(body.error || `Failed to save the API key: ${res.status}`);
-      }
-    } catch (error) {
+      setStatus(status);
+      setApiKey("");
+    } catch (error: unknown) {
       setError(errorMessage(error, "Failed to save the API key"));
     }
     setBusy(false);
@@ -251,12 +247,15 @@ function PersonalOutputStyleRow() {
   useEffect(() => {
     let alive = true;
     fetchPersonalOutputStyle(user)
-      .then((r) => {
+      .then((result) => {
         if (!alive) return;
-        setStyle(r.outputStyle);
+        setStyle(result.outputStyle);
         setError(null);
       })
-      .catch((e) => alive && setError(e.message));
+      .catch(
+        (error: unknown) =>
+          alive && setError(errorMessage(error, "Failed to load output style")),
+      );
     return () => {
       alive = false;
     };
@@ -315,12 +314,15 @@ function PersonalPromptPanel() {
   useEffect(() => {
     let alive = true;
     fetchPersonalPrompt(user)
-      .then((r) => {
+      .then((result) => {
         if (!alive) return;
-        setPrompt(r.prompt);
-        setSavedPrompt(r.prompt);
+        setPrompt(result.prompt);
+        setSavedPrompt(result.prompt);
       })
-      .catch((e) => alive && setError(e.message));
+      .catch(
+        (error: unknown) =>
+          alive && setError(errorMessage(error, "Failed to load your prompt")),
+      );
     return () => {
       alive = false;
     };
@@ -489,6 +491,9 @@ export function PreferencesPanel() {
   // workspace default from GET /api/models applies).
   const [modelPref, setModelPref] = useState<string>(getDefaultModelPref);
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [modelOptionsError, setModelOptionsError] = useState<string | null>(
+    null,
+  );
   useEffect(
     () => onDefaultModelPrefChanged(() => setModelPref(getDefaultModelPref())),
     [],
@@ -497,6 +502,7 @@ export function PreferencesPanel() {
   // workspace's own default from GET /api/repos applies).
   const [repoPref, setRepoPref] = useState<string>(getDefaultRepoPref);
   const [repoOptions, setRepoOptions] = useState<RepoInfo[]>([]);
+  const [repoOptionsError, setRepoOptionsError] = useState<string | null>(null);
   useEffect(
     () => onDefaultRepoPrefChanged(() => setRepoPref(getDefaultRepoPref())),
     [],
@@ -524,13 +530,17 @@ export function PreferencesPanel() {
   );
   useEffect(() => {
     fetchModels()
-      .then((m) => setModelOptions(m.models))
-      .catch(() => {});
+      .then((models) => setModelOptions(models.models))
+      .catch((error: unknown) =>
+        setModelOptionsError(errorMessage(error, "Failed to load models")),
+      );
   }, []);
   useEffect(() => {
     fetchRepos()
       .then(setRepoOptions)
-      .catch(() => {});
+      .catch((error: unknown) =>
+        setRepoOptionsError(errorMessage(error, "Failed to load repositories")),
+      );
   }, []);
 
   return (
@@ -542,6 +552,7 @@ export function PreferencesPanel() {
         <SettingGroup>
           <SettingRow
             title="Default model"
+            desc={modelOptionsError}
             control={
               <Select
                 label="Default model"
@@ -571,7 +582,7 @@ export function PreferencesPanel() {
 
           <SettingRow
             title="Default repository"
-            desc="Where a new session starts."
+            desc={repoOptionsError || "Where a new session starts."}
             control={
               <Select
                 label="Default repository"
