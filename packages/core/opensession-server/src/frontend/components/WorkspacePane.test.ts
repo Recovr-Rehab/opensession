@@ -193,7 +193,7 @@ test("sidebar Changes shares Review's code display options", () => {
   );
   expect(commentableDiffSource).not.toContain("rounded-lg bg-code-well");
   expect(commentableDiffSource).toContain(
-    '!stickyFileHeaders && "mx-2 overflow-clip rounded-lg"',
+    '"mx-2 overflow-clip rounded-lg border border-[var(--review-file-border)]"',
   );
   expect(commentableDiffSource).toContain(
     '!stickyFileHeaders && "mt-0 rounded-none"',
@@ -221,6 +221,9 @@ test("sidebar Changes shares Review's code display options", () => {
     '"color-mix(in srgb, var(--review-code-light) 96%, var(--review-code-dark))"',
   );
   expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--review-code-light) 90%, var(--review-code-dark))"',
+  );
+  expect(commentableDiffSource).toContain(
     '"--diffs-bg": "var(--review-code-dark)"',
   );
   expect(commentableDiffSource).toContain(
@@ -231,6 +234,9 @@ test("sidebar Changes shares Review's code display options", () => {
   );
   expect(commentableDiffSource).toContain(
     '"color-mix(in srgb, var(--review-code-dark) 94%, var(--review-code-light))"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--review-code-dark) 90%, var(--review-code-light))"',
   );
   expect(commentableDiffSource).toContain("style={DIFF_SURFACE_STYLE[theme]}");
   expect(baseCssSource).toContain("--review-code-light: #ffffff");

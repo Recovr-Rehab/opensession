@@ -77,6 +77,7 @@ const STICKY_FILE_HEADER_SURFACE =
 type DiffSurfaceStyle = React.CSSProperties & {
   "--diffs-bg": string;
   "--diffs-bg-separator-override": string;
+  "--review-file-border": string;
   "--review-file-header-bg": string;
   "--review-file-header-hover": string;
 };
@@ -85,6 +86,8 @@ const DIFF_SURFACE_STYLE: Record<"light" | "dark", DiffSurfaceStyle> = {
     "--diffs-bg": "var(--review-code-light)",
     "--diffs-bg-separator-override":
       "color-mix(in srgb, var(--blue) 12%, var(--review-code-light))",
+    "--review-file-border":
+      "color-mix(in srgb, var(--review-code-light) 90%, var(--review-code-dark))",
     "--review-file-header-bg":
       "color-mix(in srgb, var(--review-code-light) 96%, var(--review-code-dark))",
     "--review-file-header-hover":
@@ -95,6 +98,8 @@ const DIFF_SURFACE_STYLE: Record<"light" | "dark", DiffSurfaceStyle> = {
     "--diffs-bg": "var(--review-code-dark)",
     "--diffs-bg-separator-override":
       "color-mix(in srgb, var(--blue) 12%, var(--review-code-dark))",
+    "--review-file-border":
+      "color-mix(in srgb, var(--review-code-dark) 90%, var(--review-code-light))",
     "--review-file-header-bg":
       "color-mix(in srgb, var(--review-code-dark) 94%, var(--review-code-light))",
     "--review-file-header-hover":
@@ -675,7 +680,8 @@ export function CommentableDiff({ patch, options }: Props) {
       <div
         className={cn(
           FILE_ROW,
-          !stickyFileHeaders && "mx-2 overflow-clip rounded-lg",
+          !stickyFileHeaders &&
+            "mx-2 overflow-clip rounded-lg border border-[var(--review-file-border)]",
         )}
         key={`${file.name}-${i}`}
         data-diff-file={file.name}
