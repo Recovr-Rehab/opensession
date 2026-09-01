@@ -62,10 +62,7 @@ import {
 import {
   getSessionCheckoutPrefs,
   onSessionCheckoutPrefChanged,
-  sessionCheckoutDefault,
-  setSessionCheckoutDefault,
   setSessionCheckoutPref,
-  type SessionCheckoutOverride,
   type SessionCheckoutPrefs,
 } from "../../lib/session-checkout-pref";
 import {
@@ -119,7 +116,7 @@ import {
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
 import { RepoTile } from "../RepoTile";
 import { ModelMark } from "../ModelMark";
-import { IconPlus, IconRepo } from "../icons";
+import { IconRepo } from "../icons";
 
 // ── Desk voice ─────────────────────────────────────────────────────────────
 
@@ -513,10 +510,6 @@ export function PreferencesPanel() {
   const [checkoutPrefs, setCheckoutPrefs] = useState<SessionCheckoutPrefs>(
     getSessionCheckoutPrefs,
   );
-  const [checkoutOverrideDraft, setCheckoutOverrideDraft] = useState<{
-    repo: string;
-    mode: SessionCheckoutOverride;
-  } | null>(null);
   useEffect(
     () =>
       onSessionCheckoutPrefChanged(() =>
@@ -549,15 +542,6 @@ export function PreferencesPanel() {
         setRepoOptionsError(errorMessage(error, "Failed to load repositories")),
       );
   }, []);
-
-  const checkoutDefault = sessionCheckoutDefault(checkoutPrefs);
-  const checkoutOverrideRepos = repoOptions.filter((repo) => {
-    const override = checkoutPrefs[repo.id];
-    return override !== undefined && override !== checkoutDefault;
-  });
-  const availableCheckoutRepos = repoOptions.filter(
-    (repo) => checkoutPrefs[repo.id] === undefined,
-  );
 
   return (
     <SettingsPanel>
@@ -702,62 +686,11 @@ export function PreferencesPanel() {
           }
         />
       </SettingCard>
-      <SettingsGroupLabel
-        actions={
-          !checkoutOverrideDraft && availableCheckoutRepos.length > 0 ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<IconPlus size={16} />}
-              className="phone:min-h-11"
-              onClick={() =>
-                setCheckoutOverrideDraft({
-                  repo: "",
-                  mode:
-                    checkoutDefault === "checkout" ? "worktree" : "checkout",
-                })
-              }
-            >
-              Add override
-            </Button>
-          ) : undefined
-        }
-      >
-        Code workspaces
-      </SettingsGroupLabel>
+      <SettingsGroupLabel>Code workspaces</SettingsGroupLabel>
       <SettingCard>
-        <SettingRow
-          title="Default for all repositories"
-          desc="Where new code sessions make changes."
-          controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
-          control={
-            <Select
-              label="Default code workspace"
-              value={checkoutDefault}
-              options={[
-                { value: "default", label: "Use repository defaults" },
-                { value: "checkout", label: "Local checkout" },
-                { value: "worktree", label: "Separate worktree" },
-              ]}
-              className="phone:min-h-11 phone:w-full"
-              onChange={(value) => {
-                setSessionCheckoutDefault(value);
-                setCheckoutOverrideDraft((draft) =>
-                  draft?.mode === value
-                    ? {
-                        ...draft,
-                        mode: value === "checkout" ? "worktree" : "checkout",
-                      }
-                    : draft,
-                );
-              }}
-            />
-          }
-        />
-        {checkoutOverrideRepos.map((repo) => {
+        {repoOptions.map((repo) => {
           const label = repo.label || repo.id;
-          const checkoutPref = checkoutPrefs[repo.id];
-          if (!checkoutPref) return null;
+          const checkoutPref = checkoutPrefs[repo.id] ?? "default";
           return (
             <SettingRow
               key={repo.id}
@@ -767,99 +700,31 @@ export function PreferencesPanel() {
                   <span className="truncate">{label}</span>
                 </span>
               }
-              desc="Overrides the default above."
-              controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
+              desc={
+                checkoutPref === "default"
+                  ? `Repository default: ${repo.sharedCheckout ? "local checkout" : "separate worktree"}.`
+                  : "Personal override for new code sessions."
+              }
               control={
                 <Select
                   label={`${label} code workspace`}
                   value={checkoutPref}
                   options={[
-                    { value: "default", label: "Use default for all" },
+                    { value: "default", label: "Use repository default" },
                     { value: "checkout", label: "Local checkout" },
                     { value: "worktree", label: "Separate worktree" },
                   ]}
-                  className="phone:min-h-11 phone:w-full"
                   onChange={(value) => setSessionCheckoutPref(repo.id, value)}
                 />
               }
             />
           );
         })}
-        {checkoutOverrideDraft && (
-          <SettingRow
-            title="New override"
-            desc="Choose a repository and workspace."
-            controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
-            control={
-              <div className="flex flex-wrap items-center justify-end gap-2 phone:w-full">
-                <Select
-                  label="Repository to override"
-                  value={checkoutOverrideDraft.repo}
-                  options={[
-                    {
-                      value: "",
-                      label: "Choose repository",
-                      icon: <IconRepo size={16} />,
-                    },
-                    ...availableCheckoutRepos.map((repo) => ({
-                      value: repo.id,
-                      label: repo.label || repo.id,
-                      icon: <RepoTile name={repo.id} size={16} />,
-                    })),
-                  ]}
-                  className="phone:min-h-11 phone:max-w-full"
-                  onChange={(repo) =>
-                    setCheckoutOverrideDraft((draft) =>
-                      draft ? { ...draft, repo } : draft,
-                    )
-                  }
-                />
-                <Select
-                  label="Override code workspace"
-                  value={checkoutOverrideDraft.mode}
-                  options={(
-                    [
-                      { value: "checkout", label: "Local checkout" },
-                      { value: "worktree", label: "Separate worktree" },
-                    ] satisfies {
-                      value: SessionCheckoutOverride;
-                      label: string;
-                    }[]
-                  ).filter((option) => option.value !== checkoutDefault)}
-                  className="phone:min-h-11"
-                  onChange={(mode) =>
-                    setCheckoutOverrideDraft((draft) =>
-                      draft ? { ...draft, mode } : draft,
-                    )
-                  }
-                />
-                <Button
-                  variant="soft"
-                  className="phone:min-h-11"
-                  disabled={!checkoutOverrideDraft.repo}
-                  onClick={() => {
-                    setSessionCheckoutPref(
-                      checkoutOverrideDraft.repo,
-                      checkoutOverrideDraft.mode,
-                    );
-                    setCheckoutOverrideDraft(null);
-                  }}
-                >
-                  Add
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="phone:min-h-11"
-                  onClick={() => setCheckoutOverrideDraft(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            }
-          />
-        )}
       </SettingCard>
-      <SettingsHint>Changes apply to new sessions only.</SettingsHint>
+      <SettingsHint>
+        Personal choices apply to new sessions only and override each
+        repository&apos;s default.
+      </SettingsHint>
       <AppearanceSection />
       <SettingsGroupLabel>Sidebar</SettingsGroupLabel>
       <SettingCard>

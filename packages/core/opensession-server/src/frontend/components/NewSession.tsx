@@ -62,7 +62,6 @@ import {
 import {
   getSessionCheckoutPrefs,
   onSessionCheckoutPrefChanged,
-  resolveSessionCheckoutPref,
 } from "../lib/session-checkout-pref";
 import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
 import { fallbackBranchName } from "../lib/workspace-draft";
@@ -609,7 +608,7 @@ export function NewSession({
       ),
     [],
   );
-  const checkoutPref = resolveSessionCheckoutPref(checkoutPrefs, repo);
+  const checkoutPref = checkoutPrefs[repo] ?? "default";
   const repoOptions = (items: RepoInfo[]): RepoOption[] =>
     items.map((item) => ({
       id: item.id,
@@ -1632,10 +1631,8 @@ export function NewSession({
                 // so it can be the session's repo but never a second one.
                 singleOnly:
                   startPoint.kind === "new" &&
-                  (resolveSessionCheckoutPref(checkoutPrefs, p.id) ===
-                    "checkout" ||
-                    (resolveSessionCheckoutPref(checkoutPrefs, p.id) ===
-                      "default" &&
+                  ((checkoutPrefs[p.id] ?? "default") === "checkout" ||
+                    ((checkoutPrefs[p.id] ?? "default") === "default" &&
                       p.sharedCheckout)),
               })),
               // Either mode can run without a repo, and the Ask toggle in the

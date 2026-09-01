@@ -180,8 +180,8 @@ describe("sidebar row placement", () => {
     expect(classifySidebarPlacement(candidate, context)).toBe("needs-review");
   });
 
-  test("moves personally kept work into its live review band", () => {
-    const requestedOfMe = row(
+  test("puts a personally kept review workspace in Active", () => {
+    const candidate = row(
       "kept-review",
       [
         session("kept-review", {
@@ -191,24 +191,13 @@ describe("sidebar row placement", () => {
       ],
       { owner: "johnny" },
     );
-    const requestedByMe = row("awaiting-review", [
-      session("awaiting-review", {
-        reviewRequest: {
-          to: "Kent",
-          by: "Michiel",
-          at: "2026-08-16T00:00:00Z",
-        },
-      }),
-    ]);
 
+    expect(classifySidebarPlacement(candidate, context)).toBe("needs-review");
     expect(
-      classifySidebarPlacement(requestedOfMe, { ...context, claimed: true }),
-    ).toBe("needs-review");
+      classifySidebarPlacement(candidate, { ...context, claimed: true }),
+    ).toBe("status");
     expect(
-      classifySidebarPlacement(requestedByMe, { ...context, claimed: true }),
-    ).toBe("awaiting-review");
-    expect(
-      classifySidebarPlacement(requestedOfMe, {
+      classifySidebarPlacement(candidate, {
         ...context,
         claimed: true,
         snoozed: true,
