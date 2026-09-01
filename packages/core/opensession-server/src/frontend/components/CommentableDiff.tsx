@@ -987,7 +987,10 @@ export function CommentableDiff({ patch, options }: Props) {
   );
 
   return (
-    <div ref={setStickyRoot} className="flex flex-col gap-2.5">
+    <div
+      ref={setStickyRoot}
+      className={cn("flex flex-col", stickyFileHeaders ? "gap-2.5" : "gap-4")}
+    >
       {confirmation && (
         <div className="rounded-md bg-green-soft px-3 py-1.5 text-label font-semibold text-green">
           {confirmation}
@@ -1054,7 +1057,12 @@ export function CommentableDiff({ patch, options }: Props) {
                   )}
                 </button>
                 {!collapsed && (
-                  <div className="flex flex-col gap-[7px] border-l border-line pl-3">
+                  <div
+                    className={cn(
+                      "flex flex-col border-l border-line pl-3",
+                      stickyFileHeaders ? "gap-[7px]" : "gap-4",
+                    )}
+                  >
                     {group.indices.map((index) =>
                       renderFile(files[index], index),
                     )}

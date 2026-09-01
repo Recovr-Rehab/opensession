@@ -193,6 +193,12 @@ test("sidebar Changes shares Review's code display options", () => {
     '!stickyFileHeaders && "mx-2 mt-0.5"',
   );
   expect(commentableDiffSource).toContain(
+    'stickyFileHeaders ? "gap-2.5" : "gap-4"',
+  );
+  expect(commentableDiffSource).toContain(
+    'stickyFileHeaders ? "gap-[7px]" : "gap-4"',
+  );
+  expect(commentableDiffSource).toContain(
     '"--diffs-bg": "var(--code-well-light)"',
   );
   expect(commentableDiffSource).toContain(
