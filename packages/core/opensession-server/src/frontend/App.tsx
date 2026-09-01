@@ -2,10 +2,6 @@ import { BASE_PATH, stripBasePath } from "./lib/base";
 import { DEFAULT_REPO_ID, PRODUCT_NAME } from "./lib/brand";
 import type { NavigationActions } from "./lib/navigation";
 import {
-  setPendingSessionContext,
-  takePendingSessionContext,
-} from "./lib/pending-session-context";
-import {
   onSessionTitleResolutionRequested,
   retrySessionTitleResolution,
   setKnownRepos,
@@ -2739,6 +2735,7 @@ function AppContent({
     id: string,
     morphOrigin?: NewTabMorphOrigin,
     persistedSource: Promise<UnifiedSession> = Promise.resolve(src),
+    duplicate = false,
   ): Promise<string> {
     const now = new Date().toISOString();
     const user = getCurrentUser();
@@ -2748,12 +2745,14 @@ function AppContent({
       source: "opensession",
       claudeSessionId: null,
       codexThreadId: undefined,
-      title: "New session",
+      ...(duplicate
+        ? { duplicatedFromSessionId: src.id, title: src.title }
+        : { title: "New session" }),
       createdAt: now,
       lastActivity: now,
       isRunning: false,
-      // This is a blank local shell, regardless of whether the source tab ran.
-      // Inheriting `ran` makes the viewer hydrate a transcript that cannot exist.
+      // This shell has no engine yet. A duplicate's copied transcript arrives
+      // with the create response, while an ordinary sibling stays blank.
       ran: false,
       transcriptPath: null,
       startedBy: user,
@@ -2803,7 +2802,7 @@ function AppContent({
 
     return await (async () => {
       const source = await persistedSource;
-      const created = await newSessionApi(source.id, user, mode, id);
+      const created = await newSessionApi(source.id, user, mode, id, duplicate);
       const createdId = created.id;
       if (abandonedSessionCreatesRef.current.delete(id)) {
         unstick(id);
@@ -2893,12 +2892,9 @@ function AppContent({
     mode: "share" | "stack" | "ask",
     side: SplitSide | null = null,
     morphOrigin?: NewTabMorphOrigin,
-    contextSourceId?: string,
+    duplicate = false,
   ) => {
-    if (emptyWorkspaceSession) {
-      if (contextSourceId) {
-        setPendingSessionContext(emptyWorkspaceSession.id, contextSourceId);
-      }
+    if (emptyWorkspaceSession && !duplicate) {
       setActiveViewTab(null);
       navigate({ view: "session", id: emptyWorkspaceSession.id });
       return;
@@ -2949,9 +2945,6 @@ function AppContent({
     // before routing so its persisted workspace suffix cannot keep winning.
     setActiveViewTab(null);
     const optimisticId = newClientSessionId();
-    if (contextSourceId) {
-      setPendingSessionContext(optimisticId, contextSourceId);
-    }
     siblingCreateRef.current = optimisticId;
     await (async () => {
       const id = await createNewSessionFrom(
@@ -2960,6 +2953,7 @@ function AppContent({
         optimisticId,
         morphOrigin,
         persistedSource,
+        duplicate,
       );
       if (side === "right" && tabOrderKey && activeTabSplit)
         saveTabSplit(tabOrderKey, {
@@ -2969,7 +2963,6 @@ function AppContent({
         });
     })()
       .catch(async (error) => {
-        takePendingSessionContext(optimisticId);
         if (error instanceof MissingWorkspaceSessionSourceError) {
           openSessionlessWorkspaceComposer();
         } else {
@@ -3938,8 +3931,7 @@ function AppContent({
     openDraft,
     openNewSessionInWorkspace: (mode, origin) =>
       handleNewSession(mode, null, origin),
-    duplicateSession: (sourceSessionId) =>
-      handleNewSession("share", null, undefined, sourceSessionId),
+    duplicateSession: () => handleNewSession("share", null, undefined, true),
     startNewChat: (session, prompt) =>
       openNewSessionInWorkspace(session, "share", prompt),
     openPrefilledSession,
