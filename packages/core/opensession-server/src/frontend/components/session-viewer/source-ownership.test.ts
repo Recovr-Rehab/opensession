@@ -20,7 +20,13 @@ test("SessionViewer decomposition files stay below the source line limit", async
     "hooks/useSessionModelWorkflowController.ts",
     "hooks/useSessionRuntimeController.ts",
     "hooks/useTranscriptHistoryController.ts",
+    "hooks/useTranscriptReaderController.ts",
     "hooks/useSessionViewerActionsController.ts",
+    "hooks/useSessionReviewController.ts",
+    "hooks/useSessionViewStateController.ts",
+    "hooks/useSessionConversationState.ts",
+    "hooks/useSessionWorkspaceToolsController.ts",
+    "hooks/useSessionChromeController.ts",
     "lib/session-viewer-actions.ts",
     "lib/transcript-history-controller.ts",
     "components/session/SessionPreviewSurface.tsx",
@@ -40,6 +46,64 @@ test("SessionViewer decomposition files stay below the source line limit", async
       lineCount,
       `${path} has ${lineCount} physical lines`,
     ).toBeLessThanOrEqual(1_999);
+  }
+});
+
+test("new SessionViewer controllers keep cohesive bounded contracts", async () => {
+  const contracts = {
+    "hooks/useSessionReviewController.ts": [
+      "ReviewNavigationAvailability",
+      "ReviewVisibility",
+      "SessionReviewControllerOptions",
+    ],
+    "hooks/useSessionViewStateController.ts": [
+      "ViewStateIdentity",
+      "ViewStateTranscript",
+      "ViewStateSurface",
+      "ViewStateSocket",
+      "HeaderLayoutControllerOptions",
+    ],
+    "hooks/useSessionConversationState.ts": [
+      "AvailabilityIdentity",
+      "ShippedPresentationIdentity",
+      "ShippedPresentationActions",
+      "SlackComposerState",
+      "ConversationActionIdentity",
+      "ConversationActionRuntime",
+      "DraftContextState",
+      "SendComposerOptions",
+      "SendQueueOptions",
+      "ConversationProjectionOptions",
+      "HeaderActionIdentity",
+      "HeaderActionRuntime",
+      "HeaderActionModel",
+      "HeaderActionSetters",
+    ],
+    "hooks/useSessionWorkspaceToolsController.ts": [
+      "WorkspaceToolsIdentity",
+      "WorkspaceToolsRuntime",
+      "WorkspaceToolsRelations",
+    ],
+    "hooks/useSessionChromeController.ts": [
+      "ChromeIdentity",
+      "ChromePanel",
+      "ChromeRuntime",
+      "ChromeLifecycle",
+      "ChromeDeleteState",
+      "ChromePreview",
+    ],
+  };
+
+  for (const [path, names] of Object.entries(contracts)) {
+    const text = await source(path);
+    for (const name of names)
+      expect(
+        interfaceMemberCount(text, name),
+        `${path}: ${name}`,
+      ).toBeLessThanOrEqual(15);
+    expect(text, path).not.toMatch(
+      /:\s*any\b|<any>|as unknown|(?:Chunk|Group)\d+/,
+    );
   }
 });
 
@@ -88,6 +152,35 @@ test("the main conversation region owns its complete bounded JSX contract", asyn
   }
   expect(region).not.toMatch(/\buse(?:Memo|Callback)\(/);
   expect(region).not.toMatch(/\b(?:any|ts-ignore|ts-expect-error)\b/);
+});
+
+test("transcript reader lifecycle stays grouped and out of SessionViewer", async () => {
+  const [viewer, reader] = await Promise.all([
+    source("components/SessionViewer.tsx"),
+    source("hooks/useTranscriptReaderController.ts"),
+  ]);
+  const groups = [
+    "ReaderTranscriptState",
+    "ReaderIndexState",
+    "ReaderHistoryState",
+    "ReaderLayoutOptions",
+    "ReaderLifecycleIdentity",
+    "ReaderLifecycleTranscript",
+    "ReaderLifecycleHistory",
+    "ReaderLifecycleScroll",
+    "ReaderLifecycleRuntime",
+    "ReaderLifecycleIndex",
+    "ReaderLifecycleOptions",
+  ];
+
+  for (const group of groups) {
+    expect(interfaceMemberCount(reader, group), group).toBeLessThanOrEqual(15);
+  }
+  expect(viewer.match(/useTranscriptReaderLayout\(/g)).toHaveLength(1);
+  expect(viewer.match(/useTranscriptReaderLifecycle\(/g)).toHaveLength(1);
+  expect(viewer).not.toContain("const initiallyScrolledSessionRef = useRef");
+  expect(reader).not.toMatch(/:\s*any\b/);
+  expect(reader).not.toMatch(/\bas\s+(?:const|[A-Z]\w*)\b/);
 });
 
 test("the session subscription has one bounded grouped options contract", async () => {
@@ -199,11 +292,16 @@ test("SessionViewer delegates overlays and the side panel through bounded contra
 });
 
 test("SessionViewer delegates bounded action state without moving memo wrappers", async () => {
-  const [viewer, controller, actions] = await Promise.all([
-    source("components/SessionViewer.tsx"),
-    source("hooks/useSessionViewerActionsController.ts"),
-    source("lib/session-viewer-actions.ts"),
-  ]);
+  const [viewer, controller, actions, review, viewState, chrome] =
+    await Promise.all([
+      source("components/SessionViewer.tsx"),
+      source("hooks/useSessionViewerActionsController.ts"),
+      source("lib/session-viewer-actions.ts"),
+      source("hooks/useSessionReviewController.ts"),
+      source("hooks/useSessionViewStateController.ts"),
+      source("hooks/useSessionChromeController.ts"),
+    ]);
+  const hookOwners = `${viewer}\n${review}\n${viewState}\n${chrome}`;
   const controllerGroups = [
     "ShippedShareIdentity",
     "HeaderLayoutIdentity",
@@ -229,7 +327,9 @@ test("SessionViewer delegates bounded action state without moving memo wrappers"
     "useSessionOverflowState",
     "useSessionArchiveShortcut",
   ]) {
-    expect(viewer.match(new RegExp(`${hook}\\(`, "g")), hook).toHaveLength(1);
+    expect(hookOwners.match(new RegExp(`${hook}\\(`, "g")), hook).toHaveLength(
+      1,
+    );
   }
   for (const group of controllerGroups) {
     expect(interfaceMemberCount(controller, group), group).toBeLessThanOrEqual(

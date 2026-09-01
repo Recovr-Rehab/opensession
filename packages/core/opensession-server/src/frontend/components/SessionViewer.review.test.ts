@@ -5,10 +5,16 @@ const source = await Promise.all([
     new URL("./session-viewer/SessionViewerChrome.tsx", import.meta.url),
   ).text(),
   Bun.file(new URL("./SessionViewer.tsx", import.meta.url)).text(),
+  Bun.file(
+    new URL("./session-viewer/SessionViewerMainRegion.tsx", import.meta.url),
+  ).text(),
 ]).then((parts) => parts.join("\n"));
+const reviewController = await Bun.file(
+  new URL("../hooks/useSessionReviewController.ts", import.meta.url),
+).text();
 
 test("session Review keeps PR navigation below workspace actions", () => {
-  expect(source).toContain(
+  expect(reviewController).toContain(
     'const [reviewPage, setReviewPage] = useState<PrReviewPage>("files")',
   );
 

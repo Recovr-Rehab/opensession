@@ -30,7 +30,7 @@ test("SessionViewer composer owners stay bounded", async () => {
     expect(
       lineCount,
       `${path} has ${lineCount} physical lines`,
-    ).toBeLessThanOrEqual(path.endsWith("SessionViewer.tsx") ? 5_600 : 1_999);
+    ).toBeLessThanOrEqual(1_999);
   }
 
   for (const [text, names] of [
@@ -52,14 +52,20 @@ test("SessionViewer composer owners stay bounded", async () => {
 });
 
 test("SessionViewer keeps memo wrappers and delegates composer bodies", async () => {
-  const viewer = await source("components/SessionViewer.tsx");
-  expect(viewer.indexOf("useSessionComposerDraft({")).toBeLessThan(
-    viewer.indexOf("useSessionRuntime({"),
+  const [viewer, viewState, conversation] = await Promise.all([
+    source("components/SessionViewer.tsx"),
+    source("hooks/useSessionViewStateController.ts"),
+    source("hooks/useSessionConversationState.ts"),
+  ]);
+  expect(viewState.indexOf("useSessionComposerDraft({")).toBeLessThan(
+    viewState.indexOf("useSessionRuntime({"),
   );
-  expect(viewer).toContain(
-    "return sendSessionMessage(raw, opts, isolatedImages",
+  expect(conversation).toContain(
+    "return sendSessionMessage(raw, opts, isolatedImages, message);",
   );
   expect(viewer).not.toContain("const sendStartedAt = performance.now();");
-  expect(viewer).toContain("const editSentMessageInComposer = useCallback(");
-  expect(viewer).toContain("[composerHasDraft],");
+  expect(conversation).toContain(
+    "const editSentMessageInComposer = useCallback(",
+  );
+  expect(conversation).toContain("[hasDraft],");
 });

@@ -4,38 +4,43 @@ import { expect, test } from "bun:test";
 // key-decoders from these focused files instead of redefining them inline —
 // and must keep the useMemo/useState calls that give them their per-render
 // identity in the component itself, not in the extracted modules.
-test("SessionViewer imports its constants and derive helpers instead of redefining them", async () => {
-  const viewer = await Bun.file(
-    new URL("../components/SessionViewer.tsx", import.meta.url),
-  ).text();
+test("SessionViewer owners import constants and derive helpers instead of redefining them", async () => {
+  const [viewer, review, reader, viewState] = await Promise.all([
+    Bun.file(
+      new URL("../components/SessionViewer.tsx", import.meta.url),
+    ).text(),
+    Bun.file(
+      new URL("../hooks/useSessionReviewController.ts", import.meta.url),
+    ).text(),
+    Bun.file(
+      new URL("../hooks/useTranscriptReaderController.ts", import.meta.url),
+    ).text(),
+    Bun.file(
+      new URL("../hooks/useSessionViewStateController.ts", import.meta.url),
+    ).text(),
+  ]);
+  const owners = [viewer, review, reader, viewState].join("\n");
 
-  expect(viewer).toContain(
-    'import {\n  NO_SUBAGENTS,\n  NO_WORKFLOW_RUNS,\n  EMPTY_SUGGESTIONS,\n  NO_REVIEW_REPOS,\n  HIDDEN_REOPEN_MS,\n  RESUME_GROWTH_WINDOW_MS,\n  LEGACY_OPEN_SETTLE_MAX_MS,\n  INDEXED_OPEN_SETTLE_MAX_MS,\n  JUMP_PAGE_ENTRIES,\n  JUMP_MAX_ENTRIES,\n  EMPTY_TRANSCRIPT_ENTRIES,\n} from "../lib/session-viewer-constants";',
-  );
-  expect(viewer).toContain(
-    'import {\n  reviewReposFromKey,\n  discoveredPrsFromKey,\n  toolPathRootsFromKey,\n} from "../lib/session-viewer-derive";',
-  );
-  expect(viewer).toContain(
-    'import { SessionShellTiming } from "./session-viewer/shell-timing";',
-  );
+  expect(owners).toContain('from "../lib/session-viewer-constants"');
+  expect(review).toContain('from "../lib/session-viewer-derive"');
+  expect(review).toContain('from "../components/session-viewer/shell-timing"');
 
   // The singleton/decoder definitions themselves no longer live inline.
-  expect(viewer).not.toContain("const NO_SUBAGENTS:");
-  expect(viewer).not.toContain("const NO_WORKFLOW_RUNS:");
-  expect(viewer).not.toContain("const EMPTY_SUGGESTIONS:");
-  expect(viewer).not.toContain("const NO_REVIEW_REPOS:");
-  expect(viewer).not.toContain("const EMPTY_TRANSCRIPT_ENTRIES:");
-  expect(viewer).not.toContain("function reviewReposFromKey(");
-  expect(viewer).not.toContain("function discoveredPrsFromKey(");
-  expect(viewer).not.toContain("function toolPathRootsFromKey(");
-  expect(viewer).not.toContain("class SessionShellTiming");
+  expect(owners).not.toContain("const NO_SUBAGENTS:");
+  expect(owners).not.toContain("const NO_WORKFLOW_RUNS:");
+  expect(owners).not.toContain("const EMPTY_SUGGESTIONS:");
+  expect(owners).not.toContain("const NO_REVIEW_REPOS:");
+  expect(owners).not.toContain("const EMPTY_TRANSCRIPT_ENTRIES:");
+  expect(owners).not.toContain("function reviewReposFromKey(");
+  expect(owners).not.toContain("function discoveredPrsFromKey(");
+  expect(owners).not.toContain("function toolPathRootsFromKey(");
+  expect(owners).not.toContain("class SessionShellTiming");
 
-  // But the memoization that gives them per-render identity stays put: this
-  // extraction moves definitions, not hook behavior.
-  expect(viewer).toContain("() => reviewReposFromKey(reviewReposKey)");
-  expect(viewer).toContain("() => discoveredPrsFromKey(discoveredPrsKey)");
-  expect(viewer).toContain("() => toolPathRootsFromKey(toolPathRootsKey)");
-  expect(viewer).toContain(
+  // The memoization moves with its state owner, not into the pure modules.
+  expect(review).toContain("() => reviewReposFromKey(reviewReposKey)");
+  expect(review).toContain("() => discoveredPrsFromKey(discoveredPrsKey)");
+  expect(review).toContain("() => toolPathRootsFromKey(toolPathRootsKey)");
+  expect(review).toContain(
     "const [shellTiming] = useState(\n    () => new SessionShellTiming(performance.now()),\n  );",
   );
 });

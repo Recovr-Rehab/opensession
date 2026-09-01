@@ -64,6 +64,15 @@ async function sources() {
     Bun.file(
       new URL("./session-viewer/SessionViewerChrome.tsx", import.meta.url),
     ).text(),
+    Bun.file(
+      new URL("./session-viewer/SessionViewerMainRegion.tsx", import.meta.url),
+    ).text(),
+    Bun.file(
+      new URL(
+        "./session-viewer/SessionViewerAssetOverlay.tsx",
+        import.meta.url,
+      ),
+    ).text(),
   ]).then((parts) => parts.join("\n"));
   const app = await Promise.all([
     Bun.file(new URL("../AppContent.tsx", import.meta.url)).text(),
@@ -75,7 +84,13 @@ async function sources() {
   const send = await Bun.file(
     new URL("../lib/session-viewer-send.ts", import.meta.url),
   ).text();
-  return { viewer, app, bindings, send };
+  const review = await Bun.file(
+    new URL("../hooks/useSessionReviewController.ts", import.meta.url),
+  ).text();
+  const conversation = await Bun.file(
+    new URL("../hooks/useSessionConversationState.ts", import.meta.url),
+  ).text();
+  return { viewer, app, bindings, send, review, conversation };
 }
 
 function interfaceBody(sourceText: string, name: string) {
@@ -87,7 +102,8 @@ function interfaceBody(sourceText: string, name: string) {
 }
 
 test("SessionViewer navigation comes from NavigationContext", async () => {
-  const { viewer, bindings } = await sources();
+  const { viewer, bindings, review, conversation } = await sources();
+  const navigationOwners = `${viewer}\n${review}\n${conversation}`;
   const props = interfaceBody(bindings, "SessionViewerProps");
   const availability = interfaceBody(
     bindings,
@@ -107,40 +123,40 @@ test("SessionViewer navigation comes from NavigationContext", async () => {
     for (const name of names) expect(binding).toContain(`${name}?`);
   }
 
-  expect(viewer).toContain(
+  expect(navigationOwners).toContain(
     'import { useNavigation } from "../hooks/useNavigation";',
   );
   expect(viewer).toContain("const navigation = useNavigation();");
-  expect(viewer).toContain(
+  expect(review).toContain(
     "const openNextChat = canOpenNextChat ? navigation.openNextChat : undefined;",
   );
-  expect(viewer).toContain(
+  expect(review).toContain(
     "const openNewSession = canStartNewSession\n    ? navigation.openNewSessionInWorkspace\n    : undefined;",
   );
   expect(viewer).toContain('void openNewSession("share");');
   expect(viewer).toContain(
-    "navigation.startNewChat(\n                      session,",
+    'navigation.startNewChat(session, withQuotes([selection], ""))',
   );
-  expect(viewer).toContain(
+  expect(review).toContain(
     "openReview && (prPresentation.primary || prPresentation.additional.length)",
   );
-  expect(viewer).toContain("if (!id || !openSession) return;");
+  expect(conversation).toContain("if (!id || !openSession) return;");
   expect(viewer).toContain(
-    "onOpenAsTab={openAssets ? promoteAssetToTab : undefined}",
+    "onOpenAsTab: openAssets ? promoteAssetToTab : undefined,",
   );
-  expect(viewer).toContain(
+  expect(review).toContain(
     "const openCurrentWorkspace = canOpenWorkspace\n    ? navigation.openCurrentWorkspace\n    : undefined;",
   );
   expect(viewer).toContain("onOpenSession={openCurrentWorkspace}");
 });
 
 test("duplicate session stays available at the current tip inside a workspace", async () => {
-  const { viewer, send } = await sources();
+  const { viewer, send, conversation } = await sources();
   expect(viewer).toContain("                  {forkAction}");
   expect(viewer).toContain('<span className="grow">Duplicate session</span>');
   expect(viewer).not.toContain("{!workspaceScopedMenu && forkAction}");
   expect(viewer).toContain("                handleFork();");
-  expect(viewer).toContain("void navigation.duplicateSession();");
+  expect(conversation).toContain("void navigation.duplicateSession();");
   expect(viewer).not.toContain("const lastAssistantId = entries.findLast(");
   expect(send).toContain("? { messageId: draft.forkFrom.messageId }");
 });
