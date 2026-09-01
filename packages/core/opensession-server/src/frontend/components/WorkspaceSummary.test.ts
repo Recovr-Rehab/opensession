@@ -94,6 +94,16 @@ test("popup review heading keeps a small gap after a lone PR band", () => {
   );
 });
 
+test("the review label opens the review with an adjacent arrow", () => {
+  expect(summarySource).toContain('aria-label="Open review"');
+  expect(summarySource).toContain("group-hover/review:translate-x-0.5");
+  expect(summarySource).toContain("[font-size:inherit] [font-weight:inherit]");
+  expect(summarySource).not.toContain("w-[calc(100%+16px)]");
+  expect(summarySource).not.toContain(
+    ">\n              Open\n            </Button>",
+  );
+});
+
 test("pull request page navigation stays in the review toolbar", () => {
   expect(summarySource).not.toContain('aria-label="Pull request pages"');
   expect(summarySource).not.toContain("onReviewPageChange");

@@ -1186,7 +1186,7 @@ export function WorkspaceSummaryBody({
         <div
           className={cn(
             WS_SUMMARY_SECTION,
-            "ws-summary-review-heading justify-between",
+            "ws-summary-review-heading",
             embedded
               ? "h-11"
               : cn(
@@ -1197,15 +1197,21 @@ export function WorkspaceSummaryBody({
                 ),
           )}
         >
-          <span>Review</span>
-          {!reviewMode && (
+          {reviewMode ? (
+            <span>Review</span>
+          ) : (
             <Button
               variant="ghost"
               size="sm"
-              className="min-h-6 px-2 text-meta phone:min-h-11"
+              className="group/review h-full min-h-0 gap-0 rounded-sm p-0 [color:inherit] [font-size:inherit] [font-weight:inherit] hover:bg-transparent hover:[color:inherit] active:scale-100"
               onClick={() => go(onOpenPr)}
+              aria-label="Open review"
             >
-              Open
+              <span>Review</span>
+              <IconChevronRight
+                size={14}
+                className="text-faint opacity-50 transition-[color,opacity,transform] group-hover/review:translate-x-0.5 group-hover/review:text-fg group-hover/review:opacity-100 phone:opacity-100"
+              />
             </Button>
           )}
         </div>
