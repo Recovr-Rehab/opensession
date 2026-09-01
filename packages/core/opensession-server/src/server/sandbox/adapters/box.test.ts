@@ -12,6 +12,7 @@ import {
   boxSnapshotSaveIsRecoverable,
   boxSshLaneSettles,
   boxSshTransportFailed,
+  reusedBoxLaneOutcome,
   parseBoxSshEndpoint,
 } from "./box";
 
@@ -197,8 +198,21 @@ describe("Box runtime home failures", () => {
   });
 
   test("still reports a genuine home-layout failure as one", () => {
-    expect(
-      boxRuntimeHomeFailure({ exitCode: 1, stdout: "", stderr: "" }),
-    ).toBe("Box did not preserve /home/ubuntu as the durable canonical home");
+    expect(boxRuntimeHomeFailure({ exitCode: 1, stdout: "", stderr: "" })).toBe(
+      "Box did not preserve /home/ubuntu as the durable canonical home",
+    );
+  });
+});
+
+describe("Box reused SSH lane", () => {
+  test("degrades to the command plane when the lane drops, and only fails on a real verdict", () => {
+    expect(reusedBoxLaneOutcome(0)).toBe("ok");
+    // ssh's own code and the adapter's timeout say the connection went, not
+    // that /home/ubuntu is wrong - failing a session start over either is what
+    // sent the original investigation at the filesystem.
+    expect(reusedBoxLaneOutcome(255)).toBe("degrade");
+    expect(reusedBoxLaneOutcome(124)).toBe("degrade");
+    // A real non-zero from the check itself IS a verdict about the home path.
+    expect(reusedBoxLaneOutcome(1)).toBe("fail");
   });
 });

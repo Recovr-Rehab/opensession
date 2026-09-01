@@ -501,6 +501,18 @@ export function boxSshTransportFailed(exitCode: number): boolean {
   return exitCode === 255 || exitCode === 124;
 }
 
+/** What a reused SSH lane's home check means. A lane that answered one command
+ * and then lost the next failed in TRANSPORT, not in the filesystem: degrade to
+ * Box's HTTP command plane the way the fresh-install path does, rather than
+ * failing a session start over a dropped connection. Only a real non-zero from
+ * the check itself is a verdict about /home/ubuntu. */
+export function reusedBoxLaneOutcome(
+  exitCode: number,
+): "ok" | "degrade" | "fail" {
+  if (exitCode === 0) return "ok";
+  return boxSshTransportFailed(exitCode) ? "degrade" : "fail";
+}
+
 /** A freshly booted or snapshot-restored Box accepts TCP on port 22 before sshd
  * will hand out a session: the first client wins a control master that dies
  * mid-handshake while the very next attempt succeeds. Adopt a lane only once it
@@ -833,15 +845,20 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
             BOX_RUNTIME_HOME_COMMAND,
             60_000,
           );
-          if (home.exitCode !== 0) {
-            boxSshTargets().delete(boxId);
-            throw new Error(
-              `Box SSH could not restore /home/ubuntu: ${(home.stderr || home.stdout).trim().slice(0, 200)}`,
-            );
+          const outcome = reusedBoxLaneOutcome(home.exitCode);
+          if (outcome === "ok") {
+            runtimeHomeReady = true;
+            commandPlaneReady = true;
+            return;
           }
-          runtimeHomeReady = true;
-          commandPlaneReady = true;
-          return;
+          boxSshTargets().delete(boxId);
+          if (outcome === "fail") throw new Error(boxRuntimeHomeFailure(home));
+          console.warn(
+            `[sandbox:box] reused SSH lane for ${boxId} dropped mid-check; ` +
+              `staying on the command plane: ${boxRuntimeHomeFailure(home)}`,
+          );
+          // Fall through: waitForCommandPlane/ensureRuntimeHome below re-establish
+          // the box over HTTP and then try to build a fresh lane.
         }
       }
 
