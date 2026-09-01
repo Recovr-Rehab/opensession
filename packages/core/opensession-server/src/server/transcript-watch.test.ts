@@ -311,7 +311,7 @@ describe("race-free transcript watch", () => {
       (e) => e.type === "user" || e.type === "assistant",
     );
     expect(sent.length).toBeGreaterThan(132);
-    expect(messages.length).toBeGreaterThanOrEqual(4);
+    expect(messages.length).toBeGreaterThanOrEqual(8);
     expect(sent.some((e) => e.id === "current-user")).toBe(true);
     expect(sent.at(-1)?.id).toBe("current-answer");
     expect(state.frames[0].truncated).toBe(true);
