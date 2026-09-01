@@ -35,11 +35,12 @@ test("the Committed section folds open to every PR or workspace commit", () => {
   expect(summarySource).toContain("commits.map(committedRow)");
 });
 
-test("a commit opens its details inline instead of navigating to GitHub", () => {
-  expect(summarySource).toContain("function toggleCommitDetails(");
+test("a commit opens its details in a nested overlay instead of GitHub", () => {
+  expect(summarySource).toContain("function setCommitDetailsOpen(");
   expect(summarySource).toContain("fetchCommit(sha, repo)");
-  expect(summarySource).toContain("function inlineCommitDetails(");
-  expect(summarySource).toContain('title={expanded ? "Hide commit details"');
+  expect(summarySource).toContain("function commitDetailsPopup(");
+  expect(summarySource).toContain("exclusive={false}");
+  expect(summarySource).toContain('side={embedded ? "top" : "left"}');
   expect(summarySource).not.toContain("href={commit.url}");
 });
 
@@ -86,7 +87,6 @@ test("popup review heading keeps a small gap after a lone PR band", () => {
   );
 });
 
-test("pull request page navigation stays in the review toolbar", () => {
-  expect(summarySource).not.toContain('aria-label="Pull request pages"');
-  expect(summarySource).not.toContain("onReviewPageChange");
+test("popup review tabs keep a small gap after the PR band", () => {
+  expect(summarySource).toContain('className={embedded ? undefined : "mt-1"}');
 });

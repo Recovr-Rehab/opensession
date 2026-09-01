@@ -5726,6 +5726,8 @@ export function SessionViewer({
                       onOpenChange={setSummaryOpen}
                       tabStripVisible={tabStripVisible}
                       reviewMode={showReview}
+                      reviewPage={reviewPage}
+                      onReviewPageChange={setReviewPage}
                       // Too narrow for both, and the card gets out of the way
                       // until someone asks for it from the same button.
                       hasRoom={summaryHasRoom}

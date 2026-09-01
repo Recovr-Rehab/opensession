@@ -195,7 +195,7 @@ interface Props {
   /** The surrounding review header already offers the workspace summary.
    * Keep this panel's metadata rail only when it stacks for a narrow canvas. */
   hideWideOverviewRail?: boolean;
-  /** Controlled page for hosts that preserve Review state outside the panel. */
+  /** Controlled page for hosts that move Review navigation into the summary. */
   page?: PrReviewPage;
   onPageChange?: (page: PrReviewPage) => void;
   /** Move file controls into the identity row and omit the secondary row. */
@@ -1322,40 +1322,20 @@ export function PrPanel({
     </Popover.Root>
   );
 
-  const pageOptions = [
-    ["overview", "Overview", comments.length || undefined],
-    ["files", "Files", files.length || undefined],
-  ] as const;
-
-  // Page navigation shares the identity bar on desktop, preserving the code
-  // canvas' vertical space. Phone keeps the full-width row and larger targets.
-  const titlePageSwitcher = (
-    <Segmented
-      label="Pull request pages"
-      value={page}
-      onValueChange={(next) => {
-        if (next === "overview" || next === "files") setPage(next);
-      }}
-      size="sm"
-      className="shrink-0 phone:hidden"
-    >
-      {pageOptions.map(([key, label, count]) => (
-        <SegmentedOption key={key} value={key}>
-          {label}
-          {count !== undefined && (
-            <span className="text-meta text-faint tabular-nums">{count}</span>
-          )}
-        </SegmentedOption>
-      ))}
-    </Segmented>
-  );
-
-  const phonePageTabs = pageOptions.map(([key, label, count]) => (
+  /* The review has two pages. Without the workspace summary they sit in a
+     small floating switcher, leaving the identity and file controls in the
+     same toolbar positions used while the summary is open. */
+  const pageTabs = (
+    [
+      ["overview", "Overview", comments.length || undefined],
+      ["files", "Files", files.length || undefined],
+    ] as const
+  ).map(([key, label, count]) => (
     <button
       key={key}
       role="tab"
       aria-selected={page === key}
-      className={`flex h-11 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-control-label font-medium transition-colors ${
+      className={`flex h-8 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-label font-medium transition-colors phone:h-11 phone:text-control-label ${
         page === key ? "text-fg" : "text-dim hover:text-fg"
       }`}
       onClick={() => setPage(key)}
@@ -1405,15 +1385,15 @@ export function PrPanel({
     </div>
   );
 
-  const reviewBar = (
-    <div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-2 [scrollbar-width:none] desktop:hidden [&::-webkit-scrollbar]:hidden">
+  const reviewBar = !compactToolbar && (
+    <div className="flex h-8 shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden bg-surface [scrollbar-width:none] desktop:absolute desktop:left-2 desktop:top-[calc(100%+8px)] desktop:z-20 desktop:rounded-lg desktop:smooth-shadow-ring-sm phone:h-11 phone:gap-2 phone:px-2 [&::-webkit-scrollbar]:hidden">
       <div
         className="flex shrink-0 items-center gap-0.5 self-stretch"
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Pull request pages"
       >
-        {phonePageTabs}
+        {pageTabs}
       </div>
       {phoneLayout && fileControls}
     </div>
@@ -1425,8 +1405,9 @@ export function PrPanel({
       data-review-canvas="true"
       ref={setRoot}
     >
-      {/* Desktop keeps page navigation and file controls in the identity row.
-          Phone keeps one edge-to-edge navigation and controls row below it. */}
+      {/* Desktop always keeps file controls in the identity row, so opening
+          the summary only relocates page navigation. Phone keeps one
+          edge-to-edge navigation and controls row below the identity. */}
       <ReviewToolbar compact={compactToolbar}>
         <TopBar as="header" className="h-10 shrink-0 gap-2.5 px-4 phone:px-3">
           {/* State, in the app's own PR language, filled rather than drawn: the
@@ -1485,7 +1466,6 @@ export function PrPanel({
               </a>
             </Tooltip>
           </h1>
-          {titlePageSwitcher}
           {(compactToolbar || !phoneLayout) && fileControls}
           {/* A stack is secondary navigation, not page content. Keep its compact
             position/size chip in the identity bar and reveal the full rail in
