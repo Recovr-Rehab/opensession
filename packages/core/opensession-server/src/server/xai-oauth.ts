@@ -14,6 +14,7 @@
  * refreshes, under a generation stamp so a refresh that lands after an admin
  * disconnected cannot resurrect the credential it replaced.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import {
   closeSync,
@@ -130,9 +131,11 @@ export async function disconnectXai(): Promise<boolean> {
  *  dies until an admin signs in again.
  *
  *  In-process chaining is what actually serializes this deployment's turns. The
- *  lock file is for a second server sharing the state dir; it is best-effort by
- *  design — after the wait it proceeds anyway, because blocking a turn forever
- *  is worse than the narrow race it is protecting against. */
+ *  lock file is for a second server sharing the state dir. It is NOT
+ *  best-effort: a mutation that cannot take it fails instead of writing
+ *  unlocked, because a lost refresh costs the whole workspace its credential
+ *  while a failed turn costs one retry. A lock nobody released is reaped as
+ *  stale, so waiting out the full window means real contention. */
 const LOCK_STALE_MS = 30_000;
 const LOCK_WAIT_MS = 10_000;
 
@@ -193,17 +196,16 @@ function dropFileLock(): void {
   } catch {}
 }
 
-function lockHeld(): boolean {
-  return (
-    (globalThis as typeof globalThis & { __opensessionXaiLockHeld?: boolean })
-      .__opensessionXaiLockHeld === true
-  );
-}
-
-function setLockHeld(held: boolean): void {
-  (
-    globalThis as typeof globalThis & { __opensessionXaiLockHeld?: boolean }
-  ).__opensessionXaiLockHeld = held;
+/** Marks the async call tree that currently owns the lock. A process-global
+ *  boolean cannot express this: it stays set for as long as the holder is
+ *  suspended on its network refresh, so every UNRELATED caller arriving in that
+ *  window would read "held" as "held by me" and skip both locks. Storage scoped
+ *  to the holder's own continuation is the distinction the flag was missing. */
+function lockOwner(): AsyncLocalStorage<true> {
+  const g = globalThis as typeof globalThis & {
+    __opensessionXaiLockOwner?: AsyncLocalStorage<true>;
+  };
+  return (g.__opensessionXaiLockOwner ??= new AsyncLocalStorage<true>());
 }
 
 /** Run a read-modify-write against the shared credential with nothing else
@@ -213,24 +215,22 @@ async function withStoreLock<T>(run: () => Promise<T>): Promise<T> {
   // reachable from inside a modify() callback. The chain guarantees only one
   // holder is ever running, so seeing the flag set means WE are that holder -
   // and waiting on ourselves would simply deadlock.
-  if (lockHeld()) return run();
+  if (lockOwner().getStore()) return run();
   const previous = chain();
   let release!: () => void;
   const mine = new Promise<void>((resolve) => (release = resolve));
   setChain(previous.then(() => mine));
   await previous.catch(() => undefined);
-  const held = takeFileLock();
-  if (!held) {
-    console.warn(
-      "[xai] could not take the credential lock in time; proceeding unlocked",
+  if (!takeFileLock()) {
+    release();
+    throw new Error(
+      "[xai] another process is holding the Grok credential lock; try again",
     );
   }
-  setLockHeld(true);
   try {
-    return await run();
+    return await lockOwner().run(true, run);
   } finally {
-    setLockHeld(false);
-    if (held) dropFileLock();
+    dropFileLock();
     release();
   }
 }
@@ -251,6 +251,10 @@ export interface XaiStoreOptions {
   signal?: AbortSignal;
   /** Recorded on a credential this store creates, for the Settings card. */
   connectedBy?: string;
+  /** This store backs a device login rather than a turn. Its write starts a new
+   *  connection - new generation, new provenance - even over a stored
+   *  credential, because a human just authorised it. */
+  login?: boolean;
 }
 
 /**
@@ -317,7 +321,11 @@ export function xaiCredentialStore(
         // resolves, so refusing here is the only place that can stop it.
         if (options.signal?.aborted) return keep();
         const current = readStore();
-        if (before) {
+        // A login store writes a credential a human just authorised, which may
+        // well be a different xAI account. Merging it into the existing record
+        // would keep the previous generation and leave the Settings card
+        // crediting whoever connected last time. Only a refresh merges.
+        if (before && options.login !== true) {
           if (!current || current.generation !== before.generation)
             return keep();
           const merged: XaiStoredCredential = {
@@ -329,10 +337,11 @@ export function xaiCredentialStore(
           writeStore(merged);
           return piCredential(merged);
         }
-        // Nothing was stored: this is a first connect. A new generation makes
+        // A first connect, or a deliberate reconnect. A new generation makes
         // every refresh still in flight against the credential this replaces
-        // decline to write.
-        if (current) return keep();
+        // decline to write. A first connect that raced another one defers to
+        // the winner; a login the admin just completed does not.
+        if (current && options.login !== true) return keep();
         const created: XaiStoredCredential = {
           type: "oauth",
           access: next.access,
@@ -544,7 +553,7 @@ export function cancelXaiLogin(flowId: string): boolean {
 async function defaultLoginRuntime(signal: AbortSignal, connectedBy?: string) {
   const sdk = await import("@earendil-works/pi-coding-agent");
   const runtime = await sdk.ModelRuntime.create({
-    credentials: xaiCredentialStore({ signal, connectedBy }),
+    credentials: xaiCredentialStore({ signal, connectedBy, login: true }),
     modelsPath: null,
   });
   return runtime as unknown as Awaited<

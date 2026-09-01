@@ -528,6 +528,19 @@ export function boxSshTransportFailed(
  * Box's HTTP command plane the way the fresh-install path does, rather than
  * failing a session start over a dropped connection. Only a real non-zero from
  * the check itself is a verdict about /home/ubuntu. */
+/** Did a failed lane operation prove the lane itself is gone? A verdict the box
+ *  returned - permission, path, disk - means the lane carried the command and
+ *  is fine. An error with no exit code at all came from somewhere before the
+ *  box answered, so the lane cannot be vouched for. */
+export function boxLaneCondemnedBy(error: unknown): boolean {
+  const outcome = error as { exitCode?: unknown; transport?: unknown } | null;
+  if (typeof outcome?.exitCode !== "number") return true;
+  return boxSshTransportFailed({
+    exitCode: outcome.exitCode,
+    transport: outcome.transport === true,
+  });
+}
+
 export function reusedBoxLaneOutcome(
   exitCode: number,
 ): "ok" | "degrade" | "fail" {
@@ -554,8 +567,14 @@ export async function boxSshLaneSettles(
   const deadline = now() + budgetMs;
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (attempt > 0) {
-      if (now() >= deadline) return false;
-      await new Promise((wake) => setTimeout(wake, delayMs));
+      // Sleeping a flat delay overruns the budget by up to that delay: the
+      // deadline check before it passes with a millisecond to spare and the
+      // wait then runs to completion anyway. Never wait past the deadline.
+      const untilDeadline = deadline - now();
+      if (untilDeadline <= 0) return false;
+      await new Promise((wake) =>
+        setTimeout(wake, Math.min(delayMs, untilDeadline)),
+      );
     }
     const remaining = deadline - now();
     if (remaining <= 0) return false;
@@ -608,8 +627,14 @@ async function boxSshWriteFile(
     process.exited,
   ]);
   if (exitCode !== 0)
-    throw new Error(
-      `Box SSH writeFile(${path}) failed: ${stderr.trim().slice(0, 300)}`,
+    // Carry the outcome on the error. Without it the caller cannot tell a box
+    // that answered "permission denied" from a lane that never reached the box,
+    // and its transport check degrades to "always evict".
+    throw Object.assign(
+      new Error(
+        `Box SSH writeFile(${path}) failed: ${stderr.trim().slice(0, 300)}`,
+      ),
+      { exitCode, transport: exitCode === 255 || exitCode === 124 },
     );
 }
 
@@ -850,16 +875,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
         } catch (error) {
           // Only a transport failure condemns the lane. A permission, path or
           // disk error is the box answering, and answering means the lane works.
-          const outcome = error as { exitCode?: number; transport?: boolean };
-          if (
-            typeof outcome?.exitCode !== "number" ||
-            boxSshTransportFailed({
-              exitCode: outcome.exitCode,
-              transport: outcome.transport,
-            })
-          ) {
-            dropBoxSshLane(boxId);
-          }
+          if (boxLaneCondemnedBy(error)) dropBoxSshLane(boxId);
           throw error;
         }
       }

@@ -10,6 +10,7 @@ import {
   boxResumePrimeCommand,
   boxRuntimeHomeFailure,
   boxSnapshotSaveIsRecoverable,
+  boxLaneCondemnedBy,
   boxSshLaneSettles,
   boxSshTransportFailed,
   reusedBoxLaneOutcome,
@@ -279,5 +280,53 @@ describe("Box command plane failures", () => {
     }
     expect(boxSshTransportFailed({ exitCode: 255 })).toBe(true);
     expect(boxSshTransportFailed({ exitCode: 124 })).toBe(true);
+  });
+});
+
+describe("Box lane verdicts on a failed write", () => {
+  test("a box that answered keeps its lane, whatever it answered", () => {
+    for (const exitCode of [1, 2, 13, 28, 125, 126, 127]) {
+      const denied = Object.assign(new Error("Permission denied"), {
+        exitCode,
+        transport: false,
+      });
+      expect(boxLaneCondemnedBy(denied)).toBe(false);
+    }
+  });
+
+  test("a transport failure condemns the lane", () => {
+    for (const exitCode of [255, 124]) {
+      const dropped = Object.assign(new Error("Broken pipe"), {
+        exitCode,
+        transport: true,
+      });
+      expect(boxLaneCondemnedBy(dropped)).toBe(true);
+    }
+  });
+
+  test("an error carrying no verdict cannot vouch for the lane", () => {
+    // The regression: writeFile used to throw a bare Error, so every failure
+    // took this branch and an ordinary permission error evicted a live lane.
+    expect(boxLaneCondemnedBy(new Error("Box SSH writeFile failed"))).toBe(true);
+    expect(boxLaneCondemnedBy(undefined)).toBe(true);
+    expect(boxLaneCondemnedBy({ exitCode: "1" })).toBe(true);
+  });
+});
+
+describe("Box lane settling never outstays its budget", () => {
+  test("a retry delay longer than the budget is cut short", async () => {
+    // Real clock and a real timer: the point is the WAIT, and a stub clock
+    // would let a full setTimeout run while reporting no time had passed.
+    const started = Date.now();
+    const settled = await boxSshLaneSettles(
+      async () => ({ exitCode: 1 }),
+      3,
+      5_000,
+      40,
+    );
+    const elapsed = Date.now() - started;
+    expect(settled).toBe(false);
+    // Without the cap this waits the flat 5s delay before noticing.
+    expect(elapsed).toBeLessThan(1_000);
   });
 });

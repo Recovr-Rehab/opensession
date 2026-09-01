@@ -54,7 +54,9 @@ function fakeRuntime(outcome: {
   honourSignal?: boolean;
 }) {
   return async (signal: AbortSignal, connectedBy?: string) => {
-    const store = xaiCredentialStore({ signal, connectedBy });
+    // Mirrors defaultLoginRuntime exactly, login flag included - a fake that
+    // drifts from the real login store is how a provenance bug stays green.
+    const store = xaiCredentialStore({ signal, connectedBy, login: true });
     return {
       login: async (
         _providerId: string,
@@ -376,6 +378,73 @@ describe("device login through pi", () => {
       onDisk.access === "second-from-first-from-stored-access" ||
         onDisk.access === "first-from-second-from-stored-access",
     ).toBe(true);
+  });
+
+  test("a modification that arrives while another is suspended still waits", async () => {
+    seed();
+    // The re-entrancy escape hatch has to be scoped to the holder's own async
+    // tree. A process-global "held" flag stays set for as long as the holder is
+    // suspended on its refresh, so an unrelated caller arriving in that window
+    // reads it as "held by me" and runs straight through both locks.
+    let insideFirst!: () => void;
+    const firstIsSuspended = new Promise<void>((r) => (insideFirst = r));
+    let overlapped = false;
+    let firstStillRunning = false;
+
+    const first = xaiCredentialStore().modify(XAI_PROVIDER_ID, async () => {
+      firstStillRunning = true;
+      insideFirst();
+      await new Promise((wake) => setTimeout(wake, 20));
+      firstStillRunning = false;
+      return {
+        type: "oauth",
+        access: "first",
+        refresh: "first-refresh",
+        expires: Date.now() + 60 * 60_000,
+      } as never;
+    });
+
+    // Only start the second AFTER the first has suspended - starting both in
+    // the same tick passes even with the lock broken.
+    await firstIsSuspended;
+    const second = xaiCredentialStore().modify(XAI_PROVIDER_ID, async () => {
+      if (firstStillRunning) overlapped = true;
+      return {
+        type: "oauth",
+        access: "second",
+        refresh: "second-refresh",
+        expires: Date.now() + 60 * 60_000,
+      } as never;
+    });
+
+    await Promise.all([first, second]);
+    expect(overlapped).toBe(false);
+    expect(JSON.parse(readFileSync(storePath, "utf-8")).access).toBe("second");
+  });
+
+  test("reconnecting credits the admin who reconnected, not the last one", async () => {
+    seed({ generation: "gen-old", connectedBy: "octocat" });
+    const started = await startXaiLogin(
+      "hubot",
+      fakeRuntime({
+        resolve: {
+          type: "oauth",
+          access: "hubot-access",
+          refresh: "hubot-refresh",
+          expires: Date.now() + 55 * 60_000,
+        },
+      }),
+    );
+    if ("error" in started) throw new Error(started.error);
+    await settleFlows();
+
+    const onDisk = JSON.parse(readFileSync(storePath, "utf-8"));
+    expect(onDisk.access).toBe("hubot-access");
+    // A login is a new connection, not a refresh of the old one: merging would
+    // leave the Settings card naming whoever connected the previous account.
+    expect(onDisk.connectedBy).toBe("hubot");
+    expect(onDisk.generation).not.toBe("gen-old");
+    expect(xaiStatus().connectedBy).toBe("hubot");
   });
 
   test("disconnecting abandons a login still in flight", async () => {
