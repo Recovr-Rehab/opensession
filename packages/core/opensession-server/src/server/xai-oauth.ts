@@ -131,11 +131,11 @@ export async function disconnectXai(): Promise<boolean> {
  *  dies until an admin signs in again.
  *
  *  In-process chaining is what actually serializes this deployment's turns. The
- *  lock file is for a second server sharing the state dir. It is NOT
- *  best-effort: a mutation that cannot take it fails instead of writing
+ *  lock file is for a second server sharing the state dir. Contention is NOT
+ *  best-effort: a mutation that waits out the window fails instead of writing
  *  unlocked, because a lost refresh costs the whole workspace its credential
  *  while a failed turn costs one retry. A lock nobody released is reaped as
- *  stale, so waiting out the full window means real contention. */
+ *  stale, so waiting out the full window means a live holder. */
 const LOCK_STALE_MS = 30_000;
 const LOCK_WAIT_MS = 10_000;
 
@@ -158,7 +158,14 @@ function lockPath(): string {
   return `${storePath()}.lock`;
 }
 
-function takeFileLock(): boolean {
+/** Three outcomes, not two. Contention and "this filesystem cannot lock at
+ *  all" look the same to a boolean, and they call for opposite answers: one
+ *  peer is mid-write and we must not join it, versus there is no peer and no
+ *  lock to be had. Collapsing them either fails every turn on a state dir that
+ *  cannot hold a lock file, or writes underneath a live holder. */
+type LockOutcome = "taken" | "contended" | "unavailable";
+
+async function takeFileLock(): Promise<LockOutcome> {
   const deadline = Date.now() + LOCK_WAIT_MS;
   // EVERY path through this loop must reach the deadline check. An earlier
   // version continued straight back to the top when statSync also failed - a
@@ -167,13 +174,14 @@ function takeFileLock(): boolean {
   while (Date.now() <= deadline) {
     try {
       closeSync(openSync(lockPath(), "wx", 0o600));
-      return true;
+      return "taken";
     } catch (error) {
       if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") {
-        // Not contention: the directory is missing or unwritable. Locking is
-        // best effort, so say so once and let the caller proceed rather than
-        // spinning against a condition that will not clear.
-        return false;
+        // Not contention: the directory is missing or unwritable. Nobody else
+        // can be holding a lock here either, so there is no race to lose -
+        // report it and let the caller decide, rather than spinning against a
+        // condition that will not clear.
+        return "unavailable";
       }
       try {
         // A holder that died leaves its lock behind; reap it rather than
@@ -184,10 +192,14 @@ function takeFileLock(): boolean {
       } catch {
         // The holder released it between our open and our stat. Retry.
       }
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+      // An await, never a synchronous sleep. This runs on the server's only
+      // thread: spinning here would freeze every session for the whole wait,
+      // and the kernel's own guard test forbids the blocking primitives that
+      // would let it.
+      await new Promise((wake) => setTimeout(wake, 25));
     }
   }
-  return false;
+  return "contended";
 }
 
 function dropFileLock(): void {
@@ -221,16 +233,28 @@ async function withStoreLock<T>(run: () => Promise<T>): Promise<T> {
   const mine = new Promise<void>((resolve) => (release = resolve));
   setChain(previous.then(() => mine));
   await previous.catch(() => undefined);
-  if (!takeFileLock()) {
+  let outcome: LockOutcome;
+  try {
+    outcome = await takeFileLock();
+  } catch (error) {
+    release();
+    throw error;
+  }
+  if (outcome === "contended") {
     release();
     throw new Error(
       "[xai] another process is holding the Grok credential lock; try again",
     );
   }
+  if (outcome === "unavailable") {
+    console.warn(
+      "[xai] the state directory cannot hold a lock file; proceeding without cross-process exclusion",
+    );
+  }
   try {
     return await lockOwner().run(true, run);
   } finally {
-    dropFileLock();
+    if (outcome === "taken") dropFileLock();
     release();
   }
 }

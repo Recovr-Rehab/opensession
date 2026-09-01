@@ -9,6 +9,10 @@
         "mcp__stripe__update_subscription"
       ],
       "deniedTools": [
+        "mcp__featurebase-writer__reply_to_conversation",
+        "mcp__featurebase-writer__reply_to_ticket",
+        "mcp__featurebase__reply_to_conversation",
+        "mcp__featurebase__reply_to_ticket",
         "mcp__incident__alert_attach",
         "mcp__incident__alert_detach",
         "mcp__incident__escalation_respond",
@@ -88,6 +92,10 @@
         "*_update_subscription",
         "cancel_subscription",
         "create_refund",
+        "featurebase-writer_reply_to_conversation",
+        "featurebase-writer_reply_to_ticket",
+        "featurebase_reply_to_conversation",
+        "featurebase_reply_to_ticket",
         "incident_alert_attach",
         "incident_alert_detach",
         "incident_escalation_respond",
@@ -137,6 +145,15 @@
             "mcp__plain__mark_thread_todo",
             "mcp__plain__reply_to_thread",
             "mcp__plain__snooze_thread"
+          ]
+        },
+        {
+          "message": "This tool isn't available in automation runs — they are read-only toward Featurebase tickets and posts. Put the suggested reply or comment in the session report for a human to send from the Featurebase pane.",
+          "tools": [
+            "mcp__featurebase-writer__reply_to_conversation",
+            "mcp__featurebase-writer__reply_to_ticket",
+            "mcp__featurebase__reply_to_conversation",
+            "mcp__featurebase__reply_to_ticket"
           ]
         },
         {
@@ -217,7 +234,7 @@
       "type": "user"
     },
     {
-      "content": "{\n  \"confirmTools\": [\n    \"mcp__stripe__cancel_subscription\",\n    \"mcp__stripe__create_refund\",\n    \"mcp__stripe__stripe_api_execute\",\n    \"mcp__stripe__stripe_api_write\",\n    \"mcp__stripe__update_subscription\"\n  ],\n  \"deniedTools\": [\n    \"mcp__incident__alert_attach\",\n    \"mcp__incident__alert_detach\",\n    \"mcp__incident__escalation_respond\",\n    \"mcp__incident__extension_plugin_create\",\n    \"mcp__incident__extension_plugin_sync\",\n    \"mcp__incident__extension_plugin_update\",\n    \"mcp__incident__extension_skill_feedback_update\",\n    \"mcp__incident__follow_up_create\",\n    \"mcp__incident__follow_up_update\",\n    \"mcp__incident__incident_update\",\n    \"mcp__incident__investigation_steer\",\n    \"mcp__incident__investigation_sync\",\n    \"mcp__plain__mark_thread_done\",\n    \"mcp__plain__mark_thread_todo\",\n    \"mcp__plain__reply_to_thread\",\n    \"mcp__plain__snooze_thread\",\n    \"mcp__workos__create_organization\",\n    \"mcp__workos__create_organization_membership\",\n    \"mcp__workos__create_user\",\n    \"mcp__workos__delete_organization\",\n    \"mcp__workos__delete_organization_membership\",\n    \"mcp__workos__delete_user\",\n    \"mcp__workos__get_impersonation_url\",\n    \"mcp__workos__revoke_invitation\",\n    \"mcp__workos__revoke_session\",\n    \"mcp__workos__send_invitation\",\n    \"mcp__workos__send_password_reset_email\",\n    \"mcp__workos__send_verification_email\",\n    \"mcp__workos__update_organization\",\n    \"mcp__workos__update_organization_membership\",\n    \"mcp__workos__update_user\"\n  ],\n  \"inProcess\": [\n    \"opensession-audit\",\n    \"opensession-health\",\n    \"opensession-papercuts\",\n    \"opensession-report\",\n    \"opensession-turn\"\n  ],\n  \"localWorkspaceToolsDisabled\": false,\n  \"mcpScope\": [\n    \"snapshot-alpha\",\n    \"snapshot-restricted\"\n  ],\n  \"mode\": \"scratch\",\n  \"publicationPolicy\": null\n}",
+      "content": "{\n  \"confirmTools\": [\n    \"mcp__stripe__cancel_subscription\",\n    \"mcp__stripe__create_refund\",\n    \"mcp__stripe__stripe_api_execute\",\n    \"mcp__stripe__stripe_api_write\",\n    \"mcp__stripe__update_subscription\"\n  ],\n  \"deniedTools\": [\n    \"mcp__featurebase-writer__reply_to_conversation\",\n    \"mcp__featurebase-writer__reply_to_ticket\",\n    \"mcp__featurebase__reply_to_conversation\",\n    \"mcp__featurebase__reply_to_ticket\",\n    \"mcp__incident__alert_attach\",\n    \"mcp__incident__alert_detach\",\n    \"mcp__incident__escalation_respond\",\n    \"mcp__incident__extension_plugin_create\",\n    \"mcp__incident__extension_plugin_sync\",\n    \"mcp__incident__extension_plugin_update\",\n    \"mcp__incident__extension_skill_feedback_update\",\n    \"mcp__incident__follow_up_create\",\n    \"mcp__incident__follow_up_update\",\n    \"mcp__incident__incident_update\",\n    \"mcp__incident__investigation_steer\",\n    \"mcp__incident__investigation_sync\",\n    \"mcp__plain__mark_thread_done\",\n    \"mcp__plain__mark_thread_todo\",\n    \"mcp__plain__reply_to_thread\",\n    \"mcp__plain__snooze_thread\",\n    \"mcp__workos__create_organization\",\n    \"mcp__workos__create_organization_membership\",\n    \"mcp__workos__create_user\",\n    \"mcp__workos__delete_organization\",\n    \"mcp__workos__delete_organization_membership\",\n    \"mcp__workos__delete_user\",\n    \"mcp__workos__get_impersonation_url\",\n    \"mcp__workos__revoke_invitation\",\n    \"mcp__workos__revoke_session\",\n    \"mcp__workos__send_invitation\",\n    \"mcp__workos__send_password_reset_email\",\n    \"mcp__workos__send_verification_email\",\n    \"mcp__workos__update_organization\",\n    \"mcp__workos__update_organization_membership\",\n    \"mcp__workos__update_user\"\n  ],\n  \"inProcess\": [\n    \"opensession-audit\",\n    \"opensession-health\",\n    \"opensession-papercuts\",\n    \"opensession-report\",\n    \"opensession-turn\"\n  ],\n  \"localWorkspaceToolsDisabled\": false,\n  \"mcpScope\": [\n    \"snapshot-alpha\",\n    \"snapshot-restricted\"\n  ],\n  \"mode\": \"scratch\",\n  \"publicationPolicy\": null\n}",
       "contextSource": "tools",
       "noticeKind": "standing-context",
       "seq": 2,

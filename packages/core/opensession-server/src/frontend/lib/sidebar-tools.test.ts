@@ -37,7 +37,9 @@ describe("readHiddenSidebarTools", () => {
     expect([...SIDEBAR_TOOL_IDS].filter((id) => !hidden.has(id))).toEqual([
       "feed",
       "prs",
-      "plain",
+      // Support has been the Featurebase queue since 2026-08-29. Plain kept its
+      // own name and went off by default in the same change.
+      "featurebase-tickets",
       "catchup",
     ]);
   });
@@ -115,6 +117,7 @@ describe("sidebar tool order", () => {
           "catchup",
           "prs",
           "tasks",
+          "featurebase-tickets",
           "supporttinder",
           "reports",
           "plain",
@@ -127,6 +130,8 @@ describe("sidebar tool order", () => {
       "catchup",
       "feed",
       "prs",
+      // Held in place with the other tools absent from the visible order.
+      "featurebase-tickets",
       "supporttinder",
       "tasks",
       "plain",
