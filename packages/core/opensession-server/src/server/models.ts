@@ -14,6 +14,7 @@ import {
   BRIDGE_PROVIDER_IDS,
   GLM_5_3_MODEL_ID,
 } from "./model-providers";
+import { dirname, join } from "path";
 import { stateDir } from "./paths";
 import { piEngineEnabled, piPickerModels } from "./pi-config";
 import { XAI_PROVIDER_ID } from "./xai-oauth";
@@ -140,20 +141,77 @@ export const DEFAULT_BRIDGE_PICKER_MODELS = [
   "gpt-5.6-luna",
 ] as const;
 
-/** Grok models served by the one shared xAI subscription (xai-oauth.ts). They
- *  are provider-qualified because "grok-*" has no native picker id: the
- *  provider is neither a bridge nor an api-keyed entry in model-providers.json,
- *  so it is named explicitly here and in `usable` below.
+/** The one model we know pi ships, used only if its catalog cannot be read. */
+const XAI_PICKER_FALLBACK = ["pi/xai/grok-4.6"] as const;
+
+/** Newest flagship first, then the rest by name: `grok-4.6` before `grok-4.5`,
+ *  and named variants such as `grok-build-0.1` after the numbered line. */
+function compareGrokIds(a: string, b: string): number {
+  const version = (id: string) =>
+    Number(/^grok-(\d+(?:\.\d+)?)$/.exec(id)?.[1] ?? NaN);
+  const [va, vb] = [version(a), version(b)];
+  if (!Number.isNaN(va) && !Number.isNaN(vb)) return vb - va;
+  if (!Number.isNaN(va)) return -1;
+  if (!Number.isNaN(vb)) return 1;
+  return a.localeCompare(b);
+}
+
+/**
+ * Grok models served by the one shared xAI subscription (xai-oauth.ts), read
+ * from pi's OWN catalog rather than copied into this file.
  *
- *  These ids are pi's, not ours. The runtime resolves them straight out of its
- *  builtin xAI catalog, so an id invented here would pass the picker and then
- *  fail the turn. */
-export const DEFAULT_XAI_PICKER_MODELS = [
-  "pi/xai/grok-4.6",
-  "pi/xai/grok-4.5",
-  "pi/xai/grok-4.3",
-  "pi/xai/grok-build-0.1",
-] as const;
+ * A copy drifts: this list once carried `grok-build`, while pi serves
+ * `grok-build-0.1`, and an id that only exists here passes the picker and then
+ * fails the turn. pi's catalog is a data file inside the installed package, so
+ * reading it needs no network and no SDK load, and upgrading pi updates the
+ * picker on its own.
+ *
+ * They are provider-qualified because "grok-*" has no native picker id: the
+ * provider is neither a bridge nor an api-keyed entry in model-providers.json,
+ * so it is named explicitly here and in `usable` below.
+ */
+export function xaiPickerModels(): readonly string[] {
+  const cache = globalThis as typeof globalThis & {
+    __opensessionXaiPickerModels?: readonly string[];
+  };
+  if (cache.__opensessionXaiPickerModels) {
+    return cache.__opensessionXaiPickerModels;
+  }
+  let ids: string[] = [];
+  try {
+    // pi-ai is a transitive dependency, so resolve the agent package this
+    // server does depend on and take the catalog from beside it.
+    const entry = Bun.resolveSync(
+      "@earendil-works/pi-coding-agent",
+      import.meta.dir,
+    );
+    const root = entry.slice(0, entry.indexOf("/dist/"));
+    const catalog = join(dirname(root), "pi-ai/dist/providers/data/xai.json");
+    const raw = JSON.parse(readFileSync(catalog, "utf-8")) as Record<
+      string,
+      unknown
+    >;
+    // The catalog nests models under an api group ("openai-responses"); a model
+    // is any object carrying a name or a context window.
+    const walk = (node: Record<string, unknown>) => {
+      for (const [key, value] of Object.entries(node)) {
+        if (!value || typeof value !== "object" || Array.isArray(value))
+          continue;
+        const row = value as Record<string, unknown>;
+        if (row.name || row.contextWindow) ids.push(key);
+        else walk(row);
+      }
+    };
+    walk(raw);
+  } catch {
+    ids = [];
+  }
+  const resolved = ids.length
+    ? ids.sort(compareGrokIds).map((id) => `pi/${XAI_PROVIDER_ID}/${id}`)
+    : [...XAI_PICKER_FALLBACK];
+  cache.__opensessionXaiPickerModels = resolved;
+  return resolved;
+}
 
 export const KNOWN_MODELS: ModelInfo[] = [
   {
@@ -704,7 +762,7 @@ export function refreshPickerModels(): void {
     // entries. Surface their Pi ids whenever Pi is enabled; the models route
     // filters them to the account providers actually configured on this server.
     const bridgeModels = piEngineEnabled() ? DEFAULT_BRIDGE_PICKER_MODELS : [];
-    const xaiModels = piEngineEnabled() ? DEFAULT_XAI_PICKER_MODELS : [];
+    const xaiModels = piEngineEnabled() ? xaiPickerModels() : [];
     const configuredModels: readonly string[] = [
       ...bridgeModels,
       ...xaiModels,

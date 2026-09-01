@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
 import {
   accountProviderForModel,
   automaticFallbackModel,
@@ -18,6 +19,7 @@ import {
   toPiModel,
   KNOWN_MODELS,
   refreshPickerModels,
+  xaiPickerModels,
 } from "./models";
 
 const originalPiConfig = process.env.OPENSESSION_PI_CONFIG;
@@ -195,5 +197,44 @@ describe("Pi-only model routing", () => {
     expect(
       KNOWN_MODELS.filter((model) => model.id === "pi/openai/gpt-5.6-sol"),
     ).toHaveLength(1);
+  });
+});
+
+describe("Grok picker models", () => {
+  test("are pi's own ids, not a copy that can drift from them", () => {
+    // The list used to be hand-maintained here and carried `grok-build`, while
+    // pi serves `grok-build-0.1`. An id that exists only on our side passes the
+    // picker and then fails the turn, so read pi's catalog instead of trusting
+    // a copy - and prove that is what happened.
+    const ids = xaiPickerModels();
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) expect(id.startsWith("pi/xai/grok-")).toBe(true);
+
+    const entry = Bun.resolveSync(
+      "@earendil-works/pi-coding-agent",
+      import.meta.dir,
+    );
+    const root = entry.slice(0, entry.indexOf("/dist/"));
+    const catalog = join(dirname(root), "pi-ai/dist/providers/data/xai.json");
+    const served: string[] = [];
+    const walk = (node: Record<string, unknown>) => {
+      for (const [key, value] of Object.entries(node)) {
+        if (!value || typeof value !== "object" || Array.isArray(value))
+          continue;
+        const row = value as Record<string, unknown>;
+        if (row.name || row.contextWindow) served.push(key);
+        else walk(row);
+      }
+    };
+    walk(JSON.parse(readFileSync(catalog, "utf-8")));
+
+    expect([...ids].map((id) => id.replace("pi/xai/", "")).sort()).toEqual(
+      served.sort(),
+    );
+  });
+
+  test("offer the newest flagship first", () => {
+    const ids = xaiPickerModels();
+    expect(ids[0]).toBe("pi/xai/grok-4.6");
   });
 });
