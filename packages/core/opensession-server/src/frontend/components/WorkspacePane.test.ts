@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readBaseCss } from "../styles/base-css-test-support";
 
 const source = await Bun.file(
   new URL("./WorkspacePane.tsx", import.meta.url),
@@ -36,9 +37,7 @@ const reviewToolbarSource = await Bun.file(
 const summarySource = await Bun.file(
   new URL("./WorkspaceSummary.tsx", import.meta.url),
 ).text();
-const baseCssSource = await Bun.file(
-  new URL("../styles/base.css", import.meta.url),
-).text();
+const baseCssSource = await readBaseCss();
 
 test("workspace draft composers accept and persist attachments", () => {
   const composerStart = source.lastIndexOf("<Composer");

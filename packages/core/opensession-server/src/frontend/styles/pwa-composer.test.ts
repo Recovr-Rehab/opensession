@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { composerBox, composerFlapBorder } from "../lib/composer-classes";
-
-const CSS = new URL("./base.css", import.meta.url);
+import { readBaseCss } from "./base-css-test-support";
 const SHIPPED = new URL(
   "../components/ShippedChangeComposer.tsx",
   import.meta.url,
@@ -43,7 +42,7 @@ test("team note mode stays compact at rest and names itself when expanded", asyn
 });
 
 test("the installed phone composer restores model selection when expanded", async () => {
-  const css = await Bun.file(CSS).text();
+  const css = await readBaseCss();
   const shipped = await Bun.file(SHIPPED).text();
   const composer = await Bun.file(COMPOSER).text();
   const composerControls = await Bun.file(COMPOSER_CONTROLS).text();
