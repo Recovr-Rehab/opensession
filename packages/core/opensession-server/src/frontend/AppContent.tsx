@@ -69,7 +69,7 @@ import { useWorkspacePanes } from "./hooks/useWorkspacePanes";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { getActiveViewTab, saveActiveViewTab } from "./lib/active-view-tab";
 import { cachedRepos, resolveWorkspaceApi } from "./lib/api";
-import { buildAppCommandActions } from "./lib/app-command-actions";
+import { buildAppCommandActions } from "./components/app-command-actions";
 import { isToolView, parseRoute, routePath } from "./lib/app-route";
 import {
   APP_BODY,
@@ -778,84 +778,128 @@ export function AppContent({
   } = workspacePanes;
 
   const sessionTabs = useSessionTabs({
-    route,
-    navigate,
-    getCurrentRoute,
-    canonicalizePath,
-    forgetLastSession,
-    goBack,
-    currentSession,
-    currentSessionRef,
-    sessions,
-    sessionsRef,
-    workspaces,
-    currentUser,
-    isPhone,
-    detailPaneRef,
-    teamViewing,
-    tabColors,
-    setTabColors,
-    hiddenEmptySessionIds,
-    setHiddenEmptySessionIds,
-    newTabMorph,
-    setNewTabMorph,
-    clearNewTabMorphTimer,
-    startNewTabMorphTimer,
-    pendingTimer,
-    replacePendingTimer,
-    pendingSessionId,
-    setPendingSessionId,
-    setPendingNewWorkspace,
-    setOptimisticSession,
-    copyLinkPathRef,
-    inject,
-    patch,
-    refresh,
-    remove,
-    unstick,
-    refreshWorkspaces,
-    openPrefilledSession,
-    showToast,
-    dropStalePins,
-    viewState: appViewState,
-    workspacePanes,
+    routing: {
+      route,
+      navigate,
+      getCurrentRoute,
+      canonicalizePath,
+      forgetLastSession,
+      goBack,
+    },
+    source: {
+      currentSession,
+      currentSessionRef,
+      sessions,
+      sessionsRef,
+      workspaces,
+      currentUser,
+      teamViewing,
+    },
+    layout: { isPhone, detailPaneRef, tabColors, setTabColors },
+    localTabs: {
+      hiddenEmptySessionIds,
+      setHiddenEmptySessionIds,
+      newTabMorph,
+      setNewTabMorph,
+      clearNewTabMorphTimer,
+      startNewTabMorphTimer,
+    },
+    pending: {
+      pendingTimer,
+      replacePendingTimer,
+      pendingSessionId,
+      setPendingSessionId,
+      setPendingNewWorkspace,
+      setOptimisticSession,
+      copyLinkPathRef,
+    },
+    sessionStore: { inject, patch, refresh, remove, unstick },
+    actions: {
+      refreshWorkspaces,
+      openPrefilledSession,
+      showToast,
+      dropStalePins,
+    },
+    view: {
+      activeViewTab: appViewState.activeViewTab,
+      setActiveViewTabState: appViewState.setActiveViewTabState,
+      subagentSelected: appViewState.subagentSelected,
+      openSubagentPath: appViewState.openSubagentPath,
+      closeSubagentTab: appViewState.closeSubagentTab,
+      splitDropSide: appViewState.splitDropSide,
+      setSplitDropSide: appViewState.setSplitDropSide,
+      suppressWsSeedRef: appViewState.suppressWsSeedRef,
+    },
+    panes: {
+      state: {
+        routeWorkspaceId: workspacePanes.routeWorkspaceId,
+        routeWorkspace: workspacePanes.routeWorkspace,
+        wsKey: workspacePanes.wsKey,
+        wsRecord: workspacePanes.wsRecord,
+        paneViewTabs: workspacePanes.paneViewTabs,
+        openWsPanes: workspacePanes.openWsPanes,
+        subagentStack: workspacePanes.subagentStack,
+      },
+      actions: {
+        setActiveViewTab: workspacePanes.setActiveViewTab,
+        selectViewTab: workspacePanes.selectViewTab,
+        closeStagingTab: workspacePanes.closeStagingTab,
+        closeAssetsTab: workspacePanes.closeAssetsTab,
+        closeTerminalTab: workspacePanes.closeTerminalTab,
+        closePreviewTab: workspacePanes.closePreviewTab,
+        closePortalTab: workspacePanes.closePortalTab,
+        closeConversationTab: workspacePanes.closeConversationTab,
+        closeVideoTab: workspacePanes.closeVideoTab,
+        closeReviewTab: workspacePanes.closeReviewTab,
+      },
+    },
   });
   const {
-    activeWorkspaceId,
-    sidebarWorkspaceId,
-    settingsWorkspaceId,
-    copyLinkPath,
-    workspaceSessions,
-    emptyWorkspaceSession,
-    archivedSessions,
-    activeTabSplit,
-    tabStripVisible,
-    deskFabPosition,
-    toStoredSplit,
-    focusedSide,
-    activeIdFor,
-    renderTabBar,
-    handleNewSession,
-    openNewSessionInWorkspace,
-    setSessionLanes,
-    rememberArchived,
-    unarchiveSession,
-    restorableArchived,
-    reopenLastArchived,
-    reopenLastArchivedRef,
-    runningCloseDialog,
-    renameWorkspace,
-    renameWorkspaceFromSidebar,
-    archiveWorkspaceFromHeader,
-    archiveWorkspaceFromSidebar,
-    deleteWorkspaceFromHeader,
-    deleteWorkspaceFromSidebar,
-    closeSession,
-    restoreSession,
-    archiveSessionFromSidebar,
-    archiveSessionsFromCatchUp,
-    handleSessionRunningChange,
-    tabOrderKey,
+    context: {
+      activeWorkspaceId,
+      sidebarWorkspaceId,
+      settingsWorkspaceId,
+      copyLinkPath,
+      workspaceSessions,
+      emptyWorkspaceSession,
+    },
+    strip: {
+      activeTabSplit,
+      tabStripVisible,
+      deskFabPosition,
+      toStoredSplit,
+      focusedSide,
+      activeIdFor,
+      renderTabBar,
+      tabOrderKey,
+    },
+    archive: {
+      archivedSessions,
+      rememberArchived,
+      unarchiveSession,
+      restorableArchived,
+      reopenLastArchived,
+      reopenLastArchivedRef,
+      runningCloseDialog,
+      restoreSession,
+      archiveSessionsFromCatchUp,
+    },
+    sessionActions: {
+      handleNewSession,
+      openNewSessionInWorkspace,
+      setSessionLanes,
+      closeSession,
+      archiveSessionFromSidebar,
+      handleSessionRunningChange,
+    },
+    workspaceActions: {
+      renameWorkspace,
+      renameWorkspaceFromSidebar,
+      archiveWorkspaceFromHeader,
+      archiveWorkspaceFromSidebar,
+      deleteWorkspaceFromHeader,
+      deleteWorkspaceFromSidebar,
+    },
   } = sessionTabs;
 
   const topbarTitle = appTopbarTitle(route, routeWorkspace);
@@ -1027,30 +1071,90 @@ export function AppContent({
     requestedSurfaceId?: string,
   ) => (
     <AppSessionPane
-      viewerSession={viewerSession}
-      socket={socket}
-      focused={focused}
-      splitMode={splitMode}
-      requestedSurfaceId={requestedSurfaceId}
-      route={route}
-      auth={auth}
-      nextChatAvailable={nextChatAvailable}
-      pendingSessionId={pendingSessionId}
-      pendingNewWorkspace={pendingNewWorkspace}
-      pendingInitialPrompts={pendingInitialPrompts}
-      sidebarRef={sidebarRef}
-      sessions={sessions}
-      workspaces={workspaces}
-      patch={patch}
-      refresh={refresh}
-      topbarEl={topbarEl}
-      headerActionsEl={headerActionsEl}
-      headerModelEl={headerModelEl}
-      headerRepoEl={headerRepoEl}
-      rightPanelEl={rightPanelEl}
-      viewState={appViewState}
-      workspacePanes={workspacePanes}
-      sessionTabs={sessionTabs}
+      surface={{
+        viewerSession,
+        socket,
+        focused,
+        splitMode,
+        requestedSurfaceId,
+      }}
+      pending={{
+        route,
+        auth,
+        nextChatAvailable,
+        pendingSessionId,
+        pendingNewWorkspace,
+      }}
+      data={{
+        pendingInitialPrompts,
+        sidebarRef,
+        sessions,
+        workspaces,
+        patch,
+        refresh,
+      }}
+      portals={{
+        topbarEl,
+        headerActionsEl,
+        headerModelEl,
+        headerRepoEl,
+        rightPanelEl,
+      }}
+      composer={{
+        newSessionSeq: appViewState.newSessionSeq,
+        focusComposerOnOpen: appViewState.focusComposerOnOpen,
+        sessionComposerPrefills: appViewState.sessionComposerPrefills,
+        setSessionComposerPrefills: appViewState.setSessionComposerPrefills,
+      }}
+      visibility={{
+        reviewActive: appViewState.reviewActive,
+        conversationActive: appViewState.conversationActive,
+        videoActive: appViewState.videoActive,
+        stagingActive: appViewState.stagingActive,
+        assetsActive: appViewState.assetsActive,
+        terminalActive: appViewState.terminalActive,
+        previewLiveActive: appViewState.previewLiveActive,
+        portalActive: appViewState.portalActive,
+        reviewFocusPr: appViewState.reviewFocusPr,
+      }}
+      subagents={{
+        openSubagent: appViewState.openSubagent,
+        popSubagent: appViewState.popSubagent,
+        nameSubagent: appViewState.nameSubagent,
+        stackFor: appViewState.stackFor,
+      }}
+      panes={{
+        wsKey: workspacePanes.wsKey,
+        conversationThreadId: workspacePanes.conversationThreadId,
+        videoPanel: workspacePanes.videoPanel,
+        videoRef: workspacePanes.videoRef,
+        currentPortalTarget: workspacePanes.currentPortalTarget,
+        subagentActive: workspacePanes.subagentActive,
+        terminalOpen: workspacePanes.terminalOpen,
+        closeStagingTab: workspacePanes.closeStagingTab,
+        closePreviewTab: workspacePanes.closePreviewTab,
+        closeAssetsTab: workspacePanes.closeAssetsTab,
+        closeTerminalTab: workspacePanes.closeTerminalTab,
+      }}
+      tabs={{
+        context: {
+          activeWorkspaceId,
+          workspaceSessions,
+          emptyWorkspaceSession,
+        },
+        archive: { archivedSessions, restoreSession, rememberArchived },
+        sessions: {
+          setSessionLanes,
+          closeSession,
+          handleSessionRunningChange,
+        },
+        workspaces: {
+          renameWorkspace,
+          archiveWorkspaceFromHeader,
+          deleteWorkspaceFromHeader,
+        },
+        tabStripVisible,
+      }}
     />
   );
 
@@ -1196,27 +1300,50 @@ export function AppContent({
                 )}
               >
                 <AppSidebar
-                  route={route}
-                  sessions={sessions}
-                  registeredRepoInfo={registeredRepoInfo}
-                  sessionsError={sessionsError}
-                  loading={loading}
-                  refresh={refresh}
-                  workspacesLoaded={workspacesLoaded}
-                  workspaces={workspaces}
-                  teamViewing={teamViewing}
-                  listedSession={listedSession}
-                  connected={connected}
-                  productEmpty={productEmpty}
-                  githubConnectionState={githubConnectionState}
-                  mobileDetail={mobileDetail}
-                  showToast={showToast}
-                  panelIcon={panelIcon}
-                  sidebarToggleKeys={sidebarToggleKeys}
-                  appShell={appShell}
-                  interactions={documentInteractions}
-                  viewState={appViewState}
-                  sessionTabs={sessionTabs}
+                  data={{
+                    route,
+                    sessions,
+                    registeredRepoInfo,
+                    sessionsError,
+                    loading,
+                    refresh,
+                    workspacesLoaded,
+                    workspaces,
+                    teamViewing,
+                    listedSession,
+                    connected,
+                    productEmpty,
+                    githubConnectionState,
+                  }}
+                  appearance={{
+                    mobileDetail,
+                    showToast,
+                    panelIcon,
+                    sidebarToggleKeys,
+                  }}
+                  shell={{
+                    sidebarCollapsed,
+                    toggleSidebarCollapsed,
+                    sidebarWidth,
+                    sidebarColRef,
+                    startSidebarResize,
+                    headerActionsEl,
+                  }}
+                  interactions={{
+                    isPhone,
+                    sidebarRef,
+                    setNextChatAvailable,
+                  }}
+                  navigation={{
+                    taskCount: appViewState.taskCount,
+                    commandMenuRef: appViewState.commandMenuRef,
+                    sidebarWorkspaceId,
+                    renameWorkspaceFromSidebar,
+                    deleteWorkspaceFromSidebar,
+                    archiveSessionFromSidebar,
+                    archiveWorkspaceFromSidebar,
+                    setSessionLanes,
+                  }}
                 />
                 <AppShell
                   paneRef={captureDetailPane}

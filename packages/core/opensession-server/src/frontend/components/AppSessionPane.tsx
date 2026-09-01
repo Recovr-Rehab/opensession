@@ -14,66 +14,131 @@ import type { SidebarHandle } from "./Sidebar";
 import type { useAuthStatus } from "./UserPicker";
 
 interface AppSessionPaneProps {
-  viewerSession: UnifiedSession;
-  socket: ReturnType<typeof useWebSocket>;
-  focused: boolean;
-  splitMode: boolean;
-  requestedSurfaceId?: string;
-  route: Route;
-  auth: ReturnType<typeof useAuthStatus>;
-  nextChatAvailable: boolean;
-  pendingSessionId: string | null;
-  pendingNewWorkspace: boolean;
-  pendingInitialPrompts: Record<
-    string,
-    { content: string; user: string; sentAt: number; images?: string[] }
+  surface: {
+    viewerSession: UnifiedSession;
+    socket: ReturnType<typeof useWebSocket>;
+    focused: boolean;
+    splitMode: boolean;
+    requestedSurfaceId?: string;
+  };
+  pending: {
+    route: Route;
+    auth: ReturnType<typeof useAuthStatus>;
+    nextChatAvailable: boolean;
+    pendingSessionId: string | null;
+    pendingNewWorkspace: boolean;
+  };
+  data: {
+    pendingInitialPrompts: Record<
+      string,
+      { content: string; user: string; sentAt: number; images?: string[] }
+    >;
+    sidebarRef: RefObject<SidebarHandle | null>;
+    sessions: UnifiedSession[];
+    workspaces: Workspace[];
+    patch: ReturnType<typeof useSessions>["patch"];
+    refresh: ReturnType<typeof useSessions>["refresh"];
+  };
+  portals: {
+    topbarEl: HTMLElement | null;
+    headerActionsEl: HTMLElement | null;
+    headerModelEl: HTMLElement | null;
+    headerRepoEl: HTMLElement | null;
+    rightPanelEl: HTMLElement | null;
+  };
+  composer: Pick<
+    ReturnType<typeof useAppViewState>,
+    | "newSessionSeq"
+    | "focusComposerOnOpen"
+    | "sessionComposerPrefills"
+    | "setSessionComposerPrefills"
   >;
-  sidebarRef: RefObject<SidebarHandle | null>;
-  sessions: UnifiedSession[];
-  workspaces: Workspace[];
-  patch: ReturnType<typeof useSessions>["patch"];
-  refresh: ReturnType<typeof useSessions>["refresh"];
-  topbarEl: HTMLElement | null;
-  headerActionsEl: HTMLElement | null;
-  headerModelEl: HTMLElement | null;
-  headerRepoEl: HTMLElement | null;
-  rightPanelEl: HTMLElement | null;
-  viewState: ReturnType<typeof useAppViewState>;
-  workspacePanes: ReturnType<typeof useWorkspacePanes>;
-  sessionTabs: ReturnType<typeof useSessionTabs>;
+  visibility: Pick<
+    ReturnType<typeof useAppViewState>,
+    | "reviewActive"
+    | "conversationActive"
+    | "videoActive"
+    | "stagingActive"
+    | "assetsActive"
+    | "terminalActive"
+    | "previewLiveActive"
+    | "portalActive"
+    | "reviewFocusPr"
+  >;
+  subagents: Pick<
+    ReturnType<typeof useAppViewState>,
+    "openSubagent" | "popSubagent" | "nameSubagent" | "stackFor"
+  >;
+  panes: Pick<
+    ReturnType<typeof useWorkspacePanes>,
+    | "wsKey"
+    | "conversationThreadId"
+    | "videoPanel"
+    | "videoRef"
+    | "currentPortalTarget"
+    | "subagentActive"
+    | "terminalOpen"
+    | "closeStagingTab"
+    | "closePreviewTab"
+    | "closeAssetsTab"
+    | "closeTerminalTab"
+  >;
+  tabs: {
+    context: Pick<
+      ReturnType<typeof useSessionTabs>["context"],
+      "activeWorkspaceId" | "workspaceSessions" | "emptyWorkspaceSession"
+    >;
+    archive: Pick<
+      ReturnType<typeof useSessionTabs>["archive"],
+      "archivedSessions" | "restoreSession" | "rememberArchived"
+    >;
+    sessions: Pick<
+      ReturnType<typeof useSessionTabs>["sessionActions"],
+      "setSessionLanes" | "closeSession" | "handleSessionRunningChange"
+    >;
+    workspaces: Pick<
+      ReturnType<typeof useSessionTabs>["workspaceActions"],
+      | "renameWorkspace"
+      | "archiveWorkspaceFromHeader"
+      | "deleteWorkspaceFromHeader"
+    >;
+    tabStripVisible: ReturnType<
+      typeof useSessionTabs
+    >["strip"]["tabStripVisible"];
+  };
 }
 
 export function AppSessionPane({
-  viewerSession,
-  socket,
-  focused,
-  splitMode,
-  requestedSurfaceId,
-  route,
-  auth,
-  nextChatAvailable,
-  pendingSessionId,
-  pendingNewWorkspace,
-  pendingInitialPrompts,
-  sidebarRef,
-  sessions,
-  workspaces,
-  patch,
-  refresh,
-  topbarEl,
-  headerActionsEl,
-  headerModelEl,
-  headerRepoEl,
-  rightPanelEl,
-  viewState,
-  workspacePanes,
-  sessionTabs,
-}: AppSessionPaneProps) {
-  const {
+  surface: { viewerSession, socket, focused, splitMode, requestedSurfaceId },
+  pending: {
+    route,
+    auth,
+    nextChatAvailable,
+    pendingSessionId,
+    pendingNewWorkspace,
+  },
+  data: {
+    pendingInitialPrompts,
+    sidebarRef,
+    sessions,
+    workspaces,
+    patch,
+    refresh,
+  },
+  portals: {
+    topbarEl,
+    headerActionsEl,
+    headerModelEl,
+    headerRepoEl,
+    rightPanelEl,
+  },
+  composer: {
     newSessionSeq,
     focusComposerOnOpen,
     sessionComposerPrefills,
     setSessionComposerPrefills,
+  },
+  visibility: {
     reviewActive,
     conversationActive,
     videoActive,
@@ -83,40 +148,33 @@ export function AppSessionPane({
     previewLiveActive,
     portalActive,
     reviewFocusPr,
-    terminalOpen,
-    openSubagent,
-    popSubagent,
-    nameSubagent,
-    stackFor,
-  } = { ...viewState, ...workspacePanes };
-  const {
+  },
+  subagents: { openSubagent, popSubagent, nameSubagent, stackFor },
+  panes: {
     wsKey,
     conversationThreadId,
     videoPanel,
     videoRef,
     currentPortalTarget,
     subagentActive,
+    terminalOpen,
     closeStagingTab,
     closePreviewTab,
     closeAssetsTab,
     closeTerminalTab,
-  } = workspacePanes;
-  const {
-    activeWorkspaceId,
-    workspaceSessions,
-    emptyWorkspaceSession,
+  },
+  tabs: {
+    context: { activeWorkspaceId, workspaceSessions, emptyWorkspaceSession },
+    archive: { archivedSessions, restoreSession, rememberArchived },
+    sessions: { setSessionLanes, closeSession, handleSessionRunningChange },
+    workspaces: {
+      renameWorkspace,
+      archiveWorkspaceFromHeader,
+      deleteWorkspaceFromHeader,
+    },
     tabStripVisible,
-    archivedSessions,
-    restoreSession,
-    renameWorkspace,
-    archiveWorkspaceFromHeader,
-    deleteWorkspaceFromHeader,
-    setSessionLanes,
-    closeSession,
-    rememberArchived,
-    handleSessionRunningChange,
-  } = sessionTabs;
-
+  },
+}: AppSessionPaneProps) {
   const surfaceId = requestedSurfaceId ?? viewerSession.id;
   const pendingSocket = surfaceId === pendingSessionId;
   const sessionSocket = pendingSocket

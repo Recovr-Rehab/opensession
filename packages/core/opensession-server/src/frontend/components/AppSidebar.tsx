@@ -16,75 +16,107 @@ import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 
 interface AppSidebarProps {
-  route: Route;
-  sessions: UnifiedSession[];
-  registeredRepoInfo: RepoInfo[];
-  sessionsError: ReturnType<typeof useSessions>["error"];
-  loading: boolean;
-  refresh: ReturnType<typeof useSessions>["refresh"];
-  workspacesLoaded: boolean;
-  workspaces: Workspace[];
-  teamViewing: Array<{ user: string; sessionId: string }>;
-  listedSession: UnifiedSession | null;
-  connected: boolean;
-  productEmpty: boolean;
-  githubConnectionState: ReturnType<typeof useGithubConnectionState>;
-  mobileDetail: boolean;
-  showToast: (message: string) => void;
-  panelIcon: ReactNode;
-  sidebarToggleKeys: string[] | null;
-  appShell: ReturnType<typeof useAppShell>;
-  interactions: ReturnType<typeof useAppDocumentInteractions>;
-  viewState: ReturnType<typeof useAppViewState>;
-  sessionTabs: ReturnType<typeof useSessionTabs>;
+  data: {
+    route: Route;
+    sessions: UnifiedSession[];
+    registeredRepoInfo: RepoInfo[];
+    sessionsError: ReturnType<typeof useSessions>["error"];
+    loading: boolean;
+    refresh: ReturnType<typeof useSessions>["refresh"];
+    workspacesLoaded: boolean;
+    workspaces: Workspace[];
+    teamViewing: Array<{ user: string; sessionId: string }>;
+    listedSession: UnifiedSession | null;
+    connected: boolean;
+    productEmpty: boolean;
+    githubConnectionState: ReturnType<typeof useGithubConnectionState>;
+  };
+  appearance: {
+    mobileDetail: boolean;
+    showToast: (message: string) => void;
+    panelIcon: ReactNode;
+    sidebarToggleKeys: string[] | null;
+  };
+  shell: Pick<
+    ReturnType<typeof useAppShell>["sidebar"],
+    | "sidebarCollapsed"
+    | "toggleSidebarCollapsed"
+    | "sidebarWidth"
+    | "sidebarColRef"
+    | "startSidebarResize"
+  > & {
+    headerActionsEl: ReturnType<
+      typeof useAppShell
+    >["mobileTopbar"]["headerActionsEl"];
+  };
+  interactions: Pick<
+    ReturnType<typeof useAppDocumentInteractions>,
+    "isPhone" | "sidebarRef" | "setNextChatAvailable"
+  >;
+  navigation: {
+    taskCount: ReturnType<typeof useAppViewState>["taskCount"];
+    commandMenuRef: ReturnType<typeof useAppViewState>["commandMenuRef"];
+    sidebarWorkspaceId: ReturnType<
+      typeof useSessionTabs
+    >["context"]["sidebarWorkspaceId"];
+    renameWorkspaceFromSidebar: ReturnType<
+      typeof useSessionTabs
+    >["workspaceActions"]["renameWorkspaceFromSidebar"];
+    deleteWorkspaceFromSidebar: ReturnType<
+      typeof useSessionTabs
+    >["workspaceActions"]["deleteWorkspaceFromSidebar"];
+    archiveWorkspaceFromSidebar: ReturnType<
+      typeof useSessionTabs
+    >["workspaceActions"]["archiveWorkspaceFromSidebar"];
+    archiveSessionFromSidebar: ReturnType<
+      typeof useSessionTabs
+    >["sessionActions"]["archiveSessionFromSidebar"];
+    setSessionLanes: ReturnType<
+      typeof useSessionTabs
+    >["sessionActions"]["setSessionLanes"];
+  };
 }
 
 export function AppSidebar({
-  route,
-  sessions,
-  registeredRepoInfo,
-  sessionsError,
-  loading,
-  refresh,
-  workspacesLoaded,
-  workspaces,
-  teamViewing,
-  listedSession,
-  connected,
-  productEmpty,
-  githubConnectionState,
-  mobileDetail,
-  showToast,
-  panelIcon,
-  sidebarToggleKeys,
-  appShell,
-  interactions,
-  viewState,
-  sessionTabs,
-}: AppSidebarProps) {
-  const {
-    sidebar: {
-      sidebarCollapsed,
-      toggleSidebarCollapsed,
-      sidebarWidth,
-      sidebarColRef,
-      startSidebarResize,
-    },
-    mobileTopbar: { headerActionsEl },
-  } = appShell;
-  const { isPhone, sidebarRef, setNextChatAvailable } = interactions;
-  const { taskCount, commandMenuRef } = viewState;
-  const sidebarStyle: CSSProperties & { "--sidebar-w": string } = {
-    "--sidebar-w": `${sidebarWidth}px`,
-  };
-  const {
+  data: {
+    route,
+    sessions,
+    registeredRepoInfo,
+    sessionsError,
+    loading,
+    refresh,
+    workspacesLoaded,
+    workspaces,
+    teamViewing,
+    listedSession,
+    connected,
+    productEmpty,
+    githubConnectionState,
+  },
+  appearance: { mobileDetail, showToast, panelIcon, sidebarToggleKeys },
+  shell: {
+    sidebarCollapsed,
+    toggleSidebarCollapsed,
+    sidebarWidth,
+    sidebarColRef,
+    startSidebarResize,
+    headerActionsEl,
+  },
+  interactions: { isPhone, sidebarRef, setNextChatAvailable },
+  navigation: {
+    taskCount,
+    commandMenuRef,
     sidebarWorkspaceId,
     renameWorkspaceFromSidebar,
     deleteWorkspaceFromSidebar,
     archiveSessionFromSidebar,
     archiveWorkspaceFromSidebar,
     setSessionLanes,
-  } = sessionTabs;
+  },
+}: AppSidebarProps) {
+  const sidebarStyle: CSSProperties & { "--sidebar-w": string } = {
+    "--sidebar-w": `${sidebarWidth}px`,
+  };
   return (
     <>
       {/* `sidebar-container` stays on the markup as a hook: base.css's

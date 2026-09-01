@@ -1,5 +1,14 @@
-import type { CommandPaletteAction } from "../components/SessionSearch";
-import type { useAuthStatus } from "../components/UserPicker";
+import type { useAppRoute } from "../hooks/useAppRoute";
+import type { useSessionTabs } from "../hooks/useSessionTabs";
+import { PRODUCT_NAME } from "../lib/brand";
+import { settingsPaletteActions } from "../lib/settings-sections";
+import { absoluteLink, copyToClipboard } from "../lib/share-link";
+import { shortcutPrimaryKeys } from "../lib/shortcuts";
+import { setThemePref, type EffectiveTheme } from "../lib/theme";
+import { copySessionTranscript } from "../lib/transcript-copy";
+import type { UnifiedSession } from "../lib/types";
+import type { CommandPaletteAction } from "./SessionSearch";
+import type { useAuthStatus } from "./UserPicker";
 import {
   IconArchive,
   IconBook,
@@ -20,16 +29,7 @@ import {
   IconStack,
   IconUnarchive,
   IconWrench,
-} from "../components/icons";
-import type { useAppRoute } from "../hooks/useAppRoute";
-import type { useSessionTabs } from "../hooks/useSessionTabs";
-import { PRODUCT_NAME } from "./brand";
-import { settingsPaletteActions } from "./settings-sections";
-import { absoluteLink, copyToClipboard } from "./share-link";
-import { shortcutPrimaryKeys } from "./shortcuts";
-import { setThemePref, type EffectiveTheme } from "./theme";
-import { copySessionTranscript } from "./transcript-copy";
-import type { UnifiedSession } from "./types";
+} from "./icons";
 
 interface BuildAppCommandActionsOptions {
   auth: ReturnType<typeof useAuthStatus>;
@@ -43,10 +43,18 @@ interface BuildAppCommandActionsOptions {
   sidebarCollapsed: boolean;
   navigate: ReturnType<typeof useAppRoute>["navigate"];
   openPalette: () => void;
-  handleNewSession: ReturnType<typeof useSessionTabs>["handleNewSession"];
-  closeSession: ReturnType<typeof useSessionTabs>["closeSession"];
-  unarchiveSession: ReturnType<typeof useSessionTabs>["unarchiveSession"];
-  reopenLastArchived: ReturnType<typeof useSessionTabs>["reopenLastArchived"];
+  handleNewSession: ReturnType<
+    typeof useSessionTabs
+  >["sessionActions"]["handleNewSession"];
+  closeSession: ReturnType<
+    typeof useSessionTabs
+  >["sessionActions"]["closeSession"];
+  unarchiveSession: ReturnType<
+    typeof useSessionTabs
+  >["archive"]["unarchiveSession"];
+  reopenLastArchived: ReturnType<
+    typeof useSessionTabs
+  >["archive"]["reopenLastArchived"];
   setDeskOverlay: (next: {
     open: boolean;
     origin: "center" | "bottom-right";

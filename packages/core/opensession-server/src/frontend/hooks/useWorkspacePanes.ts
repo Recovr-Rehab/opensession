@@ -205,6 +205,11 @@ export function useWorkspacePanes({
   const landingWsKey = route.view === "workspace" ? route.id : null;
   const landingExplicitTab =
     route.view === "workspace" ? (route.tab ?? null) : null;
+  // Read through an effect event: takePendingReviewFocus consumes a one-shot
+  // request set by a sidebar click, and its identity is not part of what
+  // should re-run this landing effect (only the route/readiness trigger set
+  // below does).
+  const takePendingReviewFocusEvent = useEffectEvent(takePendingReviewFocus);
   useEffect(() => {
     if (
       landingWsKey === null ||
@@ -272,7 +277,7 @@ export function useWorkspacePanes({
       // the one that has it, and the review canvas only offers the PRs of
       // the session it renders — so land on a sibling that carries it.
       // Consumed by seq: only a request made for THIS navigation redirects.
-      const pending = takePendingReviewFocus();
+      const pending = takePendingReviewFocusEvent();
       const carrier =
         pending && first && !sessionCarriesPr(first, pending)
           ? sessionsRef.current.find(
@@ -329,7 +334,6 @@ export function useWorkspacePanes({
     suppressWsSeedRef,
     workspacesRef,
     sessionsRef,
-    takePendingReviewFocus,
     setReviewOpen,
     setReviewClosed,
     setConversationClosed,

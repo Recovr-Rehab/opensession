@@ -59,125 +59,183 @@ import type { useWorkspacePanes } from "./useWorkspacePanes";
 class MissingWorkspaceSessionSourceError extends Error {}
 
 interface UseSessionTabsOptions {
-  route: Route;
-  navigate: ReturnType<typeof useAppRoute>["navigate"];
-  getCurrentRoute: ReturnType<typeof useAppRoute>["getCurrentRoute"];
-  canonicalizePath: ReturnType<typeof useAppRoute>["canonicalizePath"];
-  forgetLastSession: ReturnType<typeof useAppRoute>["forgetLastSession"];
-  goBack: () => void;
-  currentSession: UnifiedSession | null;
-  currentSessionRef: RefObject<UnifiedSession | null>;
-  sessions: UnifiedSession[];
-  sessionsRef: RefObject<UnifiedSession[]>;
-  workspaces: Workspace[];
-  currentUser: string;
-  isPhone: boolean;
-  detailPaneRef: RefObject<HTMLElement | null>;
-  teamViewing: Array<{ user: string; sessionId: string }>;
-  tabColors: Record<string, string>;
-  setTabColors: Dispatch<SetStateAction<Record<string, string>>>;
-  hiddenEmptySessionIds: Set<string>;
-  setHiddenEmptySessionIds: Dispatch<SetStateAction<Set<string>>>;
-  newTabMorph: { id: string; origin: NewTabMorphOrigin } | null;
-  setNewTabMorph: Dispatch<
-    SetStateAction<{ id: string; origin: NewTabMorphOrigin } | null>
+  routing: {
+    route: Route;
+    navigate: ReturnType<typeof useAppRoute>["navigate"];
+    getCurrentRoute: ReturnType<typeof useAppRoute>["getCurrentRoute"];
+    canonicalizePath: ReturnType<typeof useAppRoute>["canonicalizePath"];
+    forgetLastSession: ReturnType<typeof useAppRoute>["forgetLastSession"];
+    goBack: () => void;
+  };
+  source: {
+    currentSession: UnifiedSession | null;
+    currentSessionRef: RefObject<UnifiedSession | null>;
+    sessions: UnifiedSession[];
+    sessionsRef: RefObject<UnifiedSession[]>;
+    workspaces: Workspace[];
+    currentUser: string;
+    teamViewing: Array<{ user: string; sessionId: string }>;
+  };
+  layout: {
+    isPhone: boolean;
+    detailPaneRef: RefObject<HTMLElement | null>;
+    tabColors: Record<string, string>;
+    setTabColors: Dispatch<SetStateAction<Record<string, string>>>;
+  };
+  localTabs: {
+    hiddenEmptySessionIds: Set<string>;
+    setHiddenEmptySessionIds: Dispatch<SetStateAction<Set<string>>>;
+    newTabMorph: { id: string; origin: NewTabMorphOrigin } | null;
+    setNewTabMorph: Dispatch<
+      SetStateAction<{ id: string; origin: NewTabMorphOrigin } | null>
+    >;
+    clearNewTabMorphTimer: () => void;
+    startNewTabMorphTimer: (id: string) => void;
+  };
+  pending: {
+    pendingTimer: RefObject<ReturnType<typeof setTimeout> | undefined>;
+    replacePendingTimer: (callback: () => void, delay: number) => void;
+    pendingSessionId: string | null;
+    setPendingSessionId: Dispatch<SetStateAction<string | null>>;
+    setPendingNewWorkspace: Dispatch<SetStateAction<boolean>>;
+    setOptimisticSession: Dispatch<SetStateAction<UnifiedSession | null>>;
+    copyLinkPathRef: RefObject<string | null>;
+  };
+  sessionStore: {
+    inject: ReturnType<typeof useSessions>["inject"];
+    patch: ReturnType<typeof useSessions>["patch"];
+    refresh: ReturnType<typeof useSessions>["refresh"];
+    remove: ReturnType<typeof useSessions>["remove"];
+    unstick: ReturnType<typeof useSessions>["unstick"];
+  };
+  actions: {
+    refreshWorkspaces: () => Promise<void>;
+    openPrefilledSession: ReturnType<
+      typeof import("./useNewSessionPalette").useNewSessionPalette
+    >["openPrefilledSession"];
+    showToast: (message: string) => void;
+    dropStalePins: (sessions: UnifiedSession[]) => void;
+  };
+  view: Pick<
+    ReturnType<typeof useAppViewState>,
+    | "activeViewTab"
+    | "setActiveViewTabState"
+    | "subagentSelected"
+    | "openSubagentPath"
+    | "closeSubagentTab"
+    | "splitDropSide"
+    | "setSplitDropSide"
+    | "suppressWsSeedRef"
   >;
-  clearNewTabMorphTimer: () => void;
-  startNewTabMorphTimer: (id: string) => void;
-  pendingTimer: RefObject<ReturnType<typeof setTimeout> | undefined>;
-  replacePendingTimer: (callback: () => void, delay: number) => void;
-  pendingSessionId: string | null;
-  setPendingSessionId: Dispatch<SetStateAction<string | null>>;
-  setPendingNewWorkspace: Dispatch<SetStateAction<boolean>>;
-  setOptimisticSession: Dispatch<SetStateAction<UnifiedSession | null>>;
-  copyLinkPathRef: RefObject<string | null>;
-  inject: ReturnType<typeof useSessions>["inject"];
-  patch: ReturnType<typeof useSessions>["patch"];
-  refresh: ReturnType<typeof useSessions>["refresh"];
-  remove: ReturnType<typeof useSessions>["remove"];
-  unstick: ReturnType<typeof useSessions>["unstick"];
-  refreshWorkspaces: () => Promise<void>;
-  openPrefilledSession: ReturnType<
-    typeof import("./useNewSessionPalette").useNewSessionPalette
-  >["openPrefilledSession"];
-  showToast: (message: string) => void;
-  dropStalePins: (sessions: UnifiedSession[]) => void;
-  viewState: ReturnType<typeof useAppViewState>;
-  workspacePanes: ReturnType<typeof useWorkspacePanes>;
+  panes: {
+    state: Pick<
+      ReturnType<typeof useWorkspacePanes>,
+      | "routeWorkspaceId"
+      | "routeWorkspace"
+      | "wsKey"
+      | "wsRecord"
+      | "paneViewTabs"
+      | "openWsPanes"
+      | "subagentStack"
+    >;
+    actions: Pick<
+      ReturnType<typeof useWorkspacePanes>,
+      | "setActiveViewTab"
+      | "selectViewTab"
+      | "closeStagingTab"
+      | "closeAssetsTab"
+      | "closeTerminalTab"
+      | "closePreviewTab"
+      | "closePortalTab"
+      | "closeConversationTab"
+      | "closeVideoTab"
+      | "closeReviewTab"
+    >;
+  };
 }
 
 export function useSessionTabs({
-  route,
-  navigate,
-  getCurrentRoute,
-  canonicalizePath,
-  forgetLastSession,
-  goBack,
-  currentSession,
-  currentSessionRef,
-  sessions,
-  sessionsRef,
-  workspaces,
-  currentUser,
-  isPhone,
-  detailPaneRef,
-  teamViewing,
-  tabColors,
-  setTabColors,
-  hiddenEmptySessionIds,
-  setHiddenEmptySessionIds,
-  newTabMorph,
-  setNewTabMorph,
-  clearNewTabMorphTimer,
-  startNewTabMorphTimer,
-  pendingTimer,
-  replacePendingTimer,
-  pendingSessionId,
-  setPendingSessionId,
-  setPendingNewWorkspace,
-  setOptimisticSession,
-  copyLinkPathRef,
-  inject,
-  patch,
-  refresh,
-  remove,
-  unstick,
-  refreshWorkspaces,
-  openPrefilledSession,
-  showToast,
-  dropStalePins,
-  viewState,
-  workspacePanes,
+  routing,
+  source,
+  layout,
+  localTabs,
+  pending,
+  sessionStore,
+  actions,
+  view,
+  panes,
 }: UseSessionTabsOptions) {
+  const {
+    route,
+    navigate,
+    getCurrentRoute,
+    canonicalizePath,
+    forgetLastSession,
+    goBack,
+  } = routing;
+  const {
+    currentSession,
+    currentSessionRef,
+    sessions,
+    sessionsRef,
+    workspaces,
+    currentUser,
+    teamViewing,
+  } = source;
+  const { isPhone, detailPaneRef, tabColors, setTabColors } = layout;
+  const {
+    hiddenEmptySessionIds,
+    setHiddenEmptySessionIds,
+    newTabMorph,
+    setNewTabMorph,
+    clearNewTabMorphTimer,
+    startNewTabMorphTimer,
+  } = localTabs;
+  const {
+    pendingTimer,
+    replacePendingTimer,
+    pendingSessionId,
+    setPendingSessionId,
+    setPendingNewWorkspace,
+    setOptimisticSession,
+    copyLinkPathRef,
+  } = pending;
+  const { inject, patch, refresh, remove, unstick } = sessionStore;
+  const { refreshWorkspaces, openPrefilledSession, showToast, dropStalePins } =
+    actions;
   const {
     activeViewTab,
     setActiveViewTabState,
     subagentSelected,
-    subagentStack,
     openSubagentPath,
     closeSubagentTab,
     splitDropSide,
     setSplitDropSide,
     suppressWsSeedRef,
-  } = { ...viewState, ...workspacePanes };
+  } = view;
   const {
-    routeWorkspaceId,
-    routeWorkspace,
-    wsKey,
-    wsRecord,
-    setActiveViewTab,
-    paneViewTabs,
-    openWsPanes,
-    selectViewTab,
-    closeStagingTab,
-    closeAssetsTab,
-    closeTerminalTab,
-    closePreviewTab,
-    closePortalTab,
-    closeConversationTab,
-    closeVideoTab,
-    closeReviewTab,
-  } = workspacePanes;
+    state: {
+      routeWorkspaceId,
+      routeWorkspace,
+      wsKey,
+      wsRecord,
+      paneViewTabs,
+      openWsPanes,
+      subagentStack,
+    },
+    actions: {
+      setActiveViewTab,
+      selectViewTab,
+      closeStagingTab,
+      closeAssetsTab,
+      closeTerminalTab,
+      closePreviewTab,
+      closePortalTab,
+      closeConversationTab,
+      closeVideoTab,
+      closeReviewTab,
+    },
+  } = panes;
   // The tab strip is scoped to the open session's workspace: its sibling sessions
   // (same workspaceId), oldest first. Sessions with no workspace (slack/linear
   // sources — their files are read-only, so the migration couldn't wrap them)
@@ -1196,40 +1254,50 @@ export function useSessionTabs({
   };
 
   return {
-    activeWorkspaceId,
-    sidebarWorkspaceId,
-    settingsWorkspaceId,
-    copyLinkPath,
-    workspaceSessions,
-    emptyWorkspaceSession,
-    archivedSessions,
-    activeTabSplit,
-    tabStripVisible,
-    deskFabPosition,
-    toStoredSplit,
-    focusedSide,
-    activeIdFor,
-    renderTabBar,
-    handleNewSession,
-    openNewSessionInWorkspace,
-    setSessionLanes,
-    rememberArchived,
-    unarchiveSession,
-    restorableArchived,
-    reopenLastArchived,
-    reopenLastArchivedRef,
-    runningCloseDialog,
-    renameWorkspace,
-    renameWorkspaceFromSidebar,
-    archiveWorkspaceFromHeader,
-    archiveWorkspaceFromSidebar,
-    deleteWorkspaceFromHeader,
-    deleteWorkspaceFromSidebar,
-    closeSession,
-    restoreSession,
-    archiveSessionFromSidebar,
-    archiveSessionsFromCatchUp,
-    handleSessionRunningChange,
-    tabOrderKey,
+    context: {
+      activeWorkspaceId,
+      sidebarWorkspaceId,
+      settingsWorkspaceId,
+      copyLinkPath,
+      workspaceSessions,
+      emptyWorkspaceSession,
+    },
+    strip: {
+      activeTabSplit,
+      tabStripVisible,
+      deskFabPosition,
+      toStoredSplit,
+      focusedSide,
+      activeIdFor,
+      renderTabBar,
+      tabOrderKey,
+    },
+    archive: {
+      archivedSessions,
+      rememberArchived,
+      unarchiveSession,
+      restorableArchived,
+      reopenLastArchived,
+      reopenLastArchivedRef,
+      runningCloseDialog,
+      restoreSession,
+      archiveSessionsFromCatchUp,
+    },
+    sessionActions: {
+      handleNewSession,
+      openNewSessionInWorkspace,
+      setSessionLanes,
+      closeSession,
+      archiveSessionFromSidebar,
+      handleSessionRunningChange,
+    },
+    workspaceActions: {
+      renameWorkspace,
+      renameWorkspaceFromSidebar,
+      archiveWorkspaceFromHeader,
+      archiveWorkspaceFromSidebar,
+      deleteWorkspaceFromHeader,
+      deleteWorkspaceFromSidebar,
+    },
   };
 }

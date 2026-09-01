@@ -16,7 +16,7 @@ const ownedModules = [
   "../hooks/useNewTabMorphTimer.ts",
   "../hooks/useSessionTabs.tsx",
   "../hooks/useWorkspacePanes.ts",
-  "./app-command-actions.tsx",
+  "../components/app-command-actions.tsx",
   "./app-topbar-title.ts",
   "./app-types.ts",
   "./event-target.ts",
@@ -59,4 +59,43 @@ describe("app source ownership", () => {
     expect(content).toContain("<AppSessionPane");
     expect(content).toContain("<AppSidebar");
   });
+});
+
+test("keeps extracted app contracts narrow", async () => {
+  const ts = await import("typescript");
+  const contracts = [
+    ["../components/AppSessionPane.tsx", "AppSessionPaneProps", 9],
+    ["../components/AppSidebar.tsx", "AppSidebarProps", 5],
+    ["../hooks/useSessionTabs.tsx", "UseSessionTabsOptions", 9],
+  ] as const;
+
+  for (const [path, interfaceName, expectedMembers] of contracts) {
+    const contents = await source(path);
+    const file = ts.createSourceFile(
+      path,
+      contents,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const declaration = file.statements.find(
+      (statement): statement is import("typescript").InterfaceDeclaration =>
+        ts.isInterfaceDeclaration(statement) &&
+        statement.name.text === interfaceName,
+    );
+    expect(declaration, `${path} exports ${interfaceName}`).toBeDefined();
+    expect(declaration?.members.length, interfaceName).toBe(expectedMembers);
+    expect(declaration?.members.length, interfaceName).toBeLessThanOrEqual(15);
+
+    function checkNestedContracts(node: import("typescript").Node) {
+      if (ts.isTypeLiteralNode(node)) {
+        expect(
+          node.members.length,
+          `${interfaceName} nested contract`,
+        ).toBeLessThanOrEqual(15);
+      }
+      ts.forEachChild(node, checkNestedContracts);
+    }
+    if (declaration) checkNestedContracts(declaration);
+  }
 });
