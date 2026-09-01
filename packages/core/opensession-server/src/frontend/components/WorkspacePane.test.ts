@@ -185,11 +185,12 @@ test("sidebar Changes shares Review's code display options", () => {
   );
   expect(commentableDiffSource).toContain("z-[6] bg-surface");
   expect(commentableDiffSource).toContain("rounded-md bg-surface");
+  expect(commentableDiffSource).toContain(': "mx-2 w-auto bg-transparent"');
   expect(commentableDiffSource).toContain(
     "mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well",
   );
   expect(commentableDiffSource).toContain(
-    'cn(FILE_BODY, !stickyFileHeaders && "mx-2")',
+    '!stickyFileHeaders && "mx-2 mt-0.5"',
   );
   expect(commentableDiffSource).toContain(
     '"--diffs-bg": "var(--code-well-light)"',
