@@ -1122,7 +1122,9 @@ export function PrPanel({
               Try again
             </Button>
           }
-        />
+        >
+          {loadError}
+        </EmptyState>
       </div>
     );
 
