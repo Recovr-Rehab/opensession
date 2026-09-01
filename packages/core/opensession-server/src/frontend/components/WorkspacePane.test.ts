@@ -4,9 +4,12 @@ import { readBaseCss } from "../styles/base-css-test-support";
 const source = await Bun.file(
   new URL("./WorkspacePane.tsx", import.meta.url),
 ).text();
-const viewerSource = await Bun.file(
-  new URL("./SessionViewer.tsx", import.meta.url),
-).text();
+const viewerSource = await Promise.all([
+  Bun.file(new URL("./SessionViewer.tsx", import.meta.url)).text(),
+  Bun.file(
+    new URL("./session-viewer/SessionViewerChrome.tsx", import.meta.url),
+  ).text(),
+]).then((parts) => parts.join("\n"));
 const prPanelSource = await Bun.file(
   new URL("./PrPanel.tsx", import.meta.url),
 ).text();

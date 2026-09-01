@@ -59,9 +59,12 @@ const callbackOwners = {
 };
 
 async function sources() {
-  const viewer = await Bun.file(
-    new URL("./SessionViewer.tsx", import.meta.url),
-  ).text();
+  const viewer = await Promise.all([
+    Bun.file(new URL("./SessionViewer.tsx", import.meta.url)).text(),
+    Bun.file(
+      new URL("./session-viewer/SessionViewerChrome.tsx", import.meta.url),
+    ).text(),
+  ]).then((parts) => parts.join("\n"));
   const app = await Promise.all([
     Bun.file(new URL("../AppContent.tsx", import.meta.url)).text(),
     Bun.file(new URL("./AppSessionPane.tsx", import.meta.url)).text(),
