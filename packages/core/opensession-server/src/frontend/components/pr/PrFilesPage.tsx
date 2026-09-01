@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+import type { CommentableDiffOptions } from "../../lib/commentable-diff";
 import type {
   DiffFileGroup,
   PrDetails,
@@ -14,7 +15,6 @@ import { PrFileTree } from "./PrFileTree";
 
 type DiffSource = "pull-request" | "worktree";
 type CodeView = "all" | "guide" | "flow";
-type DiffProps = Omit<ComponentProps<typeof CommentableDiff>, "patch">;
 type FileTreeMode = ComponentProps<typeof PrFileTree>["mode"];
 type GuideSections = ReturnType<typeof sectionsWithPatches>;
 
@@ -40,7 +40,7 @@ interface Props {
   codeFlowError: string | null;
   onRetryCodeFlow: () => void;
   diff: PrDiffResponse | null;
-  diffProps: DiffProps | null;
+  diffOptions: CommentableDiffOptions | null;
   diffError: string | null;
   diffLoading: boolean;
   diffOutOfDate: boolean;
@@ -78,7 +78,7 @@ export function PrFilesPage({
   codeFlowError,
   onRetryCodeFlow,
   diff,
-  diffProps,
+  diffOptions,
   diffError,
   diffLoading,
   diffOutOfDate,
@@ -137,7 +137,7 @@ export function PrFilesPage({
               onRetry={onRetryCodeFlow}
               onOpenLocation={onOpenFile}
             />
-          ) : !diff?.patch || !diffProps ? (
+          ) : !diff?.patch || !diffOptions ? (
             <div className="py-12 text-center text-sm text-faint">
               {diffError ? (
                 <>
@@ -164,7 +164,7 @@ export function PrFilesPage({
                   Writing the review guide… You can review the file diff while
                   it groups the change by intent.
                 </div>
-                <CommentableDiff patch={diff.patch} {...diffProps} />
+                <CommentableDiff patch={diff.patch} options={diffOptions} />
               </>
             ) : guideFailed ? (
               <div className="py-12 text-center text-sm text-faint">
@@ -215,7 +215,10 @@ export function PrFilesPage({
                       </div>
                     </div>
                     {section.patch && (
-                      <CommentableDiff patch={section.patch} {...diffProps} />
+                      <CommentableDiff
+                        patch={section.patch}
+                        options={diffOptions}
+                      />
                     )}
                   </section>
                 ))}
@@ -224,13 +227,14 @@ export function PrFilesPage({
           ) : (
             <CommentableDiff
               patch={diff.patch}
-              {...diffProps}
-              groups={
-                grouping === "ai" && diffGroups?.oid === diff.headRefOid
-                  ? diffGroups.groups || undefined
-                  : undefined
-              }
-              groupsLoading={grouping === "ai" && diffGroupsLoading}
+              options={{
+                ...diffOptions,
+                groups:
+                  grouping === "ai" && diffGroups?.oid === diff.headRefOid
+                    ? diffGroups.groups || undefined
+                    : undefined,
+                groupsLoading: grouping === "ai" && diffGroupsLoading,
+              }}
             />
           )}
         </div>

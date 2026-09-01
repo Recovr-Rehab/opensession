@@ -43,7 +43,7 @@ import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
-import type { CommentTarget, PendingComment } from "./CommentableDiff";
+import type { CommentTarget, PendingComment } from "../lib/commentable-diff";
 import { getCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import { renderPrCommentMarkdown } from "../lib/markdown";
@@ -496,7 +496,7 @@ export function PrPanel({
 
   // Inline comments don't post one-by-one — they accumulate as pending and ship
   // together when the reviewer finishes the review (the provider's native flow).
-  // Both are stable: they ride diffProps into every mounted file row, so a new
+  // Both are stable: they ride diffOptions into every mounted file row, so a new
   // identity here re-renders the whole diff.
   const handleAddPending = async (target: CommentTarget, text: string) => {
     setPending((prev) => [...prev, { ...target, text, id: randomUUID() }]);
@@ -938,10 +938,10 @@ export function PrPanel({
       : [];
 
   // Every diff on the code page is the same commentable surface; only the
-  // patch it is handed differs (the whole PR, or one guide section). Memoized
-  // because it is the props object of every mounted file row: rebuilding it
-  // re-renders the whole diff, however unrelated the state change was.
-  const diffProps = diff && {
+  // patch it is handed differs (the whole PR, or one guide section). The React
+  // Compiler keeps this options object stable so unrelated state changes do not
+  // re-render every mounted file row.
+  const diffOptions = diff && {
     diffStyle,
     controlsTarget: codeView === "all" ? diffControlsTarget : undefined,
     showViewedProgress: false,
@@ -1691,7 +1691,7 @@ export function PrPanel({
           codeFlowError={codeFlowError}
           onRetryCodeFlow={() => void refreshCodeFlow()}
           diff={diff}
-          diffProps={diffProps}
+          diffOptions={diffOptions}
           diffError={diffError}
           diffLoading={diffLoading}
           diffOutOfDate={diffOutOfDate}

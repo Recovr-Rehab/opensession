@@ -27,6 +27,9 @@ const codeDisplaySource = await Bun.file(
 const commentableDiffSource = await Bun.file(
   new URL("./CommentableDiff.tsx", import.meta.url),
 ).text();
+const pendingCommentsSource = await Bun.file(
+  new URL("../hooks/usePendingComments.ts", import.meta.url),
+).text();
 const reviewToolbarSource = await Bun.file(
   new URL("./pr/ReviewToolbar.tsx", import.meta.url),
 ).text();
@@ -159,25 +162,19 @@ test("sidebar Changes shares Review's code display options", () => {
   expect(prPanelSource).toContain("<DiffSourceSetting");
   expect(diffPanelSource).toContain("<DiffSourceSetting");
   expect(viewerSource).toContain('if (next === "pull-request") openReview?.()');
-  expect(diffPanelSource).toContain("showGroupsStatus={false}");
+  expect(diffPanelSource).toContain("showGroupsStatus: false");
   expect(diffPanelSource).toContain('aria-label="Organizing files"');
-  expect(diffPanelSource).toContain(
-    "diffStyle={codeDisplaySettings.diffStyle}",
-  );
-  expect(diffPanelSource).toContain(
-    "wrapLines={codeDisplaySettings.wrapLines}",
-  );
+  expect(diffPanelSource).toContain("diffStyle: codeDisplaySettings.diffStyle");
+  expect(diffPanelSource).toContain("wrapLines: codeDisplaySettings.wrapLines");
   expect(diffPanelSource).toMatch(
-    /structuralHighlighting=\{\s*codeDisplaySettings\.structuralHighlighting\s*\}/,
+    /structuralHighlighting:\s*codeDisplaySettings\.structuralHighlighting/,
   );
   expect(diffPanelSource).toContain(
-    "showFileStats={codeDisplaySettings.showFileStats}",
+    "showFileStats: codeDisplaySettings.showFileStats",
   );
+  expect(diffPanelSource).toContain("codeTheme: codeDisplaySettings.codeTheme");
   expect(diffPanelSource).toContain(
-    "codeTheme={codeDisplaySettings.codeTheme}",
-  );
-  expect(diffPanelSource).toContain(
-    "stickyFileHeaders={toolbarTarget === undefined}",
+    "stickyFileHeaders: toolbarTarget === undefined",
   );
   expect(diffPanelSource).toContain("--review-file-header-top");
   expect(commentableDiffSource).toContain(
@@ -194,6 +191,13 @@ test("sidebar Changes shares Review's code display options", () => {
   expect(codeDisplaySource).toContain('value="split"');
   expect(codeDisplaySource).toContain('value="unified"');
   expect(codeDisplaySource).toContain('value="system"');
+});
+
+test("CommentableDiff delegates pending-comment state behind one options prop", () => {
+  expect(commentableDiffSource).toContain("options: CommentableDiffOptions");
+  expect(commentableDiffSource).toContain("usePendingComments({");
+  expect(pendingCommentsSource).toContain("const [draft, setDraft]");
+  expect(pendingCommentsSource).toContain("const annotationsByFile = new Map");
 });
 
 test("wide Review keeps its controls stable while page navigation moves", () => {
