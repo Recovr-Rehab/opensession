@@ -631,6 +631,7 @@ export function WorkspaceSummaryBody({
   const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewStarting, setReviewStarting] = useState(false);
   const [reviewCancelling, setReviewCancelling] = useState(false);
   const [fixBusy, setFixBusy] = useState(false);
   const [fixError, setFixError] = useState<string | null>(null);
@@ -698,8 +699,9 @@ export function WorkspaceSummaryBody({
   const reviewTeams = useReviewTeams();
   const reviewers = reviewLines(pr, selectedReview, prReviewRequested);
   const osReview = pr?.osReview;
-  const osReviewActive = Boolean(pr?.reviewActive);
+  const osReviewActive = Boolean(pr?.reviewActive || reviewStarting);
   const showOsReview = osReviewActive || Boolean(osReview);
+  const canRerunOsReview = pr?.state === "OPEN" && Boolean(osReview?.stale);
   const canFixOsReview =
     pr?.state === "OPEN" &&
     Boolean(osReview) &&
@@ -761,6 +763,30 @@ export function WorkspaceSummaryBody({
     assetView === "preview" ? ASSET_FRAMES_SHOWN : ASSETS_SHOWN,
   );
   const assetsHidden = assets.length - shown.length;
+
+  async function rerunOsReview() {
+    if (!pr || !canRerunOsReview || reviewStarting) return;
+    setReviewStarting(true);
+    setReviewError(null);
+    await (async () => {
+      const result = await triggerPrActionApi(
+        session.id,
+        "review",
+        getCurrentUser(),
+        session.repo || undefined,
+      );
+      if (!result.ok)
+        throw new Error(result.error || result.message || "Couldn't start");
+      void prResource.mutate(
+        { ...pr, reviewActive: true },
+        { revalidate: false },
+      );
+    })()
+      .catch((error: unknown) => {
+        setReviewError(errorMessage(error, "Couldn't start the re-review"));
+      })
+      .finally(() => setReviewStarting(false));
+  }
 
   async function cancelOsReview() {
     if (!pr?.reviewActive || reviewCancelling) return;
@@ -1217,80 +1243,125 @@ export function WorkspaceSummaryBody({
         </div>
         {showOsReview && (
           <>
-            <button
-              className={cn(
-                WS_SUMMARY_ROW,
-                "disabled:cursor-default disabled:opacity-70",
-              )}
-              onClick={
-                osReviewActive
-                  ? () => void cancelOsReview()
-                  : canFixOsReview
-                    ? () => void fixOsReview()
-                    : () => go(() => onOpenPanelTab("info"))
-              }
-              disabled={reviewCancelling || fixBusy}
-              aria-label={
-                osReviewActive
-                  ? `Cancel ${AGENT_NAME} review`
-                  : canFixOsReview
-                    ? `Fix ${AGENT_NAME} review findings`
-                    : undefined
-              }
-              title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${
-                reviewCancelling ? "Cancelling…" : osReviewState
-              }`}
-            >
-              <span className={WS_SUMMARY_RAIL}>
-                <IconRobot
-                  size={20}
+            {canRerunOsReview && !osReviewActive ? (
+              <div className="mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-stretch gap-1 phone:h-11">
+                <button
+                  type="button"
                   className={cn(
-                    WS_SUMMARY_ICON,
-                    osReviewActive && "animate-pulse",
+                    WS_SUMMARY_ROW,
+                    "mx-0 h-full w-auto min-w-0 flex-1",
                   )}
-                />
-              </span>
-              <span className={WS_SUMMARY_LABEL}>
-                {AGENT_NAME}
-                {osReviewActive ? (
-                  <>
-                    <span className="text-faint"> · </span>
-                    <span className="text-dim">
-                      {reviewCancelling ? "Cancelling…" : "Reviewing…"}
-                    </span>
-                  </>
-                ) : osScore ? (
-                  <>
-                    <span className="text-faint"> · </span>
-                    <span className={cn("tabular-nums", osScoreTone)}>
-                      {osScore}/5
-                    </span>
-                  </>
-                ) : null}
-              </span>
-              {osReviewActive ? (
-                <span className={WS_SUMMARY_ACTION}>
-                  {reviewCancelling ? "Stopping" : "Cancel"}
-                </span>
-              ) : canFixOsReview ? (
-                <span className={cn(WS_SUMMARY_ACTION, "text-red")}>
-                  {fixBusy ? "Starting…" : "Fix"}
-                </span>
-              ) : (
-                <span
-                  className={cn(
-                    WS_SUMMARY_STATE,
-                    osReview?.stale
-                      ? "text-faint"
-                      : osReview?.blocking
-                        ? "text-red"
-                        : "text-dim",
-                  )}
+                  onClick={() => go(() => onOpenPanelTab("info"))}
+                  title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${osReviewState}`}
                 >
-                  {osReviewState}
+                  <span className={WS_SUMMARY_RAIL}>
+                    <IconRobot size={20} className={WS_SUMMARY_ICON} />
+                  </span>
+                  <span className={WS_SUMMARY_LABEL}>
+                    {AGENT_NAME}
+                    {osScore ? (
+                      <>
+                        <span className="text-faint"> · </span>
+                        <span className={cn("tabular-nums", osScoreTone)}>
+                          {osScore}/5
+                        </span>
+                      </>
+                    ) : null}
+                  </span>
+                  <span className={cn(WS_SUMMARY_STATE, "text-faint")}>
+                    New commits
+                  </span>
+                </button>
+                <span
+                  className="self-center text-meta text-faint"
+                  aria-hidden="true"
+                >
+                  ·
                 </span>
-              )}
-            </button>
+                <button
+                  type="button"
+                  className={cn(
+                    WS_SUMMARY_ACTION,
+                    "focus-ring shrink-0 cursor-pointer rounded-row border-none bg-transparent px-1 transition-[color,scale] hover:text-accent active:scale-[0.96] disabled:cursor-default disabled:opacity-50",
+                  )}
+                  onClick={() => void rerunOsReview()}
+                  disabled={reviewStarting}
+                >
+                  Re-review
+                </button>
+              </div>
+            ) : (
+              <button
+                className={cn(
+                  WS_SUMMARY_ROW,
+                  "disabled:cursor-default disabled:opacity-70",
+                )}
+                onClick={
+                  osReviewActive
+                    ? () => void cancelOsReview()
+                    : canFixOsReview
+                      ? () => void fixOsReview()
+                      : () => go(() => onOpenPanelTab("info"))
+                }
+                disabled={reviewStarting || reviewCancelling || fixBusy}
+                aria-label={
+                  osReviewActive
+                    ? `Cancel ${AGENT_NAME} review`
+                    : canFixOsReview
+                      ? `Fix ${AGENT_NAME} review findings`
+                      : undefined
+                }
+                title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${
+                  reviewCancelling ? "Cancelling…" : osReviewState
+                }`}
+              >
+                <span className={WS_SUMMARY_RAIL}>
+                  <IconRobot
+                    size={20}
+                    className={cn(
+                      WS_SUMMARY_ICON,
+                      osReviewActive && "animate-pulse",
+                    )}
+                  />
+                </span>
+                <span className={WS_SUMMARY_LABEL}>
+                  {AGENT_NAME}
+                  {osReviewActive ? (
+                    <>
+                      <span className="text-faint"> · </span>
+                      <span className="text-dim">
+                        {reviewCancelling ? "Cancelling…" : "Reviewing…"}
+                      </span>
+                    </>
+                  ) : osScore ? (
+                    <>
+                      <span className="text-faint"> · </span>
+                      <span className={cn("tabular-nums", osScoreTone)}>
+                        {osScore}/5
+                      </span>
+                    </>
+                  ) : null}
+                </span>
+                {osReviewActive ? (
+                  <span className={WS_SUMMARY_ACTION}>
+                    {reviewCancelling ? "Stopping" : "Cancel"}
+                  </span>
+                ) : canFixOsReview ? (
+                  <span className={cn(WS_SUMMARY_ACTION, "text-red")}>
+                    {fixBusy ? "Starting…" : "Fix"}
+                  </span>
+                ) : (
+                  <span
+                    className={cn(
+                      WS_SUMMARY_STATE,
+                      osReview?.blocking ? "text-red" : "text-dim",
+                    )}
+                  >
+                    {osReviewState}
+                  </span>
+                )}
+              </button>
+            )}
             {fixError && (
               <div className="px-4 py-1 text-supporting text-red" role="alert">
                 {fixError}

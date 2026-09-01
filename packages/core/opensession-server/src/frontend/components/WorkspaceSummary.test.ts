@@ -94,6 +94,17 @@ test("popup review heading keeps a small gap after a lone PR band", () => {
   );
 });
 
+test("a stale automated review offers an inline re-review action", () => {
+  expect(summarySource).toContain(
+    'const canRerunOsReview = pr?.state === "OPEN" && Boolean(osReview?.stale)',
+  );
+  expect(summarySource).toContain("async function rerunOsReview()");
+  expect(summarySource).toContain('session.id,\n        "review",');
+  expect(summarySource).toContain("{ ...pr, reviewActive: true }");
+  expect(summarySource).toContain("New commits");
+  expect(summarySource).toContain("Re-review");
+});
+
 test("the review label opens the review with an adjacent arrow", () => {
   expect(summarySource).toContain('aria-label="Open review"');
   expect(summarySource).toContain("group-hover/review:translate-x-0.5");
