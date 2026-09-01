@@ -102,7 +102,9 @@ export function ConnectTokenDialog({
               label="Connect as"
               size="sm"
               value={scope}
-              onValueChange={(next) => setScope(next as "shared" | "me")}
+              onValueChange={(next) => {
+                if (next === "shared" || next === "me") setScope(next);
+              }}
             >
               <SegmentedOption value="shared">Workspace</SegmentedOption>
               <SegmentedOption value="me">My account</SegmentedOption>
