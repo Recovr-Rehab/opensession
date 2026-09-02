@@ -7,6 +7,7 @@ import {
 import { __sessionKernelStoreForTest } from "./session-kernel";
 import type { UnifiedSession } from "./types";
 import { allClients } from "./ws-hub";
+import { sessionListResponseRevision } from "./session-list-response-revision";
 
 const sockets = new Set<any>();
 
@@ -25,9 +26,11 @@ test("session cache invalidation notifies connected list clients", () => {
   };
   sockets.add(socket);
   allClients.add(socket);
+  const responseRevision = sessionListResponseRevision();
 
   invalidateSessionsCache();
 
+  expect(sessionListResponseRevision()).toBe(responseRevision + 1);
   expect(sent.map((payload) => JSON.parse(payload))).toEqual([
     { type: "sessions_invalidated" },
   ]);

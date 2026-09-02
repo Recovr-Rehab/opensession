@@ -154,6 +154,7 @@ import {
   indexedWorkspaceMemberSessions,
   indexedWorkspaceSessions,
 } from "../session-list-store";
+import { buildAtCurrentSessionListRevision } from "../session-list-response-revision";
 import {
   loadSidebarSessionScopeContext,
   parseSidebarSessionScope,
@@ -846,7 +847,7 @@ function refreshSidebarSessionsResponse(
   const key = sidebarSessionScopeKey(scope);
   const current = sessionsResponseRefreshes.get(key);
   if (current) return current;
-  const refresh = (async () => {
+  const refresh = buildAtCurrentSessionListRevision(async () => {
     const signals = await sessionListRuntimeSignals();
     const context = sessionEnrichmentContext();
     const indexed = indexedSidebarSessions(scope.selectedSessionId);
@@ -861,16 +862,19 @@ function refreshSidebarSessionsResponse(
       loadSidebarSessionScopeContext(scope, bounded),
     );
     const text = JSON.stringify(scoped.map(sessionListRow));
-    const snapshot: SessionsResponseSnapshot = {
+    return {
       text,
       hash: Bun.hash(text).toString(16),
       expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
     };
-    sessionsResponseSnapshots.set(key, snapshot);
-    return snapshot;
-  })().finally(() => {
-    sessionsResponseRefreshes.delete(key);
-  });
+  })
+    .then((snapshot) => {
+      sessionsResponseSnapshots.set(key, snapshot);
+      return snapshot;
+    })
+    .finally(() => {
+      sessionsResponseRefreshes.delete(key);
+    });
   sessionsResponseRefreshes.set(key, refresh);
   return refresh;
 }
@@ -880,7 +884,7 @@ function refreshSessionsResponse(
 ): Promise<SessionsResponseSnapshot> {
   const current = sessionsResponseRefreshes.get(variant);
   if (current) return current;
-  const refresh = (async () => {
+  const refresh = buildAtCurrentSessionListRevision(async () => {
     const signals = await sessionListRuntimeSignals();
     const context = sessionEnrichmentContext();
     const slice =
@@ -902,17 +906,20 @@ function refreshSessionsResponse(
         ? listed.map(archivedIndexRow)
         : listed.map(sessionListRow),
     );
-    const snapshot: SessionsResponseSnapshot = {
+    return {
       text,
       hash: Bun.hash(text).toString(16),
       expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
     };
-    sessionsResponseSnapshots.set(variant, snapshot);
-    if (variant === "exclude") persistDiskLiveList(text);
-    return snapshot;
-  })().finally(() => {
-    sessionsResponseRefreshes.delete(variant);
-  });
+  })
+    .then((snapshot) => {
+      sessionsResponseSnapshots.set(variant, snapshot);
+      if (variant === "exclude") persistDiskLiveList(snapshot.text);
+      return snapshot;
+    })
+    .finally(() => {
+      sessionsResponseRefreshes.delete(variant);
+    });
   sessionsResponseRefreshes.set(variant, refresh);
   return refresh;
 }

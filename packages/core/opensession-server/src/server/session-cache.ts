@@ -55,6 +55,7 @@ import {
 import { withSessionMutationLock } from "./session-mutation-lock";
 import { broadcastToAll } from "./ws-hub";
 import { hasSessionRunningHold } from "./session-state-events";
+import { advanceSessionListResponseRevision } from "./session-list-response-revision";
 
 export const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
@@ -101,6 +102,9 @@ export function invalidateSessionsCache(): void {
     sessionsCacheGenerations[slice]++;
     if (sessionsCaches[slice]) sessionsCaches[slice]!.invalidated = true;
   }
+  // Fence a response build already reading the previous projection. The
+  // response layer retries it before releasing every request coalesced there.
+  advanceSessionListResponseRevision();
   // The list route caches its serialized response on top of this cache. Mark
   // those snapshots stale so ordinary slices rebuild on their next request;
   // the bounded live slice deliberately serves the stale body while it does
