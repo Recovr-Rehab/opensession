@@ -744,6 +744,11 @@ describe("single session ownership", () => {
     const runtime = read("session-kernel/runtime.ts");
     expect(runtime).toContain('item.kind === "creation_opening_turn"');
     expect(runtime).toContain("activeOpeningOutbox");
+    expect(runtime).toContain('"creation_workspace_prepare"');
+    expect(runtime).toContain('"creation_credential_resolve"');
+    expect(runtime).toContain('"creation_branch_prepare"');
+    expect(runtime).toContain('"creation_attachment_stage"');
+    expect(runtime).toContain("activeCreationPreparationOutbox");
     for (const relative of [
       "sandbox/docker.ts",
       "sandbox/adapters/bootstrap.ts",

@@ -40,7 +40,6 @@ export function useNewSessionCreateStart({
   goBack,
   hidePalette,
   inject,
-  unstick,
   pendingCreateDraftRef,
   pendingTimer,
   setActiveViewTabState,
@@ -121,15 +120,11 @@ export function useNewSessionCreateStart({
     setPendingSessionId(started.id);
     setPendingNewWorkspace(!started.workspaceId);
     clearTimeout(pendingTimer.current);
-    pendingTimer.current = setTimeout(() => {
-      setPendingSessionId((pending) =>
-        pending === started.id ? null : pending,
-      );
-      setOptimisticSession((pending) =>
-        pending?.id === started.id ? null : pending,
-      );
-      unstick(started.id);
-    }, 120_000);
+    // The WebSocket command outbox retains this exact create until the server
+    // returns a terminal receipt. Keep its matching shell for the same lifetime:
+    // a slow durable workspace effect is still a pending session, not a missing
+    // one, and timing the shell out would hide the only visible copy of its
+    // submitted prompt.
     navigate({ view: "session", id: started.id });
   };
 
