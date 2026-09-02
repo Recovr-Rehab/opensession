@@ -677,9 +677,9 @@ Publish a walkthrough of this session's change: a demo video, before/after scree
 
 ### `comment_on_pr_with_images`
 
-`mcp__opensession-walkthrough__comment_on_pr_with_images` · input: `comment` (string, required), `images` (object[], required), `repo` (string), `pr_number` (number)
+`mcp__opensession-walkthrough__comment_on_pr_with_images` · input: `comment` (string, required), `media` (object[]), `images` (object[]), `repo` (string), `pr_number` (number)
 
-Post a comment on this session's PR (or an explicit PR) with screenshots that RENDER INLINE on GitHub. Images are copied to durable storage and served from unguessable URLs on the configured public media origin. This requires a GitHub-reachable HTTPS origin configured through OPENSESSION_PR_IMAGES_BASE, integrations.media.publicBaseUrl, or server.publicBaseUrl; loopback, private-network, and tailnet URLs will not render. The URLs are capability links: anyone holding one can fetch the image, so don't attach anything that must stay strictly repo-member-only. Place images in the markdown with {{image:1}}, {{image:2}}, … (1-based); images you don't reference are appended at the end.
+Post a comment on this session's PR (or an explicit PR) with images or videos that render inline on GitHub. Files become repository-scoped GitHub user attachments, so private-repo media stays private and no public Open Session media origin is required. Place files with {{media:1}}, {{media:2}}, and so on. Put video placeholders on their own line so GitHub renders a player. Unreferenced files are appended in order. The old images input and {{image:N}} placeholders remain accepted for existing callers.
 
 ## opensession-slack
 
