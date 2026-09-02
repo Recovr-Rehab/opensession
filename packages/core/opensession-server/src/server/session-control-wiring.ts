@@ -703,6 +703,7 @@ registerSessionControl({
       spawnedBy: spawnedByInput,
       reportBack,
       user,
+      createdByLogin,
       sandbox,
       forkFrom,
       accountId: accountIdInput,
@@ -1246,6 +1247,7 @@ ${createMentionsNote}`;
       openingPrompt,
       user,
       createdBy: sessionCreatedBy,
+      createdByLogin,
       createdAt: sessionCreatedAt,
       mode: isScratch
         ? ("scratch" as const)

@@ -48,13 +48,10 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain(
       "For PRs outside the current primary repository, write `<repo>#<number>`, never bare `#<number>`.",
     );
-    expect(prompt).toContain(
-      "For editors, call `opensession-portals` `set_editor_preview_path`",
-    );
-    expect(prompt).toContain(
-      "at least 60 seconds, 2+ clips, and a ready non-empty transcript",
-    );
-    expect(prompt).toContain("to prevent reuse by another active session");
+    expect(prompt).toContain("`tella-stage` `lease_editor_fixture`");
+    expect(prompt).toContain("this Open Session id as `leaseKey`");
+    expect(prompt).toContain("Pass only its `leaseId`");
+    expect(prompt).toContain("verifies the lease directly with Tella");
     expect(prompt.length).toBeLessThan(1_200);
   });
 });

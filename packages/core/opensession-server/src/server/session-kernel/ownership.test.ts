@@ -468,6 +468,20 @@ describe("single session ownership", () => {
     expect(wiring).toContain("patchCreationSetupPlan(bksId, createIdentity");
     expect(wiring).toContain("createPlan.resolved");
     expect(wiring).toContain("actorCreationSetupPlan(bksId, createIdentity)");
+    expect(wiring).toContain("createdByLogin,");
+    expect(wiring).not.toContain(
+      "createdByLogin: parentSession?.createdByLogin",
+    );
+    for (const route of [
+      read("routes/sessions.ts"),
+      read("routes/reports.ts"),
+      read("routes/security.ts"),
+    ]) {
+      expect(route).toContain("createdByLogin: ctx.authUser?.login");
+    }
+    expect(read("report-sessions.ts")).toContain(
+      "createdByLogin: input.createdByLogin",
+    );
     expect(wiring).not.toContain("updateCreatePlan(");
     expect(wiring).toContain("await requestCreationWorkspace({");
     expect(wiring.match(/await requestCreationCredential\(\{/g)?.length).toBe(
