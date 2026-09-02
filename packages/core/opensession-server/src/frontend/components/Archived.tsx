@@ -550,19 +550,14 @@ export function Archived({
       {renderReasonPicker(align)}
     </>
   );
-  const count = loaded
-    ? archived.length === allArchived.length
-      ? `${archived.length} archived session${archived.length === 1 ? "" : "s"}`
-      : `${archived.length} of ${allArchived.length} archived sessions`
-    : "Loading archived sessions";
-
+  // No match count: the list itself shows what matched, and the pickers
+  // already say why.
   const actions = (
     <>
       {searchAction}
-      <span className="ml-auto whitespace-nowrap text-supporting text-dim tabular-nums">
-        {count}
-      </span>
-      {renderFilters("end")}
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {renderFilters("end")}
+      </div>
     </>
   );
 
@@ -583,9 +578,6 @@ export function Archived({
         <div className="mb-3 hidden min-w-0 items-center gap-1 overflow-x-auto phone:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {renderFilters("start")}
         </div>
-        <p className="m-0 mb-3.5 hidden text-supporting text-dim tabular-nums phone:block">
-          {count}
-        </p>
         {archived.length === 0 && !loaded ? (
           // Not "nothing archived" — nothing YET. Claiming the list is empty
           // while it is still in flight is what makes a slow load read as data
