@@ -3,6 +3,7 @@ import { BASE_PATH } from "../lib/base";
 import { msgSystemInline, msgSystemRow } from "../lib/msg-classes";
 import { Button } from "../ui/button";
 import { Skeleton, SkeletonBar } from "../ui/state";
+import { TranscriptLoadingStatus } from "./TranscriptLoadingStatus";
 
 interface SessionContextMetadata {
   available: boolean;
@@ -32,8 +33,15 @@ function tokenLabel(tokens: number): string {
  * completed used to prepend roughly 40px to an already-painted conversation.
  * A one-line ghost replaces in place instead, preserving the reader's scroll
  * position. Ancient sessions with no recorded context retain the same quiet
- * slot so resolving the negative result cannot shift the transcript either. */
-export function SessionContextMessage({ sessionId }: { sessionId: string }) {
+ * slot so resolving the negative result cannot shift the transcript either.
+ * History requests reuse this slot, so their status never inserts another row. */
+export function SessionContextMessage({
+  sessionId,
+  historyLoading = false,
+}: {
+  sessionId: string;
+  historyLoading?: boolean;
+}) {
   const [metadata, setMetadata] = useState<SessionContextMetadata | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -106,7 +114,9 @@ export function SessionContextMessage({ sessionId }: { sessionId: string }) {
 
   return (
     <div ref={rowRef} className={msgSystemRow} data-session-context>
-      {metadata === null ? (
+      {historyLoading && !open ? (
+        <TranscriptLoadingStatus />
+      ) : metadata === null ? (
         <Skeleton label="Loading session context" className={msgSystemInline}>
           <SkeletonBar className="mx-auto h-5 w-44 max-w-[60%]" />
         </Skeleton>

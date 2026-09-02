@@ -614,7 +614,6 @@ export function SessionViewer({
     setHistoryTruncated,
     loadingHistory,
     setLoadingHistory,
-    loadingAllHistory,
     setLoadingAllHistory,
   } = transcriptHistory.state;
   const {
@@ -637,6 +636,7 @@ export function SessionViewer({
     indexExpectedRef: transcriptIndexExpectedRef,
     indexEpochRef: transcriptIndexEpochRef,
     rangeRetryGeneration: transcriptRangeRetryGeneration,
+    rangesLoading: transcriptRangesLoading,
     existingIndexForInit,
     setIndexMode,
     acceptInitTail,
@@ -1662,8 +1662,7 @@ export function SessionViewer({
               transcriptIndexExpected,
               historyTruncated,
               atTop,
-              loadingHistory,
-              loadingAllHistory,
+              loadingHistory: loadingHistory || transcriptRangesLoading,
             },
             actions: {
               openAssetFromTranscript,

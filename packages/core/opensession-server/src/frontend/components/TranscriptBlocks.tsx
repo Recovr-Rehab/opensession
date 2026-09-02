@@ -99,6 +99,8 @@ interface Props {
   owner?: string;
   /** Lets wire-clamped entries' "Show full message" fetch the full content. */
   sessionId?: string;
+  /** Older transcript rows are currently being fetched. */
+  historyLoading?: boolean;
   /** Agent-published walkthrough — rendered inline where it was published.
    *  Pass a referentially stable object (see SessionViewer) so the memo holds. */
   walkthrough?: SessionWalkthrough;
@@ -318,7 +320,12 @@ export const TranscriptBlocks = function TranscriptBlocks(props: Props) {
   const renderedProps: Props = { ...props, entries, thinkingMessages };
   return (
     <>
-      {props.sessionId && <SessionContextMessage sessionId={props.sessionId} />}
+      {props.sessionId && (
+        <SessionContextMessage
+          sessionId={props.sessionId}
+          historyLoading={props.historyLoading}
+        />
+      )}
       {props.transcriptIndex ? (
         <IndexedTranscriptBlocks {...renderedProps} />
       ) : (
