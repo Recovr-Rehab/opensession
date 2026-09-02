@@ -37,7 +37,8 @@ import {
   buildPiAnthropicProvider,
   IMAGE_ONLY_PROMPT,
   MAX_TURN_IMAGES,
-  incrementalSdkUsage,
+  recordSdkStepUsage,
+  sumSdkStepUsage,
   piImageBlockToAnthropic,
   piMessagesToAnthropic,
   piSdkSessionStore,
@@ -794,49 +795,54 @@ describe("buildPiAnthropicModels", () => {
   });
 });
 
-describe("incrementalSdkUsage", () => {
-  test("subtracts usage already reported by an earlier tool step", () => {
-    expect(
-      incrementalSdkUsage(
-        {
-          input_tokens: 10,
-          output_tokens: 3,
-          cache_read_input_tokens: 7_190,
-          cache_creation_input_tokens: 0,
-        },
-        {
-          input_tokens: 20,
-          output_tokens: 236,
-          cache_read_input_tokens: 14_380,
-          cache_creation_input_tokens: 201,
-        },
-      ),
-    ).toEqual({
-      input_tokens: 10,
-      output_tokens: 233,
-      cache_read_input_tokens: 7_190,
-      cache_creation_input_tokens: 201,
+describe("SdkStepUsage", () => {
+  const request = {
+    input_tokens: 56,
+    output_tokens: 569,
+    cache_read_input_tokens: 217_978,
+    cache_creation_input_tokens: 6_139,
+  };
+
+  test("counts one API request once even when the SDK repeats its usage per content block", () => {
+    const step = new Map();
+    recordSdkStepUsage(step, "msg_1", request);
+    recordSdkStepUsage(step, "msg_1", request);
+    recordSdkStepUsage(step, "msg_1", request);
+    expect(sumSdkStepUsage(step)).toEqual(request);
+  });
+
+  test("sums the requests of one step and lets a message_delta finish its request", () => {
+    const step = new Map();
+    recordSdkStepUsage(step, "msg_1", {
+      input_tokens: 2,
+      output_tokens: 1,
+      cache_read_input_tokens: 2_200,
+      cache_creation_input_tokens: 44_982,
+    });
+    recordSdkStepUsage(step, "msg_1", { output_tokens: 519 });
+    recordSdkStepUsage(step, "msg_2", request);
+    expect(sumSdkStepUsage(step)).toEqual({
+      input_tokens: 58,
+      output_tokens: 1_088,
+      cache_read_input_tokens: 220_178,
+      cache_creation_input_tokens: 51_121,
     });
   });
 
-  test("treats lower counters as a new top-level SDK prompt", () => {
-    const current = {
-      input_tokens: 10,
-      output_tokens: 42,
-      cache_read_input_tokens: 7_391,
-      cache_creation_input_tokens: 139,
-    };
-    expect(
-      incrementalSdkUsage(
-        {
-          input_tokens: 20,
-          output_tokens: 236,
-          cache_read_input_tokens: 14_380,
-          cache_creation_input_tokens: 201,
-        },
-        current,
-      ),
-    ).toEqual(current);
+  test("ignores non-numeric fields and reports nothing for an empty step", () => {
+    const step = new Map();
+    expect(sumSdkStepUsage(step)).toBeUndefined();
+    recordSdkStepUsage(step, "msg_1", {
+      input_tokens: "56",
+      output_tokens: 3,
+      server_tool_use: { web_search_requests: 0 },
+    });
+    expect(sumSdkStepUsage(step)).toEqual({
+      input_tokens: 0,
+      output_tokens: 3,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    });
   });
 });
 

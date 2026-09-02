@@ -880,7 +880,6 @@ interface LiveSdkConversation {
   input: SdkInputQueue;
   controller: AbortController;
   pendingToolIds: string[];
-  reportedUsage?: Record<string, number>;
   suppliedToolResults: Map<string, SdkToolReply>;
   toolWaiters: Map<string, (reply: SdkToolReply) => void>;
   lastUsedAt: number;
@@ -976,24 +975,37 @@ const SDK_USAGE_FIELDS = [
   "cache_creation_input_tokens",
 ] as const;
 
-/** Claude SDK assistant usage is cumulative across tool steps within one
- * top-level prompt. Pi records each step separately, so report only the delta. */
-export function incrementalSdkUsage(
-  previous: Readonly<Record<string, number>> | undefined,
-  current: Readonly<Record<string, number>> | undefined,
+/** Usage for one pi step, keyed by Anthropic message id. Each SDK `assistant`
+ * message and stream event carries the usage of the API request that produced
+ * it, and the SDK repeats one `assistant` message per content block, so
+ * entries merge per id and sum across ids (an internal ToolSearch round trip
+ * adds a second request to the same step). The SDK `result` usage is not a
+ * per-step figure: its output count spans every step of the turn. */
+export type SdkStepUsage = Map<string, Record<string, number>>;
+
+export function recordSdkStepUsage(
+  step: SdkStepUsage,
+  id: string,
+  usage: Readonly<Record<string, unknown>>,
+): void {
+  const entry = step.get(id) ?? {};
+  for (const field of SDK_USAGE_FIELDS) {
+    const value = usage[field];
+    if (typeof value === "number") entry[field] = value;
+  }
+  step.set(id, entry);
+}
+
+export function sumSdkStepUsage(
+  step: SdkStepUsage,
 ): Record<string, number> | undefined {
-  if (!current) return undefined;
-  if (!previous) return { ...current };
-  const reset = SDK_USAGE_FIELDS.some(
-    (field) => (current[field] ?? 0) < (previous[field] ?? 0),
-  );
-  if (reset) return { ...current };
-  return Object.fromEntries(
-    SDK_USAGE_FIELDS.map((field) => [
-      field,
-      Math.max(0, (current[field] ?? 0) - (previous[field] ?? 0)),
-    ]),
-  );
+  if (step.size === 0) return undefined;
+  const total: Record<string, number> = {};
+  for (const field of SDK_USAGE_FIELDS) total[field] = 0;
+  for (const entry of step.values()) {
+    for (const field of SDK_USAGE_FIELDS) total[field] += entry[field] ?? 0;
+  }
+  return total;
 }
 
 function sdkToolReply(block: ContentBlock): SdkToolReply {
@@ -1276,8 +1288,6 @@ function acquireLiveSdkQuery(input: {
     }
     supplyLiveToolResults(live, input.plan.toolResults);
   } else {
-    // A new top-level user prompt starts a fresh SDK result-usage window.
-    live.reportedUsage = undefined;
     live.input.push(inputForPlan(input.plan));
   }
   live.lastUsedAt = Date.now();
@@ -1483,7 +1493,21 @@ async function* runSdkAttempt(
     signal?.addEventListener("abort", onAbort, { once: true });
 
     let sdkSessionId: string | undefined;
-    let sdkUsage: Record<string, number> | undefined;
+    const stepUsage: SdkStepUsage = new Map();
+    let streamMessageId: string | undefined;
+    const noteStreamUsage = (ev: Record<string, any>) => {
+      if (ev.type === "message_start") {
+        streamMessageId = String(ev.message?.id || "") || undefined;
+        if (ev.message?.usage)
+          recordSdkStepUsage(
+            stepUsage,
+            streamMessageId ?? "stream",
+            ev.message.usage,
+          );
+      } else if (ev.type === "message_delta" && ev.usage) {
+        recordSdkStepUsage(stepUsage, streamMessageId ?? "stream", ev.usage);
+      }
+    };
     let reachedResult = false;
     let cappedStopReason: "toolUse" | "length" | undefined;
     let checkpoint:
@@ -1545,11 +1569,7 @@ async function* runSdkAttempt(
       }
       emittedCaptures = Math.min(emittedCaptures, captured.length);
       clientDone = true;
-      const usage = usageFromSdkResult(
-        model,
-        incrementalSdkUsage(q.live.reportedUsage, sdkUsage),
-      );
-      q.live.reportedUsage = sdkUsage;
+      const usage = usageFromSdkResult(model, sumSdkStepUsage(stepUsage));
       partial.usage = usage;
       const message: PiAssistantMessageShape = {
         ...partial,
@@ -1582,26 +1602,17 @@ async function* runSdkAttempt(
           ) {
             releaseHeldDenies();
           }
+          noteStreamUsage(ev);
           // Pi has already received its terminal toolUse event. Consume only
           // the facade's synthetic boundary result; the real SDK handler stays parked.
           if (clientDone) {
-            if (ev.type === "message_start") {
-              turnGenerating = true;
-              if (ev.message?.usage)
-                sdkUsage = { ...sdkUsage, ...ev.message.usage };
-            } else if (ev.type === "message_delta" && ev.usage) {
-              sdkUsage = { ...sdkUsage, ...ev.usage };
-            }
+            if (ev.type === "message_start") turnGenerating = true;
             continue;
           }
           if (ev.type === "message_start") {
             turnGenerating = true;
             idxMap = new Map();
             pendingText = new Map();
-            if (ev.message?.usage)
-              sdkUsage = { ...sdkUsage, ...ev.message.usage };
-          } else if (ev.type === "message_delta") {
-            if (ev.usage) sdkUsage = { ...sdkUsage, ...ev.usage };
           } else if (ev.type === "content_block_start") {
             const block = ev.content_block as Record<string, any> | undefined;
             const sdkIdx = Number(ev.index);
@@ -1743,7 +1754,12 @@ async function* runSdkAttempt(
               captured,
               !!checkpoint,
             );
-          if (m.message?.usage) sdkUsage = { ...sdkUsage, ...m.message.usage };
+          if (m.message?.usage)
+            recordSdkStepUsage(
+              stepUsage,
+              String(m.message.id || m.uuid || "") || "assistant",
+              m.message.usage,
+            );
           if (!clientDone && !sawStreamContent) {
             // Fallback (no partial stream events from the CLI): emit each text
             // block as one delta on arrival, per-message, not end-of-request.
@@ -1811,7 +1827,10 @@ async function* runSdkAttempt(
               "SDK run failed";
             throw new Error(String(detail));
           }
-          sdkUsage = m.usage || undefined;
+          // Only fall back to the turn-wide result usage when this step saw
+          // no per-request usage at all (see SdkStepUsage).
+          if (stepUsage.size === 0 && m.usage)
+            recordSdkStepUsage(stepUsage, "result", m.usage);
           reachedResult = true;
           break;
         }
@@ -1862,11 +1881,7 @@ async function* runSdkAttempt(
       );
     }
 
-    const usage = usageFromSdkResult(
-      model,
-      incrementalSdkUsage(q.live.reportedUsage, sdkUsage),
-    );
-    q.live.reportedUsage = sdkUsage;
+    const usage = usageFromSdkResult(model, sumSdkStepUsage(stepUsage));
     partial.usage = usage;
     const stopReason: "toolUse" | "stop" | "length" =
       cappedStopReason ?? (captured.length ? "toolUse" : "stop");
