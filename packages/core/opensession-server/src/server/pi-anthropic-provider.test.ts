@@ -59,7 +59,10 @@ import {
   shouldEarlyStop,
 } from "./meridian-passthrough";
 import * as passthrough from "./meridian-passthrough";
-import { captureUnforwardedToolUses } from "./pi-model-runtime";
+import {
+  captureUnforwardedToolUses,
+  captureVisibleSdkAssistantToolUses,
+} from "./pi-model-runtime";
 import {
   admitBridgeRequest,
   ensureAnthropicBridgeCwd,
@@ -716,6 +719,53 @@ describe("Pi passthrough durable checkpoint", () => {
         content: [{ type: "tool_use", id: "tool-1", name: "read", input: {} }],
       },
     });
+    expect(shouldEarlyStop(tracker)).toBe(true);
+  });
+
+  test("captures a new live tool batch after the previous result echo", () => {
+    const tracker = createEarlyStopTracker();
+    noteUserContent(tracker, [
+      {
+        type: "tool_result",
+        tool_use_id: "previous-tool",
+        content: "previous result",
+      },
+    ]);
+    const captured: Array<{ id: string; name: string; input: unknown }> = [];
+
+    expect(
+      captureVisibleSdkAssistantToolUses(
+        tracker,
+        {
+          type: "assistant",
+          uuid: "next-assistant",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "next-tool",
+                name: "mcp__oc__read",
+                input: { path: "README.md" },
+              },
+            ],
+          },
+        },
+        captured,
+        false,
+      ),
+    ).toBe(true);
+    expect(captured).toEqual([
+      { id: "next-tool", name: "read", input: { path: "README.md" } },
+    ]);
+    expect(shouldEarlyStop(tracker)).toBe(false);
+
+    noteUserContent(tracker, [
+      {
+        type: "tool_result",
+        tool_use_id: "next-tool",
+        content: PI_PASSTHROUGH_BLOCK_REASON,
+      },
+    ]);
     expect(shouldEarlyStop(tracker)).toBe(true);
   });
 });

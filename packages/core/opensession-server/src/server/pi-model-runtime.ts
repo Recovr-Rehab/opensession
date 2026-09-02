@@ -298,6 +298,25 @@ function captureSdkToolUses(
   return captured.length - before;
 }
 
+/** Capture the next visible assistant tool batch. A live SDK continuation
+ * echoes the previous batch's tool results before emitting this assistant
+ * message, so `tracker.resolved` can legitimately be non-empty here. Those
+ * unrelated ids are harmless: early-stop settlement only checks ids present
+ * in `tracker.expected`. The durable checkpoint, not resolved history, is the
+ * boundary that stops us from observing a later hidden assistant message. */
+export function captureVisibleSdkAssistantToolUses(
+  tracker: EarlyStopTracker,
+  message: unknown,
+  captured: CapturedToolUse[],
+  checkpointed: boolean,
+): boolean {
+  if (checkpointed) return false;
+  const expectedBefore = tracker.expected.size;
+  noteAssistantMessage(tracker, message);
+  captureSdkToolUses(tracker, message, captured);
+  return tracker.expected.size > expectedBefore;
+}
+
 /** Map the live facade's synthetic boundary marker onto pi stop reasons. */
 export function recoverSyntheticSdkStopReason(
   subtype: unknown,
@@ -1717,14 +1736,13 @@ async function* runSdkAttempt(
           continue;
         }
         if (m.type === "assistant") {
-          let assistantAddedForwardedCall = false;
-          if (!checkpoint && earlyStop.resolved.size === 0) {
-            const expectedBefore = earlyStop.expected.size;
-            noteAssistantMessage(earlyStop, m);
-            captureSdkToolUses(earlyStop, m, captured);
-            assistantAddedForwardedCall =
-              earlyStop.expected.size > expectedBefore;
-          }
+          const assistantAddedForwardedCall =
+            captureVisibleSdkAssistantToolUses(
+              earlyStop,
+              m,
+              captured,
+              !!checkpoint,
+            );
           if (m.message?.usage) sdkUsage = { ...sdkUsage, ...m.message.usage };
           if (!clientDone && !sawStreamContent) {
             // Fallback (no partial stream events from the CLI): emit each text
