@@ -20,7 +20,7 @@ export const SOURCE_CHIP =
 /** Neutral pill — the origins that get no hue of their own. */
 const NEUTRAL = "bg-active text-dim";
 
-const TONE: Record<string, string> = {
+const TONE = {
   slack: "bg-[var(--chip-slack-bg)] text-[var(--chip-slack-fg)]",
   linear: "bg-[var(--chip-linear-bg)] text-[var(--chip-linear-fg)]",
   // Green is what ask means across the product (the composer's Ask toggle,
@@ -28,6 +28,8 @@ const TONE: Record<string, string> = {
   ask: "bg-green-soft text-green",
   cli: NEUTRAL,
 };
+
+const TONE_BY_SOURCE = new Map(Object.entries(TONE));
 
 /**
  * The tone for a session origin. `opensession` deliberately resolves to no
@@ -37,5 +39,5 @@ const TONE: Record<string, string> = {
  * carries that source any more.)
  */
 export function sourceChipTone(source: SessionSource | "ask" | string): string {
-  return TONE[source] ?? "";
+  return TONE_BY_SOURCE.get(source) ?? "";
 }
