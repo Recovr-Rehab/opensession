@@ -81,6 +81,7 @@ import {
 import {
   type ResolvedCreate,
   actorCreationSetupPlan,
+  actorWorktreeMaterializer,
   forkHandoffContext,
   runOpeningCreateOnce,
   resolveForkContext,
@@ -113,8 +114,6 @@ import { randomUUIDv7 } from "bun";
 import {
   patchCreationSetupPlan,
   requestCreationAttachment,
-  requestCreationBranch,
-  requestCreationCredential,
   requestCreationWorkspace,
   sessionAsk,
   sessionDelivery,
@@ -1004,28 +1003,16 @@ registerSessionControl({
           wtPath = worktreePathFor(sessionBranch, repo.id, worktreeOptions);
           const plannedBranch = sessionBranch;
           const plannedWorktreePath = wtPath;
-          const credentialPrincipal = githubCredential?.principal;
-          materializeWorktree = async () => {
-            if (credentialPrincipal) {
-              await requestCreationCredential({
-                sessionId: bksId,
-                identity: createIdentity,
-                principal: credentialPrincipal,
-                scope: `git:${repo.id}`,
-              });
-            }
-            await requestCreationBranch({
-              sessionId: bksId,
-              identity: createIdentity,
-              project: repo.id,
-              branch: plannedBranch,
-              worktreePath: plannedWorktreePath,
-              baseBranch: baseRef || repo.defaultBranch,
-              isolated: isolatedWorktree === true,
-              credentialPrincipal,
-            });
-            return plannedWorktreePath;
-          };
+          materializeWorktree = actorWorktreeMaterializer({
+            sessionId: bksId,
+            identity: createIdentity,
+            project: repo.id,
+            branch: plannedBranch,
+            worktreePath: plannedWorktreePath,
+            baseBranch: baseRef,
+            isolated: isolatedWorktree === true,
+            credentialPrincipal: githubCredential?.principal,
+          });
         }
       }
     }
@@ -1348,31 +1335,17 @@ ${createMentionsNote}`;
       typeof restoredSpec.wtPath === "string" &&
       typeof restoredSpec.branch === "string" &&
       typeof restoredSpec.repoId === "string"
-        ? async () => {
-            const credentialPrincipal = restoredSpec.gitPrincipal;
-            if (credentialPrincipal) {
-              await requestCreationCredential({
-                sessionId: bksId,
-                identity: createIdentity,
-                principal: credentialPrincipal,
-                scope: `git:${restoredSpec.repoId!}`,
-              });
-            }
-            await requestCreationBranch({
-              sessionId: bksId,
-              identity: createIdentity,
-              project: restoredSpec.repoId!,
-              branch: restoredSpec.branch!,
-              worktreePath: restoredSpec.wtPath!,
-              baseBranch:
-                restoredSpec.worktreeBaseRef ||
-                restoredSpec.stackedOn?.branch ||
-                getRepo(restoredSpec.repoId!).defaultBranch,
-              isolated: restoredSpec.worktreeIsolated === true,
-              credentialPrincipal,
-            });
-            return restoredSpec.wtPath!;
-          }
+        ? actorWorktreeMaterializer({
+            sessionId: bksId,
+            identity: createIdentity,
+            project: restoredSpec.repoId,
+            branch: restoredSpec.branch,
+            worktreePath: restoredSpec.wtPath,
+            baseBranch:
+              restoredSpec.worktreeBaseRef || restoredSpec.stackedOn?.branch,
+            isolated: restoredSpec.worktreeIsolated === true,
+            credentialPrincipal: restoredSpec.gitPrincipal,
+          })
         : undefined;
     const spec: ResolvedCreate = restoredSpec
       ? {
