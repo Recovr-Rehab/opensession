@@ -44,10 +44,11 @@ export function SubagentRows({
   if (items.length === 0) return null;
   return (
     <div data-subagents="">
-      {items.map(({ session, depth }) => {
+      {items.map(({ session, depth, sharesRootPr }) => {
         const selected = session.id === selectedId;
         const label = stateLabel(session);
         const showPrStatus =
+          !sharesRootPr &&
           !session.waitingForInput &&
           !session.isRunning &&
           (session.queuedCount ?? 0) === 0 &&

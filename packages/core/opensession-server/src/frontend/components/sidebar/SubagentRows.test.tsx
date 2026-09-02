@@ -79,8 +79,8 @@ describe("SubagentRows", () => {
     const html = renderToStaticMarkup(
       <SubagentRows
         items={[
-          { session: direct, depth: 1 },
-          { session: nested, depth: 2 },
+          { session: direct, depth: 1, inline: false, sharesRootPr: false },
+          { session: nested, depth: 2, inline: false, sharesRootPr: false },
         ]}
         selectedId="nested"
         onSelect={() => {}}
@@ -110,7 +110,9 @@ describe("SubagentRows", () => {
     });
     const html = renderToStaticMarkup(
       <SubagentRows
-        items={[{ session: worker, depth: 1 }]}
+        items={[
+          { session: worker, depth: 1, inline: false, sharesRootPr: false },
+        ]}
         selectedId={null}
         onSelect={() => {}}
         onArchive={() => {}}
@@ -122,12 +124,34 @@ describe("SubagentRows", () => {
     expect(html).toContain("text-purple");
   });
 
+  test("does not repeat the root workspace's PR icon", () => {
+    const worker = session("same-pr", {
+      isRunning: false,
+      prUrl: "https://github.com/tellahq/example/pull/1",
+      prState: "MERGED",
+    });
+    const html = renderToStaticMarkup(
+      <SubagentRows
+        items={[
+          { session: worker, depth: 1, inline: false, sharesRootPr: true },
+        ]}
+        selectedId={null}
+        onSelect={() => {}}
+        onArchive={() => {}}
+      />,
+    );
+
+    expect(html).toContain("Worker same-pr, subagent, Merged");
+    expect(html).not.toContain('title="PR merged"');
+    expect(html).not.toContain("text-purple");
+  });
+
   test("opens and archives the exact child session", () => {
     const child = session("child");
     let opened: UnifiedSession | null = null;
     let archived: UnifiedSession | null = null;
     const tree = SubagentRows({
-      items: [{ session: child, depth: 1 }],
+      items: [{ session: child, depth: 1, inline: false, sharesRootPr: false }],
       selectedId: null,
       onSelect: (session) => {
         opened = session;
