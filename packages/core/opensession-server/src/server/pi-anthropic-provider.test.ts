@@ -33,19 +33,20 @@ import { join } from "path";
 import {
   MAX_PI_SDK_SESSIONS,
   PI_PASSTHROUGH_BLOCK_REASON,
-  PI_SDK_MAX_TURNS,
   buildPiAnthropicModels,
   buildPiAnthropicProvider,
   IMAGE_ONLY_PROMPT,
   MAX_TURN_IMAGES,
+  incrementalSdkUsage,
   piImageBlockToAnthropic,
   piMessagesToAnthropic,
   piSdkSessionStore,
+  planLiveSdkTurn,
   planSdkTurn,
   sdkPromptContent,
   turnImages,
   rememberSdkTurn,
-  recoverCappedSdkStopReason,
+  recoverSyntheticSdkStopReason,
   shouldDeferClaudeText,
   usageFromSdkResult,
   type PiCatalogModel,
@@ -312,6 +313,33 @@ describe("planSdkTurn (continuation vs replay)", () => {
       { type: "tool_result", tool_use_id: "tool-1", content: "A" },
       { type: "tool_result", tool_use_id: "tool-2", content: "B" },
     ]);
+  });
+
+  test("a live checkpoint keeps steering behind complete tool results", () => {
+    const stored = {
+      sdkSessionId: "sdk-1",
+      messageCount: 2,
+      accountId: "acc-1",
+      passthroughToolCallAssistantUuid: "assistant-uuid",
+      passthroughToolCallIds: ["tool-1"],
+      lastUsedAt: Date.now(),
+    };
+    const plan = planLiveSdkTurn(stored, [
+      messages[0],
+      messages[1],
+      wire({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tool-1", content: "A" }],
+      }),
+      wire({ role: "user", content: "Also mention banana" }),
+    ]);
+    expect(plan).toMatchObject({
+      continuation: true,
+      toolResults: [
+        { type: "tool_result", tool_use_id: "tool-1", content: "A" },
+      ],
+      liveFollowUp: { prompt: "Also mention banana", images: [] },
+    });
   });
 
   test("checkpoint mismatch full-replays instead of resuming the hidden digest tail", () => {
@@ -631,22 +659,23 @@ describe("images survive the turn", () => {
 });
 
 describe("Pi passthrough durable checkpoint", () => {
-  test("caps ordinary passthrough at the durable tool boundary", () => {
-    expect(PI_SDK_MAX_TURNS).toBe(1);
+  test("maps the synthetic facade boundary onto pi stop reasons", () => {
+    expect(recoverSyntheticSdkStopReason("error_max_turns", 1, 0)).toBe(
+      "toolUse",
+    );
+    expect(recoverSyntheticSdkStopReason("error_max_turns", 0, 1)).toBe(
+      "length",
+    );
+    expect(
+      recoverSyntheticSdkStopReason("error_max_turns", 0, 0),
+    ).toBeUndefined();
+    expect(recoverSyntheticSdkStopReason("success", 1, 1)).toBeUndefined();
   });
 
-  test("recovers capped tool handoffs and reports content-only caps as truncated", () => {
-    expect(recoverCappedSdkStopReason("error_max_turns", 1, 0)).toBe("toolUse");
-    expect(recoverCappedSdkStopReason("error_max_turns", 0, 1)).toBe("length");
-    expect(recoverCappedSdkStopReason("error_max_turns", 0, 0)).toBeUndefined();
-    expect(recoverCappedSdkStopReason("success", 1, 1)).toBeUndefined();
-  });
-
-  test("uses Meridian's explicit model-facing stop instruction", () => {
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toContain(
+  test("keeps the synthetic boundary text short", () => {
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toBe(
       "This tool call has been forwarded to the client for execution.",
     );
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toContain("End your turn now.");
   });
 
   test("settles only after every parallel call and retains its assistant UUID", () => {
@@ -712,6 +741,52 @@ describe("buildPiAnthropicModels", () => {
 
   test("does not duplicate a model the catalog already has", () => {
     expect(buildPiAnthropicModels([model], "claude-sonnet-5")).toHaveLength(1);
+  });
+});
+
+describe("incrementalSdkUsage", () => {
+  test("subtracts usage already reported by an earlier tool step", () => {
+    expect(
+      incrementalSdkUsage(
+        {
+          input_tokens: 10,
+          output_tokens: 3,
+          cache_read_input_tokens: 7_190,
+          cache_creation_input_tokens: 0,
+        },
+        {
+          input_tokens: 20,
+          output_tokens: 236,
+          cache_read_input_tokens: 14_380,
+          cache_creation_input_tokens: 201,
+        },
+      ),
+    ).toEqual({
+      input_tokens: 10,
+      output_tokens: 233,
+      cache_read_input_tokens: 7_190,
+      cache_creation_input_tokens: 201,
+    });
+  });
+
+  test("treats lower counters as a new top-level SDK prompt", () => {
+    const current = {
+      input_tokens: 10,
+      output_tokens: 42,
+      cache_read_input_tokens: 7_391,
+      cache_creation_input_tokens: 139,
+    };
+    expect(
+      incrementalSdkUsage(
+        {
+          input_tokens: 20,
+          output_tokens: 236,
+          cache_read_input_tokens: 14_380,
+          cache_creation_input_tokens: 201,
+        },
+        current,
+      ),
+    ).toEqual(current);
   });
 });
 
