@@ -910,6 +910,7 @@ export function PreferencesPanel() {
           />
           <SettingRow
             title="Thinking messages"
+            desc="Latest shows the newest thought at the end of a running turn. All keeps every thought where it happened."
             control={
               <Select
                 label="Thinking messages"
