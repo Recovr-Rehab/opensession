@@ -25,39 +25,18 @@ function item(index: number): VirtualTranscriptItem {
   };
 }
 
-const source = await Bun.file(
-  new URL("./VirtualTranscriptList.tsx", import.meta.url),
-).text();
-
+// The adapter's scrolling contract (native keyed prepend anchoring, the
+// reader anchor captured before the DOM mutates and settled as a delta, one
+// writer per commit, touch deferral, rows that never glide) is asserted in a
+// real browser by tools/transcript-scroll-regression.ts and its in-page
+// probe. These tests cover the pure decision helpers only.
 describe("VirtualTranscriptList", () => {
-  test("defers observer fallback while keeping semantic measurement pre-paint", () => {
-    expect(source).toContain("useAnimationFrameWithResizeObserver: true");
-    expect(source).toContain("this.measureCommittedRows(prevProps)");
-  });
-
-  test("does not flush virtualizer notifications from a React lifecycle", () => {
-    expect(source).toContain("this.runCommitLifecycle(() =>");
-    expect(source).toMatch(
-      /if \(this\.committing\) \{[\s\S]*this\.renderAfterCommit = true;/,
-    );
-    expect(source).toContain("if (sync) this.queueRender()");
-  });
-
-  test("captures history intent before scroll-driven rerenders", () => {
-    expect(source).toContain("capture: true");
-    expect(source).toMatch(/removeEventListener\(\s*"scroll"/);
-  });
-
   test("loads history when the opening content cannot scroll", () => {
     expect(transcriptViewportNeedsHistory(700, 700)).toBe(true);
     expect(transcriptViewportNeedsHistory(699, 700)).toBe(true);
     expect(transcriptViewportNeedsHistory(701, 700)).toBe(true);
     expect(transcriptViewportNeedsHistory(702, 700)).toBe(false);
     expect(transcriptViewportNeedsHistory(0, 0)).toBe(false);
-    expect(source).toContain("this.scheduleUnderfilledHistory()");
-    expect(source).toContain(
-      "if (callback()) this.scheduleUnderfilledHistory()",
-    );
   });
 
   test("keeps the live-edge tail in the same virtual coordinate space", () => {
@@ -97,15 +76,6 @@ describe("VirtualTranscriptList", () => {
     expect(shouldCaptureReaderAnchor({ ...base, held: true })).toBe(false);
   });
 
-  test("captures before the DOM mutates and settles only deltas", () => {
-    expect(source).toContain("getSnapshotBeforeUpdate()");
-    expect(source).toContain("this.heldAnchor = this.captureReaderAnchor()");
-    expect(source).toContain("container.scrollTop += delta");
-    expect(source).not.toContain("container.scrollTop = ");
-    // A nested virtualizer render is pending: measure after it commits.
-    expect(source).toContain("if (this.renderAfterCommit) return;");
-  });
-
   test("defers corrections while touch momentum may be in flight", () => {
     expect(
       shouldDeferReaderCorrection({ touching: true, sinceTouchEnd: 5_000 }),
@@ -116,19 +86,6 @@ describe("VirtualTranscriptList", () => {
     expect(
       shouldDeferReaderCorrection({ touching: false, sinceTouchEnd: 400 }),
     ).toBe(false);
-  });
-
-  test("never transitions row position against instant scroll compensation", () => {
-    expect(source).not.toContain("transition:transform");
-    expect(source).not.toContain("ARRIVING_POSITION");
-  });
-
-  test("commits a virtualizer scroll write with its rows in one frame", () => {
-    expect(source).toContain("scrollToFn: this.scrollToFn");
-    expect(source).toContain("this.writeAwaitingRender = true;");
-    expect(source).toMatch(
-      /if \(this\.writeAwaitingRender\) \{[\s\S]*flushSync/,
-    );
   });
 
   test("keeps TanStack's ordinary measurement anchoring semantics", () => {
@@ -164,12 +121,6 @@ describe("VirtualTranscriptList", () => {
     ).toBe(false);
   });
 
-  test("uses native keyed prepend anchoring without a competing end owner", () => {
-    expect(source).toContain('anchorTo: "end"');
-    expect(source).toContain("scrollEndThreshold: -1");
-    expect(source).toContain("this.props.shouldMaintainEnd?.()");
-  });
-
   test("remeasures semantic changes through the observed measurement path", () => {
     const element = {
       getBoundingClientRect: () => ({
@@ -185,17 +136,6 @@ describe("VirtualTranscriptList", () => {
       }),
     };
     expect(measureTranscriptElement(element, undefined)).toBe(144);
-    expect(source).toContain("measureElement: measureTranscriptElement");
-    expect(source).toContain("this.virtualizer.measureElement(node)");
-    expect(source).not.toContain("this.virtualizer.resizeItem(");
-  });
-
-  test("reaffirms following after measured virtual extent changes", () => {
-    expect(source).toContain("this.renderedTotalSize = totalSize");
-    expect(source).toContain(
-      "if (this.renderedTotalSize === this.notifiedTotalSize) return",
-    );
-    expect(source).toContain("this.props.onLayout?.()");
   });
 
   test("keeps positive live-edge growth pinned in the measurement frame", () => {
