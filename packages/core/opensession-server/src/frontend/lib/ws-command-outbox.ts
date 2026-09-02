@@ -4,7 +4,13 @@ import type { WSClientMessage } from "./types";
 // Keep the shipped v1 key stable. The value migrates from one aggregate array
 // to per-request records so tabs cannot overwrite each other's durable intent.
 const KEY_PREFIX = "opensession-ws-command-outbox:v1";
-const MAX_COMMAND_BYTES = 3 * 1024 * 1024;
+export const MAX_COMMAND_BYTES = 3 * 1024 * 1024;
+// A pending command is replayed on every reconnect until the server retires
+// it. One that has waited this long belongs to a session nobody is coming
+// back to, and keeping it only blocks new sends once the byte budget is spent.
+export const PENDING_TTL_MS = 7 * 24 * 60 * 60_000;
+// Tombstones only guard the seconds-long migration race between two tabs.
+export const TOMBSTONE_TTL_MS = 7 * 24 * 60 * 60_000;
 const jsonValueSchema = z.json();
 const sessionMutationFields = {
   sessionId: z.string(),
@@ -166,13 +172,33 @@ const legacyStoredSchema = z.object({
   version: z.literal(1),
   items: z.array(storedItemSchema),
 });
-const retiredRecordSchema = z.object({ requestId: z.string() });
+const retiredRecordSchema = z.object({
+  requestId: z.string(),
+  at: z.number().optional(),
+});
 
 type JsonValue = z.infer<typeof jsonValueSchema>;
 type MutationMessage = z.infer<typeof mutationMessageSchema>;
 type AckMessage = z.infer<typeof ackMessageSchema>;
 type StoredItem = z.infer<typeof storedItemSchema>;
 type LegacyStored = z.infer<typeof legacyStoredSchema>;
+type Tombstone = z.infer<typeof retiredRecordSchema>;
+
+/** Why a command could not be saved. `full` is our own byte budget; `blocked`
+ * is the browser refusing the write (origin quota, private mode, corruption). */
+export type PutFailure = "unavailable" | "full" | "blocked";
+export type PutResult = { ok: true } | { ok: false; reason: PutFailure };
+
+export function describePutFailure(reason: PutFailure): string {
+  switch (reason) {
+    case "unavailable":
+      return "This browser has no local storage, so the command cannot be saved for reconnect.";
+    case "full":
+      return "Pending sends are using all reserved storage. Forget one under Settings, Preferences.";
+    case "blocked":
+      return "Local storage is full. Forget pending sends under Settings, Preferences, or clear site data.";
+  }
+}
 
 const utf8Bytes = (value: StoredItem) =>
   new TextEncoder().encode(JSON.stringify(value)).length;
@@ -208,11 +234,18 @@ export class WsCommandOutbox {
     private readonly keyPrefix = `${KEY_PREFIX}:local:anonymous`,
   ) {
     this.migrateAggregate();
+    this.prune();
   }
 
   put(message: WSClientMessage): boolean {
+    return this.tryPut(message).ok;
+  }
+
+  tryPut(message: WSClientMessage): PutResult {
     const id = requestId(message);
-    if (!this.store || !id || message.type === "command_ack") return false;
+    if (!this.store) return { ok: false, reason: "unavailable" };
+    if (!id || message.type === "command_ack")
+      return { ok: false, reason: "blocked" };
     const key = this.itemKey(id);
     const existing = this.allItems().find(
       (item) => item.message.requestId === id,
@@ -220,7 +253,7 @@ export class WsCommandOutbox {
     if (existing) {
       if (JSON.stringify(existing.message) !== JSON.stringify(message))
         throw new Error(`WebSocket command id ${id} was reused`);
-      return true;
+      return { ok: true };
     }
     const storedMessage = mutationMessageSchema.parse(
       JSON.parse(JSON.stringify(message)),
@@ -233,8 +266,11 @@ export class WsCommandOutbox {
       (sum, stored) => sum + utf8Bytes(stored),
       0,
     );
-    if (currentBytes + utf8Bytes(item) > MAX_COMMAND_BYTES) return false;
-    return this.write(key, item);
+    if (currentBytes + utf8Bytes(item) > MAX_COMMAND_BYTES)
+      return { ok: false, reason: "full" };
+    return this.write(key, item)
+      ? { ok: true }
+      : { ok: false, reason: "blocked" };
   }
 
   /** Retire the mutation only after its durable acknowledgement is recorded. */
@@ -264,7 +300,7 @@ export class WsCommandOutbox {
     if (!existed) return false;
     if (
       this.isLegacyId(id) &&
-      !this.write(this.retiredKey(id), { requestId: id })
+      !this.write(this.retiredKey(id), this.tombstone(id))
     )
       return false;
     try {
@@ -278,7 +314,7 @@ export class WsCommandOutbox {
       return false;
     if (
       this.isLegacyId(id) &&
-      !this.write(this.retiredKey(id), { requestId: id })
+      !this.write(this.retiredKey(id), this.tombstone(id))
     )
       return false;
     try {
@@ -312,7 +348,7 @@ export class WsCommandOutbox {
 
   /** Explicit recovery escape hatch. The tombstone prevents a stale tab write. */
   forget(id: string): boolean {
-    if (!this.store || !this.write(this.retiredKey(id), { requestId: id }))
+    if (!this.store || !this.write(this.retiredKey(id), this.tombstone(id)))
       return false;
     try {
       this.store.removeItem(this.itemKey(id));
@@ -362,17 +398,61 @@ export class WsCommandOutbox {
       ),
     );
     const byId = new Map<string, StoredItem>();
-    for (const item of this.legacy()?.items ?? []) {
+    const oldest = this.now() - PENDING_TTL_MS;
+    for (const item of [
+      ...(this.legacy()?.items ?? []),
+      ...this.records(":item:", storedItemSchema),
+    ]) {
       const id = requestId(item.message);
-      if (id && !retired.has(id) && Number.isFinite(item.createdAt))
-        byId.set(id, item);
-    }
-    for (const item of this.records(":item:", storedItemSchema)) {
-      const id = requestId(item.message);
-      if (id && !retired.has(id) && Number.isFinite(item.createdAt))
+      if (
+        id &&
+        !retired.has(id) &&
+        Number.isFinite(item.createdAt) &&
+        item.createdAt >= oldest
+      )
         byId.set(id, item);
     }
     return [...byId.values()];
+  }
+
+  /** Drop expired pending items and tombstones. Best effort: a failed removal
+   * is invisible because allItems() already filters by age. */
+  private prune(): void {
+    if (!this.store) return;
+    const now = this.now();
+    const stale: string[] = [];
+    for (const key of this.keys(":item:")) {
+      const item = this.read(key, storedItemSchema);
+      if (!item || item.createdAt < now - PENDING_TTL_MS) stale.push(key);
+    }
+    for (const key of [...this.keys(":retired:"), ...this.keys(":legacy:")]) {
+      const tombstone = this.read(key, retiredRecordSchema);
+      if (!tombstone) continue;
+      // Shipped before timestamps: start its clock now instead of guessing.
+      if (tombstone.at === undefined)
+        this.write(key, { ...tombstone, at: now });
+      else if (tombstone.at < now - TOMBSTONE_TTL_MS) stale.push(key);
+    }
+    for (const key of stale) {
+      try {
+        this.store.removeItem(key);
+      } catch {}
+    }
+  }
+
+  private keys(kind: ":item:" | ":retired:" | ":legacy:"): string[] {
+    if (!this.store) return [];
+    const prefix = `${this.keyPrefix}${kind}`;
+    const found: string[] = [];
+    for (let index = 0; index < this.store.length; index++) {
+      const key = this.store.key(index);
+      if (key?.startsWith(prefix)) found.push(key);
+    }
+    return found;
+  }
+
+  private tombstone(id: string): Tombstone {
+    return { requestId: id, at: this.now() };
   }
 
   private legacy(): LegacyStored | undefined {
@@ -399,7 +479,7 @@ export class WsCommandOutbox {
         const id = requestId(item?.message);
         if (!id || retired.has(id) || !Number.isFinite(item?.createdAt))
           continue;
-        if (!this.write(this.legacyKey(id), { requestId: id })) return;
+        if (!this.write(this.legacyKey(id), this.tombstone(id))) return;
         if (!this.read(this.itemKey(id), storedItemSchema))
           if (!this.write(this.itemKey(id), item)) return;
       }

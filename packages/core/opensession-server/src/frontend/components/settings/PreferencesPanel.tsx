@@ -123,6 +123,7 @@ import {
   SidebarItemsSection,
 } from "./AppearancePanel";
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
+import { PendingSendsSection } from "./PendingSendsSection";
 import { RepoTile } from "../RepoTile";
 import { ModelMark } from "../ModelMark";
 import { IconPlus, IconRepo } from "../icons";
@@ -910,7 +911,6 @@ export function PreferencesPanel() {
           />
           <SettingRow
             title="Thinking messages"
-            desc="Latest shows the newest thought at the end of a running turn. All keeps every thought where it happened."
             control={
               <Select
                 label="Thinking messages"
@@ -954,6 +954,7 @@ export function PreferencesPanel() {
 
       <DeskVoicePanel />
       <PersonalPromptPanel />
+      <PendingSendsSection />
     </SettingsPanel>
   );
 }

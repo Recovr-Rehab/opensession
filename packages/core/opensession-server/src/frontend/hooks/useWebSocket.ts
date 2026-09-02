@@ -17,6 +17,7 @@ import { toast } from "../ui/toast";
 import { authGatesOut, whenCurrentUserReady } from "../lib/auth-ready";
 import { publishAuthStatus } from "../components/UserPicker";
 import {
+  describePutFailure,
   localCommandScope,
   shouldRetireCommandResult,
   wsCommandOutboxForScope,
@@ -203,11 +204,10 @@ export function useWebSocket(presenceActive = true) {
           if (provisional !== commandOutbox) provisional.forget(requestId);
           continue;
         }
-        if (!commandOutbox.put(candidate)) {
+        const saved = commandOutbox.tryPut(candidate);
+        if (!saved.ok) {
           negotiatingCommandsRef.current.set(requestId, candidate);
-          toast("A pending send needs storage before it can continue.", {
-            variant: "error",
-          });
+          toast(describePutFailure(saved.reason), { variant: "error" });
           continue;
         }
         try {
@@ -533,10 +533,8 @@ export function useWebSocket(presenceActive = true) {
       const mutationRequestId = "requestId" in msg ? msg.requestId : undefined;
       if (mutationRequestId && !commandNegotiatedRef.current) {
         const provisional = wsCommandOutboxForScope(localCommandScope());
-        if (!provisional.put(msg))
-          throw new Error(
-            "Pending sends are using local storage. Reconnect or forget one before sending more.",
-          );
+        const saved = provisional.tryPut(msg);
+        if (!saved.ok) throw new Error(describePutFailure(saved.reason));
         negotiatingCommandsRef.current.set(mutationRequestId, msg);
         const pendingSocket = wsRef.current;
         if (!pendingSocket || pendingSocket.readyState === WebSocket.CLOSED) {
@@ -545,13 +543,12 @@ export function useWebSocket(presenceActive = true) {
         }
         return;
       }
-      const durableMutation = commandResultsRef.current
-        ? commandOutboxRef.current.put(msg)
-        : false;
-      if (mutationRequestId && commandResultsRef.current && !durableMutation)
-        throw new Error(
-          "Could not save this command for reconnect. It was not sent.",
-        );
+      const durableMutation =
+        mutationRequestId && commandResultsRef.current
+          ? commandOutboxRef.current.tryPut(msg)
+          : undefined;
+      if (durableMutation && !durableMutation.ok)
+        throw new Error(describePutFailure(durableMutation.reason));
       if (msg.type === "watch") {
         const cursor = feedCursorsRef.current.get(msg.sessionId);
         const watch = { ...msg, supportsFeed: true };
@@ -571,7 +568,7 @@ export function useWebSocket(presenceActive = true) {
         }
       }
       // Durable mutations replay from their receipt outbox after reconnect.
-      if (durableMutation) {
+      if (durableMutation?.ok) {
         if (!ws || ws.readyState === WebSocket.CLOSED) {
           runtime.cancel("reconnect");
           connect();
