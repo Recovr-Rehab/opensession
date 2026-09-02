@@ -98,3 +98,7 @@ export const ARCHIVED_ROW_ACTION =
   "absolute right-3 top-1.5 z-[1] opacity-0 transition-opacity " +
   "duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-100 " +
   "focus-visible:opacity-100 phone:hidden";
+
+/** The page column. The archive top bar uses the same width so its search,
+ *  count, and filter align with the list below, the way Pull requests does. */
+export const ARCHIVED_PAGE_COLUMN = "mx-auto w-full max-w-[860px] px-6";

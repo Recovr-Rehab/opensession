@@ -103,6 +103,7 @@ import {
   receivePins,
   unpin,
 } from "./lib/pins";
+import { ARCHIVED_PAGE_COLUMN } from "./lib/archived-classes";
 import { PR_PAGE_COLUMN } from "./lib/pr-list-classes";
 import { repoLabel } from "./lib/repo-label";
 import { NO_REPO } from "./lib/session-repo";
@@ -1392,6 +1393,7 @@ export function AppContent({
                             DETAIL_TOPBAR_TITLE,
                             (route.view === "prs" || route.view === "feed") &&
                               PR_PAGE_COLUMN,
+                            route.view === "archived" && ARCHIVED_PAGE_COLUMN,
                           )}
                         >
                           <span

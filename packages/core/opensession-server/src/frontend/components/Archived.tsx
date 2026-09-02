@@ -5,6 +5,7 @@ import { sessionSourceLabel } from "../lib/brand";
 import { SOURCE_CHIP, sourceChipTone } from "../lib/source-chip-classes";
 import {
   ARCHIVED_LIST,
+  ARCHIVED_PAGE_COLUMN,
   ARCHIVED_PHONE_SEARCH_DOCK,
   ARCHIVED_ROW,
   ARCHIVED_ROW_ACTION,
@@ -535,7 +536,12 @@ export function Archived({
       {mobileFilterPortaled
         ? createPortal(filterAction, mobileActionsEl)
         : null}
-      <div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 phone:px-3.5 phone:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] phone:pt-2 phone:[body.kb-open_&]:pb-[5rem] phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]">
+      <div
+        className={cn(
+          ARCHIVED_PAGE_COLUMN,
+          "pb-[60px] pt-7 phone:px-3.5 phone:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] phone:pt-2 phone:[body.kb-open_&]:pb-[5rem] phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]",
+        )}
+      >
         {!isPhone && !desktopPortaled ? (
           <div className="mb-3 flex items-center gap-2">{actions}</div>
         ) : null}
