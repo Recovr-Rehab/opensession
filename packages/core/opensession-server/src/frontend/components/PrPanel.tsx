@@ -1119,7 +1119,7 @@ export function PrPanel({
             </Button>
           }
         >
-          {loadError}
+          <span className="text-pretty">{loadError}</span>
         </EmptyState>
       </div>
     );
