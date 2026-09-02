@@ -16,6 +16,7 @@ import {
   ARCHIVED_ROW_TRAIL,
   ARCHIVED_ROW_TIME,
   ARCHIVED_ROW_TITLE,
+  ARCHIVED_ROW_TITLE_ROW,
   ARCHIVED_SECTION_LABEL,
   ARCHIVED_SECTION_ROWS,
 } from "../lib/archived-classes";
@@ -586,11 +587,6 @@ export function Archived({
                     // while looking at everyone's; why, while not filtered by
                     // reason. The repo is the tile, which carries it in a glance.
                     const meta = [
-                      chip && (
-                        <span key="chip" className={cn(SOURCE_CHIP, chip.tone)}>
-                          {chip.label}
-                        </span>
-                      ),
                       owner === "everyone" && s.startedBy && (
                         <span key="by" className="truncate">
                           {s.startedBy}
@@ -674,8 +670,15 @@ export function Archived({
                                 onSelect(s);
                               }}
                             >
-                              <span className={ARCHIVED_ROW_TITLE}>
-                                {s.title}
+                              <span className={ARCHIVED_ROW_TITLE_ROW}>
+                                <span className={ARCHIVED_ROW_TITLE}>
+                                  {s.title}
+                                </span>
+                                {chip && (
+                                  <span className={cn(SOURCE_CHIP, chip.tone)}>
+                                    {chip.label}
+                                  </span>
+                                )}
                               </span>
                               {meta.length > 0 ? (
                                 <span className={ARCHIVED_ROW_META}>
