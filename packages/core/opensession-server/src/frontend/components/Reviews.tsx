@@ -375,7 +375,6 @@ export function Reviews({
             send={send}
             addHandler={addHandler}
             sessions={sessions}
-            onOpenSessionById={onOpenSession}
             walkthrough={selected.walkthrough}
           />
         </div>

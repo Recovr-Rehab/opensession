@@ -1617,12 +1617,14 @@ export function SessionViewer({
             openPr,
             allSessions,
             workspaceSessions,
-            openSession,
             reviewSessionActionTarget,
             connected: presentedConnected,
             isBusy,
             noEngine,
             openCurrentWorkspace,
+            openNewSession: openNewSession
+              ? () => void openNewSession("share")
+              : undefined,
             setComposerPrefill,
             panelReviewRepos,
             discoveredPrs,

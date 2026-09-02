@@ -273,6 +273,12 @@ test("wide Review keeps page navigation in the identity bar", () => {
   expect(source).toContain("page={reviewPage}");
   expect(source).not.toContain("onReviewPageChange={setReviewPage}");
   expect(source).toContain("compactToolbar={reviewSummaryVisible}");
+  expect(source).toContain("ref={setReviewSessionActionTarget}");
+  expect(source).toContain("sessionActionTarget={");
+  expect(prPanelSource).toContain(
+    "createPortal(sessionActionButton, sessionActionTarget)",
+  );
+  expect(prPanelSource).toContain("sessionActionTarget === undefined");
   expect(prPanelSource).toContain('label="Pull request pages"');
   expect(prPanelSource).toContain('className="shrink-0 phone:hidden"');
   expect(prPanelSource).toContain('className="flex h-11');

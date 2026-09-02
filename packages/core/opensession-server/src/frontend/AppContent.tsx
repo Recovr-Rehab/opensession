@@ -1502,6 +1502,17 @@ export function AppContent({
                         onOpenPr={(repo, branch) =>
                           navigate({ view: "pr", repo, branch })
                         }
+                        onStartSession={() =>
+                          void (async () => {
+                            // The workspace home is the new tab: a blank
+                            // canvas with the composer at the bottom.
+                            const { workspaceId } = await resolveWorkspaceApi({
+                              pr: { repo: route.repo, branch: route.branch },
+                            });
+                            await refreshWorkspaces();
+                            navigate({ view: "workspace", id: workspaceId });
+                          })().catch((e) => console.error(e))
+                        }
                         send={send}
                         addHandler={addHandler}
                       />

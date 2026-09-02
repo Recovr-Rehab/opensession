@@ -166,16 +166,12 @@ interface ReviewRegion {
   openPr: PrPanelProps["onOpenPr"];
   allSessions: SessionViewerProps["workspace"]["allSessions"];
   workspaceSessions: SessionViewerProps["workspace"]["workspaceSessions"];
-  openSession: SessionViewerProps["availability"]["canOpenSession"] extends
-    | boolean
-    | undefined
-    ? Navigation["openSession"] | undefined
-    : never;
   reviewSessionActionTarget: PrPanelProps["sessionActionTarget"];
   connected: boolean;
   isBusy: boolean;
   noEngine: boolean;
   openCurrentWorkspace: PrPanelProps["onOpenSession"];
+  openNewSession: PrPanelProps["onStartSession"];
   setComposerPrefill: Dispatch<SetStateAction<ComposerPrefill>>;
   panelReviewRepos: PrPanelProps["repos"];
   discoveredPrs: PrPanelProps["discoveredPrs"];
@@ -447,12 +443,12 @@ export function SessionViewerMainRegion({
     openPr,
     allSessions,
     workspaceSessions,
-    openSession,
     reviewSessionActionTarget,
     connected,
     isBusy,
     noEngine,
     openCurrentWorkspace,
+    openNewSession,
     setComposerPrefill,
     panelReviewRepos,
     discoveredPrs,
@@ -711,7 +707,7 @@ export function SessionViewerMainRegion({
             onOpenPr={openPr}
             sessionId={session.id}
             sessions={allSessions || workspaceSessions || []}
-            onOpenSessionById={openSession}
+            onStartSession={openNewSession}
             sessionActionTarget={
               isPhone ? undefined : reviewSessionActionTarget
             }

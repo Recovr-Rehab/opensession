@@ -889,7 +889,7 @@ export function WorkspacePane({
           send={send}
           addHandler={addHandler}
           sessions={sessions}
-          onOpenSessionById={onOpenSession}
+          onStartSession={onNewSession ? () => onNewSession() : undefined}
           sessionActionTarget={isPhone ? undefined : reviewSessionActionTarget}
           onOpenSession={
             reviewSession ? () => onOpenSession(reviewSession.id) : undefined
