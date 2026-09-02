@@ -112,7 +112,12 @@ type AssetFiles = ComponentProps<typeof AssetsPanel>["files"];
 type SubagentStack = ComponentProps<typeof SubagentPane>["stack"];
 type TranscriptEntries = TranscriptProps["entries"];
 type LiveTurnStore = TranscriptProps["liveTurnStore"];
-type ComposerPrefill = { seq: number; text: string; replace?: boolean } | null;
+type ComposerPrefill = {
+  seq: number;
+  text: string;
+  replace?: boolean;
+  pastedTexts?: string[];
+} | null;
 type AskState =
   ComponentProps<typeof AskCard> extends {
     questions: infer Questions;

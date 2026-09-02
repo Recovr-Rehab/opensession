@@ -399,10 +399,20 @@ export function DeskConversation({
   // Returns true when the message was consumed, so the (uncontrolled) Composer
   // clears its draft; false keeps it for a retry — same contract as the
   // session view.
-  function handleSend(raw: string, opts?: { steer?: boolean }): boolean {
+  function handleSend(
+    raw: string,
+    opts?: { steer?: boolean; pastedTexts?: string[] },
+  ): boolean {
     const content = raw.trim();
+    const pastedTexts = opts?.pastedTexts ?? [];
     if (!connected) return false;
-    if (!content && images.length === 0 && files.length === 0) return false;
+    if (
+      !content &&
+      images.length === 0 &&
+      files.length === 0 &&
+      pastedTexts.length === 0
+    )
+      return false;
     // Slash commands (/model, /loop, /goal, …) are handled by the main
     // session's command system, which this compact surface deliberately
     // doesn't wire up. Sent as a plain prompt they produce no turn, so the
@@ -446,6 +456,7 @@ export function DeskConversation({
     if (isRunning) message.busyMode = opts?.steer ? "steer" : "queue";
     if (images.length) message.images = images;
     if (files.length) message.files = filePayload;
+    if (pastedTexts.length) message.pastedTexts = pastedTexts;
     send(message);
     setPending(content);
     setImages([]);

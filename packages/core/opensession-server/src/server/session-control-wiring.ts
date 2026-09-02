@@ -33,6 +33,7 @@ import {
   liftUserStop,
   promoteQueuedPrompt,
 } from "./queue-state";
+import { withPastedTexts } from "@tellahq/opensession-protocol/pasted-text";
 import { prepareAndSteerQueuedPrompt } from "./queued-steer";
 import {
   storeAppendUserLineEarly,
@@ -691,6 +692,7 @@ registerSessionControl({
       fastMode: fastModeInput,
       images: imageUrls,
       files: rawFiles,
+      pastedTexts,
       mcpServers,
       runner: runnerInput,
       automationDescendantPolicy,
@@ -1168,8 +1170,10 @@ registerSessionControl({
         identity: createIdentity,
         ...attachment,
       });
+    // Pasted blocks follow the message; the uploads note follows them, so the
+    // parser's end-anchored note regex still finds it.
     let openingPrompt = withUploadsNote(
-      prompt,
+      withPastedTexts(prompt, pastedTexts),
       attachmentSources.map((attachment) => ({
         name: attachment.name,
         path: creationAttachmentPath(

@@ -1,4 +1,5 @@
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
+import type { ComposerPrefill } from "../lib/composer-types";
 import { useEffect, useEffectEvent } from "react";
 import { z } from "zod";
 import type { Dispatch, RefObject, SetStateAction } from "react";
@@ -40,11 +41,6 @@ import type {
 import type { TranscriptController } from "./useTranscript";
 
 type Setter<T> = Dispatch<SetStateAction<T>>;
-type ComposerPrefill = {
-  seq: number;
-  text: string;
-  replace?: boolean;
-};
 type SlackComposerRequest = Extract<
   WSServerMessage,
   { type: "slack_composer" }
@@ -502,11 +498,16 @@ export function useSessionViewerSubscription({
           setContextSessions((current) => [
             ...new Set([...current, ...(item.contextSessions ?? [])]),
           ]);
-          setComposerPrefill((current) => ({
-            seq: (current?.seq ?? 0) + 1,
-            text: item.content,
-            replace: !existing.text.trim(),
-          }));
+          setComposerPrefill((current) => {
+            const prefill: ComposerPrefill = {
+              seq: (current?.seq ?? 0) + 1,
+              text: item.content,
+              replace: !existing.text.trim(),
+            };
+            if (item.pastedTexts?.length)
+              prefill.pastedTexts = item.pastedTexts;
+            return prefill;
+          });
           break;
         }
         case "ask_question":

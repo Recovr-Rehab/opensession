@@ -31,7 +31,13 @@ interface AppSessionPaneProps {
   data: {
     pendingInitialPrompts: Record<
       string,
-      { content: string; user: string; sentAt: number; images?: string[] }
+      {
+        content: string;
+        user: string;
+        sentAt: number;
+        images?: string[];
+        pastedTexts?: string[];
+      }
     >;
     sidebarRef: RefObject<SidebarHandle | null>;
     sessions: UnifiedSession[];

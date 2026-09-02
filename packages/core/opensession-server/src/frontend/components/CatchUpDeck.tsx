@@ -650,9 +650,19 @@ function CatchUpComposer({
   const isNative = target.source === "opensession";
   // Send the reply into the target session (images fold in as content blocks;
   // files route to the queue server-side), then advance the deck.
-  function handleSend(raw: string): boolean {
+  function handleSend(
+    raw: string,
+    opts?: { steer?: boolean; pastedTexts?: string[] },
+  ): boolean {
     const text = raw.trim();
-    if (!text && images.length === 0 && files.length === 0) return false;
+    const pastedTexts = opts?.pastedTexts ?? [];
+    if (
+      !text &&
+      images.length === 0 &&
+      files.length === 0 &&
+      pastedTexts.length === 0
+    )
+      return false;
     if (!connected) return false;
     // Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
     const filePayload = files.map((f) =>
@@ -669,6 +679,7 @@ function CatchUpComposer({
     };
     if (images.length > 0) message.images = images;
     if (files.length > 0) message.files = filePayload;
+    if (pastedTexts.length > 0) message.pastedTexts = pastedTexts;
     send(message);
     setImages([]);
     setFiles([]);

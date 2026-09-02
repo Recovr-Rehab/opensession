@@ -59,6 +59,8 @@ export interface NewSessionCreateDraft {
   model?: string;
   images?: string[];
   files?: FileAttachment[];
+  /** Large pastes sent beside the prompt; the optimistic bubble shows them as cards. */
+  pastedTexts?: string[];
   /** Open the optimistic session as soon as the create message is sent. */
   openImmediately?: boolean;
   /** Start the session without following it. */

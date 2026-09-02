@@ -34,6 +34,7 @@ export interface PendingPrompt {
 
 export interface OptimisticPendingPrompt extends PendingPrompt {
   images?: string[];
+  pastedTexts?: string[];
   busyMode?: "queue" | "steer";
 }
 
@@ -87,6 +88,7 @@ export function optimisticOutboxFallbacks(
       };
       if (item.busyMode === "steer") prompt.busyMode = "steer";
       if (item.images?.length) prompt.images = item.images;
+      if (item.pastedTexts?.length) prompt.pastedTexts = item.pastedTexts;
       return prompt;
     });
 }

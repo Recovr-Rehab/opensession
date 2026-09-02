@@ -141,6 +141,7 @@ interface PendingInitialPrompt {
   user: string;
   sentAt: number;
   images?: string[];
+  pastedTexts?: string[];
 }
 
 export function AppContent({

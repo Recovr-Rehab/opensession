@@ -16,6 +16,7 @@ interface PendingInitialPrompt {
   user: string;
   sentAt: number;
   images?: string[];
+  pastedTexts?: string[];
 }
 
 interface UseNewSessionCreateStartOptions {
@@ -108,13 +109,18 @@ export function useNewSessionCreateStart({
     // and the target workspace's remembered selection before navigating.
     setActiveViewTabState(null);
     if (started.workspaceId) saveActiveViewTab(started.workspaceId, null);
-    if (started.prompt || started.images?.length) {
+    if (
+      started.prompt ||
+      started.images?.length ||
+      started.pastedTexts?.length
+    ) {
       const prompt: PendingInitialPrompt = {
         content: started.prompt,
         user,
         sentAt: new Date(startedAt).getTime(),
       };
       if (started.images?.length) prompt.images = started.images;
+      if (started.pastedTexts?.length) prompt.pastedTexts = started.pastedTexts;
       setPendingInitialPrompts((current) => ({
         ...current,
         [started.id]: prompt,

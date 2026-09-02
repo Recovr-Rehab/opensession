@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ComposerPrefill } from "../lib/composer-types";
 import {
   useCallback,
   useEffect,
@@ -540,9 +541,7 @@ function parsePromptOutboxFiles(
 interface SendComposerOptions {
   setEffort: (effort: string) => void;
   setFastMode: (fast: boolean) => void;
-  setPrefill: Dispatch<
-    SetStateAction<{ seq: number; text: string; replace?: boolean } | null>
-  >;
+  setPrefill: Dispatch<SetStateAction<ComposerPrefill | null>>;
   hasDraft: () => boolean;
   settersRef: ConversationActionRuntime["composerSettersRef"];
   prefillRef: MutableRefObject<SendComposerOptions["setPrefill"]>;
@@ -586,7 +585,7 @@ export function useSessionSendController({
   const stablePrefillRef = useRef(prefillRef);
   function handleSend(
     raw: string,
-    opts?: { steer?: boolean },
+    opts?: { steer?: boolean; pastedTexts?: string[] },
     isolatedImages?: string[],
   ): boolean | Promise<boolean> {
     return sendSessionMessage(raw, opts, isolatedImages, message);
@@ -610,10 +609,14 @@ export function useSessionSendController({
     message.draft.setContextSessions(item.contextSessions ?? []);
     if (item.effort) setEffort(item.effort);
     if (item.fastMode !== undefined) setFastMode(item.fastMode);
-    setPrefill((current) => ({
-      seq: (current?.seq ?? 0) + 1,
-      text: item.content,
-    }));
+    setPrefill((current) => {
+      const prefill: ComposerPrefill = {
+        seq: (current?.seq ?? 0) + 1,
+        text: item.content,
+      };
+      if (item.pastedTexts?.length) prefill.pastedTexts = item.pastedTexts;
+      return prefill;
+    });
     discardOutbox(item);
   }
   function editQueuedInComposer(receipt: QueueReceipt, steering = false) {
@@ -637,11 +640,15 @@ export function useSessionSendController({
           type: "application/octet-stream",
         })),
       );
-      stablePrefillRef.current.current((current) => ({
-        seq: (current?.seq ?? 0) + 1,
-        text: entry.content,
-        replace: true,
-      }));
+      stablePrefillRef.current.current((current) => {
+        const prefill: ComposerPrefill = {
+          seq: (current?.seq ?? 0) + 1,
+          text: entry.content,
+          replace: true,
+        };
+        if (entry.pastedTexts?.length) prefill.pastedTexts = entry.pastedTexts;
+        return prefill;
+      });
     },
     [hasDraft],
   );

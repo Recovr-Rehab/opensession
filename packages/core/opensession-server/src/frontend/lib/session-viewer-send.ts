@@ -3,7 +3,9 @@ import { getCurrentUser } from "../components/UserPicker";
 import type { SessionSocketSend } from "../hooks/useSessionSocket";
 import { postSessionNoteApi } from "./api";
 import { dropStagingAttachments } from "./attachments";
+import type { ComposerSendOptions } from "./composer-types";
 import { unhideForSession } from "./hides";
+import { composePastedText } from "./pasted-text";
 import type { FileAttachment } from "./images";
 import type { OptimisticPendingPrompt } from "./pending-reconcile";
 import {
@@ -75,7 +77,7 @@ interface SendSessionMessageOptions {
  */
 export function sendSessionMessage(
   raw: string,
-  options: { steer?: boolean } | undefined,
+  options: ComposerSendOptions | undefined,
   isolatedImages: string[] | undefined,
   controller: SendSessionMessageOptions,
 ): boolean | Promise<boolean> {
@@ -90,17 +92,27 @@ export function sendSessionMessage(
     : withQuotes(draft.quote ? [draft.quote] : [], typed);
   const images = isolatedImages ?? draft.images;
   const files = isolated ? [] : draft.files;
-  if (!typed && images.length === 0 && files.length === 0) return false;
+  // Large pastes ride beside the text; the server places them after the
+  // message in the prompt and lifts them back onto the entry as cards.
+  const pastedTexts = isolated ? [] : (options?.pastedTexts ?? []);
+  if (
+    !typed &&
+    images.length === 0 &&
+    files.length === 0 &&
+    pastedTexts.length === 0
+  )
+    return false;
 
   // Note mode: post a team note on this session — never a prompt. The
   // server broadcast echoes it back into `notes` for every viewer, so
   // nothing is rendered optimistically here. Notes carry the quoted
-  // selection too (as "> " lines, the same shape a prompt sends).
+  // selection too (as "> " lines, the same shape a prompt sends), and a
+  // paste folded in behind a divider: a note has no attachment slot.
   if (!isolated && identity.noteMode) {
-    if (!typed && images.length === 0) return false;
+    if (!typed && images.length === 0 && pastedTexts.length === 0) return false;
     return postSessionNoteApi(
       identity.session.id,
-      text,
+      composePastedText(text, pastedTexts),
       getCurrentUser(),
       images,
     ).then(
@@ -147,6 +159,7 @@ export function sendSessionMessage(
     };
     if (images.length) message.images = images;
     if (files.length) message.files = filePayload;
+    if (pastedTexts.length) message.pastedTexts = pastedTexts;
     send(message);
     draft.setForkFrom(null);
     dropStagingAttachments(draft.draftKey);
@@ -194,6 +207,7 @@ export function sendSessionMessage(
     };
     if (images.length) input.images = images;
     if (files.length) input.files = filePayload;
+    if (pastedTexts.length) input.pastedTexts = pastedTexts;
     if (!isolated && draft.contextSessions.length)
       input.contextSessions = draft.contextSessions;
     outboxItem = promptOutbox.enqueue(input);
@@ -218,6 +232,7 @@ export function sendSessionMessage(
     transcriptAfterEntryId,
     transcriptAfterSeq,
     images: images.length ? images : undefined,
+    pastedTexts: pastedTexts.length ? pastedTexts : undefined,
     ...(steerNow
       ? { busyMode: "steer" }
       : runtime.isBusy

@@ -13,6 +13,8 @@ export interface PromptOutboxItem {
   images?: string[];
   /** Staged `{ name, path }` refs or legacy inline composer file data. */
   files?: unknown[];
+  /** Large pastes, sent beside `content`; the server places them after it. */
+  pastedTexts?: string[];
   effort?: string;
   fastMode?: boolean;
   busyMode?: "queue" | "steer";

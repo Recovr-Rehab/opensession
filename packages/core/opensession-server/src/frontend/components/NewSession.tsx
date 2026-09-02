@@ -30,6 +30,10 @@ import {
 import { getCurrentUser } from "./UserPicker";
 import { type FileAttachment } from "../lib/images";
 import {
+  createPastedTextAttachment,
+  type PastedTextAttachment,
+} from "../lib/pasted-text";
+import {
   loadDraft,
   saveDraft,
   clearDraft,
@@ -362,6 +366,11 @@ export function NewSession({
   const [files, setFiles] = useState<FileAttachment[]>(
     () => loadDraft(DRAFT_KEY).files,
   );
+  // Large pastes, held as chips beside the field and sent as `pastedTexts`.
+  // Same home as the other attachments: the draft store, mirrored here.
+  const [pastedTexts, setPastedTexts] = useState<PastedTextAttachment[]>(
+    () => loadDraft(DRAFT_KEY).pastedTexts,
+  );
   const uploads = useAttachmentUploads();
   const staging = uploads.staging;
   const [fileDragActive, setFileDragActive] = useState(false);
@@ -375,6 +384,12 @@ export function NewSession({
       sameImages(prev, stored.images) ? prev : stored.images,
     );
     setFiles((prev) => (sameFiles(prev, stored.files) ? prev : stored.files));
+    setPastedTexts((prev) =>
+      prev.length === stored.pastedTexts.length &&
+      prev.every((item, i) => item.id === stored.pastedTexts[i]?.id)
+        ? prev
+        : stored.pastedTexts,
+    );
   }, []);
   // An upload that lands while this palette is open belongs on screen even
   // though it was staged by the instance that closed: the store fires on an
@@ -795,6 +810,7 @@ export function NewSession({
         promptHandle.current?.setText("");
         setImages([]);
         setFiles([]);
+        setPastedTexts([]);
         setNewBranch("");
         setBranchEdited(false);
         promptRef.current?.focus();
@@ -915,6 +931,7 @@ export function NewSession({
           text,
           images: staged.images,
           files: staged.files,
+          pastedTexts: staged.pastedTexts,
         });
       }
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
@@ -981,6 +998,7 @@ export function NewSession({
     // that known choice into the optimistic shell so the phone title bar does
     // not wait for its own catalog fetch before naming the model.
     const optimisticModel = model || defaultModel;
+    const pastedBlocks = pastedTexts.map((item) => item.text);
     const optimisticCreate: NewSessionCreateDraft = {
       id: clientSessionId,
       prompt,
@@ -994,6 +1012,7 @@ export function NewSession({
     if (optimisticModel) optimisticCreate.model = optimisticModel;
     if (images.length) optimisticCreate.images = images;
     if (files.length) optimisticCreate.files = files;
+    if (pastedBlocks.length) optimisticCreate.pastedTexts = pastedBlocks;
     // The default action opens against this deterministic id without waiting
     // for workspace or model setup. This assignment replaces the former
     // `createAction === "open" ? { openImmediately: true }` fragment.
@@ -1049,6 +1068,7 @@ export function NewSession({
       createMessage.mcpServers = selectedMcpServers;
     }
     if (images.length) createMessage.images = images;
+    if (pastedBlocks.length) createMessage.pastedTexts = pastedBlocks;
     if (files.length) {
       createMessage.files = files.map((file) =>
         file.path
@@ -1103,7 +1123,10 @@ export function NewSession({
     // create with the same message (resolveRequestedSandbox). Block here
     // so the wall is discovered before submit, not after.
     !sandboxModelWarning &&
-    (hasPromptText || images.length > 0 || files.length > 0);
+    (hasPromptText ||
+      images.length > 0 ||
+      files.length > 0 ||
+      pastedTexts.length > 0);
 
   /** The latest `handleCreate`, for a caller that has to wait a render before
    *  it can create. The dictation bar's ↑ is the one: it writes the transcript
@@ -1462,6 +1485,7 @@ export function NewSession({
               disabled: busy,
               images,
               files,
+              pastedTexts,
               staging,
               sendKey,
               canCreate,
@@ -1483,6 +1507,16 @@ export function NewSession({
                 adoptDraftAttachments();
               },
               addAttachments: (picked) => void addAttachments(picked),
+              addPastedText: (text) => {
+                const next = [...pastedTexts, createPastedTextAttachment(text)];
+                setPastedTexts(next);
+                saveDraft(DRAFT_KEY, { pastedTexts: next });
+              },
+              removePastedText: (id) => {
+                const next = pastedTexts.filter((item) => item.id !== id);
+                setPastedTexts(next);
+                saveDraft(DRAFT_KEY, { pastedTexts: next });
+              },
               create: handleCreate,
               changeHasText: setHasPromptText,
               settleDraft: setSettledPrompt,

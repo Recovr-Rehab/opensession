@@ -110,7 +110,11 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { motion, AnimatePresence } from "motion/react";
 import { composerMorph } from "../ui/motion";
 import { shortModelLabel } from "./ModelEffortSelect";
-import type { ComposerActions, ComposerConfig } from "../lib/composer-types";
+import type {
+  ComposerActions,
+  ComposerConfig,
+  ComposerSendOptions,
+} from "../lib/composer-types";
 import { composerRadius } from "../lib/composer-radius";
 import {
   ComposerAddMenu,
@@ -328,12 +332,20 @@ export function Composer({
       !prefill.replace && text.trim()
         ? `${text.replace(/\s+$/, "")}\n${prefill.text}`
         : prefill.text;
+    // A message taken back with its pastes gets them back as chips.
+    const nextPasted = prefill.pastedTexts?.length
+      ? [
+          ...(prefill.replace ? [] : pastedTexts),
+          ...prefill.pastedTexts.map(createPastedTextAttachment),
+        ]
+      : pastedTexts;
     // Persist the handoff before React commits it. Restoring queued attachments
     // can emit a draft-store change in the same pass; if the store still holds
     // the old empty text, that event otherwise erases the restored message.
     if (!isControlled && draftKey) {
-      saveDraft(draftKey, { text: next, pastedTexts });
+      saveDraft(draftKey, { text: next, pastedTexts: nextPasted });
     }
+    if (nextPasted !== pastedTexts) setPastedTexts(nextPasted);
     setText(next);
     queueMicrotask(() => {
       const el = textareaRef.current;
@@ -355,7 +367,7 @@ export function Composer({
   function fireSend(
     handler: (
       t: string,
-      opts?: { steer?: boolean },
+      opts?: ComposerSendOptions,
     ) => boolean | void | Promise<boolean | void>,
     opts?: { steer?: boolean },
     /** A draft that has not reached state yet, which is what the dictation
@@ -379,10 +391,14 @@ export function Composer({
         current.filter((attachment) => !sentPastedIds.has(attachment.id)),
       );
     };
-    const consumed = handler(
-      composePastedText(overrideText ?? text, pastedTexts),
-      opts,
-    );
+    // The chips travel beside the text, never inside it: the handler decides
+    // whether they ride the prompt as `pastedTexts` or fold into a note.
+    const sendOptions: ComposerSendOptions = { ...opts };
+    if (pastedTexts.length)
+      sendOptions.pastedTexts = pastedTexts.map(
+        (attachment) => attachment.text,
+      );
+    const consumed = handler(overrideText ?? text, sendOptions);
     if (consumed instanceof Promise) {
       void consumed.then((result) => {
         if (result === true) consume();
@@ -391,13 +407,16 @@ export function Composer({
       consume();
     }
   }
-  const outgoingText = composePastedText(text, pastedTexts);
+  const pastedBlocks = pastedTexts.map((attachment) => attachment.text);
+  // One string for the surfaces that take no attachments (the scheduled
+  // message preview) and for the parent's emptiness check.
+  const outgoingText = composePastedText(text, pastedBlocks);
   /** Whether a given draft may be sent right now. The dictation bar asks about
    *  a draft it is about to write, so the question takes the text. */
   const sendBlockedFor = (draft: string) =>
     !!(
       (sendDisabled instanceof Function
-        ? sendDisabled(composePastedText(draft, pastedTexts))
+        ? sendDisabled(composePastedText(draft, pastedBlocks))
         : sendDisabled) || isStaging(activeStaging)
     );
   const isSendDisabled = sendBlockedFor(text);

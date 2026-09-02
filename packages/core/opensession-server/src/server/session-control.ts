@@ -119,6 +119,8 @@ export interface CreateSessionOpts {
   images?: string[];
   /** Raw composer file references, already staged through `/api/upload`. */
   files?: unknown;
+  /** Large pastes, folded after the opening prompt (protocol pasted-text.ts). */
+  pastedTexts?: string[];
   /** Optional MCP allowlist for the opening run. Empty array means no MCP servers. */
   mcpServers?: string[];
   /** Authorized persistent Runner id for a new code workspace. */

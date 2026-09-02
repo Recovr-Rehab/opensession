@@ -4,13 +4,7 @@ import {
   composePastedText,
   pastedTextLineLabel,
   shouldCollapsePastedText,
-  type PastedTextAttachment,
 } from "./pasted-text";
-
-const attachment = (text: string, id = text): PastedTextAttachment => ({
-  id,
-  text,
-});
 
 describe("pasted text attachments", () => {
   test("collapse starts at 2500 characters", () => {
@@ -27,12 +21,9 @@ describe("pasted text attachments", () => {
     expect(pastedTextLineLabel("one\ntwo\r\nthree\rfour")).toBe("+4 lines");
   });
 
-  test("pasted blocks follow the message behind a divider", () => {
+  test("a note folds pasted blocks behind a divider, message first", () => {
     expect(
-      composePastedText("Summarize this", [
-        attachment("First block"),
-        attachment("Second block"),
-      ]),
+      composePastedText("Summarize this", ["First block", "Second block"]),
     ).toBe(
       [
         "Summarize this",
@@ -48,14 +39,12 @@ describe("pasted text attachments", () => {
   });
 
   test("a lone paste goes out bare, later ones still split", () => {
-    expect(composePastedText("", [attachment("Only block")])).toBe(
-      "Only block",
+    expect(composePastedText("", ["Only block"])).toBe("Only block");
+    expect(composePastedText("", ["First", "Second"])).toBe(
+      "First\n\n---\n\nPasted text:\n\nSecond",
     );
-    expect(
-      composePastedText("", [attachment("First"), attachment("Second")]),
-    ).toBe("First\n\n---\n\nPasted text:\n\nSecond");
-    expect(
-      composePastedText("Ask", [attachment("", "empty"), attachment("Body")]),
-    ).toBe("Ask\n\n---\n\nPasted text:\n\nBody");
+    expect(composePastedText("Ask", ["", "Body"])).toBe(
+      "Ask\n\n---\n\nPasted text:\n\nBody",
+    );
   });
 });

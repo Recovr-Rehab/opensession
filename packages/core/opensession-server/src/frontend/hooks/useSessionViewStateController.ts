@@ -70,6 +70,7 @@ interface ViewStateIdentity {
     user: string;
     sentAt: number;
     images?: string[];
+    pastedTexts?: string[];
   };
   workspaceSessions?: UnifiedSession[];
   onSetStatus: SessionViewerProps["workspace"]["onSetStatus"];

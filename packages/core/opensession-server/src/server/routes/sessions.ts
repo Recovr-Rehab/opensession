@@ -31,6 +31,10 @@ import {
 import { prepareEntriesForWire, transcriptMatchSnippet } from "../jsonl-parser";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import {
+  pastedTextsFromWire,
+  withPastedTexts,
+} from "@tellahq/opensession-protocol/pasted-text";
+import {
   inWorkspaceGroup,
   type WorkspaceGroup,
 } from "@tellahq/opensession-protocol/workspace-group";
@@ -943,6 +947,7 @@ export async function handleSessionsRoutes(
       fastMode?: unknown;
       images?: unknown;
       files?: unknown;
+      pastedTexts?: unknown;
       branch?: unknown;
       user?: unknown;
       workspaceId?: unknown;
@@ -953,12 +958,13 @@ export async function handleSessionsRoutes(
     } | null;
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const files = Array.isArray(body?.files) ? body.files : undefined;
+    const pastedTexts = pastedTextsFromWire(body?.pastedTexts);
     const imageUrls = Array.isArray(body?.images)
       ? body.images.filter(
           (value): value is string => typeof value === "string",
         )
       : [];
-    if (!prompt && !files?.length && !imageUrls.length) {
+    if (!prompt && !files?.length && !imageUrls.length && !pastedTexts) {
       return Response.json(
         { error: "prompt or attachment required" },
         { status: 400 },
@@ -1064,6 +1070,7 @@ export async function handleSessionsRoutes(
         // Image and file attachments from the native create path.
         ...(imageUrls.length ? { images: imageUrls } : {}),
         ...(files?.length ? { files } : {}),
+        ...(pastedTexts ? { pastedTexts } : {}),
         user: actor,
       });
       return Response.json({
@@ -1217,6 +1224,7 @@ export async function handleSessionsRoutes(
         fastMode?: unknown;
         busyMode?: unknown;
         files?: unknown;
+        pastedTexts?: unknown;
         contextSessions?: unknown;
         clientId?: unknown;
       } | null;
@@ -1226,7 +1234,12 @@ export async function handleSessionsRoutes(
           : typeof body?.prompt === "string"
             ? body.prompt
             : "";
-      const content = raw.trim();
+      // Pasted blocks fold in at intake, after the message, so every path
+      // below (queue, steer, run, persistence) carries one string.
+      const content = withPastedTexts(
+        raw.trim(),
+        pastedTextsFromWire(body?.pastedTexts),
+      );
       const images = parseImageDataUrls(body?.images);
       const imageUrls = asDataUrlList(body?.images);
       // An image-only send is a real message, so only reject an empty one.
@@ -1382,24 +1395,31 @@ export async function handleSessionsRoutes(
         // content keeps its exact legacy shape; toolInput/images are
         // additive (existing clients ignore them) — they carry the
         // unstripped fields the bounded store row summarized away.
-        if (full)
+        if (full) {
+          // Same stripping the wire path applies, so expanding a
+          // clamped notice doesn't suddenly reveal the sentinel and
+          // "[Name] " prefix its folded form hid. The store row
+          // carries no type; a user turn is the only kind that
+          // arrives with delivery plumbing, and the detectors are
+          // conservative enough to leave anything else alone. Pasted
+          // blocks lift the same way, whole: this is where a card
+          // whose block the wire clamped fetches the rest.
+          const classified = classifyEntry({
+            id: entryId,
+            type: "user",
+            content: full.content,
+            timestamp: "",
+          });
           return Response.json({
-            // Same stripping the wire path applies, so expanding a
-            // clamped notice doesn't suddenly reveal the sentinel and
-            // "[Name] " prefix its folded form hid. The store row
-            // carries no type; a user turn is the only kind that
-            // arrives with delivery plumbing, and the detectors are
-            // conservative enough to leave anything else alone.
-            content: classifyEntry({
-              id: entryId,
-              type: "user",
-              content: full.content,
-              timestamp: "",
-            }).content,
+            content: classified.content,
+            ...(classified.pastedTexts
+              ? { pastedTexts: classified.pastedTexts }
+              : {}),
             toolInput: full.toolInput,
             images: full.images,
             featuredMedia: full.featuredMedia,
           });
+        }
       } catch {
         // store read failed — the legacy scan below still serves the entry
       }
@@ -1411,6 +1431,7 @@ export async function handleSessionsRoutes(
       const entry = classifyEntry(found);
       return Response.json({
         content: entry.content,
+        ...(entry.pastedTexts ? { pastedTexts: entry.pastedTexts } : {}),
         toolInput: entry.toolInput,
         images: entry.images,
         featuredMedia: entry.featuredMedia,

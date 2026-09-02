@@ -151,6 +151,21 @@ an already-imported store, but the running external session remains on the
 legacy serving path. Watch-setup failures fall back to that path; the client
 detects the active mode from the fields on `transcript_init`.
 
+## Pasted text
+
+A composer collapses a large paste into a chip and sends it beside the message
+as `pastedTexts`, never inside `content`. At intake (`/api/sessions/:id/prompt`,
+the `prompt`, `interrupt_prompt` and `create_session` frames, `POST
+/api/sessions`) the server folds each block into the prompt after the message
+inside a `<pasted-text>` fence (`packages/core/protocol/src/pasted-text.ts`), so
+the instruction leads and the material is delimited. That folded string is what
+the queue, the steer channel, the store, and search carry. On the way to a
+client, `classifyEntry` lifts the blocks back onto `entry.pastedTexts` and the
+queue projection does the same for queued items, so every client renders the
+message and a card per paste. The clamp cuts content from the tail, which means
+only the last block can arrive truncated; the full-entry endpoint returns the
+whole list.
+
 ## Model-visible means logged
 
 A turn's model input is more than the message a human typed: an engine handoff,

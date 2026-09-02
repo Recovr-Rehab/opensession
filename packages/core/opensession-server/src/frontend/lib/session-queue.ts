@@ -19,6 +19,8 @@ export interface QueueReceipt {
   user?: string;
   images?: string[];
   files?: unknown;
+  /** Pasted blocks the server lifted out of `content` for display. */
+  pastedTexts?: string[];
   contextSessions?: string[];
   editable?: boolean;
   editing?: boolean;
@@ -121,6 +123,7 @@ export function deriveSessionQueue({
           sender: item.user,
         };
         if (item.images?.length) entry.images = item.images;
+        if (item.pastedTexts?.length) entry.pastedTexts = item.pastedTexts;
         return entry;
       })
     : NO_OPTIMISTIC_ENTRIES;

@@ -88,6 +88,7 @@ export async function deliverSessionPrompt(
     content: string;
     images?: string[];
     files?: unknown[];
+    pastedTexts?: string[];
     effort?: string;
     fastMode?: boolean;
     busyMode?: "queue" | "steer";

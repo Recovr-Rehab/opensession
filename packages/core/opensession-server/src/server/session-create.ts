@@ -55,6 +55,10 @@ import { configuredInteractiveDefaultModel } from "./model-catalog";
 import { notifyMentions } from "./mentions";
 import { newSessionId } from "./paths";
 import { enablesPstackMode, PSTACK_MODE_NOTE } from "./pstack-mode";
+import {
+  pastedTextsFromWire,
+  withPastedTexts,
+} from "@tellahq/opensession-protocol/pasted-text";
 import { wrapContext } from "./prompt-context";
 import {
   acknowledgePromptDispatch,
@@ -217,6 +221,8 @@ export interface CreateSessionMessage {
   branch: string;
   images?: unknown;
   files?: unknown;
+  /** Large pastes, folded after the opening prompt (protocol pasted-text.ts). */
+  pastedTexts?: unknown;
   fromPr?: unknown;
   forkFrom?: unknown;
   model?: unknown;
@@ -2773,8 +2779,10 @@ export async function handleCreateSessionMessage(
         identity: createIdentity,
         ...attachment,
       });
+    // Pasted blocks follow the message; the uploads note follows them, so the
+    // parser's end-anchored note regex still finds it.
     let openingPrompt = withUploadsNote(
-      prompt,
+      withPastedTexts(prompt, pastedTextsFromWire(msg.pastedTexts)),
       attachmentSources.map((attachment) => ({
         name: attachment.name,
         path: creationAttachmentPath(

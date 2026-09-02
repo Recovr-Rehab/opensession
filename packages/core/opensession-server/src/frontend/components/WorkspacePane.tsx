@@ -509,10 +509,14 @@ export function WorkspacePane({
   const presentationSession =
     listedPresentationSession ?? hydratedPresentationSession ?? reviewSession;
 
-  function handleStart() {
+  function handleStart(_text: string, opts?: { pastedTexts?: string[] }) {
     const q = prompt.trim();
+    const pastedTexts = opts?.pastedTexts ?? [];
     if (
-      (!q && images.length === 0 && files.length === 0) ||
+      (!q &&
+        images.length === 0 &&
+        files.length === 0 &&
+        pastedTexts.length === 0) ||
       isStaging(staging) ||
       starting ||
       !connected
@@ -550,6 +554,7 @@ export function WorkspacePane({
           ? { name: file.name, path: file.path }
           : { name: file.name, dataUrl: file.dataUrl },
       );
+    if (pastedTexts.length) message.pastedTexts = pastedTexts;
     send(message);
     // App navigates into the session on session_created.
   }

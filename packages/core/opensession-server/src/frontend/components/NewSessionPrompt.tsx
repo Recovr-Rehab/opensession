@@ -15,6 +15,8 @@ import { saveDraft, NEW_SESSION_DRAFT_KEY as DRAFT_KEY } from "../lib/drafts";
 import { appendDictation } from "../lib/dictation";
 import { attachingLabel } from "../lib/attachments";
 import { imageFilesFromPaste } from "../lib/images";
+import { shouldCollapsePastedText } from "../lib/pasted-text";
+import { fileChipRow } from "../lib/composer-classes";
 import { insertPastedSessionId } from "../lib/session-url";
 import { insideOpenFence, isSendCombo } from "../lib/send-key";
 import {
@@ -37,6 +39,8 @@ import { useFileMentions } from "./useFileMentions";
 import { ImageThumbs } from "./ImageThumbs";
 import type { ImageRegionAnnotation } from "../lib/media-lightbox";
 import { FileChips } from "./FileChips";
+import { PastedTextContext } from "./PastedTextContext";
+import { AnimatePresence } from "motion/react";
 import { cn } from "../ui/cn";
 import { getCurrentUser } from "./UserPicker";
 import type {
@@ -100,6 +104,7 @@ export function NewSessionPrompt({
     disabled,
     images,
     files,
+    pastedTexts,
     staging,
     sendKey,
     canCreate,
@@ -111,6 +116,8 @@ export function NewSessionPrompt({
     removePendingImage: onRemovePendingImage,
     removePendingFile: onRemovePendingFile,
     addAttachments: onAddAttachments,
+    addPastedText: onAddPastedText,
+    removePastedText: onRemovePastedText,
     create: onCreate,
     changeHasText: onHasTextChange,
     settleDraft: onDraftSettled,
@@ -323,6 +330,7 @@ export function NewSessionPrompt({
     sessionNames.displayText,
     images.length,
     files.length,
+    pastedTexts.length,
     textareaRef,
   ]);
 
@@ -339,6 +347,14 @@ export function NewSessionPrompt({
     // A session link goes in as the id it carries, which is the same reference
     // in a third of the room and chips the same way (lib/session-url.ts).
     if (insertPastedSessionId(e)) return;
+    // A long paste becomes a chip, the same as in a session's composer, and
+    // travels beside the prompt rather than inside it.
+    const pastedText = e.clipboardData?.getData("text/plain") ?? "";
+    if (shouldCollapsePastedText(pastedText)) {
+      e.preventDefault();
+      onAddPastedText(pastedText);
+      return;
+    }
     const imgs = imageFilesFromPaste(e);
     if (imgs.length) {
       e.preventDefault();
@@ -498,6 +514,23 @@ export function NewSessionPrompt({
         onRemovePending={onRemovePendingFile}
         disabled={disabled}
       />
+      {pastedTexts.length > 0 && (
+        <div className={fileChipRow}>
+          <AnimatePresence initial={false}>
+            {pastedTexts.map((attachment) => (
+              <PastedTextContext
+                key={attachment.id}
+                attachment={attachment}
+                onRemove={() => {
+                  onRemovePastedText(attachment.id);
+                  textareaRef.current?.focus({ preventScroll: true });
+                }}
+                disabled={disabled}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
       {/* The ghost tiles are the whole message on screen, and they say
 			    nothing out loud. This is the same news for a reader who cannot
 			    see them. */}
