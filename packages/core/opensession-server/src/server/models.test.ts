@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   accountProviderForModel,
   automaticFallbackModel,
@@ -18,8 +17,9 @@ import {
   routeModel,
   toPiModel,
   KNOWN_MODELS,
+  orchestratorPreset,
+  orchestratorWorkerModels,
   refreshPickerModels,
-  xaiPickerModels,
 } from "./models";
 
 const originalPiConfig = process.env.OPENSESSION_PI_CONFIG;
@@ -51,8 +51,14 @@ describe("Pi-only model routing", () => {
     expect(toPiModel("gpt-5.6-sol")).toBe("pi/openai/gpt-5.6-sol");
   });
 
-  test("preserves explicit Pi ids", () => {
+  test("preserves explicit Pi ids and case-sensitive model suffixes", () => {
     expect(toPiModel("pi/wafer/glm-5.2")).toBe("pi/wafer/glm-5.2");
+    expect(toPiModel(" pi/My-Gateway/Qwen/Qwen3-Coder ")).toBe(
+      "pi/my-gateway/Qwen/Qwen3-Coder",
+    );
+    expect(resolveModel("pi/My-Gateway/Qwen/Qwen3-Coder")?.id).toBe(
+      "pi/my-gateway/Qwen/Qwen3-Coder",
+    );
     expect(explicitEngineFor("pi/openai/gpt-5.6-sol")).toBe("pi");
   });
 
@@ -64,10 +70,20 @@ describe("Pi-only model routing", () => {
     expect(resolveModel("pi/openai/gpt-5.5")?.id).toBe("pi/openai/gpt-5.6-sol");
   });
 
+  test("upgrades retired Fable 5 ids to Fable 5.1", () => {
+    expect(resolveModel("claude-fable-5")?.id).toBe("claude-fable-5-1");
+    expect(toPiModel("anthropic/claude-fable-5")).toBe(
+      "pi/anthropic/claude-fable-5-1",
+    );
+    expect(toPiModel("pi/anthropic/claude-fable-5")).toBe(
+      "pi/anthropic/claude-fable-5-1",
+    );
+  });
+
   test("routes every accepted id to Pi", () => {
-    expect(routeModel("claude-fable-5")).toEqual({
+    expect(routeModel("claude-fable-5-1")).toEqual({
       engine: "pi",
-      model: "pi/anthropic/claude-fable-5",
+      model: "pi/anthropic/claude-fable-5-1",
     });
     expect(routeModel("openai/gpt-5.6-sol")).toEqual({
       engine: "pi",
@@ -132,15 +148,28 @@ describe("Pi-only model routing", () => {
     expect(modelEngineKey("pi/dial/opus-fable")).toBe("dial/opus-fable");
   });
 
+  test("keeps the Fable and Sol orchestrator cross-provider", () => {
+    const preset = orchestratorPreset("orchestrator/fable-sol");
+    expect(preset).toMatchObject({
+      model: "claude-fable-5-1",
+      effort: "high",
+      workerAgents: ["worker-sol"],
+    });
+    if (!preset) throw new Error("missing Fable + Sol orchestrator preset");
+    expect(
+      orchestratorWorkerModels(preset, new Set(["anthropic", "openai"])),
+    ).toEqual(["openai/gpt-5.6-sol"]);
+  });
+
   test("builds a Pi-only fallback chain", () => {
     const first = nextFallbackModel(
-      "pi/anthropic/claude-fable-5",
+      "pi/anthropic/claude-fable-5-1",
       new Set(),
       "pi/openai/gpt-5.6-sol",
     );
     expect(first?.id.startsWith("pi/")).toBe(true);
     expect(
-      fallbackPlan("pi/anthropic/claude-fable-5", "pi/openai/gpt-5.6-sol"),
+      fallbackPlan("pi/anthropic/claude-fable-5-1", "pi/openai/gpt-5.6-sol"),
     ).toSatisfy((hops) => hops.every((hop) => hop.id.startsWith("pi/")));
   });
 
@@ -177,7 +206,7 @@ describe("Pi-only model routing", () => {
       (model) => model.provider === "pi",
     ).map((model) => model.id);
     expect(pickerIds).toContain("pi/openai/gpt-5.6-sol");
-    expect(pickerIds).toContain("pi/anthropic/claude-fable-5");
+    expect(pickerIds).toContain("pi/anthropic/claude-fable-5-1");
   });
 
   test("deduplicates retired pickerModels after routing", () => {
@@ -197,44 +226,5 @@ describe("Pi-only model routing", () => {
     expect(
       KNOWN_MODELS.filter((model) => model.id === "pi/openai/gpt-5.6-sol"),
     ).toHaveLength(1);
-  });
-});
-
-describe("Grok picker models", () => {
-  test("are pi's own ids, not a copy that can drift from them", () => {
-    // The list used to be hand-maintained here and carried `grok-build`, while
-    // pi serves `grok-build-0.1`. An id that exists only on our side passes the
-    // picker and then fails the turn, so read pi's catalog instead of trusting
-    // a copy - and prove that is what happened.
-    const ids = xaiPickerModels();
-    expect(ids.length).toBeGreaterThan(0);
-    for (const id of ids) expect(id.startsWith("pi/xai/grok-")).toBe(true);
-
-    const entry = Bun.resolveSync(
-      "@earendil-works/pi-coding-agent",
-      import.meta.dir,
-    );
-    const root = entry.slice(0, entry.indexOf("/dist/"));
-    const catalog = join(dirname(root), "pi-ai/dist/providers/data/xai.json");
-    const served: string[] = [];
-    const walk = (node: Record<string, unknown>) => {
-      for (const [key, value] of Object.entries(node)) {
-        if (!value || typeof value !== "object" || Array.isArray(value))
-          continue;
-        const row = value as Record<string, unknown>;
-        if (row.name || row.contextWindow) served.push(key);
-        else walk(row);
-      }
-    };
-    walk(JSON.parse(readFileSync(catalog, "utf-8")));
-
-    expect([...ids].map((id) => id.replace("pi/xai/", "")).sort()).toEqual(
-      served.sort(),
-    );
-  });
-
-  test("offer the newest flagship first", () => {
-    const ids = xaiPickerModels();
-    expect(ids[0]).toBe("pi/xai/grok-4.6");
   });
 });

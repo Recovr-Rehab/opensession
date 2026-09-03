@@ -1,14 +1,17 @@
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { modelProviders } from "./model-providers";
+import { hasXaiAccounts } from "./xai-accounts";
+import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
 import {
   KNOWN_MODELS,
   interactiveDefaultModel,
   modelPreset,
+  orchestratorPreset,
+  orchestratorWorkerModels,
   refreshPickerModels,
   toPiModel,
 } from "./models";
-import { XAI_PROVIDER_ID, xaiStatus } from "./xai-oauth";
 
 export interface PickerPresetRequirement {
   group?: string;
@@ -22,9 +25,7 @@ export function configuredModelProviders(): Set<string> {
   return new Set([
     ...(listAccountsPublic().length ? ["anthropic"] : []),
     ...(listCodexAccountsPublic().length ? ["openai"] : []),
-    // One shared subscription rather than a pool, so "connected" IS the
-    // capacity signal.
-    ...(xaiStatus().connected ? [XAI_PROVIDER_ID] : []),
+    ...(hasXaiAccounts() ? [XAI_OAUTH_PROVIDER] : []),
     ...Object.entries(modelProviders())
       .filter(([, provider]) => !!provider.apiKey)
       .map(([provider]) => provider),
@@ -82,12 +83,16 @@ function selectionFitsConfiguredProviders(
 ): boolean {
   const preset = modelPreset(model);
   if (!preset) return modelFitsConfiguredProviders(model, configuredProviders);
+  const orchestrator = orchestratorPreset(model);
   return presetFitsConfiguredProviders(
     {
-      group: model.replace(/^pi\//, "").startsWith("dial/")
-        ? "dial"
-        : "orchestrator",
+      group: orchestrator ? "orchestrator" : "dial",
       lead: { model: preset.model },
+      supporting: orchestrator
+        ? orchestratorWorkerModels(orchestrator, configuredProviders).map(
+            (worker) => ({ model: worker }),
+          )
+        : undefined,
     },
     configuredProviders,
   );

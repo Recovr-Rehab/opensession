@@ -5,16 +5,22 @@ import type { ReportMeta, WSServerMessage } from "../lib/types";
 import { type NewSessionPrefill } from "../lib/new-session-link";
 import { OptionSelect } from "../ui/select";
 import { ReportFrame } from "./ReportFrame";
+import { errorMessage } from "../lib/error-message";
 
 export function useSessionReports(
   sessionId: string,
   addHandler: (handler: (message: WSServerMessage) => void) => () => void,
 ) {
   const [reports, setReports] = useState<ReportMeta[]>([]);
-  const refresh = useEffectEvent(() => {
-    fetchSessionReports(sessionId)
-      .then(setReports)
-      .catch(() => {});
+  const refresh = useEffectEvent(async () => {
+    try {
+      setReports(await fetchSessionReports(sessionId));
+    } catch (error) {
+      // Reports are an optional secondary panel. On the first failed load
+      // there is no panel to own an error, while refresh failures leave the
+      // current report list visible and usable.
+      console.warn(errorMessage(error, "Failed to refresh session reports"));
+    }
   });
   useEffect(() => {
     setReports([]);

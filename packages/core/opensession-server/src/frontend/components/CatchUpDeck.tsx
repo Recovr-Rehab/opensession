@@ -1,11 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import type {
   UnifiedSession,
@@ -25,6 +18,7 @@ import {
 } from "../lib/api";
 import { loadDraft, saveDraft } from "../lib/drafts";
 import { Button } from "../ui/button";
+import { InlineAlert } from "../ui/state";
 import type { FileAttachment } from "../lib/images";
 import { getReads, isUnread, markRead } from "../lib/reads";
 import { TranscriptBlocks } from "./TranscriptBlocks";
@@ -39,6 +33,7 @@ import {
   PhoneTopBarTitle,
 } from "../ui/top-bar";
 import { IconChevronLeft, IconPlus } from "./icons";
+import { errorMessage } from "../lib/error-message";
 
 /**
  * Catch-up deck — a Slack-style "swipe through your unread" card stack. Each
@@ -105,17 +100,30 @@ export function CatchUpDeck({
   // across cards). Empty until they load — the composer degrades gracefully.
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<ProviderAccountOption[]>([]);
+  const [accountLoadError, setAccountLoadError] = useState<string | null>(null);
   useEffect(() => {
     fetchModels()
       .then((m) => {
         setModels(m.models);
         setDefaultModel(m.default);
       })
-      .catch(() => {});
-    fetchProviderAccounts()
+      .catch((cause: unknown) =>
+        setModelLoadError(errorMessage(cause, "Could not load models")),
+      );
+    fetchProviderAccounts({
+      onPoolError: (cause) =>
+        setAccountLoadError(
+          errorMessage(cause, "Could not load provider accounts"),
+        ),
+    })
       .then(setAccounts)
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setAccountLoadError(
+          errorMessage(cause, "Could not load provider accounts"),
+        ),
+      );
   }, []);
 
   // The unread queue is snapshotted once and then frozen — subsequent refreshes
@@ -125,7 +133,7 @@ export function CatchUpDeck({
   // to <base>/catchup mounts before `sessions` arrives, and freezing []
   // there would strand the deck on "All caught up" forever.
   const [frozen, setFrozen] = useState<CatchupCard[] | null>(null);
-  const live = useMemo(() => {
+  const live = (() => {
     const reads = getReads();
     const me = currentUser.toLowerCase();
     const unread = sessions.filter(
@@ -183,7 +191,7 @@ export function CatchUpDeck({
       (b.lastActivity || "").localeCompare(a.lastActivity || ""),
     );
     return out;
-  }, [sessions, currentUser, workspaces]);
+  })();
   const cards = frozen ?? live;
   // Freeze once the list has loaded (even to an empty queue — that's a
   // genuine "all caught up"). While it's still empty we keep recomputing.
@@ -221,8 +229,11 @@ export function CatchUpDeck({
     if (e.key === "Escape") return onExit();
     if (!card) return;
     // Don't hijack arrows while typing a reply.
-    const el = e.target as HTMLElement | null;
-    if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")) return;
+    if (
+      e.target instanceof HTMLTextAreaElement ||
+      e.target instanceof HTMLInputElement
+    )
+      return;
     if (e.key === "ArrowLeft") {
       e.preventDefault();
       act("archive");
@@ -281,6 +292,21 @@ export function CatchUpDeck({
           icon={<IconPlus size={24} />}
         />
       </PhoneTopBar>
+
+      {!done && (modelLoadError || accountLoadError) && (
+        <div className="flex w-full max-w-[860px] flex-col gap-2 px-4">
+          {modelLoadError && (
+            <InlineAlert onDismiss={() => setModelLoadError(null)}>
+              {modelLoadError}
+            </InlineAlert>
+          )}
+          {accountLoadError && (
+            <InlineAlert onDismiss={() => setAccountLoadError(null)}>
+              {accountLoadError}
+            </InlineAlert>
+          )}
+        </div>
+      )}
 
       {done ? (
         <CaughtUp total={total} onExit={onExit} />
@@ -409,6 +435,7 @@ function CardBody({
 }) {
   const target = replyTarget(card);
   const [entries, setEntries] = useState<TranscriptEntry[] | null>(null);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
   const scrollElRef = useRef<HTMLDivElement | null>(null);
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(
     null,
@@ -417,30 +444,33 @@ function CardBody({
   const [nodesVersion, setNodesVersion] = useState(0);
   // These callback refs update state, so their identities must remain stable:
   // React detaches an old callback ref with null before attaching a new one.
-  const setScrollEl = useCallback((node: HTMLDivElement | null) => {
+  const [setScrollEl] = useState(() => (node: HTMLDivElement | null) => {
     if (scrollElRef.current === node) return;
     scrollElRef.current = node;
     setScrollElement(node);
     setNodesVersion((version) => version + 1);
-  }, []);
-  const setContentEl = useCallback((node: HTMLDivElement | null) => {
+  });
+  const [setContentEl] = useState(() => (node: HTMLDivElement | null) => {
     if (contentElRef.current === node) return;
     contentElRef.current = node;
     setNodesVersion((version) => version + 1);
-  }, []);
+  });
   const pinned = useRef(true);
   const shouldMaintainEnd = () => pinned.current;
 
   useEffect(() => {
     let alive = true;
     setEntries(null);
+    setTranscriptError(null);
     pinned.current = true;
     fetchTranscript(target.id)
       .then((e) => {
         if (alive) setEntries(e);
       })
-      .catch(() => {
-        if (alive) setEntries([]);
+      .catch((cause: unknown) => {
+        if (!alive) return;
+        setTranscriptError(errorMessage(cause, "Could not load transcript"));
+        setEntries([]);
       });
     return () => {
       alive = false;
@@ -521,7 +551,11 @@ function CardBody({
 				    ResizeObserver on the scroll container itself never sees its
 				    content grow. */}
         <div ref={setContentEl}>
-          {entries === null ? (
+          {transcriptError ? (
+            <InlineAlert onDismiss={() => setTranscriptError(null)}>
+              {transcriptError}
+            </InlineAlert>
+          ) : entries === null ? (
             <div className="space-y-2">
               <div className="h-3 w-1/3 animate-pulse rounded bg-surface" />
               <div className="h-3 w-full animate-pulse rounded bg-surface" />
@@ -616,9 +650,19 @@ function CatchUpComposer({
   const isNative = target.source === "opensession";
   // Send the reply into the target session (images fold in as content blocks;
   // files route to the queue server-side), then advance the deck.
-  function handleSend(raw: string): boolean {
+  function handleSend(
+    raw: string,
+    opts?: { steer?: boolean; pastedTexts?: string[] },
+  ): boolean {
     const text = raw.trim();
-    if (!text && images.length === 0 && files.length === 0) return false;
+    const pastedTexts = opts?.pastedTexts ?? [];
+    if (
+      !text &&
+      images.length === 0 &&
+      files.length === 0 &&
+      pastedTexts.length === 0
+    )
+      return false;
     if (!connected) return false;
     // Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
     const filePayload = files.map((f) =>
@@ -626,15 +670,17 @@ function CatchUpComposer({
         ? { name: f.name, path: f.path }
         : { name: f.name, dataUrl: f.dataUrl },
     );
-    send({
+    const message: Extract<WSClientMessage, { type: "prompt" }> = {
       type: "prompt",
       sessionId: target.id,
       content: text,
       user: currentUser,
       effort,
-      ...(images.length ? { images } : {}),
-      ...(files.length ? { files: filePayload } : {}),
-    });
+    };
+    if (images.length > 0) message.images = images;
+    if (files.length > 0) message.files = filePayload;
+    if (pastedTexts.length > 0) message.pastedTexts = pastedTexts;
+    send(message);
     setImages([]);
     setFiles([]);
     onReplied();

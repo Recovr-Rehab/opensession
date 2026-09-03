@@ -1,5 +1,5 @@
 import React from "react";
-import type { ModelOption, ProviderAccountOption } from "../lib/api";
+import type { ModelOption } from "../lib/api";
 import {
   baseModelId,
   engineModelId,
@@ -17,7 +17,7 @@ import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { IconBolt, IconChevronRight, IconSparkle, IconUndo } from "./icons";
 import { ModelMark } from "./ModelMark";
-import type { SessionUsage } from "../lib/types";
+import type { ModelEffortSelectProps } from "../lib/model-effort-select-types";
 import { UsageCost, UsageDetails } from "./UsageMeter";
 
 export const EFFORTS = [
@@ -29,51 +29,8 @@ export const EFFORTS = [
   { id: "max", label: "Max" },
 ];
 
-type Props = {
-  models: ModelOption[];
-  defaultModel: string;
-  /** Current model id; "" = default. */
-  model: string;
-  onModelChange: (model: string) => void;
-  /** This person's preferred model for new sessions. */
-  preferredDefaultModel?: string;
-  /** Makes the current conversation model this person's default for new sessions. */
-  onSetAsDefault?: (model: string) => void;
-  /** Model is set elsewhere (e.g. Slack-owned sessions) — effort stays switchable. */
-  modelDisabled?: boolean;
-  modelTitle?: string;
-  /** When effort isn't wired, the menu is just the model list. */
-  effort?: string;
-  onEffortChange?: (effort: string) => void;
-  fastMode?: boolean;
-  onFastModeChange?: (fastMode: boolean) => void;
-  /**
-   * Pinnable provider accounts. The menu filters these to the active model's
-   * Claude or Codex pool; "" = auto (personal-first, pool fallback).
-   */
-  accounts?: ProviderAccountOption[];
-  /** Pinned account id; "" / undefined = auto. */
-  accountId?: string;
-  onAccountChange?: (accountId: string) => void;
-  /** Conversation usage shown inside this menu; omitted in new-session pickers. */
-  usage?: SessionUsage;
-  showUsage?: boolean;
-  disabled?: boolean;
-  title?: string;
-  className?: string;
-  /** The same menu can sit behind the composer pill, the full-width settings
-   * row, or the compact model link below the phone Workspace title. */
-  triggerVariant?: "pill" | "menu-row" | "hero";
-  /** Label fallback for a model that has not reached the catalog yet. */
-  fallbackModelLabel?: (id: string) => string;
-  /** Fires as the menu opens/closes. The phone composer needs it: the popup
-   * takes focus (blurring the textarea), and the composer must stay expanded
-   * while open or this trigger unmounts and the menu closes with it. */
-  onOpenChange?: (open: boolean) => void;
-};
-
 const PRIMARY_MODEL_IDS = [
-  "claude-fable-5",
+  "claude-fable-5-1",
   "claude-opus-5",
   "claude-sonnet-5",
   "claude-haiku-4-5",
@@ -85,11 +42,12 @@ const PRIMARY_MODEL_ID_SET = new Set<string>(PRIMARY_MODEL_IDS);
 
 /** Engine display names, keyed by ModelOption.provider — only used for the
  * legacy (no-engine-configured) grouping fallback below. */
-export const ENGINE_LABELS: Record<string, string> = {
+export const ENGINE_LABELS = {
   claude: "Claude",
   codex: "Codex",
   pi: "Pi",
 };
+const ENGINE_LABEL_BY_ID = new Map(Object.entries(ENGINE_LABELS));
 
 /** De-emphasized group name for the native Claude-SDK/Codex entries that stick
  * around as automation/fallback plumbing during the engine migration. */
@@ -185,7 +143,7 @@ export function workspacePresetLabel(
   );
 }
 
-/** Display name without the vendor noise: "Claude Fable 5" → "Fable 5",
+/** Display name without the vendor noise: "Claude Fable 5.1" → "Fable 5.1",
  * "GPT-5.5 (Codex)" → "GPT-5.5", "engine/anthropic/claude-sonnet-5" →
  * "Sonnet 5". The engine is an implementation detail — it never shows in a
  * model's name. */
@@ -207,13 +165,14 @@ export function shortModelLabel(id: string, models: ModelOption[]): string {
 }
 
 /** Friendly names for the upstream providers in the grouped main list. */
-const PROVIDER_LABELS: Record<string, string> = {
+const PROVIDER_LABELS = {
   dial: "The Dial",
   custom: "Custom",
   orchestrator: "The Orchestrator",
   anthropic: "Anthropic",
   openai: "OpenAI",
   pi: "Pi",
+  "xai-oauth": "xAI SuperGrok",
   xai: "xAI",
   meta: "Meta",
   google: "Google",
@@ -225,6 +184,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   cerebras: "Cerebras",
   wafer: "Wafer",
 };
+const PROVIDER_LABEL_BY_ID = new Map(Object.entries(PROVIDER_LABELS));
 
 /** Section order in the grouped main list; unlisted providers follow in
  * config order. */
@@ -234,6 +194,7 @@ const PROVIDER_ORDER = [
   "orchestrator",
   "anthropic",
   "openai",
+  "xai-oauth",
   "pi",
   "cerebras",
   "wafer",
@@ -252,8 +213,9 @@ const MODEL_TAIL_ORDER = [
   "medium",
   "low",
   "fable",
+  "fable-sol",
   "sol",
-  "claude-fable-5",
+  "claude-fable-5-1",
   "claude-opus-5",
   "claude-opus-4-8",
   "claude-sonnet-5",
@@ -284,10 +246,12 @@ const ENGINE_PROVIDERS = new Set(["pi"]);
  * the legacy group; Fable, Sol, and their current siblings remain ordinary
  * choices even against an older server that still returns native ids.
  */
-export function splitModelOptions(models: ModelOption[]): {
+type SplitModelOptions = {
   primary: ModelOption[];
   legacy: ModelOption[];
-} {
+};
+
+export function splitModelOptions(models: ModelOption[]): SplitModelOptions {
   const rank = (m: ModelOption) => {
     const i = MODEL_TAIL_ORDER.indexOf(m.id.split("/").pop() || "");
     return i === -1 ? MODEL_TAIL_ORDER.length : i;
@@ -343,30 +307,39 @@ const PICKER_ROW_GAP = "mb-0.5 last:mb-0";
  * submenus don't map to a <select>, and Base UI menus handle touch fine.
  */
 export function ModelEffortSelect({
-  models,
-  defaultModel,
-  model,
-  onModelChange,
-  preferredDefaultModel,
-  onSetAsDefault,
-  modelDisabled,
-  modelTitle,
-  effort,
-  onEffortChange,
-  fastMode,
-  onFastModeChange,
-  accounts,
-  accountId,
-  onAccountChange,
-  usage,
-  showUsage = false,
-  disabled,
-  title,
-  className,
-  triggerVariant = "pill",
-  fallbackModelLabel,
-  onOpenChange,
-}: Props) {
+  selection,
+  appearance = {},
+  actions,
+}: ModelEffortSelectProps) {
+  const {
+    models,
+    defaultModel,
+    model,
+    preferredDefaultModel,
+    modelDisabled,
+    modelTitle,
+    effort,
+    fastMode,
+    accounts,
+    accountId,
+    usage,
+  } = selection;
+  const {
+    showUsage = false,
+    disabled,
+    title,
+    className,
+    triggerVariant = "pill",
+    fallbackModelLabel,
+  } = appearance;
+  const {
+    changeModel: onModelChange,
+    setAsDefault: onSetAsDefault,
+    changeEffort: onEffortChange,
+    changeFastMode: onFastModeChange,
+    changeAccount: onAccountChange,
+    changeOpen: onOpenChange,
+  } = actions;
   const effectiveModel = model || defaultModel;
   const isPreferredDefault = preferredDefaultModel === effectiveModel;
   const [recentModelIds, setRecentModelIds] = React.useState(getRecentModels);
@@ -580,7 +553,7 @@ export function ModelEffortSelect({
     const otherGroups = [...new Set(engines)]
       .map((engine) => ({
         engine,
-        label: ENGINE_LABELS[engine] || engine,
+        label: ENGINE_LABEL_BY_ID.get(engine) || engine,
         options: otherOptions.filter((o) => o.engine === engine),
       }))
       .filter((g) => g.options.length > 0);
@@ -602,7 +575,7 @@ export function ModelEffortSelect({
         group = {
           provider,
           label:
-            PROVIDER_LABELS[provider] ||
+            PROVIDER_LABEL_BY_ID.get(provider) ||
             provider.charAt(0).toUpperCase() + provider.slice(1),
           options: [],
         };

@@ -1,6 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import { BASE_PATH } from "../lib/base";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useEffectEvent, useState } from "react";
 import {
   fetchGoals,
   fetchGoal,
@@ -73,6 +73,7 @@ const STATUS_COLOR: Record<GoalStatus, string> = {
 export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -81,27 +82,30 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
   useEffect(() => {
     fetchModels()
       .then((m) => setDefaultModel(m.default))
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setModelLoadError(errorMessage(cause, "Could not load models")),
+      );
   }, []);
 
-  const load = useCallback(async () => {
+  const load = async () => {
     try {
       setGoals(await fetchGoals());
-    } catch (cause) {
+    } catch (cause: unknown) {
       setError(errorMessage(cause, "Could not load goals"));
     }
     setLoading(false);
-  }, []);
+  };
+  const loadForEffect = useEffectEvent(() => load());
 
   useEffect(() => {
     document.title = docTitle("Goals");
-    load();
-    const id = setInterval(load, 10000);
+    void loadForEffect();
+    const id = setInterval(() => void loadForEffect(), 10000);
     return () => {
       clearInterval(id);
       document.title = DEFAULT_DOC_TITLE;
     };
-  }, [load]);
+  }, []);
 
   // The routed selection — matched by id, or by name for deep-links.
   const sel = selectedId
@@ -117,12 +121,12 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
     if (!hasSelection) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      const t = e.target as HTMLElement | null;
+      const target = e.target;
       if (
-        t &&
-        (t.tagName === "INPUT" ||
-          t.tagName === "TEXTAREA" ||
-          t.isContentEditable)
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
       )
         return;
       if (editMode) setEditMode(false);
@@ -132,11 +136,14 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [hasSelection, editMode, onSelect]);
 
-  async function act(action: () => Promise<unknown>, refreshDelay = 400) {
+  async function act<Result>(
+    action: () => Promise<Result>,
+    refreshDelay = 400,
+  ) {
     try {
       await action();
       setTimeout(load, refreshDelay);
-    } catch (cause) {
+    } catch (cause: unknown) {
       setError(errorMessage(cause, "Could not update goal"));
     }
   }
@@ -190,6 +197,14 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
           {error && (
             <InlineAlert className="mb-3" onDismiss={() => setError(null)}>
               {error}
+            </InlineAlert>
+          )}
+          {modelLoadError && (
+            <InlineAlert
+              className="mb-3"
+              onDismiss={() => setModelLoadError(null)}
+            >
+              {modelLoadError}
             </InlineAlert>
           )}
 
@@ -548,7 +563,10 @@ function GoalLedger({ id }: { id: string }) {
       .then((g) => {
         if (alive) setLedger(g.ledger || "(ledger is empty)");
       })
-      .catch(() => alive && setLedger("(failed to load ledger)"));
+      .catch((cause: unknown) => {
+        if (alive)
+          setLedger(`(${errorMessage(cause, "Failed to load ledger")})`);
+      });
     return () => {
       alive = false;
     };
@@ -591,6 +609,7 @@ function formatNext(iso: string): string {
 function accountPoolSuffix(m: ModelOption): string {
   if (m.accountProvider === "codex") return " (OpenAI Codex)";
   if (m.accountProvider === "claude") return " (Claude)";
+  if (m.accountProvider === "xai") return " (SuperGrok)";
   return "";
 }
 
@@ -630,12 +649,20 @@ function GoalForm({
   const [defaultModel, setDefaultModel] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
+  const [repoLoadError, setRepoLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchModels(), fetchRepos()])
-      .then(([m, repoItems]) => {
-        setModels(m.models);
-        setDefaultModel(m.default);
+    fetchModels()
+      .then((catalog) => {
+        setModels(catalog.models);
+        setDefaultModel(catalog.default);
+      })
+      .catch((cause: unknown) =>
+        setModelLoadError(errorMessage(cause, "Could not load models")),
+      );
+    fetchRepos()
+      .then((repoItems) => {
         if (repoItems.length) setRepos(repoItems);
         setRepo(
           (current) =>
@@ -645,7 +672,9 @@ function GoalForm({
             "",
         );
       })
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setRepoLoadError(errorMessage(cause, "Could not load repositories")),
+      );
   }, []);
 
   async function handleSave() {
@@ -673,7 +702,7 @@ function GoalForm({
         await createGoalApi({ ...payload, createdBy: getCurrentUser() });
       }
       onSaved();
-    } catch (cause) {
+    } catch (cause: unknown) {
       setError(errorMessage(cause, "Could not save goal"));
       setSaving(false);
     }
@@ -700,7 +729,7 @@ function GoalForm({
 
       <FieldGrid>
         <Field label="Mode">
-          <OptionSelect
+          <OptionSelect<"ask" | "code">
             label="Mode"
             value={mode}
             options={[
@@ -713,7 +742,7 @@ function GoalForm({
                 label: "Code · persistent worktree, can open PRs",
               },
             ]}
-            onChange={(next) => setMode(next as "ask" | "code")}
+            onChange={setMode}
           />
         </Field>
 
@@ -802,6 +831,16 @@ function GoalForm({
       </FieldGrid>
 
       {error && <InlineAlert>{error}</InlineAlert>}
+      {modelLoadError && (
+        <InlineAlert onDismiss={() => setModelLoadError(null)}>
+          {modelLoadError}
+        </InlineAlert>
+      )}
+      {repoLoadError && (
+        <InlineAlert onDismiss={() => setRepoLoadError(null)}>
+          {repoLoadError}
+        </InlineAlert>
+      )}
 
       <SettingsFormActions>
         <Button variant="soft" onClick={onClose} disabled={saving}>

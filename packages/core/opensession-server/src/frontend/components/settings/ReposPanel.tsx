@@ -34,7 +34,11 @@ function SharedCheckoutSetting() {
     let alive = true;
     fetchWorktreeSettings()
       .then((value) => alive && setSettings(value))
-      .catch((cause) => alive && setError(cause.message));
+      .catch(
+        (cause: unknown) =>
+          alive &&
+          setError(errorMessage(cause, "Failed to load worktree settings")),
+      );
     return () => {
       alive = false;
     };
@@ -64,7 +68,7 @@ function SharedCheckoutSetting() {
     await (async () => {
       setSettings(await setSharedCheckoutMode(mode));
     })()
-      .catch(async (cause) => {
+      .catch(async (cause: unknown) => {
         setSettings(previous);
         setError(
           errorMessage(cause, "Couldn’t save where sessions make changes"),
@@ -86,7 +90,10 @@ function SharedCheckoutSetting() {
           aria-label={groupLabel}
           value={settings.mode}
           disabled={saving}
-          onValueChange={(mode) => void setMode(mode as SharedCheckoutMode)}
+          onValueChange={(mode) => {
+            if (mode !== "shared" && mode !== "worktree") return;
+            void setMode(mode);
+          }}
           className="[&>*+*]:relative [&>*+*]:before:pointer-events-none [&>*+*]:before:absolute [&>*+*]:before:inset-x-5 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-line [&>*+*]:before:content-['']"
         >
           <label className="flex min-h-11 cursor-pointer items-start gap-3 px-5 py-4 transition-[background-color] hover:bg-hover">
@@ -127,6 +134,7 @@ function SharedCheckoutSetting() {
 function DefaultRepoRow() {
   const [repos, setRepos] = useState<RepoInfo[]>([]);
   const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     // fetchRepos carries the setting alongside the list, so one load fills
     // both the options and the current choice.
@@ -135,13 +143,18 @@ function DefaultRepoRow() {
         setRepos(items);
         setValue(configuredNewSessionRepo());
       })
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setError(errorMessage(cause, "Failed to load repositories")),
+      );
   }, []);
   return (
     <SettingCard>
       <SettingRow
         title="Default repository"
-        desc="Where a new session starts, for anyone who hasn't set their own."
+        desc={
+          error ||
+          "Where a new session starts, for anyone who hasn't set their own."
+        }
         control={
           <Select
             label="Default repository"
@@ -157,7 +170,12 @@ function DefaultRepoRow() {
             }))}
             onChange={(next) => {
               setValue(next);
-              void setNewSessionRepoApi(next).catch(() => {});
+              setError(null);
+              void setNewSessionRepoApi(next).catch((cause: unknown) =>
+                setError(
+                  errorMessage(cause, "Failed to set the default repository"),
+                ),
+              );
             }}
           />
         }

@@ -4,7 +4,6 @@ import { ModelProvidersPanel } from "../ModelProviders";
 import { WorkspaceModelPresetSettings } from "../WorkspaceModelPresets";
 import type { Workspace } from "../../lib/types";
 import { ProviderAccountsSection } from "./ModelAccounts";
-import { XaiConnectionSection } from "./XaiConnection";
 
 /** Providers: everything behind the model a run uses. Which model it starts
  * on, the subscription accounts it draws from and how close each one is to its
@@ -22,9 +21,6 @@ export function ProvidersPanel({ workspace }: { workspace?: Workspace }) {
       <WorkspaceModelPresetSettings workspace={workspace} />
       {/* The pool those models run on, and how full each account is. */}
       <ProviderAccountsSection />
-      {/* Subscription-backed like the pool above, but one shared credential
-			    rather than per-person accounts — so it gets its own card. */}
-      <XaiConnectionSection />
       {/* Last: one row per model, Auto on all of them until someone pins
 			    one, so it sits below everything people came here to read. */}
       <ModelProvidersPanel />

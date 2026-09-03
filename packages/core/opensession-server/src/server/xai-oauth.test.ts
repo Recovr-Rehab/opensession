@@ -1,491 +1,145 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "fs";
-import { homedir, tmpdir } from "os";
-import { join } from "path";
-import {
-  cancelXaiLogin,
-  disconnectXai,
-  pollXaiLogin,
-  startXaiLogin,
-  xaiConnected,
-  xaiCredentialStore,
-  xaiStatus,
-  XAI_PROVIDER_ID,
+  computeExpires,
+  jwtEmail,
+  jwtExpMs,
+  parseXaiCatalogBody,
+  parseXaiUsageBody,
+  tokensFromResponse,
+  xaiProxyHeaders,
+  xaiStatusLabel,
 } from "./xai-oauth";
 
-let dir = "";
-let storePath = "";
-
-/** Seed a stored credential directly - the tests that read one never need the
- *  device flow that produced it. */
-function seed(overrides: Record<string, unknown> = {}): void {
-  writeFileSync(
-    storePath,
-    JSON.stringify({
-      type: "oauth",
-      access: "stored-access",
-      refresh: "stored-refresh",
-      expires: Date.now() + 30 * 60_000,
-      generation: "gen-1",
-      connectedAt: Date.now(),
-      connectedBy: "octocat",
-      ...overrides,
-    }),
-  );
+function jwt(claims: Record<string, unknown>): string {
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  return `header.${payload}.signature`;
 }
 
-/** A ModelRuntime stand-in. It persists through the credential store inside
- *  login(), exactly as pi's Models.login does (`credentials.modify(id, () =>
- *  credential)` before login() resolves) - a fake that skipped that step is why
- *  a cancelled reconnect could replace a live credential while the suite stayed
- *  green. */
-function fakeRuntime(outcome: {
-  resolve?: Record<string, unknown>;
-  reject?: string;
-  announce?: boolean;
-  /** Set false to model a provider that ignores cancellation. */
-  honourSignal?: boolean;
-}) {
-  return async (signal: AbortSignal, connectedBy?: string) => {
-    // Mirrors defaultLoginRuntime exactly, login flag included - a fake that
-    // drifts from the real login store is how a provenance bug stays green.
-    const store = xaiCredentialStore({ signal, connectedBy, login: true });
-    return {
-      login: async (
-        _providerId: string,
-        _type: "oauth",
-        interaction: {
-          signal: AbortSignal;
-          prompt: (p: unknown) => Promise<string>;
-          notify: (event: Record<string, unknown>) => void;
+describe("xai-oauth token shaping", () => {
+  test("reads identity and expiry from the JWTs", () => {
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    expect(jwtEmail(jwt({ email: " me@example.com " }))).toBe("me@example.com");
+    expect(jwtEmail("opaque")).toBeUndefined();
+    expect(jwtExpMs(jwt({ exp }))).toBe(exp * 1000);
+    expect(jwtExpMs("opaque")).toBeNull();
+  });
+
+  test("expiry is the earlier of expires_in and the token's own exp, minus skew", () => {
+    const now = Date.now();
+    const soon = Math.floor(now / 1000) + 600;
+    const capped = computeExpires(jwt({ exp: soon }), 3600);
+    expect(capped).toBeLessThanOrEqual(soon * 1000 - 5 * 60 * 1000);
+    const opaque = computeExpires("opaque", 3600);
+    expect(opaque).toBeGreaterThan(now + 50 * 60 * 1000);
+  });
+
+  test("a refresh response may omit the refresh token when it did not rotate", () => {
+    const tokens = tokensFromResponse(
+      { access_token: "a2", expires_in: 1800 },
+      "r-old",
+    );
+    expect(tokens.refresh).toBe("r-old");
+    expect(() => tokensFromResponse({ access_token: "a2" })).toThrow(
+      /refresh token/,
+    );
+    expect(() => tokensFromResponse({ refresh_token: "r" })).toThrow(
+      /access token/,
+    );
+  });
+
+  test("status labels never echo upstream text and mark auth failures fatal", () => {
+    expect(xaiStatusLabel(401)).toEqual({
+      label: "authentication rejected",
+      fatal: true,
+    });
+    expect(xaiStatusLabel(429).label).toBe("rate limited");
+    expect(xaiStatusLabel(503).fatal).toBe(false);
+  });
+
+  test("proxy headers carry the model override only for inference", () => {
+    expect(xaiProxyHeaders()).not.toHaveProperty("x-grok-model-override");
+    expect(xaiProxyHeaders("grok-4.6")["x-grok-model-override"]).toBe(
+      "grok-4.6",
+    );
+    expect(xaiProxyHeaders()["X-XAI-Token-Auth"]).toBe("xai-grok-cli");
+  });
+});
+
+describe("parseXaiUsageBody", () => {
+  test("extracts the credit meters and period from the nested config", () => {
+    const snapshot = parseXaiUsageBody(
+      {
+        subscriptionTier: "SuperGrok Heavy",
+        onDemandEnabled: false,
+        config: {
+          creditUsagePercent: 42.5,
+          monthlyLimit: { val: 30000 },
+          used: { val: 12750 },
+          onDemandCap: { val: 5000 },
+          onDemandUsed: {},
+          currentPeriod: {
+            type: "USAGE_PERIOD_TYPE_WEEKLY",
+            start: "2026-08-31T00:00:00Z",
+            end: "2026-09-07T00:00:00Z",
+          },
+          productUsage: [
+            { product: "GrokBuild", usagePercent: 150 },
+            { product: "bad" },
+          ],
         },
-      ) => {
-        if (outcome.announce !== false) {
-          interaction.notify({
-            type: "device_code",
-            userCode: "ABCD-EFGH",
-            verificationUri: "https://x.ai/device?code=ABCD-EFGH",
-            expiresInSeconds: 600,
-          });
-        }
-        await new Promise((wake) => setTimeout(wake, 1));
-        if (outcome.reject) throw new Error(outcome.reject);
-        if (outcome.honourSignal !== false && interaction.signal.aborted) {
-          throw new Error("Login cancelled");
-        }
-        await store.modify(
-          XAI_PROVIDER_ID,
-          async () => outcome.resolve as never,
-        );
-        return outcome.resolve;
       },
-    };
-  };
-}
-
-/** Give a background login time to run its completion handler. Used where the
- *  expected outcome is that it writes NOTHING, so there is no state to poll. */
-async function settleFlows(): Promise<void> {
-  await new Promise((wake) => setTimeout(wake, 25));
-}
-
-/** startXaiLogin returns as soon as the code is announced; the credential is
- *  written by the background login. */
-async function settle(): Promise<void> {
-  for (let i = 0; i < 50; i++) {
-    await new Promise((wake) => setTimeout(wake, 2));
-    if (xaiConnected()) return;
-  }
-}
-
-/** The path a leaked write would land on: what stateDir() resolves to with no
- *  OPENSESSION_STATE_DIR. A background login outliving its test wrote a real
- *  credential here once; never again silently. */
-const realStore = join(homedir(), ".opensession", "xai-oauth.json");
-let realStoreExisted = false;
-
-beforeEach(() => {
-  realStoreExisted = existsSync(realStore);
-  dir = mkdtempSync(join(tmpdir(), "opensession-xai-"));
-  // OPENSESSION_STATE_DIR keeps the legacy flat spelling; stateDir() resolves
-  // "xai-oauth.json" to ".opensession-xai-oauth.json" under it.
-  storePath = join(dir, ".opensession-xai-oauth.json");
-  // Never let a test touch the real workspace credential.
-  process.env.OPENSESSION_STATE_DIR = dir;
-  (globalThis as Record<string, unknown>).__opensessionXaiFlows = new Map();
-});
-
-afterEach(async () => {
-  // Let any background login finish while the sandboxed state dir is STILL in
-  // force. Tearing the env down first sends its write to the real store.
-  await new Promise((wake) => setTimeout(wake, 25));
-  delete process.env.OPENSESSION_STATE_DIR;
-  rmSync(dir, { recursive: true, force: true });
-  expect(existsSync(realStore)).toBe(realStoreExisted);
-});
-
-describe("shared Grok credential", () => {
-  test("reports nothing connected until one is stored", () => {
-    expect(xaiStatus()).toEqual({ connected: false });
-    expect(xaiConnected()).toBe(false);
-    seed();
-    expect(xaiStatus().connected).toBe(true);
-    expect(xaiStatus().connectedBy).toBe("octocat");
-  });
-
-  test("ignores a truncated or hand-edited store instead of half-using it", () => {
-    writeFileSync(storePath, '{"access":"only-half"}');
-    expect(xaiConnected()).toBe(false);
-  });
-
-  test("disconnect removes the credential and answers whether it did", async () => {
-    seed();
-    expect(await disconnectXai()).toBe(true);
-    expect(xaiConnected()).toBe(false);
-    expect(await disconnectXai()).toBe(false);
-  });
-});
-
-describe("credential store handed to a turn", () => {
-  test("reads the shared credential in pi's own shape", async () => {
-    seed();
-    const store = xaiCredentialStore();
-    expect(await store.read(XAI_PROVIDER_ID)).toEqual({
-      type: "oauth",
-      access: "stored-access",
-      refresh: "stored-refresh",
-      expires: expect.any(Number),
-    });
-    expect(await store.read("anthropic")).toBeUndefined();
-  });
-
-  test("persists a refresh so the next turn does not replay a rotated token", async () => {
-    seed();
-    const store = xaiCredentialStore();
-    await store.modify(XAI_PROVIDER_ID, async (current) => {
-      expect((current as { access: string }).access).toBe("stored-access");
-      return {
-        type: "oauth",
-        access: "rotated-access",
-        refresh: "rotated-refresh",
-        expires: Date.now() + 60 * 60_000,
-      };
-    });
-    const onDisk = JSON.parse(readFileSync(storePath, "utf-8"));
-    expect(onDisk.access).toBe("rotated-access");
-    expect(onDisk.refresh).toBe("rotated-refresh");
-    // Provenance survives a refresh; it describes the connection, not the token.
-    expect(onDisk.connectedBy).toBe("octocat");
-    expect(onDisk.generation).toBe("gen-1");
-  });
-
-  test("a refresh that lands after a disconnect does not resurrect it", async () => {
-    seed();
-    const store = xaiCredentialStore();
-    await store.modify(XAI_PROVIDER_ID, async () => {
-      // The admin disconnects while xAI is answering the refresh.
-      await disconnectXai();
-      return {
-        type: "oauth",
-        access: "late-access",
-        refresh: "late-refresh",
-        expires: Date.now() + 60 * 60_000,
-      };
-    });
-    expect(xaiConnected()).toBe(false);
-  });
-
-  test("a refresh that lands after a reconnect does not clobber the new credential", async () => {
-    seed();
-    const store = xaiCredentialStore();
-    await store.modify(XAI_PROVIDER_ID, async () => {
-      seed({ generation: "gen-2", access: "reconnected-access" });
-      return {
-        type: "oauth",
-        access: "late-access",
-        refresh: "late-refresh",
-        expires: Date.now() + 60 * 60_000,
-      };
-    });
-    expect(JSON.parse(readFileSync(storePath, "utf-8")).access).toBe(
-      "reconnected-access",
+      "2026-09-02T00:00:00Z",
     );
-  });
-
-  test("keeps every other provider in memory", async () => {
-    const store = xaiCredentialStore();
-    await store.modify("anthropic", async () => ({
-      type: "api_key",
-      key: "sk-test",
-    }));
-    expect(await store.read("anthropic")).toEqual({
-      type: "api_key",
-      key: "sk-test",
+    expect(snapshot).toEqual({
+      fetchedAt: "2026-09-02T00:00:00Z",
+      subscriptionTier: "SuperGrok Heavy",
+      onDemandEnabled: false,
+      creditUsagePercent: 42.5,
+      usedCents: 12750,
+      monthlyLimitCents: 30000,
+      onDemandCapCents: 5000,
+      periodType: "USAGE_PERIOD_TYPE_WEEKLY",
+      periodStart: "2026-08-31T00:00:00Z",
+      periodEnd: "2026-09-07T00:00:00Z",
+      productUsage: [{ product: "GrokBuild", usagePercent: 100 }],
     });
-    // Nothing about another provider may reach the shared Grok file.
-    expect(xaiConnected()).toBe(false);
   });
-});
 
-describe("device login through pi", () => {
-  test("announces the code, then stores what pi returns", async () => {
-    const started = await startXaiLogin(
-      "octocat",
-      fakeRuntime({
-        resolve: {
-          type: "oauth",
-          access: "fresh-access",
-          refresh: "fresh-refresh",
-          expires: Date.now() + 55 * 60_000,
-        },
-      }),
-    );
-    expect("error" in started).toBe(false);
-    if ("error" in started) return;
-    expect(started.userCode).toBe("ABCD-EFGH");
-    expect(started.verificationUri).toContain("x.ai");
-    expect(pollXaiLogin(started.flowId)).toEqual({ status: "pending" });
-
-    await settle();
-    const polled = pollXaiLogin(started.flowId);
-    expect(polled.status).toBe("connected");
-    // Written by pi's persist through the store - the single write path - and
-    // stamped with the connector this flow was started for.
-    expect(xaiStatus().connectedBy).toBe("octocat");
+  test("derives the percent from used/limit and rejects non-billing shapes", () => {
     expect(
-      JSON.parse(readFileSync(storePath, "utf-8")).generation,
-    ).toBeTruthy();
-    expect(JSON.parse(readFileSync(storePath, "utf-8")).access).toBe(
-      "fresh-access",
-    );
+      parseXaiUsageBody({
+        config: { used: { val: 50 }, monthlyLimit: { val: 200 } },
+      }).creditUsagePercent,
+    ).toBe(25);
+    expect(() => parseXaiUsageBody([])).toThrow();
+    expect(() => parseXaiUsageBody({ config: "nope" })).toThrow();
   });
+});
 
-  test("writes the credential file private from creation", async () => {
-    const started = await startXaiLogin(
-      "octocat",
-      fakeRuntime({
-        resolve: {
-          type: "oauth",
-          access: "fresh-access",
-          refresh: "fresh-refresh",
-          expires: Date.now() + 55 * 60_000,
-        },
-      }),
-    );
-    if ("error" in started) throw new Error(started.error);
-    await settle();
-    expect(statSync(storePath).mode & 0o777).toBe(0o600);
-  });
-
-  test("surfaces a denied or expired login instead of leaving it pending", async () => {
-    const started = await startXaiLogin(
-      "octocat",
-      fakeRuntime({ reject: "xAI device authorization was denied" }),
-    );
-    if ("error" in started) throw new Error(started.error);
-    for (let i = 0; i < 50; i++) {
-      await new Promise((wake) => setTimeout(wake, 2));
-      if (pollXaiLogin(started.flowId).status !== "pending") break;
-    }
-    expect(xaiConnected()).toBe(false);
-  });
-
-  test("reports a flow that never produced a code as an error, not a hang", async () => {
-    const started = await startXaiLogin(
-      "octocat",
-      fakeRuntime({ announce: false, reject: "device authorization failed" }),
-    );
-    expect("error" in started).toBe(true);
-  });
-
-  test("cancelling stops the flow, forgets it, and writes nothing", async () => {
-    const started = await startXaiLogin(
-      "octocat",
-      fakeRuntime({
-        resolve: {
-          type: "oauth",
-          access: "never-used",
-          refresh: "never-used",
-          expires: Date.now() + 55 * 60_000,
-        },
-      }),
-    );
-    if ("error" in started) throw new Error(started.error);
-    expect(cancelXaiLogin(started.flowId)).toBe(true);
-    expect(cancelXaiLogin(started.flowId)).toBe(false);
-    await settleFlows();
-    // The bookkeeping above passed while the credential was being written
-    // anyway. Assert the thing that actually matters.
-    expect(xaiConnected()).toBe(false);
-  });
-
-  test("cancelling a RECONNECT leaves the live credential untouched", async () => {
-    // The dangerous case: something IS stored, so pi's persist finds a
-    // credential to overwrite rather than a first connect to create.
-    seed();
-    const started = await startXaiLogin(
-      "octocat",
-      fakeRuntime({
-        honourSignal: false,
-        resolve: {
-          type: "oauth",
-          access: "cancelled-reconnect",
-          refresh: "cancelled-reconnect",
-          expires: Date.now() + 55 * 60_000,
-        },
-      }),
-    );
-    if ("error" in started) throw new Error(started.error);
-    expect(cancelXaiLogin(started.flowId)).toBe(true);
-    await settleFlows();
-    expect(JSON.parse(readFileSync(storePath, "utf-8")).access).toBe(
-      "stored-access",
-    );
-  });
-
-  test("two concurrent refreshes do not interleave into a torn credential", async () => {
-    seed();
-    // Both stores read the same generation, which is exactly the case the
-    // generation stamp cannot resolve on its own - only serialization can.
-    const a = xaiCredentialStore();
-    const b = xaiCredentialStore();
-    const rotate = (
-      store: ReturnType<typeof xaiCredentialStore>,
-      tag: string,
-    ) =>
-      store.modify(XAI_PROVIDER_ID, async (current) => {
-        await new Promise((wake) => setTimeout(wake, 5));
-        return {
-          type: "oauth",
-          access: `${tag}-from-${(current as { access: string }).access}`,
-          refresh: `${tag}-refresh`,
-          expires: Date.now() + 60 * 60_000,
-        } as never;
-      });
-    await Promise.all([rotate(a, "first"), rotate(b, "second")]);
-    const onDisk = JSON.parse(readFileSync(storePath, "utf-8"));
-    // Whoever ran second must have SEEN the first one's write, not the
-    // credential both started from.
-    expect(onDisk.access).not.toBe("first-from-stored-access");
+describe("parseXaiCatalogBody", () => {
+  test("keeps chat models only, with the proxy's window fields", () => {
     expect(
-      onDisk.access === "second-from-first-from-stored-access" ||
-        onDisk.access === "first-from-second-from-stored-access",
-    ).toBe(true);
-  });
-
-  test("a modification that arrives while another is suspended still waits", async () => {
-    seed();
-    // The re-entrancy escape hatch has to be scoped to the holder's own async
-    // tree. A process-global "held" flag stays set for as long as the holder is
-    // suspended on its refresh, so an unrelated caller arriving in that window
-    // reads it as "held by me" and runs straight through both locks.
-    let insideFirst!: () => void;
-    const firstIsSuspended = new Promise<void>((r) => (insideFirst = r));
-    let overlapped = false;
-    let firstStillRunning = false;
-
-    const first = xaiCredentialStore().modify(XAI_PROVIDER_ID, async () => {
-      firstStillRunning = true;
-      insideFirst();
-      await new Promise((wake) => setTimeout(wake, 20));
-      firstStillRunning = false;
-      return {
-        type: "oauth",
-        access: "first",
-        refresh: "first-refresh",
-        expires: Date.now() + 60 * 60_000,
-      } as never;
-    });
-
-    // Only start the second AFTER the first has suspended - starting both in
-    // the same tick passes even with the lock broken.
-    await firstIsSuspended;
-    const second = xaiCredentialStore().modify(XAI_PROVIDER_ID, async () => {
-      if (firstStillRunning) overlapped = true;
-      return {
-        type: "oauth",
-        access: "second",
-        refresh: "second-refresh",
-        expires: Date.now() + 60 * 60_000,
-      } as never;
-    });
-
-    await Promise.all([first, second]);
-    expect(overlapped).toBe(false);
-    expect(JSON.parse(readFileSync(storePath, "utf-8")).access).toBe("second");
-  });
-
-  test("reconnecting credits the admin who reconnected, not the last one", async () => {
-    seed({ generation: "gen-old", connectedBy: "octocat" });
-    const started = await startXaiLogin(
-      "hubot",
-      fakeRuntime({
-        resolve: {
-          type: "oauth",
-          access: "hubot-access",
-          refresh: "hubot-refresh",
-          expires: Date.now() + 55 * 60_000,
-        },
+      parseXaiCatalogBody({
+        data: [
+          {
+            id: "grok-4.6",
+            context_window: 500000,
+            supports_reasoning_effort: true,
+          },
+          { id: "grok-imagine-image" },
+          { id: "grok-embedding-1" },
+          { id: "other-vendor" },
+          {
+            id: "grok-build",
+            context_length: 256000,
+            max_output_tokens: 30000,
+          },
+        ],
       }),
-    );
-    if ("error" in started) throw new Error(started.error);
-    await settleFlows();
-
-    const onDisk = JSON.parse(readFileSync(storePath, "utf-8"));
-    expect(onDisk.access).toBe("hubot-access");
-    // A login is a new connection, not a refresh of the old one: merging would
-    // leave the Settings card naming whoever connected the previous account.
-    expect(onDisk.connectedBy).toBe("hubot");
-    expect(onDisk.generation).not.toBe("gen-old");
-    expect(xaiStatus().connectedBy).toBe("hubot");
-  });
-
-  test("disconnecting abandons a login still in flight", async () => {
-    const started = await startXaiLogin(
-      "octocat",
-      fakeRuntime({
-        resolve: {
-          type: "oauth",
-          access: "raced",
-          refresh: "raced",
-          expires: Date.now() + 55 * 60_000,
-        },
-      }),
-    );
-    if ("error" in started) throw new Error(started.error);
-    seed();
-    await disconnectXai();
-    await settleFlows();
-    // The point is the WRITE, not the poll result: polling reports "not
-    // pending" either way, so asserting only that let a completed sign-in
-    // reconnect a workspace an admin had just disconnected.
-    expect(xaiConnected()).toBe(false);
-    expect(pollXaiLogin(started.flowId).status).not.toBe("pending");
-  });
-
-  test("a provider that ignores cancellation still cannot reconnect us", async () => {
-    const started = await startXaiLogin(
-      "octocat",
-      fakeRuntime({
-        honourSignal: false,
-        resolve: {
-          type: "oauth",
-          access: "raced",
-          refresh: "raced",
-          expires: Date.now() + 55 * 60_000,
-        },
-      }),
-    );
-    if ("error" in started) throw new Error(started.error);
-    await disconnectXai();
-    await settleFlows();
-    expect(xaiConnected()).toBe(false);
+    ).toEqual([
+      { id: "grok-4.6", contextWindow: 500000, supportsReasoningEffort: true },
+      { id: "grok-build", contextWindow: 256000, maxTokens: 30000 },
+    ]);
+    expect(parseXaiCatalogBody({ data: "x" })).toEqual([]);
   });
 });

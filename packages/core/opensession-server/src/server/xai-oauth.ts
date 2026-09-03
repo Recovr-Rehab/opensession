@@ -1,590 +1,612 @@
 /**
- * The ONE shared xAI (Grok) subscription for this workspace.
+ * xAI (SuperGrok) OAuth and cli-chat-proxy helpers for the xAI account pool.
  *
- * pi already ships a complete xAI integration: the RFC 8628 device flow
- * against auth.x.ai, refresh with rotation, the Grok model catalog, and the
- * openai-responses compatibility for api.x.ai. None of that is reimplemented
- * here, because a second copy of an OAuth client is a second copy of its bugs.
+ * Pure network and parsing code, no store access. xai-accounts.ts owns the
+ * credential store and picks accounts; xai-device-login.ts drives the
+ * interactive sign-in; this module talks to xAI.
  *
- * What pi cannot own is WHERE this workspace's single credential lives. Every
- * turn builds its own ModelRuntime with an in-memory credential store, so a
- * token pi refreshes mid-turn would die with that runtime and leave the stored
- * refresh token behind a rotation. This module supplies a write-through store
- * instead: pi reads the shared credential through it and persists whatever it
- * refreshes, under a generation stamp so a refresh that lands after an admin
- * disconnected cannot resurrect the credential it replaced.
+ * Wire details follow stnly/pi-grok v0.10.1 (MIT), the reference the feature
+ * request named: device-code OAuth against auth.x.ai with the Grok CLI client
+ * id, and every subscription call (inference, catalog, account, billing)
+ * routed through cli-chat-proxy.grok.com so it draws on SuperGrok quota, not
+ * billed API credits. Requests carry the proxy's client identity headers; the
+ * proxy rejects a version it does not admit.
  */
-import { AsyncLocalStorage } from "node:async_hooks";
-import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import {
-  closeSync,
-  existsSync,
-  openSync,
-  readFileSync,
-  statSync,
-  unlinkSync,
-} from "fs";
-import { randomUUID } from "crypto";
-import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
 
-/** pi's builtin provider id. Using it is what makes pi's catalog, its
- *  device flow and its api.x.ai compatibility apply without registration. */
-export const XAI_PROVIDER_ID = "xai";
+import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
 
-/** A pending device login is useless once its own code has expired; keep the
- *  record a little past that so a slow poll still gets a real answer. */
-const FLOW_GRACE_MS = 2 * 60_000;
+export { XAI_OAUTH_PROVIDER };
 
-function storePath(): string {
-  return stateDir("xai-oauth.json");
-}
+const ISSUER = "https://auth.x.ai";
+const DEVICE_CODE_URL = `${ISSUER}/oauth2/device/code`;
+const TOKEN_URL = `${ISSUER}/oauth2/token`;
+const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
+// conversations:* lets the proxy attach server-side history to x-grok-conv-id.
+const SCOPE =
+  "openid profile email offline_access grok-cli:access api:access conversations:read conversations:write";
+const CLIENT_VERSION = "0.2.101";
+const CLIENT_IDENTIFIER = "grok-shell";
 
-/** The shared credential, in pi's own OAuthCredential shape plus the
- *  provenance the Settings card shows and the generation stamp that makes a
- *  late write safe. */
-export interface XaiStoredCredential {
-  type: "oauth";
+/** Every subscription request rides the CLI proxy, never api.x.ai. */
+export const XAI_CLI_PROXY_BASE_URL = "https://cli-chat-proxy.grok.com/v1";
+
+/** Refresh five minutes before the token actually dies. */
+const REFRESH_SKEW_MS = 5 * 60 * 1000;
+const DEFAULT_TOKEN_LIFETIME_S = 3600;
+const AUTH_TIMEOUT_MS = 15_000;
+const PROXY_TIMEOUT_MS = 15_000;
+/** Reject bodies past this size before parsing; auth and account payloads are tiny. */
+const MAX_RESPONSE_BYTES = 256 * 1024;
+
+export interface XaiOAuthTokens {
   access: string;
   refresh: string;
-  /** Epoch ms, already reduced by pi's refresh skew. */
+  /** ms epoch when the access token should be considered spent (skewed). */
   expires: number;
-  generation: string;
-  connectedAt: number;
-  connectedBy?: string;
+  idToken?: string;
 }
 
-export interface XaiStatusPublic {
-  connected: boolean;
-  connectedAt?: number;
-  connectedBy?: string;
-  expiresAt?: number;
+export interface XaiDeviceCode {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  intervalSeconds: number;
+  expiresInSeconds: number;
 }
 
-function readStore(): XaiStoredCredential | null {
+export type XaiDevicePoll =
+  | { status: "pending" }
+  | { status: "slow_down"; intervalSeconds?: number }
+  | { status: "complete"; tokens: XaiOAuthTokens }
+  | { status: "failed"; message: string; fatal: boolean };
+
+export class XaiOAuthError extends Error {
+  constructor(
+    message: string,
+    /** True when only a fresh sign-in can fix it (revoked refresh token, denied). */
+    public readonly reloginRequired = false,
+  ) {
+    super(message);
+    this.name = "XaiOAuthError";
+  }
+}
+
+function platformLabel(): string {
+  const os =
+    process.platform === "darwin"
+      ? "macos"
+      : process.platform === "win32"
+        ? "windows"
+        : process.platform;
+  const arch =
+    process.arch === "arm64"
+      ? "aarch64"
+      : process.arch === "x64"
+        ? "x86_64"
+        : process.arch;
+  return `${os}; ${arch}`;
+}
+
+/** Identity headers the cli-chat-proxy gates on. `modelId` adds the routing
+ * override an inference request needs; account and catalog calls omit it. */
+export function xaiProxyHeaders(modelId?: string): Record<string, string> {
+  return {
+    "User-Agent": `${CLIENT_IDENTIFIER}/${CLIENT_VERSION} (${platformLabel()})`,
+    "x-grok-client-identifier": CLIENT_IDENTIFIER,
+    "x-grok-client-version": CLIENT_VERSION,
+    "x-grok-client-mode": "interactive",
+    "X-XAI-Token-Auth": "xai-grok-cli",
+    "x-authenticateresponse": "authenticate-response",
+    ...(modelId ? { "x-grok-model-override": modelId } : {}),
+  };
+}
+
+function authHeaders(): Record<string, string> {
+  return {
+    "Content-Type": "application/x-www-form-urlencoded",
+    Accept: "application/json",
+    "x-grok-client-version": CLIENT_VERSION,
+    "x-grok-client-surface": "cli",
+  };
+}
+
+async function readBoundedText(res: Response): Promise<string> {
+  const text = await res.text();
+  if (Buffer.byteLength(text, "utf8") > MAX_RESPONSE_BYTES) {
+    throw new Error(`xAI response exceeded ${MAX_RESPONSE_BYTES} bytes`);
+  }
+  return text;
+}
+
+async function readJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await readBoundedText(res);
+  const parsed: unknown = JSON.parse(text);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("xAI response was not a JSON object");
+  }
+  // SAFETY: checked to be a non-array object above; field shapes are validated by callers.
+  return parsed as Record<string, unknown>;
+}
+
+async function readErrorCode(res: Response): Promise<string> {
+  const text = await readBoundedText(res).catch(() => "");
   try {
-    if (!existsSync(storePath())) return null;
-    const parsed = JSON.parse(readFileSync(storePath(), "utf-8"));
-    if (
-      !parsed ||
-      typeof parsed.access !== "string" ||
-      typeof parsed.refresh !== "string" ||
-      typeof parsed.generation !== "string"
-    ) {
-      return null;
-    }
-    return { ...parsed, type: "oauth" } as XaiStoredCredential;
+    const parsed: unknown = JSON.parse(text);
+    const error =
+      parsed && typeof parsed === "object" && "error" in parsed
+        ? parsed.error
+        : undefined;
+    return typeof error === "string" ? error : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Short, user-safe label for a failed authenticated call. Upstream bodies
+ * can carry trace ids and internal hints, so they never land in a message. */
+export function xaiStatusLabel(status: number): {
+  label: string;
+  fatal: boolean;
+} {
+  if (status === 401 || status === 403)
+    return { label: "authentication rejected", fatal: true };
+  if (status === 404) return { label: "endpoint unavailable", fatal: false };
+  if (status === 429) return { label: "rate limited", fatal: false };
+  if (status >= 500) return { label: "upstream error", fatal: false };
+  return { label: `HTTP ${status}`, fatal: false };
+}
+
+// ── JWT helpers ─────────────────────────────────────────────────────────────
+
+export function decodeJwtClaims(
+  token: string | undefined,
+): Record<string, unknown> | null {
+  if (!token) return null;
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const parsed: unknown = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf-8"),
+    );
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? // SAFETY: checked to be a non-array object.
+        (parsed as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }
 }
 
-function writeStore(credential: XaiStoredCredential): void {
-  // 0600 at CREATION, not after: writeJsonAtomic passes the mode to openSync,
-  // so the inode is private before any bytes land. Chmod-after-rename leaves a
-  // window where the tokens sit world-readable under the default umask, and a
-  // failed chmod would leave them that way for good.
-  writeJsonAtomic(storePath(), credential, true, 0o600);
+/** ms epoch from a JWT's `exp`, or null for an opaque token. */
+export function jwtExpMs(token: string | undefined): number | null {
+  const exp = decodeJwtClaims(token)?.exp;
+  return typeof exp === "number" ? exp * 1000 : null;
 }
 
-export function xaiStatus(): XaiStatusPublic {
-  const stored = readStore();
-  if (!stored) return { connected: false };
+export function jwtEmail(token: string | undefined): string | undefined {
+  const email = decodeJwtClaims(token)?.email;
+  return typeof email === "string" && email.trim() ? email.trim() : undefined;
+}
+
+/** Stored expiry: the shorter of `expires_in` and the access token's own
+ * `exp`, both minus the refresh skew, so a clock-drifted issuer never leaves
+ * us holding a token past its real death. */
+export function computeExpires(access: string, expiresInS: number): number {
+  const fromExpiresIn = Date.now() + expiresInS * 1000 - REFRESH_SKEW_MS;
+  const exp = jwtExpMs(access);
+  return exp === null
+    ? fromExpiresIn
+    : Math.min(fromExpiresIn, exp - REFRESH_SKEW_MS);
+}
+
+export function tokensFromResponse(
+  body: Record<string, unknown>,
+  previousRefresh?: string,
+): XaiOAuthTokens {
+  const access = typeof body.access_token === "string" ? body.access_token : "";
+  if (!access) throw new XaiOAuthError("xAI did not return an access token");
+  const refresh =
+    typeof body.refresh_token === "string" && body.refresh_token
+      ? body.refresh_token
+      : previousRefresh || "";
+  if (!refresh) throw new XaiOAuthError("xAI did not return a refresh token");
+  const expiresIn =
+    typeof body.expires_in === "number" && body.expires_in > 0
+      ? body.expires_in
+      : DEFAULT_TOKEN_LIFETIME_S;
+  const idToken = typeof body.id_token === "string" ? body.id_token : undefined;
   return {
-    connected: true,
-    connectedAt: stored.connectedAt,
-    connectedBy: stored.connectedBy,
-    expiresAt: stored.expires,
+    access,
+    refresh,
+    expires: computeExpires(access, expiresIn),
+    ...(idToken ? { idToken } : {}),
   };
 }
 
-export function xaiConnected(): boolean {
-  return readStore() !== null;
-}
+// ── Device-code login ───────────────────────────────────────────────────────
 
-/** Drop the shared credential and abandon any login still in flight, so a
- *  device flow an admin walked away from cannot land on top of a disconnect. */
-export async function disconnectXai(): Promise<boolean> {
-  for (const flow of flows().values()) flow.controller.abort();
-  flows().clear();
-  // Through the same lock as every write: otherwise an unlink can land between
-  // a refresh reading the generation and writing it back, and the credential
-  // comes back from the dead.
-  return withStoreLock(async () => {
-    try {
-      if (!existsSync(storePath())) return false;
-      unlinkSync(storePath());
-      return true;
-    } catch {
-      return false;
-    }
+export async function requestXaiDeviceCode(
+  signal?: AbortSignal,
+): Promise<XaiDeviceCode> {
+  const res = await fetch(DEVICE_CODE_URL, {
+    method: "POST",
+    headers: authHeaders(),
+    body: new URLSearchParams({
+      client_id: CLIENT_ID,
+      scope: SCOPE,
+      referrer: "grok-build",
+    }),
+    signal: AbortSignal.any([
+      AbortSignal.timeout(AUTH_TIMEOUT_MS),
+      ...(signal ? [signal] : []),
+    ]),
   });
-}
-
-// ── Serialization ───────────────────────────────────────────────────────────
-
-/** pi's CredentialStore contract requires "mutual exclusion per provider id,
- *  cross-process too where the backing store supports it", and it runs the
- *  network refresh INSIDE modify(). Without that, two turns whose token expires
- *  together both POST the same refresh_token; xAI rotates, so one persists a
- *  token the other has already invalidated and the shared workspace credential
- *  dies until an admin signs in again.
- *
- *  In-process chaining is what actually serializes this deployment's turns. The
- *  lock file is for a second server sharing the state dir. Contention is NOT
- *  best-effort: a mutation that waits out the window fails instead of writing
- *  unlocked, because a lost refresh costs the whole workspace its credential
- *  while a failed turn costs one retry. A lock nobody released is reaped as
- *  stale, so waiting out the full window means a live holder. */
-const LOCK_STALE_MS = 30_000;
-const LOCK_WAIT_MS = 10_000;
-
-function chain(): Promise<void> {
-  const g = globalThis as typeof globalThis & {
-    __opensessionXaiLockChain?: Promise<void>;
-  };
-  return (g.__opensessionXaiLockChain ??= Promise.resolve());
-}
-
-function setChain(next: Promise<void>): void {
-  (
-    globalThis as typeof globalThis & {
-      __opensessionXaiLockChain?: Promise<void>;
-    }
-  ).__opensessionXaiLockChain = next;
-}
-
-function lockPath(): string {
-  return `${storePath()}.lock`;
-}
-
-/** Three outcomes, not two. Contention and "this filesystem cannot lock at
- *  all" look the same to a boolean, and they call for opposite answers: one
- *  peer is mid-write and we must not join it, versus there is no peer and no
- *  lock to be had. Collapsing them either fails every turn on a state dir that
- *  cannot hold a lock file, or writes underneath a live holder. */
-type LockOutcome = "taken" | "contended" | "unavailable";
-
-async function takeFileLock(): Promise<LockOutcome> {
-  const deadline = Date.now() + LOCK_WAIT_MS;
-  // EVERY path through this loop must reach the deadline check. An earlier
-  // version continued straight back to the top when statSync also failed - a
-  // missing parent directory then span this synchronously, forever, on the
-  // credential path.
-  while (Date.now() <= deadline) {
-    try {
-      closeSync(openSync(lockPath(), "wx", 0o600));
-      return "taken";
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") {
-        // Not contention: the directory is missing or unwritable. Nobody else
-        // can be holding a lock here either, so there is no race to lose -
-        // report it and let the caller decide, rather than spinning against a
-        // condition that will not clear.
-        return "unavailable";
-      }
-      try {
-        // A holder that died leaves its lock behind; reap it rather than
-        // stalling every future refresh on this box.
-        if (Date.now() - statSync(lockPath()).mtimeMs > LOCK_STALE_MS) {
-          unlinkSync(lockPath());
-        }
-      } catch {
-        // The holder released it between our open and our stat. Retry.
-      }
-      // An await, never a synchronous sleep. This runs on the server's only
-      // thread: spinning here would freeze every session for the whole wait,
-      // and the kernel's own guard test forbids the blocking primitives that
-      // would let it.
-      await new Promise((wake) => setTimeout(wake, 25));
-    }
-  }
-  return "contended";
-}
-
-function dropFileLock(): void {
-  try {
-    unlinkSync(lockPath());
-  } catch {}
-}
-
-/** Marks the async call tree that currently owns the lock. A process-global
- *  boolean cannot express this: it stays set for as long as the holder is
- *  suspended on its network refresh, so every UNRELATED caller arriving in that
- *  window would read "held" as "held by me" and skip both locks. Storage scoped
- *  to the holder's own continuation is the distinction the flag was missing. */
-function lockOwner(): AsyncLocalStorage<true> {
-  const g = globalThis as typeof globalThis & {
-    __opensessionXaiLockOwner?: AsyncLocalStorage<true>;
-  };
-  return (g.__opensessionXaiLockOwner ??= new AsyncLocalStorage<true>());
-}
-
-/** Run a read-modify-write against the shared credential with nothing else
- *  touching it. */
-async function withStoreLock<T>(run: () => Promise<T>): Promise<T> {
-  // Re-entrant by design: disconnectXai takes this lock, and it is also
-  // reachable from inside a modify() callback. The chain guarantees only one
-  // holder is ever running, so seeing the flag set means WE are that holder -
-  // and waiting on ourselves would simply deadlock.
-  if (lockOwner().getStore()) return run();
-  const previous = chain();
-  let release!: () => void;
-  const mine = new Promise<void>((resolve) => (release = resolve));
-  setChain(previous.then(() => mine));
-  await previous.catch(() => undefined);
-  let outcome: LockOutcome;
-  try {
-    outcome = await takeFileLock();
-  } catch (error) {
-    release();
-    throw error;
-  }
-  if (outcome === "contended") {
-    release();
-    throw new Error(
-      "[xai] another process is holding the Grok credential lock; try again",
+  if (!res.ok) {
+    const code = await readErrorCode(res);
+    throw new XaiOAuthError(
+      `xAI device-code request failed: ${code || xaiStatusLabel(res.status).label}`,
     );
   }
-  if (outcome === "unavailable") {
-    console.warn(
-      "[xai] the state directory cannot hold a lock file; proceeding without cross-process exclusion",
-    );
-  }
+  const body = await readJson(res);
+  const verificationUri =
+    typeof body.verification_uri_complete === "string" &&
+    body.verification_uri_complete
+      ? body.verification_uri_complete
+      : typeof body.verification_uri === "string"
+        ? body.verification_uri
+        : "";
+  let url: URL;
   try {
-    return await lockOwner().run(true, run);
-  } finally {
-    if (outcome === "taken") dropFileLock();
-    release();
+    url = new URL(verificationUri);
+  } catch {
+    throw new XaiOAuthError("xAI returned an unusable verification URL");
   }
-}
-
-// ── The write-through credential store handed to a per-turn runtime ─────────
-
-/** pi's own CredentialStore type, derived from the SDK so this stays a
- *  type-only reference and never pulls pi into the module graph at import. */
-export type PiCredentialStore = NonNullable<
-  NonNullable<Parameters<typeof ModelRuntime.create>[0]>["credentials"]
->;
-type PiCredential = Awaited<ReturnType<PiCredentialStore["read"]>>;
-
-export interface XaiStoreOptions {
-  /** Aborting this refuses every write through this store. A device login runs
-   *  against a store bound to its own flow, so cancelling the flow stops the
-   *  credential pi is about to persist rather than racing it afterwards. */
-  signal?: AbortSignal;
-  /** Recorded on a credential this store creates, for the Settings card. */
-  connectedBy?: string;
-  /** This store backs a device login rather than a turn. Its write starts a new
-   *  connection - new generation, new provenance - even over a stored
-   *  credential, because a human just authorised it. */
-  login?: boolean;
-}
-
-/**
- * A credential store for one turn or one login: the shared xAI credential is
- * read from and written back to disk, every other provider stays in memory.
- *
- * `modify` is the ONLY write path, as pi's contract says it is. pi persists a
- * login through it and refreshes through it, so both go through the same lock,
- * the same abort check and the same generation check. A refresh that finishes
- * after an admin disconnected or reconnected finds a different generation and
- * drops its write instead of resurrecting a credential nobody is using.
- */
-export function xaiCredentialStore(
-  options: XaiStoreOptions = {},
-): PiCredentialStore {
-  const memory = new Map<string, PiCredential>();
+  if (url.protocol !== "https:") {
+    throw new XaiOAuthError("xAI returned an unusable verification URL");
+  }
+  const deviceCode =
+    typeof body.device_code === "string" ? body.device_code : "";
+  const userCode = typeof body.user_code === "string" ? body.user_code : "";
+  if (!deviceCode || !userCode) {
+    throw new XaiOAuthError("xAI device-code response was incomplete");
+  }
   return {
-    async read(id: string) {
-      if (id !== XAI_PROVIDER_ID) return memory.get(id);
-      const stored = readStore();
-      return stored ? piCredential(stored) : undefined;
-    },
-    async list() {
-      const rows = [...memory.entries()]
-        .filter(([, credential]) => credential !== undefined)
-        .map(([providerId, credential]) => ({
-          providerId,
-          type: credential!.type,
-        }));
-      if (readStore()) {
-        rows.push({ providerId: XAI_PROVIDER_ID, type: "oauth" as const });
-      }
-      return rows;
-    },
-    async modify(
-      id: string,
-      fn: (current: PiCredential) => Promise<PiCredential>,
-    ) {
-      if (id !== XAI_PROVIDER_ID) {
-        const next = await fn(memory.get(id));
-        if (next !== undefined) memory.set(id, next);
-        return memory.get(id);
-      }
-      return withStoreLock(async () => {
-        const before = readStore();
-        const next = await fn(before ? piCredential(before) : undefined);
-        const keep = () => {
-          const now = readStore();
-          return now ? piCredential(now) : undefined;
-        };
-        if (next === undefined) return keep();
-        if (
-          next.type !== "oauth" ||
-          typeof next.access !== "string" ||
-          typeof next.refresh !== "string" ||
-          typeof next.expires !== "number"
-        ) {
-          // Not something this store can persist. Leave the stored credential
-          // alone rather than overwriting a working token with an api-key entry.
-          return keep();
-        }
-        // The admin cancelled this login, or disconnected the workspace, while
-        // xAI was still answering. pi commits its own write before login()
-        // resolves, so refusing here is the only place that can stop it.
-        if (options.signal?.aborted) return keep();
-        const current = readStore();
-        // A login store writes a credential a human just authorised, which may
-        // well be a different xAI account. Merging it into the existing record
-        // would keep the previous generation and leave the Settings card
-        // crediting whoever connected last time. Only a refresh merges.
-        if (before && options.login !== true) {
-          if (!current || current.generation !== before.generation)
-            return keep();
-          const merged: XaiStoredCredential = {
-            ...before,
-            access: next.access,
-            refresh: next.refresh,
-            expires: next.expires,
-          };
-          writeStore(merged);
-          return piCredential(merged);
-        }
-        // A first connect, or a deliberate reconnect. A new generation makes
-        // every refresh still in flight against the credential this replaces
-        // decline to write. A first connect that raced another one defers to
-        // the winner; a login the admin just completed does not.
-        if (current && options.login !== true) return keep();
-        const created: XaiStoredCredential = {
-          type: "oauth",
-          access: next.access,
-          refresh: next.refresh,
-          expires: next.expires,
-          generation: randomUUID(),
-          connectedAt: Date.now(),
-          connectedBy: options.connectedBy,
-        };
-        writeStore(created);
-        return piCredential(created);
-      });
-    },
-    async delete(id: string) {
-      if (id !== XAI_PROVIDER_ID) {
-        memory.delete(id);
-        return;
-      }
-      // Only the stored credential. Aborting live device logins is an admin
-      // action (disconnectXai), not something a pi-side logout should do.
-      await withStoreLock(async () => {
-        try {
-          if (existsSync(storePath())) unlinkSync(storePath());
-        } catch {}
-      });
-    },
+    deviceCode,
+    userCode,
+    verificationUri: url.href,
+    intervalSeconds:
+      typeof body.interval === "number" && body.interval > 0
+        ? body.interval
+        : 5,
+    expiresInSeconds:
+      typeof body.expires_in === "number" && body.expires_in > 0
+        ? body.expires_in
+        : 900,
   };
 }
 
-function piCredential(stored: XaiStoredCredential) {
-  return {
-    type: "oauth" as const,
-    access: stored.access,
-    refresh: stored.refresh,
-    expires: stored.expires,
-  };
-}
-
-// ── Device login, driven through pi's own flow ─────────────────────────────
-
-export interface XaiLoginFlow {
-  id: string;
-  userCode: string;
-  verificationUri: string;
-  expiresAt: number;
-  controller: AbortController;
-  settled?: { ok: true } | { ok: false; error: string };
-}
-
-/** Module-global so a reload of this module during dev does not strand a
- *  login the browser is still polling. */
-function flows(): Map<string, XaiLoginFlow> {
-  const g = globalThis as typeof globalThis & {
-    __opensessionXaiFlows?: Map<string, XaiLoginFlow>;
-  };
-  return (g.__opensessionXaiFlows ??= new Map());
-}
-
-function pruneFlows(): void {
-  const now = Date.now();
-  for (const [id, flow] of flows()) {
-    if (now > flow.expiresAt + FLOW_GRACE_MS) {
-      flow.controller.abort();
-      flows().delete(id);
-    }
-  }
-}
-
-export interface XaiLoginStarted {
-  flowId: string;
-  userCode: string;
-  verificationUri: string;
-  expiresAt: number;
-}
-
-/**
- * Begin pi's xAI device flow and return the code to show the admin. The login
- * promise keeps running in the background; `pollXaiLogin` reports where it got
- * to. `loadRuntime` is a seam so tests do not need the real pi SDK.
- */
-export async function startXaiLogin(
-  connectedBy?: string,
-  loadRuntime: (
-    signal: AbortSignal,
-    connectedBy?: string,
-  ) => Promise<{
-    login: (
-      providerId: string,
-      type: "oauth",
-      interaction: {
-        signal: AbortSignal;
-        prompt: (prompt: unknown) => Promise<string>;
-        notify: (event: Record<string, unknown>) => void;
-      },
-    ) => Promise<unknown>;
-  }> = defaultLoginRuntime,
-): Promise<XaiLoginStarted | { error: string }> {
-  pruneFlows();
-  const controller = new AbortController();
-  let runtime;
-  try {
-    runtime = await loadRuntime(controller.signal, connectedBy);
-  } catch (error) {
-    return { error: describe(error) };
-  }
-
-  let announce: (started: XaiLoginStarted) => void = () => undefined;
-  let fail: (error: Error) => void = () => undefined;
-  const announced = new Promise<XaiLoginStarted>((resolve, reject) => {
-    announce = resolve;
-    fail = reject;
+/** One poll of the token endpoint for a pending device grant. */
+export async function pollXaiDeviceToken(
+  deviceCode: string,
+  signal?: AbortSignal,
+): Promise<XaiDevicePoll> {
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: authHeaders(),
+    body: new URLSearchParams({
+      grant_type: DEVICE_GRANT_TYPE,
+      device_code: deviceCode,
+      client_id: CLIENT_ID,
+    }),
+    signal: AbortSignal.any([
+      AbortSignal.timeout(AUTH_TIMEOUT_MS),
+      ...(signal ? [signal] : []),
+    ]),
   });
-  const id = randomUUID();
-
-  const login = runtime
-    .login(XAI_PROVIDER_ID, "oauth", {
-      signal: controller.signal,
-      // pi's xAI flow never prompts; anything that does is a flow we cannot
-      // drive from an HTTP round trip, so fail loudly instead of hanging.
-      prompt: async () => {
-        throw new Error("xAI login asked for interactive input");
-      },
-      notify: (event) => {
-        if (event.type !== "device_code") return;
-        const expiresInSeconds =
-          typeof event.expiresInSeconds === "number"
-            ? event.expiresInSeconds
-            : 600;
-        announce({
-          flowId: id,
-          userCode: String(event.userCode ?? ""),
-          verificationUri: String(event.verificationUri ?? ""),
-          expiresAt: Date.now() + expiresInSeconds * 1_000,
-        });
-      },
-    })
-    .then(() => {
-      // No write here. pi persists the credential through the store above,
-      // which is the only write path and already applied the lock, the abort
-      // check and the generation check. Writing again would be a second,
-      // unserialized path - which is exactly how a cancelled reconnect used to
-      // replace a live credential.
-      const flow = flows().get(id);
-      if (!xaiConnected()) {
-        if (flow) {
-          flow.settled = { ok: false, error: "The Grok sign-in was cancelled" };
-        }
-        return;
-      }
-      if (flow) flow.settled = { ok: true };
-    })
-    .catch((error: unknown) => {
-      const flow = flows().get(id);
-      if (flow) flow.settled = { ok: false, error: describe(error) };
-      fail(error instanceof Error ? error : new Error(describe(error)));
-    });
-  void login;
-
-  let started: XaiLoginStarted;
-  try {
-    started = await announced;
-  } catch (error) {
-    controller.abort();
-    return { error: describe(error) };
-  }
-  flows().set(id, {
-    id,
-    userCode: started.userCode,
-    verificationUri: started.verificationUri,
-    expiresAt: started.expiresAt,
-    controller,
-  });
-  return started;
-}
-
-export type XaiPollResult =
-  | { status: "pending" }
-  | { status: "connected"; state: XaiStatusPublic }
-  | { status: "error"; error: string };
-
-/** Report where a started login got to, and retire the flow once it is done. */
-export function pollXaiLogin(flowId: string): XaiPollResult {
-  pruneFlows();
-  const flow = flows().get(flowId);
-  if (!flow) {
-    // Deliberately not "connected": a credential may exist because someone
-    // else connected one. This flow's own outcome is simply no longer known.
+  if (res.ok) {
     return {
-      status: "error",
-      error: "That Grok login is no longer in progress",
+      status: "complete",
+      tokens: tokensFromResponse(await readJson(res)),
     };
   }
-  if (!flow.settled) return { status: "pending" };
-  flows().delete(flowId);
-  return flow.settled.ok
-    ? { status: "connected", state: xaiStatus() }
-    : { status: "error", error: flow.settled.error };
+  const code = await readErrorCode(res);
+  switch (code) {
+    case "authorization_pending":
+      return { status: "pending" };
+    case "slow_down":
+      return { status: "slow_down" };
+    case "access_denied":
+    case "authorization_denied":
+      return { status: "failed", message: "Sign-in was denied.", fatal: true };
+    case "expired_token":
+      return {
+        status: "failed",
+        message: "The device code expired. Start again.",
+        fatal: true,
+      };
+    default:
+      return {
+        status: "failed",
+        message: `xAI token exchange failed: ${code || xaiStatusLabel(res.status).label}`,
+        fatal: false,
+      };
+  }
 }
 
-/** Cancel a login the admin backed out of. */
-export function cancelXaiLogin(flowId: string): boolean {
-  const flow = flows().get(flowId);
-  if (!flow) return false;
-  flow.controller.abort();
-  flows().delete(flowId);
-  return true;
-}
+// ── Refresh ─────────────────────────────────────────────────────────────────
 
-async function defaultLoginRuntime(signal: AbortSignal, connectedBy?: string) {
-  const sdk = await import("@earendil-works/pi-coding-agent");
-  const runtime = await sdk.ModelRuntime.create({
-    credentials: xaiCredentialStore({ signal, connectedBy, login: true }),
-    modelsPath: null,
+export async function refreshXaiTokens(
+  refresh: string,
+  signal?: AbortSignal,
+): Promise<XaiOAuthTokens> {
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: authHeaders(),
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: CLIENT_ID,
+      refresh_token: refresh,
+    }),
+    signal: AbortSignal.any([
+      AbortSignal.timeout(AUTH_TIMEOUT_MS),
+      ...(signal ? [signal] : []),
+    ]),
   });
-  return runtime as unknown as Awaited<
-    ReturnType<NonNullable<Parameters<typeof startXaiLogin>[1]>>
-  >;
+  if (!res.ok) {
+    // The OAuth error code, not the HTTP status, says whether a re-login is
+    // needed: invalid_grant/invalid_client are terminal, a 5xx blip is not.
+    const code = await readErrorCode(res);
+    const fatal = code === "invalid_grant" || code === "invalid_client";
+    throw new XaiOAuthError(
+      `xAI token refresh failed: ${code || xaiStatusLabel(res.status).label}`,
+      fatal,
+    );
+  }
+  return tokensFromResponse(await readJson(res), refresh);
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+// ── Proxy account and usage endpoints ───────────────────────────────────────
+
+export interface XaiUser {
+  userId: string;
+  email?: string;
+  name?: string;
+  teamName?: string;
+  organizationName?: string;
+  hasGrokCodeAccess?: boolean;
+}
+
+function str(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+export async function fetchXaiUser(access: string): Promise<XaiUser> {
+  const res = await fetch(`${XAI_CLI_PROXY_BASE_URL}/user`, {
+    headers: { Authorization: `Bearer ${access}`, ...xaiProxyHeaders() },
+    signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    await readBoundedText(res).catch(() => undefined);
+    const { label, fatal } = xaiStatusLabel(res.status);
+    throw new XaiOAuthError(`xAI account lookup failed: ${label}`, fatal);
+  }
+  const body = await readJson(res);
+  const userId = str(body.userId);
+  if (!userId || !/^[\x21-\x7e]{1,256}$/.test(userId)) {
+    throw new XaiOAuthError("xAI account lookup returned no user id");
+  }
+  const name = [str(body.firstName), str(body.lastName)]
+    .filter(Boolean)
+    .join(" ");
+  return {
+    userId,
+    ...(str(body.email) ? { email: str(body.email) } : {}),
+    ...(name ? { name } : {}),
+    ...(str(body.teamName) ? { teamName: str(body.teamName) } : {}),
+    ...(str(body.organizationName)
+      ? { organizationName: str(body.organizationName) }
+      : {}),
+    ...(typeof body.hasGrokCodeAccess === "boolean"
+      ? { hasGrokCodeAccess: body.hasGrokCodeAccess }
+      : {}),
+  };
+}
+
+/** Subscription credit usage, derived from the proxy's unofficial
+ * `/billing?format=credits`. Every field is optional because the endpoint's
+ * shape varies; the UI renders what came back. Cents are integers. */
+export interface XaiUsageSnapshot {
+  fetchedAt: string;
+  subscriptionTier?: string;
+  creditUsagePercent?: number;
+  usedCents?: number;
+  monthlyLimitCents?: number;
+  onDemandEnabled?: boolean;
+  onDemandUsedCents?: number;
+  onDemandCapCents?: number;
+  periodType?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  productUsage?: Array<{ product: string; usagePercent: number }>;
+  error?: string;
+}
+
+const MAX_CENTS = 1_000_000_000_000;
+
+function asObject(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? // SAFETY: checked to be a non-array object.
+      (value as Record<string, unknown>)
+    : undefined;
+}
+
+function asCents(value: unknown): number | undefined {
+  const cents = asObject(value)?.val;
+  return typeof cents === "number" &&
+    Number.isSafeInteger(cents) &&
+    cents >= 0 &&
+    cents <= MAX_CENTS
+    ? cents
+    : undefined;
+}
+
+function asPercent(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : undefined;
+}
+
+function asTimestamp(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length > 64) return undefined;
+  return Number.isFinite(Date.parse(value)) ? value : undefined;
+}
+
+function asLabel(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 80 || /[\u0000-\u001f\u007f]/.test(trimmed))
+    return undefined;
+  return trimmed;
+}
+
+/** Pure: parse a billing body into a snapshot. Throws on a shape that cannot
+ * be a billing response so the caller records an error instead of rendering
+ * an empty, misleading meter. */
+export function parseXaiUsageBody(
+  body: unknown,
+  fetchedAt = new Date().toISOString(),
+): XaiUsageSnapshot {
+  const root = asObject(body);
+  if (!root) throw new Error("xAI usage returned an invalid response");
+  if (
+    root.config !== undefined &&
+    root.config !== null &&
+    !asObject(root.config)
+  )
+    throw new Error("xAI usage returned an invalid response");
+  const snapshot: XaiUsageSnapshot = { fetchedAt };
+  const tier = asLabel(root.subscriptionTier);
+  if (tier) snapshot.subscriptionTier = tier;
+  if (typeof root.onDemandEnabled === "boolean")
+    snapshot.onDemandEnabled = root.onDemandEnabled;
+  const config = asObject(root.config);
+  if (!config) return snapshot;
+  const percent = asPercent(config.creditUsagePercent);
+  const used = asCents(config.used);
+  const limit = asCents(config.monthlyLimit);
+  const onDemandUsed = asCents(config.onDemandUsed);
+  const onDemandCap = asCents(config.onDemandCap);
+  if (percent !== undefined) snapshot.creditUsagePercent = percent;
+  else if (used !== undefined && limit !== undefined && limit > 0)
+    snapshot.creditUsagePercent = Math.min(100, (used / limit) * 100);
+  if (used !== undefined) snapshot.usedCents = used;
+  if (limit !== undefined) snapshot.monthlyLimitCents = limit;
+  if (onDemandUsed !== undefined) snapshot.onDemandUsedCents = onDemandUsed;
+  if (onDemandCap !== undefined) snapshot.onDemandCapCents = onDemandCap;
+  const period = asObject(config.currentPeriod);
+  const periodType = asLabel(period?.type);
+  const periodStart =
+    asTimestamp(period?.start) ?? asTimestamp(config.billingPeriodStart);
+  const periodEnd =
+    asTimestamp(period?.end) ?? asTimestamp(config.billingPeriodEnd);
+  if (periodType) snapshot.periodType = periodType;
+  if (periodStart) snapshot.periodStart = periodStart;
+  if (periodEnd) snapshot.periodEnd = periodEnd;
+  if (Array.isArray(config.productUsage)) {
+    const productUsage = config.productUsage.flatMap((entry: unknown) => {
+      const row = asObject(entry);
+      const product = asLabel(row?.product);
+      const usagePercent = asPercent(row?.usagePercent);
+      return product && usagePercent !== undefined
+        ? [{ product, usagePercent }]
+        : [];
+    });
+    if (productUsage.length) snapshot.productUsage = productUsage;
+  }
+  return snapshot;
+}
+
+export async function fetchXaiUsage(access: string): Promise<XaiUsageSnapshot> {
+  const user = await fetchXaiUser(access);
+  const res = await fetch(`${XAI_CLI_PROXY_BASE_URL}/billing?format=credits`, {
+    headers: {
+      Authorization: `Bearer ${access}`,
+      "x-userid": user.userId,
+      ...xaiProxyHeaders(),
+    },
+    signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    await readBoundedText(res).catch(() => undefined);
+    const { label, fatal } = xaiStatusLabel(res.status);
+    throw new XaiOAuthError(`xAI billing lookup failed: ${label}`, fatal);
+  }
+  return parseXaiUsageBody(await readJson(res));
+}
+
+// ── Live model catalog ──────────────────────────────────────────────────────
+
+export interface XaiCatalogEntry {
+  id: string;
+  name?: string;
+  contextWindow?: number;
+  maxTokens?: number;
+  supportsReasoningEffort?: boolean;
+}
+
+function isChatModelId(id: string): boolean {
+  const lower = id.toLowerCase();
+  return (
+    lower.startsWith("grok") &&
+    !lower.includes("imagine") &&
+    !lower.includes("embedding") &&
+    !lower.includes("tts")
+  );
+}
+
+/** Pure: keep the chat models of a `/models` body, in the proxy's order. */
+export function parseXaiCatalogBody(body: unknown): XaiCatalogEntry[] {
+  const data = asObject(body)?.data;
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((entry: unknown) => {
+    const row = asObject(entry);
+    const id = str(row?.id);
+    if (!id || id.length > 120 || !isChatModelId(id)) return [];
+    const contextWindow =
+      typeof row?.context_window === "number"
+        ? row.context_window
+        : typeof row?.context_length === "number"
+          ? row.context_length
+          : undefined;
+    return [
+      {
+        id,
+        ...(asLabel(row?.name) ? { name: asLabel(row?.name) } : {}),
+        ...(contextWindow && contextWindow > 0 ? { contextWindow } : {}),
+        ...(typeof row?.max_output_tokens === "number" &&
+        row.max_output_tokens > 0
+          ? { maxTokens: row.max_output_tokens }
+          : {}),
+        ...(typeof row?.supports_reasoning_effort === "boolean"
+          ? { supportsReasoningEffort: row.supports_reasoning_effort }
+          : {}),
+      },
+    ];
+  });
+}
+
+export async function fetchXaiCatalog(
+  access: string,
+): Promise<XaiCatalogEntry[]> {
+  const res = await fetch(`${XAI_CLI_PROXY_BASE_URL}/models`, {
+    headers: { Authorization: `Bearer ${access}`, ...xaiProxyHeaders() },
+    signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    await readBoundedText(res).catch(() => undefined);
+    const { label, fatal } = xaiStatusLabel(res.status);
+    throw new XaiOAuthError(`xAI catalog fetch failed: ${label}`, fatal);
+  }
+  return parseXaiCatalogBody(await readJson(res));
 }

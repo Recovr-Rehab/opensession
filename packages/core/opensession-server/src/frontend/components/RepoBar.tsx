@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   cachedRepos,
   fetchRepos,
@@ -59,6 +59,10 @@ export function RepoBar({
   const [hasWork, setHasWork] = useState(false); // already has edits/commits → confirm on switch
   const [busy, setBusy] = useState<string | null>(null); // trigger label while an action runs
   const [error, setError] = useState<string | null>(null);
+  const [controlsLoadError, setControlsLoadError] = useState<string | null>(
+    null,
+  );
+  const [reposLoadError, setReposLoadError] = useState<string | null>(null);
   // Switch-with-work confirmation. `confirmTarget` is the repo whose label the
   // dialog shows; `confirmOpen` drives visibility separately so the label
   // survives the exit animation (clearing the target would flash it to null).
@@ -69,11 +73,12 @@ export function RepoBar({
   // switch landed and the parent re-fetched). Compared by content: the parent
   // rebuilds the array each fetch.
   const initialAttachedKey = JSON.stringify(initialAttached);
-  const initialAttachedValue = useMemo(
-    () => JSON.parse(initialAttachedKey) as AttachedRepo[],
-    [initialAttachedKey],
-  );
-  useEffect(() => setAttached(initialAttachedValue), [initialAttachedValue]);
+  const previousInitialAttachedKey = useRef(initialAttachedKey);
+  useEffect(() => {
+    if (previousInitialAttachedKey.current === initialAttachedKey) return;
+    previousInitialAttachedKey.current = initialAttachedKey;
+    setAttached(initialAttached);
+  }, [initialAttached, initialAttachedKey]);
   useEffect(() => setPrimary(primaryRepo), [primaryRepo]);
 
   // Can this session's primary repo be switched, and does it already have work?
@@ -82,8 +87,17 @@ export function RepoBar({
       .then(({ switchable, hasWork }) => {
         setSwitchable(switchable);
         setHasWork(hasWork);
+        setControlsLoadError(null);
       })
-      .catch(() => {});
+      .catch((error) => {
+        // Without fresh server state, hide switching rather than offer it from
+        // stale flags. Attaching cached repositories remains independent.
+        setSwitchable(false);
+        setHasWork(false);
+        setControlsLoadError(
+          errorMessage(error, "Failed to load repository controls"),
+        );
+      });
   }, [sessionId, primary]);
 
   useEffect(() => {
@@ -91,8 +105,16 @@ export function RepoBar({
     // cached list is missing, and a failed refresh keeps the rows on screen.
     if (open)
       fetchRepos()
-        .then(setRepos)
-        .catch(() => {});
+        .then((nextRepos) => {
+          setRepos(nextRepos);
+          setReposLoadError(null);
+        })
+        .catch((error) => {
+          // Keep the cached rows visible while naming the failed revalidation.
+          setReposLoadError(
+            errorMessage(error, "Failed to refresh repositories"),
+          );
+        });
   }, [open]);
 
   const attachedIds = new Set(attached.map((r) => r.repo));
@@ -161,8 +183,20 @@ export function RepoBar({
           .then(({ switchable, hasWork }) => {
             setSwitchable(switchable);
             setHasWork(hasWork);
+            setControlsLoadError(null);
           })
-          .catch(() => {});
+          .catch((refreshError) => {
+            // The switch failure keeps the action error. This secondary loader
+            // fails closed and reports inside the menu with the stale controls.
+            setSwitchable(false);
+            setHasWork(false);
+            setControlsLoadError(
+              errorMessage(
+                refreshError,
+                "Failed to refresh repository controls after switch failure",
+              ),
+            );
+          });
       })
       .finally(async () => {
         setBusy(null);
@@ -232,8 +266,26 @@ export function RepoBar({
       <Menu.Root open={open} onOpenChange={setOpen}>
         {trigger}
         <Menu.Popup align="start" sideOffset={6} className="min-w-[230px]">
+          {controlsLoadError && (
+            <div
+              role="alert"
+              className="max-w-[240px] px-2.5 py-1.5 text-supporting leading-snug text-red"
+            >
+              {controlsLoadError}
+            </div>
+          )}
+          {reposLoadError && (
+            <div
+              role="alert"
+              className="max-w-[240px] px-2.5 py-1.5 text-supporting leading-snug text-red"
+            >
+              {reposLoadError}
+            </div>
+          )}
           {!repos.length ? (
-            <div className="px-2.5 py-2 text-label text-faint">Loading…</div>
+            reposLoadError ? null : (
+              <div className="px-2.5 py-2 text-label text-faint">Loading…</div>
+            )
           ) : (
             <>
               {switchable ? (
@@ -313,12 +365,13 @@ export function RepoBar({
                   </div>
                 )}
               </Menu.Group>
-              {!switchable ? (
+              {!switchable && !controlsLoadError ? (
                 <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-supporting leading-snug text-faint">
                   Ask sessions read the shared checkout, so there's no primary
                   repo to switch.
                 </div>
               ) : (
+                switchable &&
                 hasWork && (
                   <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-supporting leading-snug text-faint">
                     Switching keeps your current changes in the{" "}

@@ -40,7 +40,7 @@ import type {
   UnifiedSession,
   WSClientMessage,
 } from "../lib/types";
-import { formatPrCommentPrompt } from "./PrPanel";
+import { formatPrCommentPrompt } from "../lib/pr-prompts";
 import { renderMarkdown } from "../lib/markdown";
 import { fullTime } from "../lib/time";
 import { errorMessage } from "../lib/error-message";
@@ -1042,14 +1042,14 @@ function ReviewerChip({
     const prevGithub = ghRequested;
     const me = getCurrentUser();
     // Re-assigning drops any prior sign-off (a fresh reviewer, fresh review).
-    const next = name
+    const next: ReviewRequestInfo | null = name
       ? {
           to: name,
-          ...(recipients ? { recipients } : {}),
           by: me,
           at: new Date().toISOString(),
         }
       : null;
+    if (next && recipients) next.recipients = recipients;
     setReq(next);
     // Clearing a session that has no request of its own withdraws GitHub's
     // pending ones instead, which is what the server does with the same call.

@@ -17,6 +17,7 @@ import {
   testSandboxConnection,
   updateSandboxConnection,
 } from "../../lib/api/sandboxes";
+import { errorMessage } from "../../lib/error-message";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { Field, Input, Select } from "../../ui/input";
@@ -29,6 +30,7 @@ import {
   SettingsHint,
   SettingsPanel,
 } from "../../ui/settings";
+import { InlineAlert } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
 import { IconCheck, IconPlus } from "../icons";
@@ -271,19 +273,20 @@ function ConnectDialog({
   async function connect() {
     setSaving(true);
     await (async () => {
-      const response = await connectSandbox(connection.provider, {
-        ...(apiKey ? { apiKey } : {}),
-        ...(tokenId ? { tokenId } : {}),
-        ...(tokenSecret ? { tokenSecret } : {}),
-        settings: {
-          ...(region ? { region } : {}),
-          ...(snapshot ? { snapshot } : {}),
-          ...(app ? { app } : {}),
-          ...(environment ? { environment } : {}),
-          ...(cpu ? { cpu: Number(cpu) } : {}),
-          ...(memoryMb ? { memoryMb: Number(memoryMb) } : {}),
-        },
-      });
+      const settings: NonNullable<
+        Parameters<typeof connectSandbox>[1]["settings"]
+      > = {};
+      const body: Parameters<typeof connectSandbox>[1] = { settings };
+      if (apiKey) body.apiKey = apiKey;
+      if (tokenId) body.tokenId = tokenId;
+      if (tokenSecret) body.tokenSecret = tokenSecret;
+      if (region) settings.region = region;
+      if (snapshot) settings.snapshot = snapshot;
+      if (app) settings.app = app;
+      if (environment) settings.environment = environment;
+      if (cpu) settings.cpu = Number(cpu);
+      if (memoryMb) settings.memoryMb = Number(memoryMb);
+      const response = await connectSandbox(connection.provider, body);
       onChanged(response);
       onOpenChange(false);
       toast(`${provider.label} connection check started`, {
@@ -291,14 +294,9 @@ function ConnectDialog({
       });
     })()
       .catch(async (error) => {
-        toast(
-          error instanceof Error
-            ? error.message
-            : `Failed to connect ${provider.label}`,
-          {
-            variant: "error",
-          },
-        );
+        toast(errorMessage(error, `Failed to connect ${provider.label}`), {
+          variant: "error",
+        });
       })
       .finally(async () => {
         setSaving(false);
@@ -314,14 +312,9 @@ function ConnectDialog({
       toast(`${provider.label} disconnected`, { variant: "success" });
     })()
       .catch(async (error) => {
-        toast(
-          error instanceof Error
-            ? error.message
-            : `Failed to disconnect ${provider.label}`,
-          {
-            variant: "error",
-          },
-        );
+        toast(errorMessage(error, `Failed to disconnect ${provider.label}`), {
+          variant: "error",
+        });
       })
       .finally(async () => {
         setSaving(false);
@@ -563,14 +556,9 @@ function ConnectionCard({
       onChanged(await testSandboxConnection(connection.provider));
     })()
       .catch(async (error) => {
-        toast(
-          error instanceof Error
-            ? error.message
-            : `Failed to test ${provider.label}`,
-          {
-            variant: "error",
-          },
-        );
+        toast(errorMessage(error, `Failed to test ${provider.label}`), {
+          variant: "error",
+        });
       })
       .finally(async () => {
         setBusy(false);
@@ -585,14 +573,9 @@ function ConnectionCard({
       );
     })()
       .catch(async (error) => {
-        toast(
-          error instanceof Error
-            ? error.message
-            : `Failed to update ${provider.label}`,
-          {
-            variant: "error",
-          },
-        );
+        toast(errorMessage(error, `Failed to update ${provider.label}`), {
+          variant: "error",
+        });
       })
       .finally(async () => {
         setBusy(false);
@@ -805,14 +788,9 @@ function ProjectEnvironmentDialog({
       );
     })()
       .catch(async (error) => {
-        toast(
-          error instanceof Error
-            ? error.message
-            : "Failed to build project snapshot",
-          {
-            variant: "error",
-          },
-        );
+        toast(errorMessage(error, "Failed to build project snapshot"), {
+          variant: "error",
+        });
       })
       .finally(async () => {
         setSaving(false);
@@ -835,11 +813,12 @@ function ProjectEnvironmentDialog({
             <Field label="Provider">
               <Select
                 value={provider}
-                onChange={(event) =>
-                  chooseProvider(
-                    event.target.value as SandboxConnectionInfo["provider"],
-                  )
-                }
+                onChange={(event) => {
+                  const nextProvider = providerOptions.find(
+                    (candidate) => candidate === event.target.value,
+                  );
+                  if (nextProvider) chooseProvider(nextProvider);
+                }}
               >
                 {providerOptions.map((candidate) => (
                   <option key={candidate} value={candidate}>
@@ -929,6 +908,10 @@ export function SandboxesPanel() {
   );
   const [canManage, setCanManage] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [connectionsError, setConnectionsError] = useState<string | null>(null);
+  const [environmentsError, setEnvironmentsError] = useState<string | null>(
+    null,
+  );
   const [environmentDialogOpen, setEnvironmentDialogOpen] = useState(false);
   const [environmentTarget, setEnvironmentTarget] =
     useState<SandboxEnvironmentInfo>();
@@ -946,15 +929,32 @@ export function SandboxesPanel() {
     let active = true;
     const load = () => {
       void fetchSandboxEnvironments()
-        .then((response) => active && setEnvironments(response.environments))
-        .catch(() => {});
+        .then((response) => {
+          if (!active) return;
+          setEnvironments(response.environments);
+          setEnvironmentsError(null);
+        })
+        .catch((error) => {
+          if (active) {
+            setEnvironmentsError(
+              errorMessage(error, "Failed to load sandbox environments"),
+            );
+          }
+        });
       return fetchSandboxConnections().then(
         (response) => {
           if (!active) return;
           apply(response);
+          setConnectionsError(null);
           setLoading(false);
         },
-        () => active && setLoading(false),
+        (error) => {
+          if (!active) return;
+          setConnectionsError(
+            errorMessage(error, "Failed to load sandbox connections"),
+          );
+          setLoading(false);
+        },
       );
     };
     void load();
@@ -1011,6 +1011,8 @@ export function SandboxesPanel() {
         description="Connect compute you already pay for. Each session gets an isolated sandbox; project snapshots make new sandboxes start faster."
       />
       <WorkspaceSandboxDefaults canManage={canManage} />
+      {connectionsError && <InlineAlert>{connectionsError}</InlineAlert>}
+      {environmentsError && <InlineAlert>{environmentsError}</InlineAlert>}
       <SettingsGroupLabel>Connections</SettingsGroupLabel>
       {!canManage && (
         <SettingsHint>

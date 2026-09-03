@@ -67,36 +67,41 @@ export function ModelRow({
           className={composerToolbarSelect}
         >
           <ModelEffortSelect
-            className={cn(palettePill, composerToolbarPill)}
-            // The pill is where the effort chords are worth naming: they
-            // step what it displays. Appended to the native title the
-            // trigger already carries, so a reader who hovers the thing
-            // they would otherwise click finds them.
-            title={
-              (modelTitle || "Model and reasoning effort for this session") +
-              (effortDownLabel && effortUpLabel
-                ? `\n${effortDownLabel} / ${effortUpLabel} steps the effort`
-                : "")
-            }
-            models={models}
-            defaultModel={defaultModel}
-            model={model}
-            onModelChange={onModelChange}
-            preferredDefaultModel={preferredDefaultModel}
-            onSetAsDefault={onSetAsDefault}
-            modelDisabled={modelDisabled}
-            modelTitle={modelTitle}
-            effort={effort}
-            onEffortChange={onEffortChange}
-            fastMode={fastMode}
-            onFastModeChange={onFastModeChange}
-            accounts={accounts}
-            accountId={accountId}
-            onAccountChange={onAccountChange}
-            usage={usage}
-            showUsage
-            disabled={disabled}
-            onOpenChange={onOpenChange}
+            selection={{
+              models,
+              defaultModel,
+              model,
+              preferredDefaultModel,
+              modelDisabled,
+              modelTitle,
+              effort,
+              fastMode,
+              accounts,
+              accountId,
+              usage,
+            }}
+            appearance={{
+              className: cn(palettePill, composerToolbarPill),
+              // The pill is where the effort chords are worth naming: they
+              // step what it displays. Appended to the native title the
+              // trigger already carries, so a reader who hovers the thing
+              // they would otherwise click finds them.
+              title:
+                (modelTitle || "Model and reasoning effort for this session") +
+                (effortDownLabel && effortUpLabel
+                  ? `\n${effortDownLabel} / ${effortUpLabel} steps the effort`
+                  : ""),
+              showUsage: true,
+              disabled,
+            }}
+            actions={{
+              changeModel: onModelChange,
+              setAsDefault: onSetAsDefault,
+              changeEffort: onEffortChange,
+              changeFastMode: onFastModeChange,
+              changeAccount: onAccountChange,
+              changeOpen: onOpenChange,
+            }}
           />
         </motion.div>
       )}

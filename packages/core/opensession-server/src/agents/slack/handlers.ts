@@ -54,6 +54,7 @@ import { isStopMessage, cancelSession } from "./cancel";
 import { pollForVercelPreview } from "./github-reviews";
 import {
   gitIdentityFor,
+  githubLoginForTrustedSlackId,
   slackIdToFirstName,
 } from "../../server/shared/user-mappings";
 import { oneShot } from "../../server/one-shot";
@@ -946,6 +947,7 @@ export async function processMessage(
         }),
         "opensession-sessions": createSessionsMcpServer({
           createdBy: userName || msg.userId,
+          createdByLogin: githubLoginForTrustedSlackId(msg.userId) || undefined,
           isAdmin,
           currentSessionId: `slack-${sessionKey}`,
         }),
@@ -1101,13 +1103,13 @@ export async function processMessage(
           session.model = event.toModel;
           await persistSession(session);
         }
-        await sendSlackMessage(
-          channel,
-          durable
-            ? `:warning: \`${event.fromModel}\` is out of usage on all accounts — continuing on \`${event.toModel}\`.`
-            : `:warning: \`${event.fromModel}\` ${event.switchReason || "fell back"} — using \`${event.toModel}\` for this turn only.`,
-          threadTs,
-        ).catch(() => {});
+        if (!durable) {
+          await sendSlackMessage(
+            channel,
+            `:warning: \`${event.fromModel}\` ${event.switchReason || "fell back"} — using \`${event.toModel}\` for this turn only.`,
+            threadTs,
+          ).catch(() => {});
+        }
       }
 
       // Assistant prose -> the card's narration line (Linear-style). Chunks

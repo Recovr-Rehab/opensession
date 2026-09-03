@@ -55,6 +55,7 @@ export interface NavigationActions {
     mode: NavigationNewSessionMode,
     origin?: NavigationMorphOrigin,
   ): Promise<void>;
+  duplicateSession(): Promise<void>;
   startNewChat(session: UnifiedSession, prompt: string): void;
   openPrefilledSession(prefill: NewSessionPrefill): void;
 
