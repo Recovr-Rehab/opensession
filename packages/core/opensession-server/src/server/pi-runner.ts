@@ -89,7 +89,11 @@ import {
   runToolPolicy,
   readLocalInstructions,
 } from "./run-policy";
-import { buildRunInstructions } from "./run-instructions";
+import {
+  assembleRunSystemPrompt,
+  buildRunInstructions,
+  buildSessionContext,
+} from "./run-instructions";
 import {
   logInjectedContext,
   logStandingContext,
@@ -2305,10 +2309,7 @@ async function* runPiAttempt(
       repoHost: isScratch ? undefined : cwdRepo?.host,
       localInstructions: readLocalInstructions(cwd),
       inProcessMcp: opts.inProcessMcp,
-      osSessionId: journal?.osSessionId,
-      user,
-      author,
-      githubUserLogin,
+      hasSession: !!journal?.osSessionId,
       dialOracle:
         resolved?.dial && dialOracleAgent
           ? {
@@ -2432,7 +2433,19 @@ async function* runPiAttempt(
         }),
       }),
       systemPromptOverride: (base) =>
-        base ? `${base}\n\n${instructions}` : instructions,
+        assembleRunSystemPrompt({ base, cwd, instructions }),
+    });
+    // What the system prompt leaves out so it stays byte-identical across
+    // sessions (prompt-cache sharing): session link, requester, checkout path.
+    const sessionContext = buildSessionContext({
+      osSessionId: journal?.osSessionId,
+      cwd,
+      isAsk,
+      isScratch,
+      repoHost: isScratch ? undefined : cwdRepo?.host,
+      user,
+      author,
+      githubUserLogin,
     });
     await loader.reload();
 
@@ -2687,9 +2700,11 @@ async function* runPiAttempt(
       prompt,
       loader.getSkills().skills,
     );
-    const promptForEngine = resumeMissNote
-      ? `${wrapContext(resumeMissNote, "handoff")}\n\n${promptWithSkill}`
-      : promptWithSkill;
+    const promptForEngine = [
+      wrapContext(sessionContext, "session"),
+      ...(resumeMissNote ? [wrapContext(resumeMissNote, "handoff")] : []),
+      promptWithSkill,
+    ].join("\n\n");
     // Injected BELOW runOnModel's choke point, so that call never saw this
     // payload — log it here, exactly as the previous runner runner does for its own
     // same-engine-restart handoff. Re-logging is free: entry ids are

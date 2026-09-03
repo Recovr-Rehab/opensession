@@ -26,7 +26,15 @@ export const GH_CHECKS_CLI_PATH = join(
   "gh-checks.ts",
 );
 
-/** Minimal per-run context appended to the engine system prompt. */
+/**
+ * Minimal per-run context appended to the engine system prompt.
+ *
+ * Nothing here may vary per session. The Claude Agent SDK sends the whole
+ * system prompt as ONE prompt-cache block, so a single session-specific byte
+ * (session id, requester, checkout path) costs every new session a full cache
+ * write of the ~25k-token prefix instead of a read. Per-session facts ride the
+ * engine prompt as session context instead (buildSessionContext).
+ */
 export function buildRunInstructions(input: {
   isAsk: boolean;
   /** Repo-less scratch session (feed-item workspaces — the feeds design). */
@@ -39,19 +47,13 @@ export function buildRunInstructions(input: {
    *  slug, or comma-separated list) — see RunAgentOpts.prReviewer. */
   prReviewer?: string;
   inProcessMcp?: Record<string, unknown>;
-  osSessionId?: string;
-  /** Requester attribution for PRs: the turn's raw user label and the resolved
-   *  git identity (same table as commit attribution). PRs open under the bot
-   *  GitHub account, so the body line + assignee are how the human shows up. */
-  user?: string;
-  author?: GitIdentity | null;
+  /** The run belongs to a session, so PRs it opens get attributed. The id
+   *  itself is session context, never prompt text. */
+  hasSession?: boolean;
   /** Backing git host of the session's primary repo; undefined = GitHub.
    *  "codestorage" swaps the PR-flow instructions for push-the-branch ones
    *  (code.storage has no PRs — a pushed branch is the change request). */
   repoHost?: "github" | "codestorage";
-  /** Set when this run carries the owner's own GitHub token (github-auth.ts):
-   *  PRs are authored by them directly, so skip the bot-attribution assignee. */
-  githubUserLogin?: string | null;
   /** Untracked instance-local instructions (readLocalInstructions) — appended
    *  verbatim so operator-private guidance never has to live in the tracked
    *  AGENTS.md. */
@@ -86,6 +88,10 @@ export function buildRunInstructions(input: {
   parts.push(
     "## References\nFor PRs outside the current primary repository, write " +
       "`<repo>#<number>`, never bare `#<number>`.",
+  );
+  parts.push(
+    "## Working directory\nRelative paths in this prompt resolve against the working " +
+      "directory named in the session context.",
   );
 
   if (input.isScratch) {
@@ -132,28 +138,17 @@ export function buildRunInstructions(input: {
   if (
     !input.isAsk &&
     !input.isScratch &&
-    input.osSessionId &&
+    input.hasSession &&
     input.repoHost === "codestorage"
   ) {
     parts.push(
       "## Code Storage\nCommit and push the branch; a pushed branch is the change request. " +
         "Do not merge it or use `gh pr create`.",
     );
-  } else if (!input.isAsk && !input.isScratch && input.osSessionId) {
-    const link = `${UI_BASE}/session/${input.osSessionId}`;
-    const requester = input.author?.name || null;
-    const login = githubLoginFor(input.user || input.author?.name);
-    const footer = requester
-      ? `Started by ${requester} in [this ${personaName()} session](${link})`
-      : `Created by [this ${personaName()} session](${link})`;
+  } else if (!input.isAsk && !input.isScratch && input.hasSession) {
     parts.push(
-      "## PR attribution\nEnd each PR body with:\n\n" +
-        `${footer}\n` +
-        (input.githubUserLogin
-          ? `PRs use @${input.githubUserLogin}'s account; do not add an assignee.`
-          : requester && login
-            ? `When possible, assign @${login}.`
-            : ""),
+      "## PR attribution\nEnd each PR body with the attribution footer from the session " +
+        "context and follow its assignee rule.",
     );
     if (input.prReviewer) {
       parts.push(
@@ -190,4 +185,84 @@ export function buildRunInstructions(input: {
   if (input.localInstructions?.trim())
     parts.push(input.localInstructions.trim());
   return parts.join("\n\n");
+}
+
+/**
+ * The per-session facts buildRunInstructions deliberately leaves out, fenced
+ * as `session` context ahead of every prompt: the first message of a fresh
+ * engine session carries it, and re-sending it each turn keeps it in reach
+ * after compaction or a resume miss.
+ */
+export function buildSessionContext(input: {
+  osSessionId?: string;
+  cwd?: string;
+  isAsk: boolean;
+  isScratch?: boolean;
+  repoHost?: "github" | "codestorage";
+  /** Requester attribution for PRs: the turn's raw user label and the resolved
+   *  git identity (same table as commit attribution). PRs open under the bot
+   *  GitHub account, so the body line + assignee are how the human shows up. */
+  user?: string;
+  author?: GitIdentity | null;
+  /** Set when this run carries the owner's own GitHub token (github-auth.ts):
+   *  PRs are authored by them directly, so skip the bot-attribution assignee. */
+  githubUserLogin?: string | null;
+}): string {
+  const lines: string[] = [];
+  const link = input.osSessionId
+    ? `${UI_BASE}/session/${input.osSessionId}`
+    : null;
+  if (link) lines.push(`${personaName()} session: ${link}`);
+  if (input.cwd) lines.push(`Working directory: ${input.cwd}`);
+  if (
+    link &&
+    !input.isAsk &&
+    !input.isScratch &&
+    input.repoHost !== "codestorage"
+  ) {
+    const requester = input.author?.name || null;
+    const login = githubLoginFor(input.user || input.author?.name);
+    const footer = requester
+      ? `Started by ${requester} in [this ${personaName()} session](${link})`
+      : `Created by [this ${personaName()} session](${link})`;
+    lines.push(`PR attribution footer: ${footer}`);
+    const rule = input.githubUserLogin
+      ? `PRs use @${input.githubUserLogin}'s account; do not add an assignee.`
+      : requester && login
+        ? `When possible, assign @${login}.`
+        : "";
+    if (rule) lines.push(rule);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Compose the engine system prompt from pi's base prompt so that every
+ * session of one repo sends the same bytes. Pi stamps the absolute cwd into
+ * the context-file paths, the skill locations and a trailing "Current working
+ * directory" line, and most sessions run in their own worktree, so those
+ * paths become cwd-relative and the cwd line moves to the session context.
+ */
+export function assembleRunSystemPrompt(input: {
+  base: string | undefined;
+  cwd: string;
+  instructions: string;
+}): string {
+  const cwd = input.cwd.replace(/\\/g, "/").replace(/\/+$/, "");
+  const relative = (path: string) =>
+    path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path;
+  let base = input.base || "";
+  const cwdLine = `\nCurrent working directory: ${cwd}`;
+  if (base.endsWith(cwdLine)) base = base.slice(0, -cwdLine.length);
+  base = base
+    .replace(
+      /<project_instructions path="([^"]*)">/g,
+      (_match, path: string) =>
+        `<project_instructions path="${relative(path)}">`,
+    )
+    .replace(
+      /<location>([^<]*)<\/location>/g,
+      (_match, path: string) => `<location>${relative(path)}</location>`,
+    );
+  return base ? `${base}\n\n${input.instructions}` : input.instructions;
 }
