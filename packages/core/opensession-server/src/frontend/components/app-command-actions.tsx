@@ -283,6 +283,15 @@ export function buildAppCommandActions({
       icon: <IconFeed size={18} />,
       run: () => navigate({ view: "feed" }),
     },
+    {
+      id: "featurebase",
+      label: "Support",
+      description: "Read and answer Featurebase tickets",
+      category: "Navigate",
+      keywords: ["tickets", "featurebase", "support", "inbox"],
+      icon: <IconMail size={18} />,
+      run: () => navigate({ view: "featurebase" }),
+    },
     // Catch up is offered at phone widths only (lib/sidebar-tools.ts), so
     // the palette doesn't offer it where the sidebar doesn't.
     ...(isPhone
