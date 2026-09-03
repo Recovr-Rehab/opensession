@@ -261,6 +261,15 @@ describe("resolvePiRoutedModel", () => {
       modelID: "gpt-5.6-sol",
       orchestrator: { id: "orchestrator/sol" },
     });
+    expect(resolvePiRoutedModel("pi/orchestrator/fable-sol")).toMatchObject({
+      providerID: "anthropic",
+      modelID: "claude-fable-5-1",
+      orchestrator: {
+        id: "orchestrator/fable-sol",
+        workerAgents: ["worker-sol"],
+      },
+      effort: "high",
+    });
   });
 
   test("rejects unknown preset ids", () => {

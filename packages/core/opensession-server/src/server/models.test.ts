@@ -17,6 +17,8 @@ import {
   routeModel,
   toPiModel,
   KNOWN_MODELS,
+  orchestratorPreset,
+  orchestratorWorkerModels,
   refreshPickerModels,
 } from "./models";
 
@@ -144,6 +146,19 @@ describe("Pi-only model routing", () => {
   test("keeps engine keys provider-neutral", () => {
     expect(modelEngineKey("pi/anthropic/claude-opus-5")).toBe("claude-opus-5");
     expect(modelEngineKey("pi/dial/opus-fable")).toBe("dial/opus-fable");
+  });
+
+  test("keeps the Fable and Sol orchestrator cross-provider", () => {
+    const preset = orchestratorPreset("orchestrator/fable-sol");
+    expect(preset).toMatchObject({
+      model: "claude-fable-5-1",
+      effort: "high",
+      workerAgents: ["worker-sol"],
+    });
+    if (!preset) throw new Error("missing Fable + Sol orchestrator preset");
+    expect(
+      orchestratorWorkerModels(preset, new Set(["anthropic", "openai"])),
+    ).toEqual(["openai/gpt-5.6-sol"]);
   });
 
   test("builds a Pi-only fallback chain", () => {

@@ -213,6 +213,7 @@ const MODEL_TAIL_ORDER = [
   "medium",
   "low",
   "fable",
+  "fable-sol",
   "sol",
   "claude-fable-5-1",
   "claude-opus-5",

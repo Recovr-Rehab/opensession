@@ -71,9 +71,7 @@ export function buildRunInstructions(input: {
   orchestrator?: {
     presetLabel: string;
     mainLabel: string;
-    workers: Array<{ agent: string; label: string; modelLabel: string }>;
-    /** Pi delegates through the sessions MCP instead of Pi task agents. */
-    tool?: "task" | "sessions";
+    workers: Array<{ role: string; model: string; modelLabel: string }>;
   };
 }): string {
   const parts: string[] = [];
@@ -117,11 +115,15 @@ export function buildRunInstructions(input: {
   if (input.orchestrator) {
     const o = input.orchestrator;
     const workers = o.workers
-      .map((w) => `\`${w.agent}\` (${w.modelLabel})`)
+      .map(
+        (worker) =>
+          `${worker.role}: ${worker.modelLabel} via \`${worker.model}\``,
+      )
       .join(", ");
     parts.push(
       `## Workers\nThe "${o.presetLabel}" preset gives ${o.mainLabel} these workers: ` +
-        `${workers}. Delegate clear independent tasks, then verify their work.`,
+        `${workers}. Use opensession-sessions spawn_task with the listed model for clear ` +
+        "independent tasks, then verify their work.",
     );
   }
 

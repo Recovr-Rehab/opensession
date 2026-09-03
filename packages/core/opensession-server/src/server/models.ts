@@ -457,15 +457,11 @@ export function dialPreset(model?: string | null): DialPreset | undefined {
 
 // ── The Orchestrator ──────────────────────────────────────────────────────
 //
-// The Dial reversed (Cursor's agent-swarm economics: "few moments in a large
-// task genuinely require frontier intelligence" — workers burn most tokens,
-// so the cheap seats go to execution): a frontier MAIN model leads — plans,
-// decides, reviews, integrates — and delegates well-scoped execution subtasks
-// to cheaper WORKER models wired in as Pi subagents. Same mechanics as
-// the dial throughout: the session stores `orchestrator/<name>` as its model,
-// everything resolves at dispatch, and only orchestrator runs are told the
-// workers exist. Opt-in via orchestratorEnabled() — the presets stay
-// out of the picker by default.
+// The Dial reversed: a frontier main model plans, decides, reviews, and
+// integrates, while focused worker sessions handle implementation. A preset
+// stores `orchestrator/<name>` on the session and resolves its lead and workers
+// at dispatch. Only orchestrator runs are told the workers exist. The global
+// presets remain opt-in via orchestratorEnabled().
 
 export interface OrchestratorPreset {
   /** Stored as the session's model id, e.g. "orchestrator/fable". */
@@ -482,15 +478,11 @@ export interface OrchestratorPreset {
 }
 
 /**
- * The worker subagents, keyed by Pi agent name. Like the oracles they're
- * defined STATICALLY in every engine server config (stable agent set ⇒ stable
- * config hash ⇒ server reuse) and invisible in practice to non-orchestrator
- * runs — only orchestrator runs get the instructions block naming them.
- *
- * Worker NAMES are role-based, not model-based. Each name has a same-bridge
- * fallback, while configured third-party providers can supply a universal
- * backing: `worker-fast` prefers Cerebras GPT OSS when its key is available.
- * The orchestrator's prompts and task tool list stay identical either way.
+ * Worker roles are stable while their backing model may follow the lead's
+ * provider. Pi delegates them through Open Session worker sessions, so an
+ * explicit cross-provider role such as `worker-sol` can deliberately stay on
+ * OpenAI while Fable leads on Anthropic. Only orchestrator runs receive the
+ * instructions that name these workers.
  */
 export const ORCHESTRATOR_WORKER_AGENTS: Record<
   string,
@@ -552,6 +544,24 @@ export const ORCHESTRATOR_WORKER_AGENTS: Record<
       },
     },
   },
+  "worker-sol": {
+    label: "Implementation worker",
+    description:
+      "Implementation worker: GPT-5.6 Sol at high effort executes one well-scoped " +
+      "implementation task end to end. Give it exact files, constraints, and acceptance criteria.",
+    bridges: {
+      anthropic: {
+        model: "openai/gpt-5.6-sol",
+        variant: "high",
+        label: "GPT-5.6 Sol",
+      },
+      openai: {
+        model: "openai/gpt-5.6-sol",
+        variant: "high",
+        label: "GPT-5.6 Sol",
+      },
+    },
+  },
 };
 
 /** The backing (model/variant/label) a worker NAME resolves to. A configured
@@ -560,7 +570,7 @@ export const ORCHESTRATOR_WORKER_AGENTS: Record<
 export function orchestratorWorkerForBridge(
   name: string,
   mainProviderID: string,
-  availableProviderIDs = new Set(
+  availableProviderIDs: ReadonlySet<string> = new Set(
     Object.entries(modelProviders())
       .filter(([, config]) => !!config.apiKey)
       .map(([id]) => id),
@@ -573,6 +583,23 @@ export function orchestratorWorkerForBridge(
   return w.bridges[mainProviderID] ?? w.bridges.anthropic;
 }
 
+export function orchestratorWorkerModels(
+  preset: OrchestratorPreset,
+  availableProviderIDs?: ReadonlySet<string>,
+): string[] {
+  const mainProviderID = preset.model.startsWith("claude-")
+    ? "anthropic"
+    : "openai";
+  return preset.workerAgents.flatMap((name) => {
+    const worker = orchestratorWorkerForBridge(
+      name,
+      mainProviderID,
+      availableProviderIDs,
+    );
+    return worker ? [worker.model] : [];
+  });
+}
+
 export const ORCHESTRATOR_PRESETS: OrchestratorPreset[] = [
   {
     id: "orchestrator/fable",
@@ -581,6 +608,15 @@ export const ORCHESTRATOR_PRESETS: OrchestratorPreset[] = [
     model: "claude-fable-5-1",
     effort: "high",
     workerAgents: ["worker", "worker-fast"],
+  },
+  {
+    id: "orchestrator/fable-sol",
+    label: "Orchestrator · Fable + Sol",
+    description:
+      "Fable 5.1 high leads planning, review, and integration; Sol high implements",
+    model: "claude-fable-5-1",
+    effort: "high",
+    workerAgents: ["worker-sol"],
   },
   {
     id: "orchestrator/sol",
@@ -599,8 +635,8 @@ function orchestratorPickerDescription(preset: OrchestratorPreset): string {
   const workers = preset.workerAgents.flatMap((name) => {
     const backing = orchestratorWorkerForBridge(name, mainProviderID);
     if (!backing) return [];
-    const role = name === "worker-fast" ? "fast worker" : "worker";
-    return [`${role}: ${backing.label} ${backing.variant}`];
+    const role = ORCHESTRATOR_WORKER_AGENTS[name]?.label || name;
+    return [`${role.toLowerCase()}: ${backing.label} ${backing.variant}`];
   });
   return `${preset.description}; delegates to ${workers.join(" and ")}`;
 }

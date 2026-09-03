@@ -7,6 +7,8 @@ import {
   KNOWN_MODELS,
   interactiveDefaultModel,
   modelPreset,
+  orchestratorPreset,
+  orchestratorWorkerModels,
   refreshPickerModels,
   toPiModel,
 } from "./models";
@@ -81,12 +83,16 @@ function selectionFitsConfiguredProviders(
 ): boolean {
   const preset = modelPreset(model);
   if (!preset) return modelFitsConfiguredProviders(model, configuredProviders);
+  const orchestrator = orchestratorPreset(model);
   return presetFitsConfiguredProviders(
     {
-      group: model.replace(/^pi\//, "").startsWith("dial/")
-        ? "dial"
-        : "orchestrator",
+      group: orchestrator ? "orchestrator" : "dial",
       lead: { model: preset.model },
+      supporting: orchestrator
+        ? orchestratorWorkerModels(orchestrator, configuredProviders).map(
+            (worker) => ({ model: worker }),
+          )
+        : undefined,
     },
     configuredProviders,
   );

@@ -2334,14 +2334,21 @@ async function* runPiAttempt(
               presetLabel:
                 resolved.workspacePreset?.label || resolved.orchestrator.label,
               mainLabel: piModelLabel(resolved.orchestrator.model),
-              workers: resolved.orchestrator.workerAgents.map((name) => ({
-                agent: name,
-                label: ORCHESTRATOR_WORKER_AGENTS[name]?.label || name,
-                modelLabel:
-                  orchestratorWorkerForBridge(name, parsed.providerID)?.label ||
+              workers: resolved.orchestrator.workerAgents.flatMap((name) => {
+                const worker = orchestratorWorkerForBridge(
                   name,
-              })),
-              tool: "sessions",
+                  parsed.providerID,
+                );
+                return worker
+                  ? [
+                      {
+                        role: ORCHESTRATOR_WORKER_AGENTS[name]?.label || name,
+                        model: toPiModel(worker.model) || worker.model,
+                        modelLabel: worker.label,
+                      },
+                    ]
+                  : [];
+              }),
             }
           : undefined,
     });
