@@ -18,6 +18,7 @@ import { mineStatus } from "../lib/sidebar-lanes";
 import { MINE_STATUS_META } from "../lib/sidebar-types";
 import { shortTime } from "../lib/time";
 import type { UnifiedSession } from "../lib/types";
+import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { FeaturebaseTicketPane } from "./FeaturebasePanes";
@@ -100,9 +101,7 @@ function ticketLane(type: string | null | undefined): string {
 /** The id the route and the pane use. Ticket number when there is one, because
  *  that is what the URL and "TK-12" read as; the raw id otherwise. */
 function ticketKey(ticket: FeaturebaseTicket): string {
-  return ticket.ticketNumber != null
-    ? String(ticket.ticketNumber)
-    : ticket.id;
+  return ticket.ticketNumber != null ? String(ticket.ticketNumber) : ticket.id;
 }
 
 interface Props {
@@ -189,8 +188,7 @@ export function FeaturebaseInbox({
   function renderRow(ticket: FeaturebaseTicket, laneDot: string) {
     const key = ticketKey(ticket);
     const session = sessionFor(ticket);
-    const who =
-      ticket.author.name || ticket.author.email || "Unknown";
+    const who = ticket.author.name || ticket.author.email || "Unknown";
     const dot =
       (session
         ? MINE_STATUS_META.find((m) => m.key === mineStatus(session))?.dotColor
@@ -199,7 +197,9 @@ export function FeaturebaseInbox({
     const number =
       ticket.ticketNumber != null ? `TK-${ticket.ticketNumber} ` : "";
     return (
-      <button
+      <Button
+        variant="ghost"
+        size="sm"
         key={ticket.id}
         type="button"
         className={ROW}
@@ -228,7 +228,7 @@ export function FeaturebaseInbox({
             {`${number}${ticket.title || ticket.preview || "No subject"}`}
           </span>
         </span>
-      </button>
+      </Button>
     );
   }
 

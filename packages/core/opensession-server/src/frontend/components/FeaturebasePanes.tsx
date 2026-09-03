@@ -28,12 +28,7 @@ import {
   composerTextareaPadding,
 } from "../lib/composer-classes";
 import { noAutofill } from "../lib/composer-autofill";
-import {
-  IconArrowUp,
-  IconPaperclip,
-  IconPencil,
-  IconSparkle,
-} from "./icons";
+import { IconArrowUp, IconPaperclip, IconPencil, IconSparkle } from "./icons";
 import { useCurrentUser } from "./UserPicker";
 import {
   fetchFeaturebasePost,
@@ -206,7 +201,9 @@ function Composer({
               <span className="truncate" title={url}>
                 {url.split("/").pop() || url}
               </span>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 type="button"
                 className="shrink-0 text-faint hover:text-fg"
                 aria-label={`Remove ${url}`}
@@ -215,7 +212,7 @@ function Composer({
                 }
               >
                 &times;
-              </button>
+              </Button>
             </span>
           ))}
         </div>
@@ -226,7 +223,9 @@ function Composer({
       <div className="mt-2 flex items-center gap-2">
         {allowAttachments && (
           <Tooltip label="Attach a file by URL (Featurebase has no upload API)">
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
               className={cn(palettePill, "shrink-0")}
               disabled={
@@ -237,7 +236,7 @@ function Composer({
             >
               <IconPaperclip size={14} />
               Attach
-            </button>
+            </Button>
           </Tooltip>
         )}
         <Tooltip
@@ -247,7 +246,9 @@ function Composer({
               : "Write a note only the team sees"
           }
         >
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
             aria-pressed={isNote}
             disabled={sending}
@@ -261,7 +262,7 @@ function Composer({
           >
             <IconPencil size={14} />
             Internal note
-          </button>
+          </Button>
         </Tooltip>
         <span className="min-w-0 truncate text-meta text-faint phone:hidden">
           {isNote
@@ -273,7 +274,9 @@ function Composer({
             Sent \u2713
           </span>
         )}
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           type="button"
           className={cn("ml-auto", composerSend, composerSendDefault)}
           disabled={
@@ -285,7 +288,7 @@ function Composer({
           aria-label={isNote ? "Add internal note" : "Send reply"}
         >
           <IconArrowUp size={24} />
-        </button>
+        </Button>
       </div>
     </div>
   );
