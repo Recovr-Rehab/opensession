@@ -46,10 +46,14 @@ export type { PrStack, PrStackLayer } from "./pr-contract";
 
 /** The per-PR fields every layer is built from. */
 const LAYER_FIELDS = "number title url state isDraft headRefName baseRefName";
+// Free to request: the bucket this credential really spends from, fed to the
+// budget log so it reports what consumers see rather than a separate probe.
+const BUCKET_FIELD = "rateLimit { limit used remaining resetAt }";
 
 /** Scalars only — no `entries`, whose failure would null the stack with it. */
 const STACK_QUERY = `
 query($owner:String!,$name:String!,$number:Int!){
+  ${BUCKET_FIELD}
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
       ${LAYER_FIELDS}
@@ -61,6 +65,7 @@ query($owner:String!,$name:String!,$number:Int!){
 /** The intended one-shot enumeration. Broken upstream as of 2026-07-30. */
 const ENTRIES_QUERY = `
 query($owner:String!,$name:String!,$number:Int!){
+  ${BUCKET_FIELD}
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
       stackEntry {
@@ -77,6 +82,7 @@ query($owner:String!,$name:String!,$number:Int!){
 /** One hop of the chain walk: the PR on a given head or base branch. */
 const BY_REF_QUERY = (arg: "headRefName" | "baseRefName") => `
 query($owner:String!,$name:String!,$ref:String!){
+  ${BUCKET_FIELD}
   repository(owner:$owner,name:$name){
     pullRequests(${arg}:$ref, states:[OPEN,MERGED], first:10, orderBy:{field:CREATED_AT,direction:DESC}){
       nodes { ${LAYER_FIELDS} stackEntry { position stack { number } } }
@@ -221,7 +227,13 @@ async function graphql(
   for (const [k, v] of Object.entries(numbers)) args.push("-F", `${k}=${v}`);
   const started = Date.now();
   const { code, out, err } = await runGh(args, credential);
-  noteGithubGraphqlCall("pr-stack", Date.now() - started, code === 0);
+  let parsed: any = null;
+  try {
+    parsed = out.trim() ? JSON.parse(out) : null;
+  } catch {}
+  noteGithubGraphqlCall("pr-stack", Date.now() - started, code === 0, {
+    bucket: parsed?.data?.rateLimit,
+  });
   if (code !== 0) {
     const msg = String(err || "gh api graphql failed").slice(0, 300);
     if (isUnknownFieldMsg(msg)) {
@@ -240,12 +252,9 @@ async function graphql(
       return null;
     }
   }
-  try {
-    return JSON.parse(out);
-  } catch {
+  if (parsed === null)
     console.warn(`[pr-stack] ${label} returned an unparseable body`);
-    return null;
-  }
+  return parsed;
 }
 
 /**
