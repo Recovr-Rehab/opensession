@@ -17,8 +17,8 @@
  * ARRAY ORDER IS BOOT ORDER. It matches the original hand-written sequence
  * (plain, linear, slack, stripe, grafana, github) so that agent
  * registration — including webhook route registration — happens in exactly the
- * order it always has. Append new integrations; do not reshuffle. Present
- * them in a friendlier order in UI if you like.
+ * order it always has. Present them in a friendlier order in UI if you like,
+ * but do not reshuffle this array casually.
  *
  * Other invariants preserved from the original blocks:
  *  - a failing import logs and is skipped; it never takes the server down

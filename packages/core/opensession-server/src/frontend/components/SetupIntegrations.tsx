@@ -35,7 +35,7 @@ const INTEGRATION_DESCRIPTIONS = new Map([
     "codestorage",
     "Git hosting with branch-based reviews and local signing keys.",
   ],
-])
+]);
 
 function IntegrationCard({
   integration,
