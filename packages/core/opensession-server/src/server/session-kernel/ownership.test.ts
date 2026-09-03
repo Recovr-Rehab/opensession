@@ -911,7 +911,6 @@ describe("single session ownership", () => {
     expect(unmarkBeforeThrow).toBeGreaterThan(0);
     expect(unmarkBeforeThrow).toBeLessThan(admissionLoss);
     for (const backend of [
-      "host-client.ts",
       "runner-session.ts",
       "sandbox/docker.ts",
       "sandbox/adapters/bootstrap.ts",
@@ -920,6 +919,11 @@ describe("single session ownership", () => {
       expect(source).toContain("journalRecordAbnormalCompletion(");
       expect(source).toContain("sourceCompleted && sawTerminal");
     }
+    const hostClient = read("host-client.ts");
+    expect(hostClient).toContain("journalRecordAbnormalCompletion(");
+    expect(hostClient).toContain(
+      "sawTerminal || handle.endedAfterCancellation",
+    );
 
     const cache = read("session-cache.ts");
     const outcome = cache.indexOf("if (errorMessage) {");
