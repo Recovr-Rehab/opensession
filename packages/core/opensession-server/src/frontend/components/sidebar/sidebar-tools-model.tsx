@@ -29,7 +29,7 @@ import {
   toolFitsViewport,
   type SidebarToolId,
 } from "../../lib/sidebar-tools";
-import { PLAIN_ID, supportSurfaceOf } from "../../lib/support-surface";
+import { SUPPORT_ID, supportSurfaceOf } from "../../lib/support-surface";
 import type { FeedDescriptor } from "../../lib/types";
 
 interface SidebarToolsModelOptions {
@@ -113,8 +113,8 @@ export function createSidebarToolsModel({
       // Support is the Featurebase queue as of 2026-08-29. Plain keeps a tool
       // of its own below, because a workspace that still runs Plain must be
       // able to reach it, and two rows both called Support would be unreadable.
-      id: "featurebase-tickets",
-      label: SIDEBAR_TOOL_LABELS["featurebase-tickets"],
+      id: SUPPORT_ID,
+      label: SIDEBAR_TOOL_LABELS[SUPPORT_ID],
       icon: <IconMail />,
       active: featurebaseActive,
       onClick: navigation.openFeaturebase,
@@ -182,13 +182,13 @@ export function createSidebarToolsModel({
   // read as theirs, so a borrowed sidebar is their workspaces and nothing
   // else. Another teammate, or your own sidebar back, is a click away in
   // "Group, filter & sort" — and the strip at the top is the way out.
-  // Support is the one tool whose visibility is not its own: it and the Plain
-  // band are two doors onto one queue, and both at once would list the same
+  // Support is the one tool whose visibility is not its own: it and the
+  // sidebar band are two doors onto one queue, and both at once would list the same
   // tickets twice. The tool wins when the independent stored lists say both,
   // because it is the default placement and the band is the alternate.
   const supportSurface = supportSurfaceOf(
-    !hiddenTools.has(PLAIN_ID),
-    !hiddenFeeds.has(PLAIN_ID),
+    !hiddenTools.has(SUPPORT_ID),
+    !hiddenFeeds.has(SUPPORT_ID),
   );
   const visibleTools = borrowedLens
     ? []
@@ -196,7 +196,8 @@ export function createSidebarToolsModel({
         (tool) =>
           !hiddenTools.has(tool.id) &&
           !(productEmpty && tool.id === "prs") &&
-          !(tool.id === PLAIN_ID && supportSurface !== "page"),
+          !(tool.id === SUPPORT_ID && supportSurface !== "page") &&
+          !(tool.id === "plain" && !feeds.some((feed) => feed.id === "plain")),
       );
 
   // What the sidebar's own right-click menu offers (SidebarToolsMenu): every
@@ -204,11 +205,11 @@ export function createSidebarToolsModel({
   //
   // Support is the exception, and the reason that menu is a real one: where
   // the others tick on or off, it names which of two surfaces its queue lives
-  // on, so it is a submenu of three states rather than a tick. No Plain feed
-  // means no queue to place, so the row drops out entirely.
-  const plainQueueExists = feeds.some((feed) => feed.id === PLAIN_ID);
+  // on, so it is a submenu of three states rather than a tick. No Support
+  // feed means no queue to place, so the row drops out entirely.
+  const supportQueueExists = feeds.some((feed) => feed.id === SUPPORT_ID);
   const sidebarMenuTools: SidebarMenuTool[] = fittingTools
-    .filter((tool) => tool.id !== PLAIN_ID || plainQueueExists)
+    .filter((tool) => tool.id !== SUPPORT_ID || supportQueueExists)
     .map((tool) => {
       const menuTool: SidebarMenuTool = {
         id: tool.id,
@@ -216,11 +217,11 @@ export function createSidebarToolsModel({
         icon: tool.icon,
         shown: !hiddenTools.has(tool.id),
       };
-      if (tool.id === PLAIN_ID) menuTool.surface = supportSurface;
+      if (tool.id === SUPPORT_ID) menuTool.surface = supportSurface;
       return menuTool;
     });
   const sidebarMenuSources = feeds
-    .filter((feed) => feed.id !== PLAIN_ID)
+    .filter((feed) => feed.id !== SUPPORT_ID)
     .map((feed) => ({
       id: feed.id,
       label: feed.title,

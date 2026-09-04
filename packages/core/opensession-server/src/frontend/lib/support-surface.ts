@@ -29,9 +29,12 @@ import { setSidebarToolVisible } from "./sidebar-tools";
  *  tool of its own, off by default, and no longer the thing this file governs. */
 export const SUPPORT_ID = "featurebase-tickets";
 
-/** @deprecated Read SUPPORT_ID. Kept so a stale import fails loudly at the
- *  call site rather than silently governing the wrong queue. */
-export const PLAIN_ID = SUPPORT_ID;
+// There is deliberately no PLAIN_ID alias. It existed while call sites were
+// being moved across, but an alias cannot do what it promised: a stale
+// `import { PLAIN_ID }` would resolve and then quietly govern the Featurebase
+// queue. With it gone the next upstream merge — whose own files still import
+// PLAIN_ID — fails to compile, which is the moment to point them at SUPPORT_ID
+// on purpose rather than inherit the old name by accident.
 
 export type SupportSurface = "sidebar" | "page" | "off";
 

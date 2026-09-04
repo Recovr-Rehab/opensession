@@ -57,7 +57,7 @@ import {
   setSidebarSubagentsPref,
 } from "../../lib/sidebar-subagents-pref";
 import {
-  PLAIN_ID,
+  SUPPORT_ID,
   SUPPORT_SURFACE_OPTIONS,
   setSupportSurface,
   supportSurfaceOf,
@@ -558,9 +558,9 @@ export function SidebarItemsSection() {
         {/* Support is one decision, not two switches. Its tool and its
 				    sidebar band are the same queue reached two ways, so they are
 				    set together here and left out of the lists below. Only
-				    offered when Plain is actually connected: with no queue behind
-				    it there is nowhere for either surface to lead. */}
-        {sidebarFeeds.some((feed) => feed.id === PLAIN_ID) && (
+				    offered when the queue is actually connected: with nothing
+				    behind it there is nowhere for either surface to lead. */}
+        {sidebarFeeds.some((feed) => feed.id === SUPPORT_ID) && (
           <SettingRow
             title="Support tickets"
             desc="Choose where tickets appear."
@@ -568,8 +568,8 @@ export function SidebarItemsSection() {
               <Select
                 label="Where support tickets live"
                 value={supportSurfaceOf(
-                  !hiddenSidebarTools.has(PLAIN_ID),
-                  !hiddenSidebarFeeds.has(PLAIN_ID),
+                  !hiddenSidebarTools.has(SUPPORT_ID),
+                  !hiddenSidebarFeeds.has(SUPPORT_ID),
                 )}
                 options={SUPPORT_SURFACE_OPTIONS}
                 onChange={setSupportSurface}
@@ -578,7 +578,7 @@ export function SidebarItemsSection() {
           />
         )}
         {SIDEBAR_TOOL_IDS.filter(
-          (toolId) => toolFitsViewport(toolId, isPhone) && toolId !== PLAIN_ID,
+          (toolId) => toolFitsViewport(toolId, isPhone) && toolId !== SUPPORT_ID,
         ).map((toolId) => (
           <SettingRow
             key={toolId}
@@ -595,7 +595,7 @@ export function SidebarItemsSection() {
           />
         ))}
         {sidebarFeeds
-          .filter((feed) => feed.id !== PLAIN_ID)
+          .filter((feed) => feed.id !== SUPPORT_ID)
           .map((feed) => (
             <SettingRow
               key={feed.id}
